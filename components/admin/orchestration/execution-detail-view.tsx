@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  Eye,
   Loader2,
   RotateCcw,
   StopCircle,
@@ -519,12 +520,44 @@ export function ExecutionDetailView({
     [execution.id, router]
   );
 
+  // Retroactive supervisor review. Available on any terminal execution
+  // — refreshes the row on success so the verdict badge re-renders.
+  const handleReview = useCallback(async () => {
+    setActionLoading(true);
+    setActionResult(null);
+    try {
+      const result = await apiClient.post<{ verdict: string; score: number }>(
+        API.ADMIN.ORCHESTRATION.executionReview(execution.id),
+        { body: {} }
+      );
+      setActionResult({
+        type: 'success',
+        message: `Supervisor reviewed this execution — verdict: ${result.verdict} (score ${result.score.toFixed(2)}). Refreshing…`,
+      });
+      router.refresh();
+    } catch (err) {
+      setActionResult({
+        type: 'error',
+        message: err instanceof APIClientError ? err.message : 'Review failed',
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  }, [execution.id, router]);
+
   const canCancel = liveSnap.status === 'running' || liveSnap.status === 'paused_for_approval';
   const canApprove = liveSnap.status === 'paused_for_approval';
   const canRetry = liveSnap.status === 'failed';
   const failedStepId = canRetry
     ? displayTrace.find((e) => e.status === 'failed')?.stepId
     : undefined;
+  // Retroactive review is available on any terminal execution — operators
+  // who skipped the supervisor at trigger time or whose template
+  // doesn't include the step can still get an honest verdict.
+  const canReview =
+    liveSnap.status === 'completed' ||
+    liveSnap.status === 'failed' ||
+    liveSnap.status === 'cancelled';
 
   // Extract approval prompt from awaiting trace entry
   const approvalPrompt = canApprove ? getApprovalPrompt(displayTrace) : null;
@@ -552,7 +585,7 @@ export function ExecutionDetailView({
       )}
 
       {/* Action buttons */}
-      {(canCancel || canApprove || (canRetry && failedStepId)) && (
+      {(canCancel || canApprove || (canRetry && failedStepId) || canReview) && (
         <div className="flex flex-wrap gap-2">
           {canApprove && (
             <Button size="sm" onClick={() => void handleApprove()} disabled={actionLoading}>
@@ -591,6 +624,18 @@ export function ExecutionDetailView({
             >
               <RotateCcw className="mr-2 h-4 w-4" />
               Retry Failed Step
+            </Button>
+          )}
+          {canReview && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleReview()}
+              disabled={actionLoading}
+              data-testid="execution-review-button"
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              {execution.supervisorVerdict ? 'Re-review' : 'Review this execution'}
             </Button>
           )}
         </div>
