@@ -150,7 +150,10 @@ export function AuditModelsDialog({
   models,
 }: AuditModelsDialogProps): React.ReactElement {
   const router = useRouter();
-  const [selected, setSelected] = useState<Set<string>>(new Set(models.map((m) => m.id)));
+  // Default to no models selected — operators opt in by ticking individual
+  // rows or clicking "Select all". Auditing every model on every open is
+  // expensive (one LLM call per model) and rarely what the operator wants.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [providerFilter, setProviderFilter] = useState<string>('all');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

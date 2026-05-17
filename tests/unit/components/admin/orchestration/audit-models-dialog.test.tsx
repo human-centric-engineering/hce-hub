@@ -2,7 +2,7 @@
  * AuditModelsDialog Component Tests
  *
  * Test Coverage:
- * - Renders all models as checkboxes (all selected by default)
+ * - Renders all models as checkboxes (NONE selected by default — opt-in via row click or "Select all")
  * - Provider filter dropdown filters the visible model list
  * - "Select all" / "Deselect all" toggle for the current filtered view
  * - Individual model checkbox toggles selection
@@ -160,22 +160,23 @@ describe('AuditModelsDialog', () => {
       ).toBeInTheDocument();
     });
 
-    it('all model checkboxes are checked by default', () => {
+    it('all model checkboxes are UNchecked by default (opt-in)', () => {
+      // Initial state: nothing selected. Operators tick individual rows or
+      // click "Select all" to opt in. Auditing every model by default is
+      // expensive (one LLM call per model) and rarely what the operator
+      // intends — the cost surface stays predictable.
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
-      // Scope to model checkboxes only — the supervisor + report toggles
-      // also appear as checkboxes in the dialog but ship unchecked by
-      // design (operator opts in).
       const modelCheckboxes = screen.getAllByRole('checkbox', { name: /select .* for audit/i });
       for (const checkbox of modelCheckboxes) {
-        expect(checkbox).toBeChecked();
+        expect(checkbox).not.toBeChecked();
       }
     });
 
-    it('shows correct "N of M selected" count on initial render', () => {
+    it('shows correct "0 of M selected" count on initial render', () => {
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
-      expect(screen.getByText(/2 of 2 selected/)).toBeInTheDocument();
+      expect(screen.getByText(/0 of 2 selected/)).toBeInTheDocument();
     });
 
     it('shows the model name and provider/modelId in each row', () => {
@@ -267,12 +268,13 @@ describe('AuditModelsDialog', () => {
 
       const checkbox = screen.getByRole('checkbox', { name: /select gpt-5 for audit/i });
       const row = checkbox.closest('[role="button"]') as HTMLElement;
-      expect(checkbox).toBeChecked();
+      // Initial state: unchecked (opt-in).
+      expect(checkbox).not.toBeChecked();
 
       row.focus();
       await user.keyboard('{Enter}');
 
-      expect(checkbox).not.toBeChecked();
+      expect(checkbox).toBeChecked();
     });
 
     it('toggles model selection when Space is pressed on a row', async () => {
@@ -281,12 +283,12 @@ describe('AuditModelsDialog', () => {
 
       const checkbox = screen.getByRole('checkbox', { name: /select gpt-5 for audit/i });
       const row = checkbox.closest('[role="button"]') as HTMLElement;
-      expect(checkbox).toBeChecked();
+      expect(checkbox).not.toBeChecked();
 
       row.focus();
       await user.keyboard(' ');
 
-      expect(checkbox).not.toBeChecked();
+      expect(checkbox).toBeChecked();
     });
   });
 
@@ -330,57 +332,51 @@ describe('AuditModelsDialog', () => {
   // ── Select all / Deselect all ──────────────────────────────────────────────
 
   describe('select all / deselect all toggle', () => {
-    it('shows "Deselect all" when all filtered models are selected', () => {
+    it('shows "Select all" on initial render (nothing selected by default)', () => {
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
-      // All models are selected by default → button should say "Deselect all"
-      expect(screen.getByRole('button', { name: /deselect all/i })).toBeInTheDocument();
-    });
-
-    it('clicking "Deselect all" unchecks all visible model checkboxes', async () => {
-      const user = userEvent.setup();
-      render(<AuditModelsDialog {...DEFAULT_PROPS} />);
-
-      await user.click(screen.getByRole('button', { name: /deselect all/i }));
-
-      // Scope to model checkboxes only — the "Run supervisor" toggle has
-      // its own aria-label and stays in its independent state.
-      const modelCheckboxes = screen.getAllByRole('checkbox', { name: /select .* for audit/i });
-      for (const checkbox of modelCheckboxes) {
-        expect(checkbox).not.toBeChecked();
-      }
-    });
-
-    it('shows "Select all" after deselecting all models', async () => {
-      const user = userEvent.setup();
-      render(<AuditModelsDialog {...DEFAULT_PROPS} />);
-
-      await user.click(screen.getByRole('button', { name: /deselect all/i }));
-
+      // Initial state: empty selection → button reads "Select all"
       expect(screen.getByRole('button', { name: /^select all$/i })).toBeInTheDocument();
     });
 
-    it('clicking "Select all" re-checks all visible model checkboxes', async () => {
+    it('clicking "Select all" checks every visible model checkbox', async () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
-      // First deselect, then re-select
-      await user.click(screen.getByRole('button', { name: /deselect all/i }));
       await user.click(screen.getByRole('button', { name: /^select all$/i }));
 
-      // Scope to model checkboxes — supervisor/report toggles are independent.
       const modelCheckboxes = screen.getAllByRole('checkbox', { name: /select .* for audit/i });
       for (const checkbox of modelCheckboxes) {
         expect(checkbox).toBeChecked();
       }
     });
 
-    it('"Select all" only affects the currently filtered models', async () => {
+    it('button flips to "Deselect all" once all filtered models are selected', async () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
-      // Deselect everything first
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
+
+      expect(screen.getByRole('button', { name: /deselect all/i })).toBeInTheDocument();
+    });
+
+    it('clicking "Deselect all" unchecks every visible model checkbox', async () => {
+      const user = userEvent.setup();
+      render(<AuditModelsDialog {...DEFAULT_PROPS} />);
+
+      // Select first, then deselect — exercises the round-trip.
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /deselect all/i }));
+
+      const modelCheckboxes = screen.getAllByRole('checkbox', { name: /select .* for audit/i });
+      for (const checkbox of modelCheckboxes) {
+        expect(checkbox).not.toBeChecked();
+      }
+    });
+
+    it('"Select all" only affects the currently filtered models', async () => {
+      const user = userEvent.setup();
+      render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
       // Filter to openai only
       const trigger = screen.getByRole('combobox');
@@ -409,7 +405,7 @@ describe('AuditModelsDialog', () => {
   // ── Individual model toggle ────────────────────────────────────────────────
 
   describe('individual model toggle', () => {
-    it('clicking the row div unchecks a checked model', async () => {
+    it('clicking the row div checks an unchecked model', async () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
@@ -418,37 +414,39 @@ describe('AuditModelsDialog', () => {
       // causing a double-toggle that leaves selection unchanged.
       const checkbox = screen.getByRole('checkbox', { name: /select gpt-5 for audit/i });
       const row = checkbox.closest('[role="button"]') as HTMLElement;
-      expect(checkbox).toBeChecked();
+      // Initial state: unchecked (opt-in).
+      expect(checkbox).not.toBeChecked();
 
       await user.click(row);
 
-      expect(checkbox).not.toBeChecked();
+      expect(checkbox).toBeChecked();
     });
 
-    it('clicking the row div re-checks an unchecked model', async () => {
+    it('clicking the row div twice unchecks a previously-checked model', async () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
       const checkbox = screen.getByRole('checkbox', { name: /select gpt-5 for audit/i });
       const row = checkbox.closest('[role="button"]') as HTMLElement;
 
-      // Click twice: uncheck then re-check
+      // Click once to check, click again to uncheck.
       await user.click(row);
+      expect(checkbox).toBeChecked();
       await user.click(row);
 
-      expect(checkbox).toBeChecked();
+      expect(checkbox).not.toBeChecked();
     });
 
     it('updates the selection count when a model row is clicked', async () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
-      // Initial state: 2 of 2 selected
+      // Initial state: 0 of 2 selected
       expect(
-        screen.getByText((_, el) => el?.textContent === '2 of 2 selected')
+        screen.getByText((_, el) => el?.textContent === '0 of 2 selected')
       ).toBeInTheDocument();
 
-      // Click the row div to deselect GPT-5
+      // Click the row div to select GPT-5
       const checkbox = screen.getByRole('checkbox', { name: /select gpt-5 for audit/i });
       const row = checkbox.closest('[role="button"]') as HTMLElement;
       await user.click(row);
@@ -462,9 +460,15 @@ describe('AuditModelsDialog', () => {
   // ── Submit button state ────────────────────────────────────────────────────
 
   describe('submit button state', () => {
-    it('submit button shows count of selected models', () => {
+    it('submit button shows count of selected models', async () => {
+      const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      // Initial state: 0 selected → button reads "Audit 0 models"
+      expect(screen.getByRole('button', { name: /audit 0 models/i })).toBeInTheDocument();
+
+      // After selecting all, count flips to 2.
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       expect(screen.getByRole('button', { name: /audit 2 models/i })).toBeInTheDocument();
     });
 
@@ -472,7 +476,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
-      // Deselect Claude-4 via row click (row div fires toggleModel exactly once)
+      // Select only Claude-4 by ticking its row.
       const claudeCheckbox = screen.getByRole('checkbox', { name: /select claude-4 for audit/i });
       const claudeRow = claudeCheckbox.closest('[role="button"]') as HTMLElement;
       await user.click(claudeRow);
@@ -480,19 +484,17 @@ describe('AuditModelsDialog', () => {
       expect(screen.getByRole('button', { name: /audit 1 model$/i })).toBeInTheDocument();
     });
 
-    it('submit button is disabled when 0 models are selected', async () => {
-      const user = userEvent.setup();
+    it('submit button is disabled on initial render (0 models selected)', () => {
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
-
-      await user.click(screen.getByRole('button', { name: /deselect all/i }));
-
       const auditBtn = screen.getByRole('button', { name: /audit 0 models/i });
       expect(auditBtn).toBeDisabled();
     });
 
-    it('submit button is enabled when at least one model is selected', () => {
+    it('submit button is enabled after at least one model is selected', async () => {
+      const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       const auditBtn = screen.getByRole('button', { name: /audit 2 models/i });
       expect(auditBtn).not.toBeDisabled();
     });
@@ -510,6 +512,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
@@ -535,6 +538,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
@@ -561,6 +565,7 @@ describe('AuditModelsDialog', () => {
       ]);
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
       const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -577,6 +582,7 @@ describe('AuditModelsDialog', () => {
       ]);
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
       const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -600,6 +606,7 @@ describe('AuditModelsDialog', () => {
       expect(reportCheckbox).not.toBeChecked();
       await user.click(reportCheckbox);
       expect(reportCheckbox).toBeChecked();
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
       const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -625,6 +632,7 @@ describe('AuditModelsDialog', () => {
       await user.click(supervisorCheckbox);
       expect(supervisorCheckbox).toBeChecked();
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
       const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -654,6 +662,7 @@ describe('AuditModelsDialog', () => {
         />
       );
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
@@ -686,6 +695,7 @@ describe('AuditModelsDialog', () => {
         />
       );
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
       await waitFor(() => screen.getByTestId('audit-run-in-background'));
       await user.click(screen.getByTestId('audit-run-in-background'));
@@ -721,6 +731,7 @@ describe('AuditModelsDialog', () => {
         />
       );
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
       await waitFor(() => screen.getByTestId('audit-view-full-details'));
       await user.click(screen.getByTestId('audit-view-full-details'));
@@ -741,6 +752,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
@@ -773,10 +785,11 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
-      // Deselect the Anthropic model via row click (avoids double-toggle from checkbox input bubble)
-      const claudeCheckbox = screen.getByRole('checkbox', { name: /select claude-4 for audit/i });
-      const claudeRow = claudeCheckbox.closest('[role="button"]') as HTMLElement;
-      await user.click(claudeRow);
+      // Initial state is empty; select only the OpenAI model via row click
+      // (avoids the double-toggle that would fire if we clicked the input).
+      const gptCheckbox = screen.getByRole('checkbox', { name: /select gpt-5 for audit/i });
+      const gptRow = gptCheckbox.closest('[role="button"]') as HTMLElement;
+      await user.click(gptRow);
       await user.click(screen.getByRole('button', { name: /audit 1 model$/i }));
 
       await waitFor(() => {
@@ -801,6 +814,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
@@ -817,6 +831,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
@@ -832,6 +847,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
@@ -847,6 +863,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
@@ -862,6 +879,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
@@ -881,6 +899,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
@@ -902,6 +921,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
@@ -916,6 +936,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
@@ -930,6 +951,7 @@ describe('AuditModelsDialog', () => {
       const user = userEvent.setup();
       render(<AuditModelsDialog {...DEFAULT_PROPS} />);
 
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
       await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
 
       await waitFor(() => {
