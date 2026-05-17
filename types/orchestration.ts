@@ -598,6 +598,81 @@ export interface ExecutionListItem {
 }
 
 // ============================================================================
+// Supervisor — neutral post-hoc audit of a workflow execution
+// ============================================================================
+
+export type SupervisorVerdict = 'pass' | 'concerns' | 'fail' | 'inconclusive';
+export type SupervisorSeverity = 'low' | 'medium' | 'high';
+export type SupervisorConfidence = 'low' | 'medium' | 'high';
+
+export interface SupervisorCitation {
+  /** Step id the supervisor is grounding this claim against. */
+  evidenceStepId: string;
+  /** Verbatim quote from that step's output. Validated against `ctx.stepOutputs`. */
+  evidenceQuote: string;
+}
+
+export interface SupervisorStrength {
+  claim: string;
+  evidenceStepId: string;
+  evidenceQuote: string;
+}
+
+export interface SupervisorWeakness {
+  severity: SupervisorSeverity;
+  claim: string;
+  /** Null only when the supervisor declares "no specific step at fault, but…". */
+  evidenceStepId: string | null;
+  evidenceQuote: string | null;
+  recommendation: string;
+}
+
+export interface SupervisorAnomaly {
+  stepId: string;
+  observation: string;
+}
+
+export interface SupervisorPreviousVerdict {
+  verdict: SupervisorVerdict;
+  score: number | null;
+  reviewedAt: string;
+  triggeredBy: 'in_workflow' | 'retroactive';
+}
+
+/**
+ * The structured output a supervisor step returns. Stored on the
+ * execution row (Phase 3) and emitted via `StepResult.output`.
+ *
+ * `parseFailure` is only populated when the verdict is `'inconclusive'` —
+ * i.e. the LLM returned malformed JSON twice and the executor wrote the
+ * raw response here so it isn't lost.
+ */
+export interface SupervisorReport {
+  verdict: SupervisorVerdict;
+  score: number;
+  summary: string;
+  strengths: SupervisorStrength[];
+  weaknesses: SupervisorWeakness[];
+  anomalies: SupervisorAnomaly[];
+  unverifiedAreas: string[];
+  confidence: SupervisorConfidence;
+  /** Citations the post-hoc validator stripped. Preserved for debugging. */
+  invalidCitations?: Array<{
+    location: 'strength' | 'weakness';
+    index: number;
+    reason: 'unknown_step_id' | 'quote_not_found';
+    evidenceStepId: string;
+    evidenceQuote: string;
+  }>;
+  /** Audit trail for retroactive re-reviews (Phase 4). */
+  previousVerdicts?: SupervisorPreviousVerdict[];
+  /** Identity of the trigger. Set by the executor / retroactive endpoint. */
+  triggeredBy?: 'in_workflow' | 'retroactive';
+  /** Raw response captured when JSON parsing failed twice (verdict === 'inconclusive'). */
+  parseFailure?: { rawResponse: string; reason: string };
+}
+
+// ============================================================================
 // Streaming Chat Events
 // ============================================================================
 

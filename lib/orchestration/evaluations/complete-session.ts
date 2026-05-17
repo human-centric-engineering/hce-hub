@@ -45,6 +45,12 @@ import {
   tryParseJson,
 } from '@/lib/orchestration/evaluations/parse-structured';
 import { scoreResponse } from '@/lib/orchestration/evaluations/score-response';
+import {
+  EVALUATION_DEFAULT_MODEL as DEFAULT_MODEL,
+  EVALUATION_DEFAULT_PROVIDER as DEFAULT_PROVIDER,
+  JUDGE_MODEL,
+  JUDGE_PROVIDER,
+} from '@/lib/orchestration/evaluations/judge-model';
 
 /** Maximum number of log events included in the analysis prompt. */
 const MAX_LOGS_IN_PROMPT = 50;
@@ -52,19 +58,6 @@ const MAX_LOGS_IN_PROMPT = 50;
 const ANALYSIS_TIMEOUT_MS = 10_000;
 const ANALYSIS_MAX_TOKENS = 1500;
 const ANALYSIS_TEMPERATURE = 0.2;
-
-const DEFAULT_PROVIDER = process.env.EVALUATION_DEFAULT_PROVIDER ?? 'anthropic';
-const DEFAULT_MODEL = process.env.EVALUATION_DEFAULT_MODEL ?? 'claude-sonnet-4-6';
-
-/**
- * Judge model used for the per-turn metric scorer (faithfulness,
- * groundedness, relevance). Independent of the agent under test so a
- * Haiku-powered agent can be judged by a stronger model. Falls through
- * to `EVALUATION_DEFAULT_PROVIDER` / `EVALUATION_DEFAULT_MODEL` when
- * the dedicated env vars aren't set.
- */
-const JUDGE_PROVIDER = process.env.EVALUATION_JUDGE_PROVIDER ?? DEFAULT_PROVIDER;
-const JUDGE_MODEL = process.env.EVALUATION_JUDGE_MODEL ?? DEFAULT_MODEL;
 
 interface EvaluationAnalysis {
   summary: string;

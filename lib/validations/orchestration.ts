@@ -2510,6 +2510,66 @@ export const evaluateConfigSchema = stepErrorConfigSchema.extend({
   temperature: z.number().optional(),
 });
 
+/**
+ * `supervisor` — independent post-hoc audit of the execution.
+ *
+ * Reads the full execution trace (compacted projection) and emits a
+ * calibrated verdict with evidence-cited weaknesses. Anti-optimism
+ * mechanics live in the executor: forced structured citations,
+ * post-hoc citation validator, `minWeaknesses` floor, independent
+ * judge model, low temperature. See
+ * `lib/orchestration/engine/executors/supervisor.ts`.
+ */
+export const supervisorConfigSchema = stepErrorConfigSchema.extend({
+  /** Rubric of what "doing its job" means for this workflow. */
+  assessmentCriteria: z.string().min(1),
+  /** Explicit failure modes to look for. Defaults baked into the prompt. */
+  redTeamPrompts: z.array(z.string()).optional(),
+  /**
+   * When true (default), every claim must carry `evidenceStepId` +
+   * `evidenceQuote` matching the cited step's output. Stripped citations
+   * downgrade the verdict. Turning this off disables the citation
+   * validator — only do that if you accept unsourced verdicts.
+   */
+  requireEvidenceCitations: z.boolean().optional(),
+  /**
+   * Minimum number of entries the supervisor's `weaknesses[]` array
+   * must contain. If the supervisor genuinely finds none, it must
+   * declare "no defects found AND I verified the following steps:" with
+   * an explicit stepId list.
+   */
+  minWeaknesses: z.number().int().nonnegative().optional(),
+  /**
+   * When true (default), `modelOverride` falls through to the shared
+   * `JUDGE_MODEL` (see `@/lib/orchestration/evaluations/judge-model`).
+   * `modelOverride` set on this step beats the judge env var.
+   */
+  useJudgeModel: z.boolean().optional(),
+  modelOverride: z.string().optional(),
+  temperature: z.number().optional(),
+  /** Opt-in to making a `fail` verdict terminate the workflow. */
+  failOnVerdict: z.enum(['never', 'fail']).optional(),
+  /**
+   * Output-truncation strategy for the trace projection.
+   *  - `'auto'` (default): head + middle + tail samples for outputs > 4KB
+   *  - `'all'`: no truncation (author accepts the token bill)
+   *  - `'terminal-only'`: full output for the most recent step; 1KB head for earlier steps
+   */
+  includeStepOutputs: z.enum(['auto', 'all', 'terminal-only']).optional(),
+  /**
+   * Pre-checked state of the "Run supervisor" checkbox on the run dialog.
+   * Independent of whether the executor itself opts to run — see
+   * `respectRuntimeOptOut`.
+   */
+  defaultEnabled: z.boolean().optional(),
+  /**
+   * When true (default), `inputData.__runSupervisor === false` causes the
+   * step to short-circuit with `expectedSkip: true`. Set to false on a
+   * step that should always run regardless of the trigger payload.
+   */
+  respectRuntimeOptOut: z.boolean().optional(),
+});
+
 /** Response transformation config for external-call steps. */
 export const responseTransformSchema = z.object({
   /** Transformation type. `jmespath` for structured extraction. `template` for string templates. */
