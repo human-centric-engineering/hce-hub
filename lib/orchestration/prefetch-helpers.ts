@@ -6,6 +6,7 @@
  * the form falls back to free-text inputs with a warning banner.
  */
 
+import { z } from 'zod';
 import { API } from '@/lib/api/endpoints';
 import { parseApiResponse, serverFetch } from '@/lib/api/server-fetch';
 import { logger } from '@/lib/logging';
@@ -136,19 +137,24 @@ export async function getModels(): Promise<ModelOption[] | null> {
   }
 }
 
-/** Subset of an `AiProviderModel` row needed to shape into `ModelOption`. */
-interface ProviderMatrixRow {
-  modelId: string;
-  providerSlug: string;
-  capabilities?: string[] | null;
+/**
+ * Subset of an `AiProviderModel` row needed to shape into `ModelOption`.
+ *
+ * Defined as a Zod schema so the API response is runtime-validated at
+ * the boundary (not just type-asserted). Per CLAUDE.md: never `as` on
+ * external data — Zod-parse at the edge instead. Without this guard
+ * an upstream rename (e.g. `modelId` → `id`) would silently pass
+ * `undefined` rows through and collapse the dedup key downstream.
+ */
+const providerMatrixRowSchema = z.object({
+  modelId: z.string(),
+  providerSlug: z.string(),
+  capabilities: z.array(z.string()).nullish(),
   /** Optional matrix metadata used purely for the dropdown's tier hint. */
-  tierRole?: string | null;
-  deploymentProfiles?: string[] | null;
-}
-
-interface ProviderMatrixListResponse {
-  data?: unknown;
-}
+  tierRole: z.string().nullish(),
+  deploymentProfiles: z.array(z.string()).nullish(),
+});
+type ProviderMatrixRow = z.infer<typeof providerMatrixRowSchema>;
 
 /**
  * Agent-form model dropdown source — restricted to the operator-curated
@@ -214,24 +220,39 @@ export async function getAgentModels(): Promise<ModelOption[] | null> {
   }
 }
 
+/**
+ * Row payload sniffer + Zod parser. The `/provider-models` endpoint
+ * currently returns a flat array, but the defensive wrap-check absorbs
+ * either shape without crashing the form. Either way, the array
+ * elements are `safeParse`'d through {@link providerMatrixRowSchema}
+ * so we never widen unvalidated JSON into the typed return.
+ */
 async function readProviderMatrixRows(res: Response): Promise<ProviderMatrixRow[]> {
   if (!res.ok) return [];
-  const body = await parseApiResponse<ProviderMatrixRow[] | ProviderMatrixListResponse>(res);
+  const body = await parseApiResponse<unknown>(res);
   if (!body.success) return [];
-  const data = body.data;
-  if (Array.isArray(data)) return data;
-  // Defensive: some pagination shapes wrap rows in `{ data: [...] }`.
-  // The current endpoint returns a flat array; this guard absorbs any
-  // future shape drift without crashing the form.
-  if (
-    data &&
-    typeof data === 'object' &&
-    'data' in data &&
-    Array.isArray((data as { data: unknown }).data)
-  ) {
-    return (data as { data: ProviderMatrixRow[] }).data;
+
+  // Unwrap either the flat-array shape or the `{ data: [...] }` shape.
+  const raw = body.data;
+  const candidate = Array.isArray(raw)
+    ? raw
+    : raw &&
+        typeof raw === 'object' &&
+        'data' in raw &&
+        Array.isArray((raw as { data: unknown }).data)
+      ? (raw as { data: unknown[] }).data
+      : null;
+  if (candidate === null) return [];
+
+  const parsed = z.array(providerMatrixRowSchema).safeParse(candidate);
+  if (!parsed.success) {
+    logger.warn('prefetch: provider-matrix row shape drifted from schema', {
+      issueCount: parsed.error.issues.length,
+      sampleIssue: parsed.error.issues[0]?.message,
+    });
+    return [];
   }
-  return [];
+  return parsed.data;
 }
 
 function deriveTier(

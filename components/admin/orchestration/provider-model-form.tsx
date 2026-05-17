@@ -217,9 +217,18 @@ export function ProviderModelForm({ model }: ProviderModelFormProps) {
         return valid.length > 0 ? valid : model ? [] : ['chat'];
       })(),
       tierRole: (model?.tierRole as ModelFormData['tierRole']) ?? 'thinking',
-      deploymentProfiles: (model?.deploymentProfiles as ModelFormData['deploymentProfiles']) ?? [
-        'hosted',
-      ],
+      deploymentProfiles: ((): DeploymentProfile[] => {
+        // Mirrors the `capabilities` pattern above: filter the saved
+        // values against the current allowlist so a row carrying a
+        // future or deprecated profile token doesn't widen into the
+        // form's enum-typed default via an unsafe `as` cast. Default
+        // to `['hosted']` when no valid value remains.
+        const incoming = model?.deploymentProfiles ?? [];
+        const valid = incoming.filter((p): p is DeploymentProfile =>
+          (DEPLOYMENT_PROFILES as readonly string[]).includes(p)
+        );
+        return valid.length > 0 ? valid : ['hosted'];
+      })(),
       reasoningDepth: (model?.reasoningDepth as ModelFormData['reasoningDepth']) ?? 'medium',
       latency: (model?.latency as ModelFormData['latency']) ?? 'medium',
       costEfficiency: (model?.costEfficiency as ModelFormData['costEfficiency']) ?? 'medium',
