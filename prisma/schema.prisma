@@ -595,17 +595,39 @@ model AiConversation {
 }
 
 // Individual messages
+//
+// Provenance columns mirror the supervisor-on-execution pattern (5 scalars +
+// 1 JSON bundle on `AiWorkflowExecution`). Scalars are indexed for query
+// ("show me every message produced by agent vN", "...routed to model X");
+// the `provenance` JSON column holds the structured evidence bundle —
+// citations (with documentVersion + contentHash), workflow step sources
+// snapshotted at message-creation time, and capability calls.
+//
+// `workflowExecutionId` is NOT a foreign key — executions can be pruned
+// independently of messages. The column is a snapshot reference, same
+// treatment as `modelId` (a string snapshot, not an FK to `AiModel`).
 model AiMessage {
   id             String    @id @default(cuid())
   conversationId String
   role           String // "user", "assistant", "system", "tool"
   content        String    @db.Text
-  metadata       Json? // {tokenUsage, modelUsed, latencyMs, costUsd}
+  metadata       Json? // {tokenUsage, latencyMs, costUsd, sideEffectModels, pendingApproval, error}
   capabilitySlug String?
   toolCallId     String?
   rating         Int? // -1 = thumbs down, 1 = thumbs up, null = unrated
   ratedAt        DateTime?
   createdAt      DateTime  @default(now())
+
+  // Provenance — version pins captured at message-creation time
+  agentVersionId      String?
+  workflowExecutionId String?
+  workflowVersionId   String?
+  modelId             String?
+  providerSlug        String?
+
+  // Provenance bundle — typed as MessageProvenance in types/orchestration.ts
+  // Shape: { citations: Citation[], workflowSources?: ProvenanceItem[], capabilityCalls?: ToolCallTrace[] }
+  provenance Json?
 
   // Relations
   conversation     AiConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -617,6 +639,9 @@ model AiMessage {
   @@index([role])
   @@index([createdAt])
   @@index([rating])
+  @@index([agentVersionId])
+  @@index([workflowExecutionId])
+  @@index([modelId])
   @@map("ai_message")
 }
 
