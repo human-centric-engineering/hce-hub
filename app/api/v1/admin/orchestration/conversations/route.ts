@@ -27,22 +27,44 @@ export const GET = withAdminAuth(async (request, session) => {
     validateQueryParams(searchParams, listConversationsQuerySchema);
   const skip = (page - 1) * limit;
 
-  const where: Prisma.AiConversationWhereInput = { userId: session.user.id };
-  if (agentId) where.agentId = agentId;
-  if (isActive !== undefined) where.isActive = isActive;
-  if (q) where.title = { contains: q, mode: 'insensitive' };
+  // Caller can see conversations they own AND conversations the owner
+  // has actively shared with admins. The "active share" predicate
+  // mirrors `isShareActive` in conversation-access.ts — repeated inline
+  // here because Prisma's where-clause query builder doesn't accept a
+  // function predicate.
+  const visibilityClause: Prisma.AiConversationWhereInput = {
+    OR: [
+      { userId: session.user.id },
+      {
+        share: {
+          revokedAt: null,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+      },
+    ],
+  };
+
+  const filterClauses: Prisma.AiConversationWhereInput[] = [];
+  if (agentId) filterClauses.push({ agentId });
+  if (isActive !== undefined) filterClauses.push({ isActive });
+  if (q) filterClauses.push({ title: { contains: q, mode: 'insensitive' } });
   if (messageSearch) {
-    where.messages = { some: { content: { contains: messageSearch, mode: 'insensitive' } } };
+    filterClauses.push({
+      messages: { some: { content: { contains: messageSearch, mode: 'insensitive' } } },
+    });
   }
-  if (tag) {
-    where.tags = { has: tag };
-  }
+  if (tag) filterClauses.push({ tags: { has: tag } });
   if (dateFrom || dateTo) {
-    where.updatedAt = {
-      ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-      ...(dateTo ? { lte: new Date(dateTo) } : {}),
-    };
+    filterClauses.push({
+      updatedAt: {
+        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+        ...(dateTo ? { lte: new Date(dateTo) } : {}),
+      },
+    });
   }
+
+  const where: Prisma.AiConversationWhereInput =
+    filterClauses.length > 0 ? { AND: [visibilityClause, ...filterClauses] } : visibilityClause;
 
   const [conversations, total] = await Promise.all([
     prisma.aiConversation.findMany({

@@ -68,8 +68,21 @@ export const GET = withAdminAuth(async (request, session) => {
   }
   const embeddingStr = `[${queryEmbedding.join(',')}]`;
 
-  // Build dynamic WHERE conditions — always scope to the calling admin
-  const conditions: string[] = [`c."userId" = $4`];
+  // Build dynamic WHERE conditions.
+  //
+  // Visibility: caller can see conversations they own AND conversations
+  // the owner has actively shared. "Active" mirrors `isShareActive` in
+  // conversation-access.ts: revokedAt IS NULL AND (expiresAt IS NULL OR
+  // expiresAt > now()). The OR is fixed (no params); the active-share
+  // sub-query reuses the same caller id ($4) only for the owner branch.
+  const conditions: string[] = [
+    `(c."userId" = $4 OR EXISTS (
+       SELECT 1 FROM "ai_conversation_share" s
+       WHERE s."conversationId" = c.id
+         AND s."revokedAt" IS NULL
+         AND (s."expiresAt" IS NULL OR s."expiresAt" > NOW())
+     ))`,
+  ];
   const params: unknown[] = [embeddingStr, threshold, limit, session.user.id];
   let paramIdx = 5;
 
