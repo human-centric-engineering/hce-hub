@@ -36,14 +36,19 @@ vi.mock('@/lib/db/client', () => ({
 }));
 
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({
-  logAdminAction: vi.fn(),
+  logConversationAccess: vi.fn(),
+}));
+
+vi.mock('@/lib/orchestration/access/conversation-access', () => ({
+  adminCanViewConversation: vi.fn(),
 }));
 
 // ─── Imports after mocks ─────────────────────────────────────────────────────
 
 import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db/client';
-import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
+import { logConversationAccess } from '@/lib/orchestration/audit/admin-audit-logger';
+import { adminCanViewConversation } from '@/lib/orchestration/access/conversation-access';
 import { GET as GET_JSON } from '@/app/api/v1/admin/orchestration/conversations/[id]/provenance/route';
 import { GET as GET_MD } from '@/app/api/v1/admin/orchestration/conversations/[id]/provenance.md/route';
 
@@ -53,7 +58,6 @@ const AGENT_ID = 'cmjbv4i3x00003wsloputgwu2';
 const CONV_ID = 'cmjbv4i3x00003wsloputgwu3';
 // Matches the user.id returned by `mockAdminUser()` in tests/helpers/auth.ts.
 const USER_ID = 'cmjbv4i3x00003wsloputgwul';
-const OTHER_USER_ID = 'cmjbv4i3x00003wsloputgwu8';
 const INVALID_ID = 'not-a-cuid';
 
 function makeConversation(overrides: Record<string, unknown> = {}) {
@@ -140,29 +144,38 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/provenance (JSON)', 
     });
   });
 
-  describe('Ownership scoping', () => {
-    it('returns 404 when the conversation belongs to another user', async () => {
+  describe('Consent-gated access', () => {
+    it('returns 404 when the helper denies (no share + non-owner)', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      // Conversation exists but is owned by someone else — must not leak
-      // its existence; 404 (not 403) matches the export-route posture.
-      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
-        makeConversation({ userId: OTHER_USER_ID }) as never
-      );
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: false,
+        basis: null,
+        ownerId: null,
+      });
       const res = await GET_JSON(makeJsonRequest(), makeParams(CONV_ID));
       expect(res.status).toBe(404);
     });
 
     it('returns 404 when the conversation does not exist', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null);
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: false,
+        basis: null,
+        ownerId: null,
+      });
       const res = await GET_JSON(makeJsonRequest(), makeParams(CONV_ID));
       expect(res.status).toBe(404);
     });
   });
 
   describe('Successful retrieval', () => {
-    it('returns the provenance bundle with scalar pins per message', async () => {
+    it('returns the provenance bundle with scalar pins per message (owner basis)', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'owner',
+        ownerId: USER_ID,
+      });
       vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
         makeConversation({
           messages: [
@@ -228,6 +241,11 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/provenance (JSON)', 
 
     it('returns null provenance when the persisted JSON fails schema validation', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'owner',
+        ownerId: USER_ID,
+      });
       vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
         makeConversation({
           messages: [
@@ -251,41 +269,71 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/provenance (JSON)', 
   });
 
   describe('Audit-of-audits', () => {
-    it('writes a conversation.provenance_export audit entry on a successful JSON fetch', async () => {
+    it('writes a conversation.provenance_export audit entry on cross-user (shared) fetch', async () => {
+      const OTHER_USER = 'cmjbv4i3x00003wsloputgwz9';
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'shared',
+        ownerId: OTHER_USER,
+      });
       vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
         makeConversation({
+          userId: OTHER_USER,
           messages: [makeMessage({ role: 'user' }), makeMessage({ role: 'assistant' })],
         }) as never
       );
 
       await GET_JSON(makeJsonRequest(), makeParams(CONV_ID));
 
-      expect(vi.mocked(logAdminAction)).toHaveBeenCalledWith(
+      expect(vi.mocked(logConversationAccess)).toHaveBeenCalledWith(
         expect.objectContaining({
-          userId: USER_ID,
+          adminUserId: USER_ID,
+          accessBasis: 'shared',
+          conversationOwnerId: OTHER_USER,
           action: 'conversation.provenance_export',
-          entityType: 'conversation',
-          entityId: CONV_ID,
-          entityName: 'Tenancy deposit advice',
-          metadata: expect.objectContaining({ format: 'json', messageCount: 2 }),
+          conversationId: CONV_ID,
+          conversationTitle: 'Tenancy deposit advice',
+          extra: expect.objectContaining({ format: 'json', messageCount: 2 }),
         })
       );
     });
 
-    it('does not write an audit entry on auth failure', async () => {
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER'));
+    it('owner-basis fetch passes basis=owner to the helper (which no-ops)', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'owner',
+        ownerId: USER_ID,
+      });
+      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
+        makeConversation({ messages: [makeMessage({ role: 'user' })] }) as never
+      );
+
       await GET_JSON(makeJsonRequest(), makeParams(CONV_ID));
-      expect(vi.mocked(logAdminAction)).not.toHaveBeenCalled();
+
+      // Route always calls logConversationAccess; the helper itself
+      // decides whether to write the DB row (it no-ops on owner).
+      expect(vi.mocked(logConversationAccess)).toHaveBeenCalledWith(
+        expect.objectContaining({ accessBasis: 'owner' })
+      );
     });
 
-    it('does not write an audit entry on a 404 (cross-user ownership miss)', async () => {
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
-        makeConversation({ userId: OTHER_USER_ID }) as never
-      );
+    it('does not call the audit helper on auth failure', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER'));
       await GET_JSON(makeJsonRequest(), makeParams(CONV_ID));
-      expect(vi.mocked(logAdminAction)).not.toHaveBeenCalled();
+      expect(vi.mocked(logConversationAccess)).not.toHaveBeenCalled();
+    });
+
+    it('does not call the audit helper on a 404 (helper denies)', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: false,
+        basis: null,
+        ownerId: null,
+      });
+      await GET_JSON(makeJsonRequest(), makeParams(CONV_ID));
+      expect(vi.mocked(logConversationAccess)).not.toHaveBeenCalled();
     });
   });
 });
@@ -315,17 +363,24 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/provenance.md', () =
     expect(res.status).toBe(400);
   });
 
-  it('returns 404 when conversation belongs to another user', async () => {
+  it('returns 404 when the helper denies (no share + non-owner)', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
-      makeConversation({ userId: OTHER_USER_ID }) as never
-    );
+    vi.mocked(adminCanViewConversation).mockResolvedValue({
+      ok: false,
+      basis: null,
+      ownerId: null,
+    });
     const res = await GET_MD(makeMdRequest(), makeParams(CONV_ID));
     expect(res.status).toBe(404);
   });
 
-  it('returns text/markdown with attachment disposition and a no-store cache directive', async () => {
+  it('returns text/markdown with attachment disposition and a no-store cache directive (owner basis)', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(adminCanViewConversation).mockResolvedValue({
+      ok: true,
+      basis: 'owner',
+      ownerId: USER_ID,
+    });
     vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
       makeConversation({
         messages: [
@@ -353,37 +408,46 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/provenance.md', () =
     expect(body).toContain('Model `claude-sonnet-4-6`');
   });
 
-  it('writes a conversation.provenance_export audit entry on a successful Markdown fetch', async () => {
+  it('writes a conversation.provenance_export audit entry on cross-user (shared) Markdown fetch', async () => {
+    const OTHER_USER = 'cmjbv4i3x00003wsloputgwz9';
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(adminCanViewConversation).mockResolvedValue({
+      ok: true,
+      basis: 'shared',
+      ownerId: OTHER_USER,
+    });
     vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
       makeConversation({
+        userId: OTHER_USER,
         messages: [makeMessage({ role: 'user' }), makeMessage({ role: 'assistant' })],
       }) as never
     );
 
     await GET_MD(makeMdRequest(), makeParams(CONV_ID));
 
-    expect(vi.mocked(logAdminAction)).toHaveBeenCalledWith(
+    expect(vi.mocked(logConversationAccess)).toHaveBeenCalledWith(
       expect.objectContaining({
-        userId: USER_ID,
+        adminUserId: USER_ID,
+        accessBasis: 'shared',
+        conversationOwnerId: OTHER_USER,
         action: 'conversation.provenance_export',
-        entityType: 'conversation',
-        entityId: CONV_ID,
-        entityName: 'Tenancy deposit advice',
-        metadata: expect.objectContaining({ format: 'markdown', messageCount: 2 }),
+        extra: expect.objectContaining({ format: 'markdown', messageCount: 2 }),
       })
     );
-    // bytes metadata is populated from the rendered string length
-    const call = vi.mocked(logAdminAction).mock.calls[0]?.[0];
-    expect(call?.metadata?.bytes).toBeGreaterThan(0);
+    // bytes is populated from the rendered string length
+    const call = vi.mocked(logConversationAccess).mock.calls[0]?.[0];
+    const bytes = (call?.extra as { bytes?: number } | undefined)?.bytes;
+    expect(bytes).toBeGreaterThan(0);
   });
 
-  it('does not write an audit entry on a 404 (cross-user ownership miss)', async () => {
+  it('does not call the audit helper on a 404 (helper denies)', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
-      makeConversation({ userId: OTHER_USER_ID }) as never
-    );
+    vi.mocked(adminCanViewConversation).mockResolvedValue({
+      ok: false,
+      basis: null,
+      ownerId: null,
+    });
     await GET_MD(makeMdRequest(), makeParams(CONV_ID));
-    expect(vi.mocked(logAdminAction)).not.toHaveBeenCalled();
+    expect(vi.mocked(logConversationAccess)).not.toHaveBeenCalled();
   });
 });

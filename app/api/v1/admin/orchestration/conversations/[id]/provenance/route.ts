@@ -28,7 +28,8 @@ import { adminLimiter, createRateLimitResponse } from '@/lib/security/rate-limit
 import { getClientIP } from '@/lib/security/ip';
 import { cuidSchema } from '@/lib/validations/common';
 import { messageProvenanceSchema } from '@/lib/validations/orchestration';
-import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
+import { logConversationAccess } from '@/lib/orchestration/audit/admin-audit-logger';
+import { adminCanViewConversation } from '@/lib/orchestration/access/conversation-access';
 
 export const GET = withAdminAuth<{ id: string }>(async (request, session, { params }) => {
   const clientIP = getClientIP(request);
@@ -43,6 +44,11 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
   }
   const id = parsed.data;
 
+  // Consent-gated access: owner OR active share. Cross-user without
+  // a share returns 404 — never confirms the row's existence.
+  const access = await adminCanViewConversation(id, session.user.id);
+  if (!access.ok) throw new NotFoundError(`Conversation ${id} not found`);
+
   const conversation = await prisma.aiConversation.findUnique({
     where: { id },
     include: {
@@ -52,13 +58,7 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
       },
     },
   });
-
-  // Ownership-scoped to the calling admin, matching the export route's
-  // posture. Cross-user access returns 404 (not 403) — same shape as
-  // "row doesn't exist" so an attacker can't enumerate other users.
-  if (!conversation || conversation.userId !== session.user.id) {
-    throw new NotFoundError(`Conversation ${id} not found`);
-  }
+  if (!conversation) throw new NotFoundError(`Conversation ${id} not found`);
 
   // Validate every persisted provenance JSON before returning. Failure
   // is non-fatal: a row with malformed provenance returns null in the
@@ -99,17 +99,18 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
     messageCount: messages.length,
   });
 
-  // Audit-of-audits: log every provenance download so an auditor can
-  // see who exported what and when. Fire-and-forget — never blocks the
-  // response. Pair endpoint: `/provenance.md` writes the same action
-  // type with `format: 'markdown'`.
-  logAdminAction({
-    userId: session.user.id,
+  // Audit-of-audits: every cross-user (shared-basis) provenance
+  // download writes an audit row with conversationOwnerId so compliance
+  // can trace exports across users. Owner-basis downloads skip logging
+  // by convention (logConversationAccess no-ops on basis === 'owner').
+  logConversationAccess({
+    adminUserId: session.user.id,
+    conversationId: id,
+    conversationTitle: conversation.title,
+    conversationOwnerId: conversation.userId,
+    accessBasis: access.basis ?? 'owner',
     action: 'conversation.provenance_export',
-    entityType: 'conversation',
-    entityId: id,
-    entityName: conversation.title,
-    metadata: { format: 'json', messageCount: messages.length },
+    extra: { format: 'json', messageCount: messages.length },
     clientIp: getClientIP(request),
   });
 

@@ -1,15 +1,22 @@
 /**
  * Admin Orchestration — Single conversation (GET, PATCH, DELETE)
  *
- * GET    /api/v1/admin/orchestration/conversations/:id
- * PATCH  /api/v1/admin/orchestration/conversations/:id
- * DELETE /api/v1/admin/orchestration/conversations/:id
+ * GET    /api/v1/admin/orchestration/conversations/:id   — consent-gated read
+ * PATCH  /api/v1/admin/orchestration/conversations/:id   — owner-only mutation
+ * DELETE /api/v1/admin/orchestration/conversations/:id   — owner-only destroy
  *
- * Scoped to the caller's own conversations. Attempting to access
- * another user's conversation returns 404 (not 403) — we never confirm
- * the existence of resources owned by other users.
+ * Read access goes through `adminCanViewConversation`: the caller can
+ * GET either their own conversation OR one the owner has actively
+ * shared (see `AiConversationShare`). Cross-user reads on a shared
+ * conversation write an audit row.
  *
- * `AiMessage` rows cascade via the foreign key relation.
+ * **Mutations stay owner-only by design.** A share grants *view*
+ * consent, not write-or-destroy consent. Allowing a non-owner admin to
+ * PATCH (rename/archive) or DELETE a shared conversation would let the
+ * sharee unilaterally modify the sharer's data — outside the
+ * consent contract. The owner-only check is preserved on PATCH/DELETE.
+ *
+ * `AiMessage` rows cascade via the foreign key relation on DELETE.
  *
  * Authentication: Admin role required.
  */
@@ -23,6 +30,8 @@ import { adminLimiter, createRateLimitResponse } from '@/lib/security/rate-limit
 import { getClientIP } from '@/lib/security/ip';
 import { cuidSchema } from '@/lib/validations/common';
 import { updateConversationSchema } from '@/lib/validations/orchestration';
+import { adminCanViewConversation } from '@/lib/orchestration/access/conversation-access';
+import { logConversationAccess } from '@/lib/orchestration/audit/admin-audit-logger';
 
 export const GET = withAdminAuth<{ id: string }>(async (request, session, { params }) => {
   const log = await getRouteLogger(request);
@@ -33,8 +42,11 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
   }
   const id = parsed.data;
 
-  const conversation = await prisma.aiConversation.findFirst({
-    where: { id, userId: session.user.id },
+  const access = await adminCanViewConversation(id, session.user.id);
+  if (!access.ok) throw new NotFoundError(`Conversation ${id} not found`);
+
+  const conversation = await prisma.aiConversation.findUnique({
+    where: { id },
     include: {
       agent: { select: { id: true, name: true, slug: true } },
       _count: { select: { messages: true } },
@@ -42,7 +54,18 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
   });
   if (!conversation) throw new NotFoundError(`Conversation ${id} not found`);
 
-  log.info('Conversation fetched', { conversationId: id });
+  log.info('Conversation fetched', { conversationId: id, accessBasis: access.basis });
+
+  logConversationAccess({
+    adminUserId: session.user.id,
+    conversationId: id,
+    conversationTitle: conversation.title,
+    conversationOwnerId: conversation.userId,
+    accessBasis: access.basis ?? 'owner',
+    action: 'conversation.metadata_viewed',
+    clientIp: getClientIP(request),
+  });
+
   return successResponse(conversation);
 });
 

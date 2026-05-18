@@ -30,7 +30,8 @@ import {
   renderConversationMarkdown,
   type RenderConversationMessage,
 } from '@/lib/orchestration/trace/render-conversation-markdown';
-import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
+import { logConversationAccess } from '@/lib/orchestration/audit/admin-audit-logger';
+import { adminCanViewConversation } from '@/lib/orchestration/access/conversation-access';
 
 export const GET = withAdminAuth<{ id: string }>(async (request, session, { params }) => {
   const clientIP = getClientIP(request);
@@ -45,6 +46,10 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
   }
   const id = parsed.data;
 
+  // Consent-gated access: owner OR active share.
+  const access = await adminCanViewConversation(id, session.user.id);
+  if (!access.ok) throw new NotFoundError(`Conversation ${id} not found`);
+
   const conversation = await prisma.aiConversation.findUnique({
     where: { id },
     include: {
@@ -54,10 +59,7 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
       },
     },
   });
-
-  if (!conversation || conversation.userId !== session.user.id) {
-    throw new NotFoundError(`Conversation ${id} not found`);
-  }
+  if (!conversation) throw new NotFoundError(`Conversation ${id} not found`);
 
   const messages: RenderConversationMessage[] = conversation.messages.map((msg) => {
     let provenance = null;
@@ -109,15 +111,16 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
     bytes: markdown.length,
   });
 
-  // Audit-of-audits: log every Markdown download. Pair endpoint:
-  // `/provenance` writes the same action type with `format: 'json'`.
-  logAdminAction({
-    userId: session.user.id,
+  // Audit-of-audits: every cross-user (shared-basis) Markdown download
+  // writes an audit row. Owner-basis downloads skip logging.
+  logConversationAccess({
+    adminUserId: session.user.id,
+    conversationId: id,
+    conversationTitle: conversation.title,
+    conversationOwnerId: conversation.userId,
+    accessBasis: access.basis ?? 'owner',
     action: 'conversation.provenance_export',
-    entityType: 'conversation',
-    entityId: id,
-    entityName: conversation.title,
-    metadata: { format: 'markdown', messageCount: messages.length, bytes: markdown.length },
+    extra: { format: 'markdown', messageCount: messages.length, bytes: markdown.length },
     clientIp: getClientIP(request),
   });
 

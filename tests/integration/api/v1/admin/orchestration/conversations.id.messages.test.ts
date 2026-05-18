@@ -42,10 +42,20 @@ vi.mock('@/lib/db/client', () => ({
   },
 }));
 
+vi.mock('@/lib/orchestration/access/conversation-access', () => ({
+  adminCanViewConversation: vi.fn(),
+}));
+
+vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({
+  logConversationAccess: vi.fn(),
+}));
+
 // ─── Imports after mocks ─────────────────────────────────────────────────────
 
 import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db/client';
+import { adminCanViewConversation } from '@/lib/orchestration/access/conversation-access';
+import { logConversationAccess } from '@/lib/orchestration/audit/admin-audit-logger';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -123,9 +133,14 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/messages', () => {
     });
   });
 
-  describe('Successful retrieval', () => {
-    it('returns 200 with messages and conversation metadata', async () => {
+  describe('Successful retrieval — owner basis', () => {
+    it('returns 200 with messages when caller owns the conversation', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'owner',
+        ownerId: USER_ID,
+      });
       vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(makeConversation() as never);
       vi.mocked(prisma.aiMessage.findMany).mockResolvedValue([
         makeMessage({ createdAt: new Date('2025-01-01T10:00:00Z') }),
@@ -150,22 +165,13 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/messages', () => {
       expect(data.data.conversation.userId).toBe(USER_ID);
     });
 
-    it('looks up conversation by id (cross-user admin audit)', async () => {
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(makeConversation() as never);
-      vi.mocked(prisma.aiMessage.findMany).mockResolvedValue([]);
-
-      await GET(makeRequest(), makeParams(CONV_ID));
-
-      expect(vi.mocked(prisma.aiConversation.findUnique)).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: CONV_ID },
-        })
-      );
-    });
-
     it('returns messages ordered ascending by createdAt', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'owner',
+        ownerId: USER_ID,
+      });
       vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(makeConversation() as never);
       vi.mocked(prisma.aiMessage.findMany).mockResolvedValue([]);
 
@@ -179,14 +185,47 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/messages', () => {
     });
   });
 
-  describe('Not found', () => {
-    it('returns 404 when conversation does not exist', async () => {
+  describe('Successful retrieval — shared basis (consent-gated cross-user)', () => {
+    it('returns 200 when the helper grants shared-basis access', async () => {
+      const OTHER_USER = 'cmjbv4i3x00003wsloputgw88';
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null);
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'shared',
+        ownerId: OTHER_USER,
+      });
+      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
+        makeConversation({ userId: OTHER_USER }) as never
+      );
+      vi.mocked(prisma.aiMessage.findMany).mockResolvedValue([makeMessage()] as never);
+
+      const response = await GET(makeRequest(), makeParams(CONV_ID));
+
+      expect(response.status).toBe(200);
+      expect(vi.mocked(logConversationAccess)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accessBasis: 'shared',
+          conversationOwnerId: OTHER_USER,
+          action: 'conversation.messages_viewed',
+        })
+      );
+    });
+  });
+
+  describe('Not found (consent-gated)', () => {
+    it('returns 404 when the helper denies access', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: false,
+        basis: null,
+        ownerId: null,
+      });
 
       const response = await GET(makeRequest(), makeParams(CONV_ID));
 
       expect(response.status).toBe(404);
+      // No audit row when access is denied.
+      expect(vi.mocked(logConversationAccess)).not.toHaveBeenCalled();
     });
   });
 

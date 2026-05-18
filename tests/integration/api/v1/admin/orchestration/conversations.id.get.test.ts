@@ -36,9 +36,20 @@ vi.mock('@/lib/db/client', () => ({
   prisma: {
     aiConversation: {
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
       delete: vi.fn(),
     },
   },
+}));
+
+// Black-box the access helper — its internals have their own tests
+// (`tests/unit/lib/orchestration/access/conversation-access.test.ts`).
+vi.mock('@/lib/orchestration/access/conversation-access', () => ({
+  adminCanViewConversation: vi.fn(),
+}));
+
+vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({
+  logConversationAccess: vi.fn(),
 }));
 
 vi.mock('@/lib/security/rate-limit', () => ({
@@ -69,6 +80,8 @@ vi.mock('@/lib/logging', () => ({
 
 import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db/client';
+import { adminCanViewConversation } from '@/lib/orchestration/access/conversation-access';
+import { logConversationAccess } from '@/lib/orchestration/audit/admin-audit-logger';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -137,9 +150,14 @@ describe('GET /api/v1/admin/orchestration/conversations/:id', () => {
   });
 
   describe('Successful retrieval', () => {
-    it('returns conversation detail with agent and _count on success', async () => {
+    it('returns conversation detail with agent and _count when caller owns it', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiConversation.findFirst).mockResolvedValue(makeConversation() as never);
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'owner',
+        ownerId: ADMIN_ID,
+      });
+      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(makeConversation() as never);
 
       const response = await GET(makeRequest(CONV_ID), makeParams(CONV_ID));
       const data = await parseJson<{
@@ -161,30 +179,76 @@ describe('GET /api/v1/admin/orchestration/conversations/:id', () => {
       expect(data.data._count.messages).toBe(5);
     });
 
-    it('scopes the query to session.user.id via findFirst where clause', async () => {
+    it('owner reads do not write an audit row (helper no-ops on basis=owner)', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiConversation.findFirst).mockResolvedValue(makeConversation() as never);
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'owner',
+        ownerId: ADMIN_ID,
+      });
+      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(makeConversation() as never);
 
       await GET(makeRequest(CONV_ID), makeParams(CONV_ID));
 
-      expect(vi.mocked(prisma.aiConversation.findFirst)).toHaveBeenCalledWith(
+      // We DO call logConversationAccess — the helper itself decides
+      // whether to write the row (it no-ops on owner). Assert the
+      // route passed basis='owner' so that contract holds.
+      expect(vi.mocked(logConversationAccess)).toHaveBeenCalledWith(
+        expect.objectContaining({ accessBasis: 'owner' })
+      );
+    });
+
+    it('shared-basis reads return 200 and audit with accessBasis=shared + conversationOwnerId', async () => {
+      const OTHER_USER = 'cmjbv4i3x00003wsloputgw99';
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'shared',
+        ownerId: OTHER_USER,
+      });
+      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
+        makeConversation({ userId: OTHER_USER }) as never
+      );
+
+      const response = await GET(makeRequest(CONV_ID), makeParams(CONV_ID));
+
+      expect(response.status).toBe(200);
+      expect(vi.mocked(logConversationAccess)).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: CONV_ID, userId: ADMIN_ID },
+          accessBasis: 'shared',
+          conversationOwnerId: OTHER_USER,
+          action: 'conversation.metadata_viewed',
         })
       );
     });
   });
 
-  describe('Cross-user access (CRITICAL — must be 404, not 403)', () => {
-    it('returns 404 when conversation is not found or belongs to another user', async () => {
-      // findFirst returns null because { id, userId } does not match.
+  describe('Cross-user access (consent-gated — must be 404, not 403)', () => {
+    it('returns 404 when the helper denies access (no share + non-owner)', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiConversation.findFirst).mockResolvedValue(null);
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: false,
+        basis: null,
+        ownerId: null,
+      });
 
       const response = await GET(makeRequest(CONV_ID), makeParams(CONV_ID));
 
       expect(response.status).toBe(404);
       expect(response.status).not.toBe(403);
+    });
+
+    it('does not write an audit row when access is denied', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: false,
+        basis: null,
+        ownerId: null,
+      });
+
+      await GET(makeRequest(CONV_ID), makeParams(CONV_ID));
+
+      expect(vi.mocked(logConversationAccess)).not.toHaveBeenCalled();
     });
   });
 
