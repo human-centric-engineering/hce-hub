@@ -166,6 +166,22 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/provenance (JSON)', 
       const res = await GET_JSON(makeJsonRequest(), makeParams(CONV_ID));
       expect(res.status).toBe(404);
     });
+
+    it('returns 404 if the conversation disappears between the access check and the data fetch (TOCTOU)', async () => {
+      // Defensive belt-and-braces — same shape as the messages route.
+      // Helper says ok, but the subsequent findUnique returns null
+      // because the conversation was deleted in the meantime.
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'owner',
+        ownerId: USER_ID,
+      });
+      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null);
+
+      const res = await GET_JSON(makeJsonRequest(), makeParams(CONV_ID));
+      expect(res.status).toBe(404);
+    });
   });
 
   describe('Successful retrieval', () => {
@@ -237,6 +253,29 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/provenance (JSON)', 
       expect(assistant?.modelId).toBe('claude-sonnet-4-6');
       expect(assistant?.providerSlug).toBe('anthropic');
       expect(assistant?.provenance?.citations).toHaveLength(1);
+    });
+
+    it('renders the conversation header with null agent fields when the agent has been deleted', async () => {
+      // The route's response shape uses `conversation.agent?.slug ?? null`
+      // and `conversation.agent?.name ?? null` to tolerate a missing
+      // agent relation. Cover those nullish-coalescing branches.
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'owner',
+        ownerId: USER_ID,
+      });
+      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
+        makeConversation({ agent: null, messages: [] }) as never
+      );
+
+      const res = await GET_JSON(makeJsonRequest(), makeParams(CONV_ID));
+      expect(res.status).toBe(200);
+      const body = await parseJson<{
+        data: { conversation: { agentSlug: string | null; agentName: string | null } };
+      }>(res);
+      expect(body.data.conversation.agentSlug).toBeNull();
+      expect(body.data.conversation.agentName).toBeNull();
     });
 
     it('returns null provenance when the persisted JSON fails schema validation', async () => {
@@ -374,6 +413,19 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/provenance.md', () =
     expect(res.status).toBe(404);
   });
 
+  it('returns 404 if the conversation disappears between the access check and the data fetch (TOCTOU)', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(adminCanViewConversation).mockResolvedValue({
+      ok: true,
+      basis: 'owner',
+      ownerId: USER_ID,
+    });
+    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null);
+
+    const res = await GET_MD(makeMdRequest(), makeParams(CONV_ID));
+    expect(res.status).toBe(404);
+  });
+
   it('returns text/markdown with attachment disposition and a no-store cache directive (owner basis)', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(adminCanViewConversation).mockResolvedValue({
@@ -406,6 +458,25 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/provenance.md', () =
     expect(body).toContain(`# Conversation provenance — \`${CONV_ID}\``);
     expect(body).toContain('Tenant Advisor');
     expect(body).toContain('Model `claude-sonnet-4-6`');
+  });
+
+  it('renders the Markdown header with null agent fields when the agent has been deleted', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(adminCanViewConversation).mockResolvedValue({
+      ok: true,
+      basis: 'owner',
+      ownerId: USER_ID,
+    });
+    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
+      makeConversation({ agent: null, messages: [] }) as never
+    );
+
+    const res = await GET_MD(makeMdRequest(), makeParams(CONV_ID));
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    // The renderer falls back to `\`—\`` for the agent label when name,
+    // slug, and id are all null. Confirm the header still renders.
+    expect(body).toContain(`# Conversation provenance — \`${CONV_ID}\``);
   });
 
   it('writes a conversation.provenance_export audit entry on cross-user (shared) Markdown fetch', async () => {
@@ -449,5 +520,40 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/provenance.md', () =
     });
     await GET_MD(makeMdRequest(), makeParams(CONV_ID));
     expect(vi.mocked(logConversationAccess)).not.toHaveBeenCalled();
+  });
+
+  it('logs a warning and omits the bundle when persisted provenance is malformed', async () => {
+    // Mirror of the JSON-route case higher up — the renderer must
+    // degrade gracefully on a malformed provenance JSON rather than
+    // 500 the caller. The Markdown variant exercises a separate
+    // safeParse-and-log branch.
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(adminCanViewConversation).mockResolvedValue({
+      ok: true,
+      basis: 'owner',
+      ownerId: USER_ID,
+    });
+    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(
+      makeConversation({
+        messages: [
+          makeMessage({
+            id: 'msg-bad',
+            role: 'assistant',
+            content: 'A',
+            // Citations missing required fields — bundle is malformed.
+            provenance: { citations: [{ marker: 'one' }] },
+          }),
+        ],
+      }) as never
+    );
+
+    const res = await GET_MD(makeMdRequest(), makeParams(CONV_ID));
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    // Markdown still renders the message header — but with no
+    // provenance section attached.
+    expect(body).toContain('Assistant');
+    expect(body).not.toContain('Citations');
   });
 });

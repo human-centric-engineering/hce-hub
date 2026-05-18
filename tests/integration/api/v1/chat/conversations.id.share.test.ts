@@ -198,6 +198,36 @@ describe('POST /api/v1/chat/conversations/:id/share', () => {
     const res = await POST(postRequest({ expiresInDays: 91 }), paramsFor(CONV_ID));
     expect(res.status).toBe(400);
   });
+
+  it('treats a malformed JSON body as an empty object (default expiry, no reason)', async () => {
+    // The route has `request.json().catch(() => ({}))` as a defensive
+    // fallback so callers can POST with no body and get a default-expiry
+    // share. A malformed body should follow the same path, not 500.
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER'));
+    vi.mocked(prisma.aiConversation.findFirst).mockResolvedValue({ id: CONV_ID } as never);
+    vi.mocked(prisma.aiConversationShare.upsert).mockResolvedValue({
+      id: SHARE_ID,
+      conversationId: CONV_ID,
+    } as never);
+
+    const req = new NextRequest(
+      `http://localhost:3000/api/v1/chat/conversations/${CONV_ID}/share`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'not valid JSON {{{',
+      }
+    );
+
+    const res = await POST(req, paramsFor(CONV_ID));
+
+    expect(res.status).toBe(200);
+    expect(prisma.aiConversationShare.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ reason: null }),
+      })
+    );
+  });
 });
 
 // ─── DELETE /share ───────────────────────────────────────────────────────────

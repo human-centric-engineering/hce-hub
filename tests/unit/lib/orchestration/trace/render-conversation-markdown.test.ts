@@ -287,4 +287,235 @@ describe('renderConversationMarkdown', () => {
       '[open in admin](https://admin.example.com/admin/orchestration/conversations/conv-1)'
     );
   });
+
+  // ── Branch coverage: defensive fallbacks ───────────────────────────────────
+
+  describe('rendering edge cases', () => {
+    it('renders an unknown message role verbatim (roleLabel default case)', () => {
+      const md = renderConversationMarkdown(baseConversation, [
+        makeMessage({ id: 'm-1', role: 'observer', content: 'noted' }),
+      ]);
+      // The default arm of `roleLabel` returns the role unchanged.
+      expect(md).toContain('### 1. observer — ');
+    });
+
+    it('renders an _empty content_ placeholder when an assistant message has no body', () => {
+      const md = renderConversationMarkdown(baseConversation, [
+        makeMessage({ id: 'm-1', role: 'assistant', content: '   ' }),
+      ]);
+      expect(md).toContain('_empty content_');
+    });
+
+    it('fence-renders tool messages with truncation', () => {
+      const md = renderConversationMarkdown(baseConversation, [
+        makeMessage({
+          id: 'm-tool',
+          role: 'tool',
+          content: '{"data":"some long tool result"}',
+          capabilitySlug: 'lookup_order',
+        }),
+      ]);
+      expect(md).toContain('Capability `lookup_order`');
+      // Code fence applied.
+      expect(md).toMatch(/```\n\{"data":"some long tool result"\}\n```/);
+    });
+
+    it('falls back to "(untitled conversation)" when title is null', () => {
+      const md = renderConversationMarkdown({ ...baseConversation, title: null }, []);
+      expect(md).toContain('(untitled conversation)');
+    });
+
+    it('renders citations with no documentName / contentHash / section as dashes', () => {
+      const md = renderConversationMarkdown(baseConversation, [
+        makeMessage({
+          id: 'm-1',
+          role: 'assistant',
+          content: 'A [1].',
+          provenance: {
+            citations: [
+              {
+                marker: 1,
+                chunkId: 'c1',
+                documentId: 'd1',
+                documentName: null,
+                contentHash: null,
+                documentVersion: null,
+                section: null,
+                patternNumber: null,
+                patternName: null,
+                excerpt: 'x',
+                similarity: 0.5,
+              },
+            ],
+          },
+        }),
+      ]);
+      // The doc-label uses just the documentId in backticks when name is null.
+      expect(md).toContain('| [1] | `d1` | — | — |');
+    });
+
+    it('renders capability calls without resultPreview / costUsd as dashes', () => {
+      const md = renderConversationMarkdown(baseConversation, [
+        makeMessage({
+          id: 'm-1',
+          role: 'assistant',
+          content: 'Done.',
+          provenance: {
+            capabilityCalls: [
+              {
+                slug: 'no_preview',
+                arguments: {},
+                latencyMs: 7,
+                success: true,
+              },
+            ],
+          },
+        }),
+      ]);
+      // Both resultPreview and cost fall back to '—'.
+      expect(md).toContain('| `no_preview` | `ok` | 7ms | — | — |');
+    });
+
+    it('renders workflow source items without stepId / reference / note as dashes', () => {
+      const md = renderConversationMarkdown(baseConversation, [
+        makeMessage({
+          id: 'm-1',
+          role: 'assistant',
+          content: 'Wf.',
+          provenance: {
+            workflowSources: [{ source: 'training_knowledge', confidence: 'low' }],
+          },
+        }),
+      ]);
+      // All optional fields fall back to '—'.
+      expect(md).toContain('| — | `training_knowledge` | `low` | — | — |');
+    });
+
+    it('renders the workflow-execution pin without a version when workflowVersionId is null', () => {
+      const md = renderConversationMarkdown(baseConversation, [
+        makeMessage({
+          id: 'm-1',
+          role: 'assistant',
+          content: 'Hi.',
+          workflowExecutionId: 'exec-1',
+          workflowVersionId: null,
+        }),
+      ]);
+      // No `@ <version>` suffix when null.
+      expect(md).toContain('Workflow execution `exec-1`');
+      expect(md).not.toContain('@');
+    });
+
+    it('falls back to agentSlug then agentId then "—" when agentName is null', () => {
+      // agentName null, agentSlug present → uses slug.
+      const m1 = renderConversationMarkdown(
+        { ...baseConversation, agentName: null, agentSlug: 'tenant-advisor' },
+        []
+      );
+      expect(m1).toContain('| Agent | `tenant-advisor` |');
+
+      // agentName + agentSlug both null, agentId present → uses agentId.
+      const m2 = renderConversationMarkdown(
+        { ...baseConversation, agentName: null, agentSlug: null, agentId: 'agent-1' },
+        []
+      );
+      expect(m2).toContain('| Agent | `agent-1` |');
+
+      // All three null → '—'
+      const m3 = renderConversationMarkdown(
+        { ...baseConversation, agentName: null, agentSlug: null, agentId: null },
+        []
+      );
+      expect(m3).toContain('| Agent | `—` |');
+    });
+
+    it('truncates an excerpt that exceeds the cap', () => {
+      const longExcerpt = 'x'.repeat(2000);
+      const md = renderConversationMarkdown(baseConversation, [
+        makeMessage({
+          id: 'm-1',
+          role: 'assistant',
+          content: 'A.',
+          provenance: {
+            citations: [
+              {
+                marker: 1,
+                chunkId: 'c1',
+                documentId: 'd1',
+                documentName: 'Doc',
+                contentHash: null,
+                documentVersion: null,
+                section: null,
+                patternNumber: null,
+                patternName: null,
+                excerpt: longExcerpt,
+                similarity: 0.5,
+              },
+            ],
+          },
+        }),
+        // also truncate the workflow-source long reference and note
+        makeMessage({
+          id: 'm-2',
+          role: 'assistant',
+          content: 'B.',
+          provenance: {
+            workflowSources: [
+              {
+                source: 'web_search',
+                confidence: 'medium',
+                reference: 'r'.repeat(200),
+                note: 'n'.repeat(200),
+              },
+            ],
+          },
+        }),
+      ]);
+      expect(md).toContain('…');
+    });
+
+    it('renders a capability fail envelope with the errorCode', () => {
+      const md = renderConversationMarkdown(baseConversation, [
+        makeMessage({
+          id: 'm-1',
+          role: 'assistant',
+          content: 'Tried.',
+          provenance: {
+            capabilityCalls: [
+              {
+                slug: 'send_email',
+                arguments: {},
+                latencyMs: 50,
+                success: false,
+                errorCode: 'forbidden',
+                costUsd: 0.001,
+              },
+            ],
+          },
+        }),
+      ]);
+      expect(md).toContain('| `send_email` | `fail: forbidden` | 50ms | $0.0010 |');
+    });
+
+    it('uses the "unknown" errorCode placeholder on a fail envelope with no errorCode', () => {
+      const md = renderConversationMarkdown(baseConversation, [
+        makeMessage({
+          id: 'm-1',
+          role: 'assistant',
+          content: 'Tried.',
+          provenance: {
+            capabilityCalls: [
+              {
+                slug: 'send_email',
+                arguments: {},
+                latencyMs: 50,
+                success: false,
+              },
+            ],
+          },
+        }),
+      ]);
+      expect(md).toContain('`fail: unknown`');
+    });
+  });
 });

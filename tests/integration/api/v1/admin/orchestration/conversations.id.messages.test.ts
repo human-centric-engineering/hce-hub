@@ -227,6 +227,27 @@ describe('GET /api/v1/admin/orchestration/conversations/:id/messages', () => {
       // No audit row when access is denied.
       expect(vi.mocked(logConversationAccess)).not.toHaveBeenCalled();
     });
+
+    it('returns 404 if the conversation disappears between the access check and the data fetch (TOCTOU)', async () => {
+      // Defensive belt-and-braces: the helper says ok, but the
+      // subsequent findUnique returns null because the conversation was
+      // deleted between the two queries (e.g. concurrent DELETE in
+      // another tab). The route must 404 cleanly rather than NPE.
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(adminCanViewConversation).mockResolvedValue({
+        ok: true,
+        basis: 'owner',
+        ownerId: USER_ID,
+      });
+      vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null);
+
+      const response = await GET(makeRequest(), makeParams(CONV_ID));
+
+      expect(response.status).toBe(404);
+      // No audit row — the conversation no longer exists by the time
+      // we'd record the access.
+      expect(vi.mocked(logConversationAccess)).not.toHaveBeenCalled();
+    });
   });
 
   describe('Validation errors', () => {
