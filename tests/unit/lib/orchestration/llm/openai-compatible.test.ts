@@ -1625,6 +1625,31 @@ describe('buildBaseParams', () => {
     });
   });
 
+  // ── Prefixed model ids — the failure case that motivated promoting the
+  //    param-shape decision into the model registry. The prior regex was
+  //    anchored on `^(o\d+|gpt-5)`, so an OpenRouter / Azure id like
+  //    `openai/gpt-5-mini` slipped past the check and 400'd with
+  //    "Unsupported parameter: 'max_tokens' is not supported with this
+  //    model. Use 'max_completion_tokens' instead." `deriveParamProfile`
+  //    strips known provider prefixes before testing.
+
+  describe.each([
+    ['openai/gpt-5', 'openai/gpt-5'],
+    ['openai/gpt-5-mini', 'openai/gpt-5-mini'],
+    ['openai/o3-mini', 'openai/o3-mini'],
+    ['azure/gpt-5', 'azure/gpt-5'],
+  ])('prefixed reasoning id — %s', (label, modelId) => {
+    it(`still resolves to max_completion_tokens for ${label}`, async () => {
+      chatCreateMock.mockResolvedValue(makeChatCompletion('ok', 'stop'));
+      const provider = makeProvider();
+      await provider.chat([{ role: 'user', content: 'x' }], { model: modelId, maxTokens: 256 });
+
+      const params = chatCreateMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(params?.max_completion_tokens).toBe(256);
+      expect(params?.max_tokens).toBeUndefined();
+    });
+  });
+
   it('does not include tools when tools array is empty', async () => {
     // Arrange
     chatCreateMock.mockResolvedValue(makeChatCompletion('ok', 'stop'));

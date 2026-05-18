@@ -216,6 +216,54 @@ describe('runLlmCall', () => {
     expect(telemetry[0].durationMs).toBeGreaterThanOrEqual(0);
   });
 
+  it('captures requestParams (maxTokens, temperature, responseFormat) on the telemetry entry when the caller supplied them', async () => {
+    const mockChat = vi.fn().mockResolvedValue({
+      content: 'answer',
+      usage: { inputTokens: 12, outputTokens: 7 },
+    });
+    vi.mocked(getModel).mockReturnValue({ provider: 'openai' } as any);
+    vi.mocked(getProvider).mockResolvedValue({ chat: mockChat } as any);
+    vi.mocked(calculateCost).mockReturnValue({ totalCostUsd: 0.001, isLocal: false } as any);
+    vi.mocked(logCost).mockResolvedValue(null as any);
+
+    const telemetry: import('@/types/orchestration').LlmTelemetryEntry[] = [];
+    const ctx = makeCtx({ stepTelemetry: telemetry });
+    await runLlmCall(ctx, {
+      stepId: 's1',
+      prompt: 'hi',
+      modelOverride: 'gpt-4o',
+      maxTokens: 512,
+      temperature: 0.3,
+      responseFormat: { type: 'json_object' },
+    });
+
+    expect(telemetry).toHaveLength(1);
+    expect(telemetry[0].requestParams).toEqual({
+      maxTokens: 512,
+      temperature: 0.3,
+      responseFormat: 'json_object',
+    });
+  });
+
+  it('omits requestParams entirely when the caller passed none (undefined fields would be misleading)', async () => {
+    vi.mocked(getModel).mockReturnValue({ provider: 'openai' } as any);
+    vi.mocked(getProvider).mockResolvedValue({
+      chat: vi.fn().mockResolvedValue({
+        content: 'answer',
+        usage: { inputTokens: 5, outputTokens: 3 },
+      }),
+    } as any);
+    vi.mocked(calculateCost).mockReturnValue({ totalCostUsd: 0.001, isLocal: false } as any);
+    vi.mocked(logCost).mockResolvedValue(null as any);
+
+    const telemetry: import('@/types/orchestration').LlmTelemetryEntry[] = [];
+    const ctx = makeCtx({ stepTelemetry: telemetry });
+    await runLlmCall(ctx, { stepId: 's1', prompt: 'hi', modelOverride: 'gpt-4o' });
+
+    expect(telemetry).toHaveLength(1);
+    expect(telemetry[0].requestParams).toBeUndefined();
+  });
+
   it('does not throw when ctx.stepTelemetry is undefined (back-compat for callers without an array)', async () => {
     vi.mocked(getModel).mockReturnValue({ provider: 'openai' } as any);
     vi.mocked(getProvider).mockResolvedValue({

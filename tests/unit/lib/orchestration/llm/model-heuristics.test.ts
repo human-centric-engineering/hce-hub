@@ -18,6 +18,7 @@ import {
   deriveDeploymentProfiles,
   deriveLatency,
   deriveMatrixSlug,
+  deriveParamProfile,
   deriveReasoningDepth,
   deriveTierRole,
   deriveToolUse,
@@ -201,6 +202,53 @@ describe('deriveDeploymentProfiles', () => {
 
   it('non-local model → [hosted]', () => {
     expect(deriveDeploymentProfiles({ isLocal: false })).toEqual(['hosted']);
+  });
+});
+
+describe('deriveParamProfile', () => {
+  it('anthropic provider always maps to the anthropic profile', () => {
+    expect(deriveParamProfile('claude-sonnet-4', 'anthropic')).toBe('anthropic');
+    expect(deriveParamProfile('claude-haiku-4.5', 'anthropic')).toBe('anthropic');
+  });
+
+  it('gemini provider always maps to the gemini profile', () => {
+    expect(deriveParamProfile('gemini-2.5-pro', 'gemini')).toBe('gemini');
+    expect(deriveParamProfile('any-model-id', 'gemini')).toBe('gemini');
+  });
+
+  it('OpenAI reasoning + gpt-5 families map to openai-reasoning', () => {
+    expect(deriveParamProfile('gpt-5', 'openai')).toBe('openai-reasoning');
+    expect(deriveParamProfile('gpt-5-mini', 'openai')).toBe('openai-reasoning');
+    expect(deriveParamProfile('o1', 'openai')).toBe('openai-reasoning');
+    expect(deriveParamProfile('o3-mini', 'openai')).toBe('openai-reasoning');
+    expect(deriveParamProfile('o4-preview', 'openai')).toBe('openai-reasoning');
+  });
+
+  it('strips provider prefixes so OpenRouter-style ids still match — this is the failure case that motivated promoting the routing into the registry', () => {
+    expect(deriveParamProfile('openai/gpt-5-mini', 'openai')).toBe('openai-reasoning');
+    expect(deriveParamProfile('azure/gpt-5', 'openai')).toBe('openai-reasoning');
+    expect(deriveParamProfile('openai/o3-mini', 'openai')).toBe('openai-reasoning');
+  });
+
+  it('does NOT match reasoning patterns mid-id (anchored regex prevents false positives)', () => {
+    // A fine-tuned model that happens to contain "gpt-5" as a substring
+    // somewhere other than the start should not be treated as a
+    // reasoning model.
+    expect(deriveParamProfile('my-fine-tuned-gpt-5-fork', 'openai')).toBe('openai-legacy');
+    expect(deriveParamProfile('foo-o3-mini', 'openai')).toBe('openai-legacy');
+  });
+
+  it('falls back to openai-legacy for everything else', () => {
+    expect(deriveParamProfile('gpt-4o', 'openai')).toBe('openai-legacy');
+    expect(deriveParamProfile('gpt-4o-mini', 'openai')).toBe('openai-legacy');
+    expect(deriveParamProfile('gpt-4.1', 'openai')).toBe('openai-legacy');
+    // OpenAI-compatible hosts of non-OpenAI models all use legacy
+    // chat-completions conventions.
+    expect(deriveParamProfile('llama-3.3-70b-versatile', 'groq')).toBe('openai-legacy');
+    expect(deriveParamProfile('mixtral-8x7b-32768', 'groq')).toBe('openai-legacy');
+    expect(deriveParamProfile('meta-llama/Llama-3.3-70B-Instruct-Turbo', 'together')).toBe(
+      'openai-legacy'
+    );
   });
 });
 

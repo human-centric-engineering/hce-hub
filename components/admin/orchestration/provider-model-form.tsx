@@ -122,10 +122,12 @@ const modelFormSchema = z.object({
   costEfficiency: z.enum(['very_high', 'high', 'medium', 'none']),
   contextLength: z.enum(['very_high', 'high', 'medium', 'n_a']),
   toolUse: z.enum(['strong', 'moderate', 'none']),
-  // Wire-level parameter convention. Empty string is treated as "not set"
-  // (the runtime derives a fallback via `deriveParamProfile`). See
-  // `lib/orchestration/llm/types.ts` for the profile semantics.
-  paramProfile: z.enum(['openai-legacy', 'openai-reasoning', 'anthropic', 'gemini', '']),
+  // Wire-level parameter convention. `'auto'` is the sentinel for "not set"
+  // (the runtime derives a fallback via `deriveParamProfile`). Radix
+  // Select forbids an empty-string value on `<SelectItem>` so we can't
+  // use `''` as the sentinel even though that's how the column persists
+  // (NULL → "not set"). The submit handler translates `'auto'` → null.
+  paramProfile: z.enum(['auto', 'openai-legacy', 'openai-reasoning', 'anthropic', 'gemini']),
   bestRole: z.string().min(1, 'Best role is required').max(200),
   // Embedding-specific
   dimensions: z
@@ -239,7 +241,7 @@ export function ProviderModelForm({ model }: ProviderModelFormProps) {
       costEfficiency: (model?.costEfficiency as ModelFormData['costEfficiency']) ?? 'medium',
       contextLength: (model?.contextLength as ModelFormData['contextLength']) ?? 'medium',
       toolUse: (model?.toolUse as ModelFormData['toolUse']) ?? 'moderate',
-      paramProfile: (model?.paramProfile as ModelFormData['paramProfile']) ?? '',
+      paramProfile: (model?.paramProfile as ModelFormData['paramProfile']) ?? 'auto',
       bestRole: model?.bestRole ?? '',
       dimensions: model?.dimensions?.toString() ?? '',
       schemaCompatible: model?.schemaCompatible ?? false,
@@ -303,10 +305,10 @@ export function ProviderModelForm({ model }: ProviderModelFormProps) {
       costEfficiency: data.costEfficiency,
       contextLength: data.contextLength,
       toolUse: data.toolUse,
-      // Empty string in the form means "let the runtime derive it" — persist
-      // as null so the DB column matches the on-write intent. The runtime
-      // applies `deriveParamProfile()` for null rows.
-      paramProfile: data.paramProfile === '' ? null : data.paramProfile,
+      // `'auto'` is the form sentinel for "let the runtime derive it" —
+      // persist as null so the DB column matches the on-write intent.
+      // The runtime applies `deriveParamProfile()` for null rows.
+      paramProfile: data.paramProfile === 'auto' ? null : data.paramProfile,
       bestRole: data.bestRole,
       isActive: data.isActive,
       local: data.local,
@@ -731,14 +733,14 @@ export function ProviderModelForm({ model }: ProviderModelFormProps) {
             </FieldHelp>
           </Label>
           <Select
-            defaultValue={model?.paramProfile ?? ''}
+            defaultValue={model?.paramProfile ?? 'auto'}
             onValueChange={(v) => setValue('paramProfile', v as ModelFormData['paramProfile'])}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Auto (derive from model id)" />
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Auto (derive from model id)</SelectItem>
+              <SelectItem value="auto">Auto (derive from model id)</SelectItem>
               <SelectItem value="openai-legacy">
                 OpenAI legacy — max_tokens, free temperature
               </SelectItem>

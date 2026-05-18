@@ -78,6 +78,28 @@ describe('rollupTelemetry', () => {
     expect(result.outputTokens).toBe(0);
     expect(result.llmDurationMs).toBe(0);
   });
+
+  it('carries requestParams from the LAST turn (matches model/provider rollup semantics)', () => {
+    const result = rollupTelemetry([
+      telemetry({ requestParams: { maxTokens: 100, temperature: 0.2 } }),
+      telemetry({
+        requestParams: { maxTokens: 4096, temperature: 0.7, responseFormat: 'json_schema' },
+      }),
+    ]);
+    expect(result.requestParams).toEqual({
+      maxTokens: 4096,
+      temperature: 0.7,
+      responseFormat: 'json_schema',
+    });
+  });
+
+  it('omits requestParams from the rollup when the last turn did not capture them', () => {
+    // Single-turn rollup without requestParams — the field should be
+    // absent so an empty spread into the trace entry doesn't write a
+    // misleading sentinel value.
+    const result = rollupTelemetry([telemetry()]);
+    expect(result.requestParams).toBeUndefined();
+  });
 });
 
 describe('computeTraceAggregates', () => {

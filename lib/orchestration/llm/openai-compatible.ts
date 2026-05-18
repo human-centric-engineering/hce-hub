@@ -59,6 +59,7 @@ import type {
   LlmToolCall,
   LlmToolChoice,
   ModelInfo,
+  ParamProfile,
   StreamChunk,
   TranscribeOptions,
   TranscribeResponse,
@@ -105,7 +106,7 @@ const DEFAULT_MAX_TOKENS = 4096;
  * slipped past the anchored regex and 400'd with `'max_tokens' is not
  * supported with this model. Use 'max_completion_tokens' instead.`
  */
-function resolveParamProfile(modelId: string, providerName: string) {
+function resolveParamProfile(modelId: string, providerName: string): ParamProfile {
   const info = getModel(modelId);
   return info?.paramProfile ?? deriveParamProfile(modelId, providerName);
 }

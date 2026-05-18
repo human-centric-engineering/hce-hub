@@ -120,6 +120,26 @@ describe('dbModelToModelInfo', () => {
     expect(dbModelToModelInfo(makeRow({ contextLength: 'medium' })).maxContext).toBe(32_000);
     expect(dbModelToModelInfo(makeRow({ contextLength: 'n_a' })).maxContext).toBe(0);
   });
+
+  it('forwards a known paramProfile value onto the ModelInfo so the provider class can branch on it', () => {
+    const info = dbModelToModelInfo(makeRow({ paramProfile: 'openai-reasoning' }));
+    expect(info.paramProfile).toBe('openai-reasoning');
+  });
+
+  it('omits paramProfile entirely when the row column is null (lets runtime fallback apply)', () => {
+    const info = dbModelToModelInfo(makeRow({ paramProfile: null }));
+    expect(info.paramProfile).toBeUndefined();
+  });
+
+  it('drops an unknown paramProfile value rather than narrowing it to a wrong enum member', () => {
+    // Column is plain TEXT in Postgres — an operator could write
+    // garbage via raw SQL. The adapter must treat unknown values as
+    // absent, not as a phantom enum member.
+    const info = dbModelToModelInfo(
+      makeRow({ paramProfile: 'banana' as unknown as AiProviderModel['paramProfile'] })
+    );
+    expect(info.paramProfile).toBeUndefined();
+  });
 });
 
 describe('mergeDbModelsWithRegistry', () => {

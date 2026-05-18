@@ -177,8 +177,31 @@ Any PATCH flips `isDefault` to `false` server-side so re-seeds leave the row alo
 | Cost Efficiency | `very_high` · `high` · `medium` · `none`                                                                                                                                                                                                                                                                                                                                                   |
 | Context Length  | `very_high` · `high` · `medium` · `n_a`                                                                                                                                                                                                                                                                                                                                                    |
 | Tool Use        | `strong` · `moderate` · `none`                                                                                                                                                                                                                                                                                                                                                             |
+| Param Profile   | Optional. Wire-level convention the model expects: `openai-legacy` · `openai-reasoning` · `anthropic` · `gemini`. Leave on **Auto** to let `deriveParamProfile()` resolve it from model id + provider. Set explicitly when an automated derivation gets it wrong — e.g. a renamed o-series model. See [Param profile](#param-profile) below                                                |
 | Best Role       | Free-text one-liner (e.g. "Planner / orchestrator")                                                                                                                                                                                                                                                                                                                                        |
 | Active          | `<Switch>`. Inactive models are hidden from the matrix and `recommend` endpoint                                                                                                                                                                                                                                                                                                            |
+
+### Param profile
+
+The `paramProfile` field tells the runtime which wire-level convention the model accepts. The OpenAI-compatible provider class (`lib/orchestration/llm/openai-compatible.ts`) consults `ModelInfo.paramProfile` before serialising a request. Resolution is:
+
+1. **Registry hit** — the DB column `AiProviderModel.paramProfile` flows through `dbModelToModelInfo` onto `ModelInfo`. Authoritative.
+2. **Heuristic fallback** — `deriveParamProfile(modelId, provider)` strips known prefixes (`openai/`, `azure/`) and pattern-matches the bare id. Used when the column is null.
+
+| Profile            | Wire shape                                             | When to set explicitly                                                                           |
+| ------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `openai-legacy`    | `max_tokens`, free `temperature`                       | The default for gpt-4o, gpt-4, gpt-3.5, and any Llama/Mixtral hosted via Groq/Together/Fireworks |
+| `openai-reasoning` | `max_completion_tokens`, `temperature` locked to 1     | o-series and gpt-5 family. Set explicitly on rows the heuristic can't infer from the id          |
+| `anthropic`        | `max_tokens` required, supports `top_k` and `thinking` | Reserved for the Anthropic provider class — not consumed by openai-compatible                    |
+| `gemini`           | `maxOutputTokens`                                      | Reserved for a future Gemini provider class                                                      |
+
+Leave on **Auto** for most rows — the heuristic correctly classifies any id starting with `o<digit>` or `gpt-5` (with or without an `openai/` / `azure/` prefix). Set explicitly when:
+
+- The model id is renamed in a way the heuristic doesn't recognise.
+- OpenAI ships a new reasoning family the heuristic regex doesn't match.
+- An admin wants to lock the profile in the audit trail rather than trust the heuristic.
+
+A misclassified reasoning model returns `400 Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.` on the first chat turn — the request envelope is captured on the execution trace (`requestParams` field on the failed step) so the misconfiguration is visible from the UI.
 
 ### Embedding-only fields
 
