@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FieldHelp } from '@/components/ui/field-help';
 import { cn } from '@/lib/utils';
-import { messageMetadataSchema } from '@/lib/validations/orchestration';
+import { messageMetadataSchema, messageProvenanceSchema } from '@/lib/validations/orchestration';
 import { MessageWithCitations } from '@/components/admin/orchestration/chat/message-with-citations';
 import { MessageTrace } from '@/components/admin/orchestration/chat/message-trace';
 import type { Citation, ToolCallTrace } from '@/types/orchestration';
@@ -27,17 +27,13 @@ import type { Citation, ToolCallTrace } from '@/types/orchestration';
 
 interface MessageMetadata {
   tokenUsage?: { input?: number; output?: number };
-  modelUsed?: string;
   latencyMs?: number;
   costUsd?: number;
+}
+
+interface MessageProvenance {
   citations?: Citation[];
-  /**
-   * Per-capability dispatch diagnostics persisted by the streaming
-   * handler when the live request opted into `includeTrace`. Old
-   * messages (pre-trace) simply leave this absent and the trace
-   * strip renders nothing.
-   */
-  toolCalls?: ToolCallTrace[];
+  capabilityCalls?: ToolCallTrace[];
 }
 
 export interface ConversationMessage {
@@ -47,6 +43,19 @@ export interface ConversationMessage {
   capabilitySlug: string | null;
   toolCallId: string | null;
   metadata: Record<string, unknown> | null;
+  /**
+   * Provenance bundle: citations, capability calls, workflow sources.
+   * Migrated out of `metadata` so it is queryable + first-class. The
+   * trace viewer reads citations and capabilityCalls from here.
+   */
+  provenance: Record<string, unknown> | null;
+  /** Scalar version pins — null on direct chat with the live agent. */
+  agentVersionId: string | null;
+  workflowExecutionId: string | null;
+  workflowVersionId: string | null;
+  /** Model + provider that produced the assistant turn. */
+  modelId: string | null;
+  providerSlug: string | null;
   createdAt: string;
 }
 
@@ -72,6 +81,12 @@ function parseMetadata(raw: Record<string, unknown> | null): MessageMetadata {
   return result.success ? result.data : {};
 }
 
+function parseProvenance(raw: Record<string, unknown> | null): MessageProvenance {
+  if (!raw) return {};
+  const result = messageProvenanceSchema.safeParse(raw);
+  return result.success ? result.data : {};
+}
+
 function formatTimestamp(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '—';
@@ -88,6 +103,7 @@ function MessageCard({ message }: { message: ConversationMessage }) {
   const config = ROLE_CONFIG[message.role] ?? ROLE_CONFIG.user;
   const Icon = config.icon;
   const meta = parseMetadata(message.metadata);
+  const prov = parseProvenance(message.provenance);
   const isTool = message.role === 'tool';
 
   return (
@@ -117,11 +133,11 @@ function MessageCard({ message }: { message: ConversationMessage }) {
           <>
             <MessageWithCitations
               content={message.content}
-              citations={meta.citations}
+              citations={prov.citations}
               className="text-sm"
             />
-            {meta.toolCalls && meta.toolCalls.length > 0 && (
-              <MessageTrace toolCalls={meta.toolCalls} />
+            {prov.capabilityCalls && prov.capabilityCalls.length > 0 && (
+              <MessageTrace toolCalls={prov.capabilityCalls} />
             )}
           </>
         ) : (
@@ -130,12 +146,12 @@ function MessageCard({ message }: { message: ConversationMessage }) {
       </div>
 
       {/* Metadata bar */}
-      {(meta.modelUsed ||
+      {(message.modelId ||
         meta.tokenUsage ||
         meta.latencyMs !== undefined ||
         meta.costUsd !== undefined) && (
         <div className="text-muted-foreground mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
-          {meta.modelUsed && <span>{meta.modelUsed}</span>}
+          {message.modelId && <span>{message.modelId}</span>}
           {meta.tokenUsage?.input !== undefined && (
             <span>{meta.tokenUsage.input.toLocaleString()} in</span>
           )}

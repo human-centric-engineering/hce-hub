@@ -132,6 +132,16 @@ export const GET = withAdminAuth(async (request, session) => {
       role: msg.role,
       content: msg.content,
       metadata: msg.metadata,
+      // Provenance columns surfaced so the export carries the audit
+      // substrate (versions + citations + capability calls + workflow
+      // sources) alongside conversation content. CSV path stays lossy
+      // by design — it's the "human-readable transcript" format.
+      provenance: msg.provenance,
+      agentVersionId: msg.agentVersionId,
+      workflowExecutionId: msg.workflowExecutionId,
+      workflowVersionId: msg.workflowVersionId,
+      modelId: msg.modelId,
+      providerSlug: msg.providerSlug,
       createdAt: msg.createdAt.toISOString(),
     })),
   }));
