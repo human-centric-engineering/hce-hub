@@ -919,4 +919,130 @@ describe('CallExternalApiCapability', () => {
       expect(headers.Authorization).toBe('Bearer tok_abc');
     });
   });
+
+  describe('redactProvenance', () => {
+    it('declares processesPii=true', () => {
+      const cap = new CallExternalApiCapability();
+      expect(cap.processesPii).toBe(true);
+    });
+
+    it('masks auth-style headers (case-insensitive) in the persisted args', () => {
+      const cap = new CallExternalApiCapability();
+      const redacted = cap.redactProvenance(
+        {
+          url: 'https://api.example.com/charge',
+          method: 'POST',
+          headers: {
+            authorization: 'Bearer eyJ...',
+            'X-API-Key': 'sk_live_abc',
+            'Content-Type': 'application/json',
+          },
+          body: { customerId: 'cus_123', amount: 5000 },
+        },
+        { success: true, data: { status: 200, body: { id: 'ch_1' } } }
+      );
+      const safeArgs = redacted.args as {
+        headers: Record<string, string>;
+      };
+      expect(safeArgs.headers.authorization).toBe('<redacted>');
+      expect(safeArgs.headers['X-API-Key']).toBe('<redacted>');
+      // Non-auth headers pass through.
+      expect(safeArgs.headers['Content-Type']).toBe('application/json');
+    });
+
+    it('replaces request body and multipart with sentinels', () => {
+      const cap = new CallExternalApiCapability();
+      const redacted = cap.redactProvenance(
+        {
+          url: 'https://api.example.com/email',
+          method: 'POST',
+          body: { to: 'alice@example.com', subject: 'Receipt', html: '<p>...</p>' },
+        },
+        { success: true, data: { status: 202, body: { sent: true } } }
+      );
+      const safeArgs = redacted.args as { body: string };
+      expect(safeArgs.body).toBe('<redacted: body>');
+      // multipart was not supplied; should not appear at all in the safeArgs
+      expect((redacted.args as { multipart?: unknown }).multipart).toBeUndefined();
+    });
+
+    it('replaces multipart with a sentinel when supplied', () => {
+      const cap = new CallExternalApiCapability();
+      const redacted = cap.redactProvenance(
+        {
+          method: 'POST',
+          url: 'https://gotenberg.example.com/forms/chromium/convert/html',
+          multipart: {
+            files: [{ name: 'index.html', contentType: 'text/html', data: 'PGh0bWw+...' }],
+          },
+        },
+        { success: true, data: { status: 200, body: { ok: true } } }
+      );
+      const safeArgs = redacted.args as { multipart: string };
+      expect(safeArgs.multipart).toBe('<redacted: multipart>');
+    });
+
+    it('preserves url, method, and responseExtract verbatim (audit-useful structural fields)', () => {
+      const cap = new CallExternalApiCapability();
+      const redacted = cap.redactProvenance(
+        {
+          url: 'https://api.example.com/lookup',
+          method: 'GET',
+          responseExtract: 'data.users[0].id',
+        },
+        { success: true, data: { status: 200, body: { users: [] } } }
+      );
+      const safeArgs = redacted.args as {
+        url: string;
+        method: string;
+        responseExtract: string;
+      };
+      expect(safeArgs.url).toBe('https://api.example.com/lookup');
+      expect(safeArgs.method).toBe('GET');
+      expect(safeArgs.responseExtract).toBe('data.users[0].id');
+    });
+
+    it('redacts the response body in resultPreview but keeps status', () => {
+      const cap = new CallExternalApiCapability();
+      const redacted = cap.redactProvenance(
+        { url: 'https://api.example.com/x', method: 'GET' },
+        {
+          success: true,
+          data: { status: 200, body: { secret_field: 'sensitive value' } },
+        }
+      );
+      expect(redacted.resultPreview).toContain('"status":200');
+      expect(redacted.resultPreview).toContain('<redacted: body>');
+      expect(redacted.resultPreview).not.toContain('sensitive value');
+    });
+
+    it('keeps transformError in the preview (it is diagnostic, not PII)', () => {
+      const cap = new CallExternalApiCapability();
+      const redacted = cap.redactProvenance(
+        { url: 'https://api.example.com/x', method: 'GET' },
+        {
+          success: true,
+          data: {
+            status: 200,
+            body: { large: 'object' },
+            transformError: 'JMESPath: parse error at position 12',
+          },
+        }
+      );
+      expect(redacted.resultPreview).toContain('JMESPath: parse error at position 12');
+    });
+
+    it('passes error envelopes through verbatim (no body to redact)', () => {
+      const cap = new CallExternalApiCapability();
+      const redacted = cap.redactProvenance(
+        { url: 'https://api.example.com/x', method: 'GET' },
+        {
+          success: false,
+          error: { code: 'http_error', message: 'Connection refused' },
+        }
+      );
+      expect(redacted.resultPreview).toContain('"success":false');
+      expect(redacted.resultPreview).toContain('"code":"http_error"');
+    });
+  });
 });

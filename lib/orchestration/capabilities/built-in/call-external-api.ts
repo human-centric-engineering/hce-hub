@@ -37,6 +37,7 @@ import {
   resolveEnvTemplate,
   resolveEnvTemplatesInRecord,
 } from '@/lib/orchestration/env-template';
+import { maskKeysInObject, redactedString } from '@/lib/security/redact';
 import {
   buildMultipartBody,
   executeHttpRequest,
@@ -161,8 +162,29 @@ function isParsableUrl(value: string): boolean {
   }
 }
 
+/**
+ * Headers commonly used for outbound authentication. These names get
+ * masked from the persisted provenance trace so a secret never lands
+ * on a durable audit row even if the LLM accidentally surfaces it in
+ * an `Authorization`-shaped header.
+ *
+ * Match is case-insensitive (see `maskKeysInObject`). Per-binding
+ * `forcedHeaders` carrying secrets — set by admins — go through the
+ * same redaction.
+ */
+const AUTH_HEADER_NAMES = [
+  'Authorization',
+  'Proxy-Authorization',
+  'X-Api-Key',
+  'Api-Key',
+  'X-Auth-Token',
+  'X-Access-Token',
+  'Cookie',
+];
+
 export class CallExternalApiCapability extends BaseCapability<Args, Data> {
   readonly slug = SLUG;
+  readonly processesPii = true;
 
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: SLUG,
@@ -232,6 +254,53 @@ export class CallExternalApiCapability extends BaseCapability<Args, Data> {
   };
 
   protected readonly schema = argsSchema;
+
+  /**
+   * The args of an outbound HTTP call routinely carry secrets (auth
+   * headers) and PII (customer data in JSON bodies, files in multipart
+   * parts). The response body can carry the same. Persist only the
+   * structural fields that are useful for audit — method, URL, redacted
+   * headers, status — and replace body/multipart with sentinels.
+   *
+   * The LLM still sees the un-redacted request + response on its turn;
+   * only the durable provenance record is masked.
+   */
+  redactProvenance(
+    args: Args,
+    result: CapabilityResult<Data>
+  ): {
+    args: unknown;
+    resultPreview: string;
+  } {
+    const safeHeaders = args.headers
+      ? maskKeysInObject(args.headers, AUTH_HEADER_NAMES)
+      : undefined;
+    const safeArgs = {
+      ...(args.url !== undefined ? { url: args.url } : {}),
+      method: args.method,
+      ...(safeHeaders ? { headers: safeHeaders } : {}),
+      ...(args.body !== undefined ? { body: redactedString('body') } : {}),
+      ...(args.multipart !== undefined ? { multipart: redactedString('multipart') } : {}),
+      ...(args.responseExtract !== undefined ? { responseExtract: args.responseExtract } : {}),
+    };
+
+    // Result preview: keep status + transformError; drop body (may
+    // contain customer records, payment refs, full response payloads).
+    let preview: string;
+    if (result.success && result.data) {
+      const data = result.data;
+      const safeData: Record<string, unknown> = { status: data.status };
+      if (data.transformError) safeData.transformError = data.transformError;
+      safeData.body = redactedString('body');
+      preview = JSON.stringify({ success: true, data: safeData });
+    } else {
+      // Error envelope is { success: false, error: { code, message } }
+      // — no body, safe to persist as-is.
+      preview = JSON.stringify(result);
+    }
+
+    return { args: safeArgs, resultPreview: preview };
+  }
 
   async execute(args: Args, context: CapabilityContext): Promise<CapabilityResult<Data>> {
     const loaded = await this.loadCustomConfig(context.agentId);
