@@ -32,11 +32,16 @@ vi.mock('@/lib/orchestration/knowledge/embedder', () => ({
   embedText: vi.fn(),
 }));
 
+vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({
+  logConversationAccess: vi.fn(),
+}));
+
 // ─── Imports ────────────────────────────────────────────────────────────
 
 import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db/client';
 import { embedText } from '@/lib/orchestration/knowledge/embedder';
+import { logConversationAccess } from '@/lib/orchestration/audit/admin-audit-logger';
 import { mockAdminUser, mockUnauthenticatedUser } from '@/tests/helpers/auth';
 import { GET } from '@/app/api/v1/admin/orchestration/conversations/search/route';
 
@@ -299,6 +304,100 @@ describe('GET /conversations/search', () => {
 
     // 1 - 1.5 = -0.5, but should be clamped to 0
     expect(body.data[0].bestMatch.similarity).toBe(0);
+  });
+
+  describe('audit-of-audits', () => {
+    const ADMIN_ID = 'cmjbv4i3x00003wsloputgwul';
+    const OTHER_USER = 'cmjbv4i3x00003wsloputgwzz';
+
+    it('fires logConversationAccess with shared basis for cross-user matches', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
+        makeSearchResult({
+          conversationId: 'conv-shared',
+          userId: OTHER_USER,
+          conversationTitle: 'Their conversation',
+          messageId: 'msg-99',
+          distance: 0.2,
+        }),
+      ]);
+
+      await GET(makeRequest({ q: 'refund inquiry' }));
+
+      expect(vi.mocked(logConversationAccess)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(logConversationAccess)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          adminUserId: ADMIN_ID,
+          conversationId: 'conv-shared',
+          conversationTitle: 'Their conversation',
+          conversationOwnerId: OTHER_USER,
+          accessBasis: 'shared',
+          action: 'conversation.search_matched',
+          extra: expect.objectContaining({
+            query: 'refund inquiry',
+            messageId: 'msg-99',
+            similarity: expect.any(Number),
+          }),
+        })
+      );
+    });
+
+    it('does NOT fire logConversationAccess for own-conversation matches', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
+        makeSearchResult({
+          conversationId: 'conv-own',
+          userId: ADMIN_ID,
+          distance: 0.2,
+        }),
+      ]);
+
+      await GET(makeRequest({ q: 'my notes' }));
+
+      expect(vi.mocked(logConversationAccess)).not.toHaveBeenCalled();
+    });
+
+    it('fires one audit row per unique shared conversation, not per matched message', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      // Two matches in the same shared conversation — dedup should collapse
+      // them and only one audit row should be written.
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
+        makeSearchResult({
+          conversationId: 'conv-shared',
+          userId: OTHER_USER,
+          messageId: 'msg-a',
+          distance: 0.1,
+        }),
+        makeSearchResult({
+          conversationId: 'conv-shared',
+          userId: OTHER_USER,
+          messageId: 'msg-b',
+          distance: 0.3,
+        }),
+      ]);
+
+      await GET(makeRequest({ q: 'test' }));
+
+      expect(vi.mocked(logConversationAccess)).toHaveBeenCalledTimes(1);
+    });
+
+    it('fires only for cross-user rows when results mix owner + shared', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
+        makeSearchResult({ conversationId: 'conv-own', userId: ADMIN_ID, distance: 0.1 }),
+        makeSearchResult({ conversationId: 'conv-shared', userId: OTHER_USER, distance: 0.2 }),
+      ]);
+
+      await GET(makeRequest({ q: 'test' }));
+
+      expect(vi.mocked(logConversationAccess)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(logConversationAccess)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: 'conv-shared',
+          accessBasis: 'shared',
+        })
+      );
+    });
   });
 
   it('includes list-shape fields (isActive, updatedAt, _count) for the UI', async () => {

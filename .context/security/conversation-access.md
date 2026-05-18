@@ -50,10 +50,16 @@ where: {
 Every cross-user (shared-basis) read writes an `AiAdminAuditLog` row via [`logConversationAccess`](../../lib/orchestration/audit/admin-audit-logger.ts) with:
 
 - `userId` — the admin who read
-- `action` — `conversation.metadata_viewed` / `messages_viewed` / `provenance_export`
+- `action` — one of:
+  - `conversation.metadata_viewed` (GET `/conversations/:id`)
+  - `conversation.messages_viewed` (GET `/conversations/:id/messages`)
+  - `conversation.provenance_export` (GET `/conversations/:id/provenance[.md]`)
+  - `conversation.search_matched` (GET `/conversations/search` — fired per cross-user row in the result set)
 - `entityId` — the conversation id
 - `metadata.accessBasis: 'shared'`
 - `metadata.conversationOwnerId` — the end user who owns the row
+
+The list endpoint (`GET /conversations`) is **not** audited per-row — it returns summary data only (title, tags, summary, message count; no message content), and per-row audit on a paginated browse would write 25+ rows per page render without adding compliance signal. Substantive cross-user reads — single-conversation detail, messages, provenance bundle, and search matches (which uniquely return up to 500 chars of message content) — all write a row.
 
 Owner reads skip logging by convention — routine self-access would flood the log without adding signal. The helper silently no-ops on `basis === 'owner'` so callers don't need a branch.
 

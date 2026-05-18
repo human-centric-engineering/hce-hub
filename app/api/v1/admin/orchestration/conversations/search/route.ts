@@ -22,6 +22,8 @@ import { successResponse } from '@/lib/api/responses';
 import { ValidationError } from '@/lib/api/errors';
 import { getRouteLogger } from '@/lib/api/context';
 import { embedText } from '@/lib/orchestration/knowledge/embedder';
+import { logConversationAccess } from '@/lib/orchestration/audit/admin-audit-logger';
+import { getClientIP } from '@/lib/security/ip';
 import { z } from 'zod';
 
 const searchQuerySchema = z.object({
@@ -190,6 +192,30 @@ export const GET = withAdminAuth(async (request, session) => {
         similarity: Math.max(0, 1 - Number(r.distance)),
       },
     }));
+
+  // Audit-of-audits for cross-user matches. The OR-subquery in the SQL
+  // above pulls in actively-shared conversations alongside the caller's
+  // own; for any returned row whose owner is not the caller, write one
+  // shared-basis row. Owner-basis matches no-op via `logConversationAccess`.
+  // One log per unique conversation (grouped is already deduped).
+  const clientIp = getClientIP(request);
+  for (const row of grouped) {
+    if (row.userId === session.user.id) continue;
+    logConversationAccess({
+      adminUserId: session.user.id,
+      conversationId: row.conversationId,
+      conversationTitle: row.title,
+      conversationOwnerId: row.userId,
+      accessBasis: 'shared',
+      action: 'conversation.search_matched',
+      extra: {
+        query: q,
+        similarity: row.bestMatch.similarity,
+        messageId: row.bestMatch.messageId,
+      },
+      clientIp,
+    });
+  }
 
   return successResponse(grouped, { total: grouped.length, semanticAvailable: true });
 });
