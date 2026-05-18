@@ -914,11 +914,19 @@ export interface SystemInstructionsHistoryEntry {
 // ============================================================================
 
 /**
- * Structured metadata stored in `AiMessage.metadata`.
+ * Diagnostic metadata stored in `AiMessage.metadata`.
  *
  * Shape varies by message role:
- * - `assistant` messages carry `tokenUsage`, `modelUsed`, `latencyMs`, `costUsd`
- * - `tool` messages carry `toolCall` and `result`
+ * - `assistant` messages carry `tokenUsage`, `latencyMs`, `costUsd`
+ * - `tool` messages carry `toolCall` (singular) and `result`
+ * - error-marker messages carry `error` + `errorCode`
+ *
+ * **Provenance lives elsewhere.** Citations, capability-call traces, the
+ * model that produced the message, the agent/workflow versions in effect
+ * at message time — these moved to first-class columns on `AiMessage`
+ * (`modelId`, `agentVersionId`, `workflowVersionId`, …) and a typed
+ * {@link MessageProvenance} bundle in `AiMessage.provenance`. Anything
+ * that grounds or attributes the message belongs there, not here.
  *
  * All fields are optional and JSON-serializable so the object can be
  * written directly to a Prisma `Json` column without runtime conversion.
@@ -926,15 +934,8 @@ export interface SystemInstructionsHistoryEntry {
 export interface MessageMetadata {
   // Present on assistant messages
   tokenUsage?: TokenUsage;
-  modelUsed?: string;
   latencyMs?: number;
   costUsd?: number;
-  /**
-   * Source attributions that grounded the assistant response. Markers
-   * here align with `[N]` references in the message `content`. Empty or
-   * absent for non-RAG turns.
-   */
-  citations?: Citation[];
   /**
    * Set on the synthetic assistant message persisted when a workflow
    * triggered via the `run_workflow` capability paused on a
@@ -943,14 +944,6 @@ export interface MessageMetadata {
    * the underlying execution row reaches a terminal state.
    */
   pendingApproval?: PendingApproval;
-  /**
-   * Per-tool dispatch diagnostics aggregated across the assistant
-   * turn. Populated only when the chat request opts in via
-   * `includeTrace: true` (admin internal surfaces). Drives the inline
-   * `<MessageTrace>` strip both live (during streaming) and post-hoc
-   * (in the conversation trace viewer).
-   */
-  toolCalls?: ToolCallTrace[];
   /**
    * Additional model invocations during the turn beyond the main LLM
    * (embeddings, the rolling summariser). Mirrors the `done` event's
@@ -964,6 +957,62 @@ export interface MessageMetadata {
   // Present on error-marker messages (persisted when streaming fails completely)
   error?: boolean;
   errorCode?: string;
+}
+
+// ============================================================================
+// Message Provenance
+// ============================================================================
+
+/**
+ * Per-message audit substrate, stored in `AiMessage.provenance` (JSONB).
+ *
+ * Mirrors the supervisor-on-execution pattern (5 scalars + 1 JSON bundle
+ * on `AiWorkflowExecution`): the scalar columns on `AiMessage`
+ * (`agentVersionId`, `workflowExecutionId`, `workflowVersionId`,
+ * `modelId`, `providerSlug`) are the indexed pins; this bundle holds the
+ * richer evidence tree.
+ *
+ * Three trails converge here:
+ *
+ * 1. **citations** — KB chunks the LLM cited via `[N]` markers, captured
+ *    by the streaming chat handler. Each citation pins
+ *    `documentVersion` + `contentHash` *at message-creation time* so a
+ *    later re-ingestion of the same document does not silently change
+ *    what an auditor sees.
+ * 2. **workflowSources** — `output.sources` items emitted by the
+ *    terminal step of any workflow that fired this message (via the
+ *    `run_workflow` capability). Snapshotted at result-handling time so
+ *    the message row is self-describing for audit without joining back
+ *    to the execution trace.
+ * 3. **capabilityCalls** — every capability dispatch that ran during the
+ *    turn that produced the message. Always populated for assistant
+ *    messages that used tools (no `includeTrace` gate — audit substrate
+ *    is not an admin debug toggle).
+ *
+ * Returned alongside scalar pins by
+ * `GET /api/v1/admin/orchestration/conversations/{id}/provenance`,
+ * rendered as deterministic Markdown by `renderConversationMarkdown`.
+ */
+export interface MessageProvenance {
+  /**
+   * KB chunks cited by the LLM in this message. Markers align with
+   * `[N]` references in the message `content`. Empty or absent for
+   * non-RAG turns.
+   */
+  citations?: Citation[];
+  /**
+   * Snapshot of the terminal workflow step's `output.sources` for
+   * messages produced by `run_workflow`. Absent when the message did
+   * not originate from a workflow capability call.
+   */
+  workflowSources?: ProvenanceItem[];
+  /**
+   * Capability calls dispatched during the turn that produced this
+   * message. Each entry includes args, latency, success/error, and an
+   * optional truncated result preview. Always populated for assistant
+   * messages that fired at least one capability.
+   */
+  capabilityCalls?: ToolCallTrace[];
 }
 
 /**
@@ -983,6 +1032,23 @@ export interface Citation {
   chunkId: string;
   documentId: string;
   documentName: string | null;
+  /**
+   * Hash of the document's content at the moment this citation was
+   * produced. Snapshotted from `AiKnowledgeDocument.contentHash`. Lets
+   * an auditor detect a silent re-ingestion of the same `documentId`:
+   * if today's hash differs from this one, the chunk the LLM saw is no
+   * longer available verbatim. Null on legacy citations created before
+   * the snapshot landed.
+   */
+  contentHash: string | null;
+  /**
+   * Monotonic version of the document at citation time. Distinct from
+   * `contentHash` for the human-readable "v3" surface; the hash is the
+   * cryptographic identity. Item 31 (KB freshness scanner) increments
+   * this on re-ingestion; until that ships, the column may stay null
+   * and the hash carries the audit signal alone.
+   */
+  documentVersion: number | null;
   /** Section heading, or "Page N" for PDF-derived chunks. */
   section: string | null;
   patternNumber: number | null;

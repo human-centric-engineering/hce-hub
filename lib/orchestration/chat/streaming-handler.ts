@@ -28,6 +28,7 @@ import type {
   Citation,
   InputBreakdown,
   MessageMetadata,
+  MessageProvenance,
   PendingApproval,
   SideEffectModelUsage,
   ToolCallTrace,
@@ -219,6 +220,15 @@ interface PersistMessageParams {
   capabilitySlug?: string;
   toolCallId?: string;
   metadata?: MessageMetadata;
+  // Provenance pins — Phase 3 populates these from the resolved agent /
+  // model / workflow context at message-creation time. Phase 2 wires the
+  // plumbing only.
+  agentVersionId?: string;
+  workflowExecutionId?: string;
+  workflowVersionId?: string;
+  modelId?: string;
+  providerSlug?: string;
+  provenance?: MessageProvenance;
 }
 
 interface WriteEvaluationLogParams {
@@ -1024,6 +1034,7 @@ export class StreamingChatHandler {
         if (assistantText.length > 0) {
           const isTerminalTurn = toolCalls.size === 0;
           const assistantMetadata: MessageMetadata = {};
+          const assistantProvenance: MessageProvenance = {};
           // TS narrows `usage` (a closure-captured `let`) to its initial
           // `null` value at this point because the closure mutation inside
           // `withSpanGenerator` isn't visible to flow analysis. The cast
@@ -1037,18 +1048,19 @@ export class StreamingChatHandler {
             };
           }
           if (isTerminalTurn && citations.length > 0) {
-            assistantMetadata.citations = citations;
+            assistantProvenance.citations = citations;
           }
-          // Admin-only: attach per-tool diagnostics to the terminal
-          // assistant message so the post-hoc trace viewer can render
-          // the same `<MessageTrace>` strip from persisted state.
+          // Per-capability dispatch diagnostics on the terminal assistant
+          // message. Phase 3 drops the `includeTrace` gate so audit
+          // substrate is always-on; for now we preserve current behavior
+          // and route the data through `provenance` instead of `metadata`.
           if (isTerminalTurn && request.includeTrace && turnToolCalls.length > 0) {
-            assistantMetadata.toolCalls = turnToolCalls;
+            assistantProvenance.capabilityCalls = turnToolCalls;
           }
           // Surface every model that ran on this turn — not just the
           // main LLM. Embeddings (per `search_knowledge_base` call) and
           // the rolling summariser get aggregated here so the cost
-          // strip can render them alongside `modelUsed`.
+          // strip can render them alongside the persisted modelId scalar.
           if (isTerminalTurn) {
             const sideEffects = aggregateSideEffectModels(
               turnToolCalls.map((t) => t.sideEffectModel),
@@ -1063,6 +1075,9 @@ export class StreamingChatHandler {
             role: 'assistant',
             content: assistantText,
             ...(Object.keys(assistantMetadata).length > 0 ? { metadata: assistantMetadata } : {}),
+            ...(Object.keys(assistantProvenance).length > 0
+              ? { provenance: assistantProvenance }
+              : {}),
           });
           // Queue async embedding for semantic search (non-blocking)
           queueMessageEmbedding(assistantMsg.id, assistantText);
@@ -1779,6 +1794,17 @@ export class StreamingChatHandler {
       // bridges TypeScript's interface-vs-indexed-object mismatch with Prisma's
       // `InputJsonValue` — it is not laundering unvalidated data.
       data.metadata = params.metadata as Prisma.InputJsonValue;
+    }
+    if (params.agentVersionId !== undefined) data.agentVersionId = params.agentVersionId;
+    if (params.workflowExecutionId !== undefined)
+      data.workflowExecutionId = params.workflowExecutionId;
+    if (params.workflowVersionId !== undefined) data.workflowVersionId = params.workflowVersionId;
+    if (params.modelId !== undefined) data.modelId = params.modelId;
+    if (params.providerSlug !== undefined) data.providerSlug = params.providerSlug;
+    if (params.provenance !== undefined) {
+      // Same cast posture as `metadata` above — `MessageProvenance` is a
+      // structured, JSON-serializable shape; not unvalidated data.
+      data.provenance = params.provenance as Prisma.InputJsonValue;
     }
     return prisma.aiMessage.create({ data });
   }

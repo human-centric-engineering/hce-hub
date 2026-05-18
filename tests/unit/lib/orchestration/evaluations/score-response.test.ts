@@ -44,6 +44,8 @@ const baseCitation = {
   chunkId: 'c1',
   documentId: 'd1',
   documentName: 'Doc',
+  contentHash: null,
+  documentVersion: null,
   section: 'Page 1',
   patternNumber: null,
   patternName: null,

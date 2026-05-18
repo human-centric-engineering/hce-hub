@@ -20,6 +20,8 @@ function makeCitation(overrides: Partial<Citation> = {}): Citation {
     chunkId: 'c1',
     documentId: 'd1',
     documentName: 'Tenancy Guide',
+    contentHash: null,
+    documentVersion: null,
     section: 'Page 12',
     patternNumber: null,
     patternName: null,

@@ -114,6 +114,11 @@ export function extractCitations(
       chunkId: raw.chunkId,
       documentId: raw.documentId,
       documentName: raw.documentName ?? null,
+      // Phase 3 stamps these from AiKnowledgeDocument at chunk-resolution
+      // time; until then they ship as null and the audit substrate
+      // treats null as "pre-snapshot".
+      contentHash: null,
+      documentVersion: null,
       section: raw.section ?? null,
       patternNumber: raw.patternNumber ?? null,
       patternName: raw.patternName ?? null,
