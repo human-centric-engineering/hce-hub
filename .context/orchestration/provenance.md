@@ -107,4 +107,88 @@ The guard's existing retry budget gives the LLM two attempts to attribute before
 - [provider-model-audit.ts seed](../../prisma/seeds/data/templates/provider-model-audit.ts) — first workflow to adopt the contract
 - [provider audit guide](../admin/orchestration-provider-audit-guide.md) — admin walkthrough
 - [chat citations](./chat.md#citations) — the chat-handler-level analogue
-- [improvement-priorities item 47](./meta/improvement-priorities.md) — conversation provenance bundle (separate, complementary)
+
+# Message-Level Provenance
+
+Workflow-step provenance (above) captures `output.sources` per step. The conversation-level twin — added alongside the supervisor audit substrate — captures the same idea per message, in a typed bundle on every assistant `AiMessage`. An auditor can hand a partner the full record of "how was this answer grounded" without joins across tables.
+
+The schema mirrors the supervisor-on-execution pattern: 5 indexed scalars + 1 JSON bundle. Scalars are queryable; JSON holds the rich evidence tree.
+
+## What lands on each AiMessage
+
+| Column                | Source of truth                                                                                    | Use                                                                                    |
+| --------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `agentVersionId`      | Pinned `AiAgentVersion.id` when the message was fired by a versioned agent                         | Filter "every message produced by agent vN". Null on direct chat with the live agent.  |
+| `workflowExecutionId` | `AiWorkflowExecution.id` of the last `run_workflow` capability call that completed during the turn | Self-describing join key back to the execution row. Non-FK (executions can be pruned). |
+| `workflowVersionId`   | `AiWorkflowExecution.versionId` snapshotted at message time                                        | Pin which workflow version produced the synthesised answer.                            |
+| `modelId`             | The model string resolved by `resolveAgentProviderAndModel` for this turn                          | "Show every message routed to model X."                                                |
+| `providerSlug`        | The provider slug resolved for this turn                                                           | Cost-attribution + audit.                                                              |
+| `provenance` (JSONB)  | Typed `MessageProvenance` shape (below)                                                            | Rich evidence tree for the audit bundle.                                               |
+
+Indexes on `agentVersionId`, `workflowExecutionId`, `modelId` keep the queryable surface fast.
+
+## The MessageProvenance bundle
+
+```typescript
+interface MessageProvenance {
+  /** KB chunks cited via `[N]` markers in the assistant content. */
+  citations?: Citation[];
+  /** Snapshot of the terminal workflow step's output.sources when `run_workflow` fired. */
+  workflowSources?: ProvenanceItem[];
+  /** Every capability dispatch on the turn that produced this message (always-on). */
+  capabilityCalls?: ToolCallTrace[];
+}
+```
+
+Authoritative source: [`types/orchestration.ts`](../../types/orchestration.ts) (`MessageProvenance`). The schema lives in [`lib/validations/orchestration.ts`](../../lib/validations/orchestration.ts) (`messageProvenanceSchema`) — read sites validate before consuming.
+
+### Citations gain `contentHash` and `documentVersion`
+
+The chat handler's `Citation` type now pins `contentHash` and `documentVersion` per cited chunk. The hash comes from `AiKnowledgeDocument.contentHash` at search time — a later re-ingestion of the same `documentId` will hash differently, so an auditor can detect that the chunk the LLM saw is no longer available verbatim. `documentVersion` stays null until the KB freshness scanner (improvement-priorities item 31) lands; the hash alone carries the audit signal until then.
+
+## How it flows
+
+```
+chat handler turn       →   resolved agent + model + provider
+KB chunk lookups        →   contentHash forwarded onto each Citation
+capability dispatches   →   buildToolCallTrace (always-on, no includeTrace gate)
+run_workflow result     →   workflowExecutionId captured per turn
+assistant build site    →   snapshotWorkflowProvenance() reads the
+                            execution's terminal step output.sources
+persistMessage()        →   one helper writes all 5 scalars + provenance bundle
+```
+
+The capture is best-effort everywhere it can be:
+
+- A pruned `AiWorkflowExecution` between dispatch and the assistant build → snapshot returns null, message persists without workflow pins, warn logged.
+- A malformed persisted provenance JSON → `messageProvenanceSchema.safeParse` returns failure; consumers degrade to null; the message still renders.
+- A pre-feature row (or a write site that doesn't carry the new fields, e.g. error markers) → columns stay null, treated as "pre-snapshot".
+
+Provenance is audit substrate, not a load-bearing primitive.
+
+## The bundle endpoint
+
+`GET /api/v1/admin/orchestration/conversations/[id]/provenance` returns the typed bundle as JSON. The sibling `provenance.md` route returns the deterministic Markdown rendering. Both are admin-only, rate-limited (`adminLimiter`), and ownership-scoped to `session.user.id` — cross-user access returns 404 (matching the export-route posture, not 403, so an attacker can't enumerate other users).
+
+The Markdown renderer ([`lib/orchestration/trace/render-conversation-markdown.ts`](../../lib/orchestration/trace/render-conversation-markdown.ts)) emits HTML-ready GitHub-flavoured Markdown so a future Gotenberg PDF adapter can convert without surprises. PDF is not yet built — it's a thin downstream wrapper once Gotenberg infrastructure is provisioned.
+
+## Adopting it in your code
+
+Most users don't need to. The chat handler is the single write site; every assistant message gets pinned automatically. You only need to think about provenance when:
+
+- **You write a non-chat AiMessage row.** Carry the model/provider/agent context through `PersistMessageParams` and snapshot any workflow result. The chat handler's `persistMessage` helper is the reference implementation.
+- **You consume `AiMessage.metadata`.** It no longer carries `citations`, `toolCalls`, or `modelUsed`. Read those from `AiMessage.provenance.citations`, `AiMessage.provenance.capabilityCalls`, and the new top-level `AiMessage.modelId` column.
+- **You add a third provenance trail** (e.g. memory retrieval, tool federation). Extend `MessageProvenance` with the new field and update the renderer + Zod schema. The shape is open for extension; the contract is "every claim must be attributable."
+
+## What this is not
+
+- **Not a back-fill.** Pre-feature rows stay as they are. Convention: null = pre-snapshot.
+- **Not a single source of truth for execution provenance.** Workflow step `output.sources` still live in the execution trace; the message bundle holds a _snapshot_ of the terminal step's sources for self-describing audit. The execution remains canonical.
+- **Not coupled to a supervisor verdict per message.** Conversation-level supervisor review is reserved (`POST /conversations/[id]/review` is unallocated) for a future, separate item. The provenance bundle is the substrate that future supervisor would review.
+
+## See also
+
+- [improvement-priorities item 47](./meta/improvement-priorities.md) — the originating ticket
+- [admin conversations UI](../admin/orchestration-conversations.md) — trace viewer surface
+- [orchestration endpoints](../api/orchestration-endpoints.md) — route reference
+- [chat citations](./chat.md#citations) — the chunk-marker contract the bundle persists

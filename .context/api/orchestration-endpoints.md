@@ -87,6 +87,8 @@ Validation schemas for every request body / query live in `lib/validations/orche
 | `/conversations`                          | GET                | List caller's conversations                                                                                | 3.3     |
 | `/conversations/:id`                      | GET, DELETE        | Read / delete one of the caller's conversations                                                            | 3.3     |
 | `/conversations/:id/messages`             | GET                | Read messages of one conversation                                                                          | 3.3     |
+| `/conversations/:id/provenance`           | GET                | Per-message provenance bundle (JSON) — versions, citations, capability calls, workflow sources             | 7.7     |
+| `/conversations/:id/provenance.md`        | GET                | Deterministic Markdown rendering of the provenance bundle (downloadable attachment)                        | 7.7     |
 | `/conversations/clear`                    | POST               | Bulk-delete by filter (at least one filter required)                                                       | 3.3     |
 | `/costs`                                  | GET                | Breakdown by day / agent / model                                                                           | 3.4     |
 | `/costs/summary`                          | GET                | Today / week / month + per-agent + trend                                                                   | 3.4     |
@@ -834,6 +836,59 @@ Ownership-checked by `findFirst({ where: { id, userId: session.user.id } })`. Mi
 ### `GET /conversations/:id/messages`
 
 Paginated. Same ownership check.
+
+### `GET /conversations/:id/provenance`
+
+Returns the typed `MessageProvenance` bundle for every message in the conversation, alongside the five scalar version pins per message (`agentVersionId`, `workflowExecutionId`, `workflowVersionId`, `modelId`, `providerSlug`) and conversation-level metadata. Admin-only, rate-limited (`adminLimiter`), ownership-scoped. Persisted provenance JSON is validated via `messageProvenanceSchema.safeParse` before returning; malformed rows surface as `provenance: null` so the caller's UI degrades gracefully.
+
+Response shape:
+
+```jsonc
+{
+  "success": true,
+  "data": {
+    "conversation": {
+      "id": "...",
+      "title": "...",
+      "userId": "...",
+      "agentId": "...",
+      "agentSlug": "...",
+      "agentName": "...",
+      "isActive": true,
+      "createdAt": "...",
+      "updatedAt": "..."
+    },
+    "messages": [
+      {
+        "id": "...",
+        "role": "assistant",
+        "content": "...",
+        "capabilitySlug": null,
+        "toolCallId": null,
+        "createdAt": "...",
+        "agentVersionId": null,
+        "workflowExecutionId": null,
+        "workflowVersionId": null,
+        "modelId": "claude-sonnet-4-6",
+        "providerSlug": "anthropic",
+        "provenance": {
+          "citations": [...],          // KB chunks with contentHash
+          "workflowSources": [...],    // from run_workflow terminal step
+          "capabilityCalls": [...]     // every dispatch (always-on)
+        }
+      }
+    ]
+  }
+}
+```
+
+### `GET /conversations/:id/provenance.md`
+
+Deterministic Markdown rendering of the same bundle, served as `Content-Type: text/markdown; charset=utf-8` with `Content-Disposition: attachment; filename="conversation-<id>-provenance.md"` and `Cache-Control: no-store`. The renderer (`renderConversationMarkdown` at [`lib/orchestration/trace/render-conversation-markdown.ts`](../../lib/orchestration/trace/render-conversation-markdown.ts)) emits HTML-ready GitHub-flavoured Markdown — same conversation produces byte-identical output modulo the footer timestamp.
+
+Reserved: `/conversations/:id/provenance.pdf` — not built. The renderer's HTML-ready output lets a future Gotenberg adapter slot in as a thin downstream wrapper once that infrastructure is provisioned.
+
+See [`provenance.md`](../orchestration/provenance.md#message-level-provenance) for the message-level audit substrate this serves.
 
 ### `POST /conversations/clear`
 

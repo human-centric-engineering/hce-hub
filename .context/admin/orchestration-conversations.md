@@ -107,11 +107,22 @@ One card per `AiMessage`, ordered by `createdAt asc`. Each card shows:
 - **Capability slug** — rendered next to the badge **only** for `role === 'tool'` messages when `capabilitySlug` is set.
 - **Timestamp** — localised date+time.
 - **Content** — plain `<p>` with `whitespace-pre-wrap` for non-tool roles; `<pre>` monospace block for tool messages (tool output is raw JSON/text).
-- **Metadata bar** — inline chips for `modelUsed`, `tokenUsage.input` (`"N in"`), `tokenUsage.output` (`"N out"`), `latencyMs` (`"N ms"`), `costUsd` (`"$0.0000"`). Row only renders if at least one field is present.
+- **Metadata bar** — inline chips for `modelId` (top-level column, not nested in metadata), `providerSlug`, `tokenUsage.input` (`"N in"`), `tokenUsage.output` (`"N out"`), `latencyMs` (`"N ms"`), `costUsd` (`"$0.0000"`). Row only renders if at least one field is present.
+- **Provenance pin row** — small `outline` badges showing `agent <id-prefix>` and `workflow exec <id-prefix> @ <version-prefix>` when those scalars are populated on the message row. Mirrors the `SupervisorVerdictBadge` styling in `ExecutionDetailView` so the execution page and the conversation page share visual vocabulary. Omitted when no version pins are set (direct chat with the live agent).
 - **Raw toggle** — only appears when `metadata` has at least one key. Expands a `<pre>` with `JSON.stringify(metadata, null, 2)`.
-- **Inline tool-call trace** — when an assistant message carries `metadata.toolCalls` (populated by the streaming handler whenever the live request set `includeTrace: true`), `<MessageTrace>` (`components/admin/orchestration/chat/message-trace.tsx`) renders a collapsible strip with one card per dispatched capability: slug, args JSON, latency, success state, optional cost, and a result preview. Pre-trace conversations omit `toolCalls` entirely and the strip is absent. See `.context/orchestration/chat.md#inline-trace-annotations-admin-only` for the full wire contract.
+- **Inline tool-call trace** — when an assistant message carries `provenance.capabilityCalls` (always-on for capability-using assistant turns; not gated by `includeTrace`), `<MessageTrace>` (`components/admin/orchestration/chat/message-trace.tsx`) renders a collapsible strip with one card per dispatched capability: slug, args JSON, latency, success state, optional cost, and a result preview. Pre-feature conversations and capability-free turns leave `provenance` null and the strip is absent. See `.context/orchestration/chat.md#inline-trace-annotations-admin-only` for the full wire contract.
 
-`toolCallId` is on the wire type but unused by the component — the tool-call linkage is reconstructed from the denormalised `toolCalls[]` array on the assistant turn rather than from cross-message parent/child references.
+`toolCallId` is on the wire type but unused by the component — the tool-call linkage is reconstructed from the denormalised `capabilityCalls[]` array on the assistant turn rather than from cross-message parent/child references.
+
+### Download provenance bundle
+
+Above the timeline, the viewer renders a `Download provenance` button group when a `conversationId` prop is supplied (always set on the admin detail route; absent only in preview / embedded contexts):
+
+- **JSON** — opens `/api/v1/admin/orchestration/conversations/[id]/provenance` in a new tab. Returns the typed `MessageProvenance` bundle per message + the five scalar version pins + conversation-level metadata. Suitable for programmatic consumption by an external audit pipeline.
+- **Markdown** — opens `/api/v1/admin/orchestration/conversations/[id]/provenance.md`. Returns the deterministic Markdown rendering as a downloadable attachment (`text/markdown; charset=utf-8`, `Cache-Control: no-store`). The renderer ([`lib/orchestration/trace/render-conversation-markdown.ts`](../../lib/orchestration/trace/render-conversation-markdown.ts)) is deterministic — same conversation produces byte-identical output modulo the footer timestamp.
+- **PDF** — reserved. The renderer emits HTML-ready Markdown so the future Gotenberg adapter is a thin downstream wrapper, but the route is not built. No PDF button renders today.
+
+A `FieldHelp` popover next to the group explains what the bundle contains: agent / workflow / model versions, KB chunks cited (with content hash at message time), capability calls, and workflow step sources.
 
 ## Tagging
 
