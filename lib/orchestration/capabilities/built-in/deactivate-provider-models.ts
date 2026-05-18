@@ -59,6 +59,7 @@ interface Data {
 
 export class DeactivateProviderModelsCapability extends BaseCapability<Args, Data> {
   readonly slug = 'deactivate_provider_models';
+  readonly processesPii = false;
 
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'deactivate_provider_models',

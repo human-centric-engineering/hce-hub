@@ -83,6 +83,7 @@ interface Data {
 
 export class AddProviderModelsCapability extends BaseCapability<Args, Data> {
   readonly slug = 'add_provider_models';
+  readonly processesPii = false;
 
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'add_provider_models',

@@ -39,6 +39,7 @@ interface Data {
 
 export class GetPatternDetailCapability extends BaseCapability<Args, Data> {
   readonly slug = 'get_pattern_detail';
+  readonly processesPii = false;
 
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'get_pattern_detail',

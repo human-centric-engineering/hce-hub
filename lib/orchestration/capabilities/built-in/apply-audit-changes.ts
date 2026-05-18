@@ -141,6 +141,7 @@ interface Data {
 
 export class ApplyAuditChangesCapability extends BaseCapability<Args, Data> {
   readonly slug = 'apply_audit_changes';
+  readonly processesPii = false;
 
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'apply_audit_changes',

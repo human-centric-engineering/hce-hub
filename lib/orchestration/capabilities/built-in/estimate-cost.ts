@@ -52,6 +52,7 @@ interface Data {
 
 export class EstimateCostCapability extends BaseCapability<Args, Data> {
   readonly slug = 'estimate_workflow_cost';
+  readonly processesPii = false;
 
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'estimate_workflow_cost',
