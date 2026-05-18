@@ -232,7 +232,7 @@ describe('background workflow crash flow (e2e)', () => {
     });
 
     // 6b. The webhook subscriptions subsystem should also receive the event so
-    // admins who configured a webhook via the /admin/orchestration/webhooks UI
+    // admins who configured a webhook via the /admin/orchestration/event-subscriptions UI
     // (instead of the API-only event hooks) get the same notification.
     expect(dispatchWebhookEvent).toHaveBeenCalledWith('execution_crashed', {
       executionId: EXECUTION_ID,

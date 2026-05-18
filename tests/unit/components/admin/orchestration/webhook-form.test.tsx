@@ -81,7 +81,7 @@ describe('WebhookForm', () => {
     expect(document.getElementById('secret')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: /description/i })).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: /active/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /create webhook/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create subscription/i })).toBeInTheDocument();
   });
 
   it('renders all 12 event type checkboxes', () => {
@@ -100,7 +100,7 @@ describe('WebhookForm', () => {
     const user = userEvent.setup();
     render(<WebhookForm mode="create" />);
 
-    await user.click(screen.getByRole('button', { name: /create webhook/i }));
+    await user.click(screen.getByRole('button', { name: /create subscription/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/must be a valid url/i)).toBeInTheDocument();
@@ -121,7 +121,7 @@ describe('WebhookForm', () => {
     // Select an event
     await user.click(screen.getAllByRole('checkbox')[0]);
 
-    await user.click(screen.getByRole('button', { name: /create webhook/i }));
+    await user.click(screen.getByRole('button', { name: /create subscription/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/at least 16 characters/i)).toBeInTheDocument();
@@ -164,7 +164,7 @@ describe('WebhookForm', () => {
       'https://example.com/hook'
     );
     await user.click(screen.getByTitle(/generate a random secret/i));
-    await user.click(screen.getByRole('button', { name: /create webhook/i }));
+    await user.click(screen.getByRole('button', { name: /create subscription/i }));
 
     // Assert — inline validation error appears and the API is NOT called
     await waitFor(() => {
@@ -191,7 +191,7 @@ describe('WebhookForm', () => {
     await user.click(screen.getAllByRole('checkbox')[0]);
 
     // Act
-    await user.click(screen.getByRole('button', { name: /create webhook/i }));
+    await user.click(screen.getByRole('button', { name: /create subscription/i }));
 
     // Assert — the POST was made with the webhook URL in the body
     await waitFor(() => {
@@ -206,7 +206,7 @@ describe('WebhookForm', () => {
       );
     });
     // Assert — navigated to list page
-    expect(pushMock).toHaveBeenCalledWith('/admin/orchestration/webhooks');
+    expect(pushMock).toHaveBeenCalledWith('/admin/orchestration/event-subscriptions');
   });
 
   it('edit mode: pre-populates fields from existing webhook', () => {
@@ -279,7 +279,7 @@ describe('WebhookForm', () => {
       unknown
     >;
     expect(patchBody).toMatchObject({ url: 'https://x.com', isActive: true });
-    expect(pushMock).toHaveBeenCalledWith('/admin/orchestration/webhooks');
+    expect(pushMock).toHaveBeenCalledWith('/admin/orchestration/event-subscriptions');
   });
 
   it('edit mode: includes new secret in PATCH body when the user changes it', async () => {
@@ -314,7 +314,7 @@ describe('WebhookForm', () => {
         })
       );
     });
-    expect(pushMock).toHaveBeenCalledWith('/admin/orchestration/webhooks');
+    expect(pushMock).toHaveBeenCalledWith('/admin/orchestration/event-subscriptions');
   });
 
   it('edit mode: surfaces APIClientError message in error banner when PATCH fails', async () => {
@@ -361,7 +361,7 @@ describe('WebhookForm', () => {
     await user.click(screen.getAllByRole('checkbox')[0]);
 
     // Act
-    await user.click(screen.getByRole('button', { name: /create webhook/i }));
+    await user.click(screen.getByRole('button', { name: /create subscription/i }));
 
     // Assert — error banner renders with the API error message
     await waitFor(() => {
@@ -386,7 +386,7 @@ describe('WebhookForm', () => {
     await user.click(screen.getAllByRole('checkbox')[0]);
 
     // Act
-    await user.click(screen.getByRole('button', { name: /create webhook/i }));
+    await user.click(screen.getByRole('button', { name: /create subscription/i }));
 
     // Assert — fallback message shown
     await waitFor(() => {

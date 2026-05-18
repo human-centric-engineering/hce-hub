@@ -163,7 +163,7 @@ const navSections: NavSection[] = [
             description: 'Pending approvals',
           },
           {
-            href: '/admin/orchestration/webhooks',
+            href: '/admin/orchestration/event-subscriptions',
             label: 'Event Subscriptions',
             icon: Webhook,
             description: 'Webhook notifications',

@@ -674,7 +674,7 @@ describe('drainEngine: engine crash path', () => {
         error: 'engine boom',
       });
       // Mirror to the webhook subscriptions subsystem so admins can subscribe
-      // via the existing /admin/orchestration/webhooks UI.
+      // via the existing /admin/orchestration/event-subscriptions UI.
       expect(dispatchWebhookEvent).toHaveBeenCalledWith('execution_crashed', {
         executionId: 'exec_1',
         workflowId: 'wf_1',

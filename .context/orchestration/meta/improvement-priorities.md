@@ -1017,13 +1017,13 @@ Items 37–39 are correctness — they prevent silent damage. Items 40–43 are 
 
 **Why it matters.** `AiEventHookDelivery` tracks retries today, but the retry policy is hardcoded — `MAX_ATTEMPTS = 3`, `RETRY_DELAYS_MS = [10_000, 60_000, 300_000]` in `lib/orchestration/webhooks/dispatcher.ts` lines 31–35. When a partner's receiver is degraded for an hour, what does Sunrise do? Three attempts spread across ~6 minutes, then give up — and the failed deliveries sit in `AiEventHookDelivery` but the admin has no UI to inspect them, replay them, or hold-and-retry-later. For any production-shaped partner pilot, this is "we lost data and no one noticed."
 
-**What exists today.** Hardcoded retry constants in `webhooks/dispatcher.ts`. `AiEventHookDelivery` records every attempt with status, error, latency. A `/deliveries` API route exists at `app/api/v1/admin/orchestration/webhooks/[id]/deliveries/route.ts`. The admin webhooks page (`app/admin/orchestration/webhooks/page.tsx`) lists subscriptions but does not surface failed deliveries or expose any DLQ UI. `AiEventHook` schema has no `retryPolicy` column; retry behaviour is global.
+**What exists today.** Hardcoded retry constants in `webhooks/dispatcher.ts`. `AiEventHookDelivery` records every attempt with status, error, latency. A `/deliveries` API route exists at `app/api/v1/admin/orchestration/webhooks/[id]/deliveries/route.ts`. The admin Event Subscriptions page (`app/admin/orchestration/event-subscriptions/page.tsx`) lists subscriptions but does not surface failed deliveries or expose any DLQ UI. `AiEventHook` schema has no `retryPolicy` column; retry behaviour is global.
 
 **What we'd ship.**
 
 1. **Per-hook retry policy.** Add `AiEventHook.retryPolicy Json?` carrying `{ maxAttempts, backoffStrategy: 'exponential' | 'linear' | 'fixed', baseDelayMs, maxDelayMs, jitter }`. Default to the current hardcoded values when null so existing hooks are unaffected. Validate via Zod in `lib/validations/event-hooks.ts`.
 2. **Dead-letter state.** Add `AiEventHookDelivery.state` enum (`pending` / `succeeded` / `failed` / `dead-lettered` / `manually-replayed`) and `deadLetteredAt` timestamp. The dispatcher transitions `failed → dead-lettered` after `maxAttempts` is exhausted; nothing auto-retries dead-lettered deliveries.
-3. **DLQ admin UI.** New `app/admin/orchestration/webhooks/[id]/dlq/page.tsx` (or a tab on the existing hook detail page) listing dead-lettered deliveries with payload preview, last error, status code, attempt timeline. Per-row "Replay" action that re-queues the delivery with attempt counter reset. Bulk-replay with confirmation.
+3. **DLQ admin UI.** New `app/admin/orchestration/event-subscriptions/[id]/dlq/page.tsx` (or a tab on the existing hook detail page) listing dead-lettered deliveries with payload preview, last error, status code, attempt timeline. Per-row "Replay" action that re-queues the delivery with attempt counter reset. Bulk-replay with confirmation.
 4. **Retry-policy UI.** New panel on the hook form with retry-policy fields and FieldHelp linking to a recipe explaining backoff curves and when to use each.
 
 **Benefits.**

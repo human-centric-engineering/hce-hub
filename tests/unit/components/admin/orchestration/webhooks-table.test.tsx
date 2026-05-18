@@ -138,15 +138,15 @@ describe('WebhooksTable', () => {
     render(<WebhooksTable initialWebhooks={[]} initialMeta={META} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/no webhook subscriptions yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/no event subscriptions yet/i)).toBeInTheDocument();
     });
   });
 
-  it('has a create button linking to new webhook page', () => {
+  it('has a create button linking to new subscription page', () => {
     render(<WebhooksTable initialWebhooks={[]} initialMeta={META} />);
 
-    const link = screen.getByRole('link', { name: /new webhook/i });
-    expect(link).toHaveAttribute('href', '/admin/orchestration/webhooks/new');
+    const link = screen.getByRole('link', { name: /new subscription/i });
+    expect(link).toHaveAttribute('href', '/admin/orchestration/event-subscriptions/new');
   });
 
   it('renders event badges for each webhook', () => {

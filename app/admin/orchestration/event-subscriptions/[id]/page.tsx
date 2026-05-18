@@ -48,7 +48,7 @@ export default async function WebhookDetailPage({ params }: { params: Promise<{ 
           AI Orchestration
         </Link>
         {' / '}
-        <Link href="/admin/orchestration/webhooks" className="hover:underline">
+        <Link href="/admin/orchestration/event-subscriptions" className="hover:underline">
           Event Subscriptions
         </Link>
         {' / '}

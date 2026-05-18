@@ -186,7 +186,7 @@ Webhook subscription URLs are validated via Zod schema refinements that call `ch
 
 ## Webhook Management UI
 
-Full CRUD for webhooks is available at `/admin/orchestration/webhooks`. See [Webhook Management UI](../admin/orchestration-webhooks.md).
+Full CRUD for webhooks is available at `/admin/orchestration/event-subscriptions` (page label: "Event Subscriptions"). See [Webhook Management UI](../admin/orchestration-webhooks.md).
 
 ## Retention Pruning
 

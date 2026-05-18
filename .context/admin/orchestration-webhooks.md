@@ -2,15 +2,15 @@
 
 Admin UI for managing webhook subscriptions. Full CRUD with delivery history, retry, and test ping.
 
-**Route:** `/admin/orchestration/webhooks`
+**Route:** `/admin/orchestration/event-subscriptions` (page-level label is "Event Subscriptions" — the underlying mechanism is still webhooks)
 
 ## Pages
 
-| Route                                | File                                             | Purpose                                 |
-| ------------------------------------ | ------------------------------------------------ | --------------------------------------- |
-| `/admin/orchestration/webhooks`      | `app/admin/orchestration/webhooks/page.tsx`      | List all webhooks                       |
-| `/admin/orchestration/webhooks/new`  | `app/admin/orchestration/webhooks/new/page.tsx`  | Create webhook form                     |
-| `/admin/orchestration/webhooks/[id]` | `app/admin/orchestration/webhooks/[id]/page.tsx` | Edit webhook + test button + deliveries |
+| Route                                           | File                                                        | Purpose                                      |
+| ----------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------- |
+| `/admin/orchestration/event-subscriptions`      | `app/admin/orchestration/event-subscriptions/page.tsx`      | List all subscriptions                       |
+| `/admin/orchestration/event-subscriptions/new`  | `app/admin/orchestration/event-subscriptions/new/page.tsx`  | Create subscription form                     |
+| `/admin/orchestration/event-subscriptions/[id]` | `app/admin/orchestration/event-subscriptions/[id]/page.tsx` | Edit subscription + test button + deliveries |
 
 ## Components
 
@@ -22,7 +22,7 @@ Admin UI for managing webhook subscriptions. Full CRUD with delivery history, re
 - Active filter dropdown, pagination
 - Inline active/inactive toggle via `Switch` — optimistic update with revert on failure
 - Row actions dropdown with Edit (navigates to edit page) and Delete (AlertDialog confirmation)
-- Create button links to `/webhooks/new`
+- Create button links to `/event-subscriptions/new`
 
 ### `WebhookForm`
 

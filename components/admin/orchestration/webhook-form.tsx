@@ -127,12 +127,12 @@ export function WebhookForm({ mode, webhook }: WebhookFormProps) {
         await apiClient.patch(API.ADMIN.ORCHESTRATION.webhookById(webhook.id), {
           body: payload,
         });
-        router.push('/admin/orchestration/webhooks');
+        router.push('/admin/orchestration/event-subscriptions');
       } else {
         await apiClient.post(API.ADMIN.ORCHESTRATION.WEBHOOKS, {
           body: data,
         });
-        router.push('/admin/orchestration/webhooks');
+        router.push('/admin/orchestration/event-subscriptions');
       }
     } catch (err) {
       setError(
@@ -154,7 +154,7 @@ export function WebhookForm({ mode, webhook }: WebhookFormProps) {
         </h1>
         <div className="flex items-center gap-2">
           <Button type="button" variant="outline" asChild>
-            <Link href="/admin/orchestration/webhooks">Cancel</Link>
+            <Link href="/admin/orchestration/event-subscriptions">Cancel</Link>
           </Button>
           <Button type="submit" disabled={submitting}>
             {submitting ? (

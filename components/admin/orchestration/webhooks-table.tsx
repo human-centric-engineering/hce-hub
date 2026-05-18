@@ -167,7 +167,7 @@ export function WebhooksTable({ initialWebhooks, initialMeta }: WebhooksTablePro
           </Select>
         </div>
         <Button asChild>
-          <Link href="/admin/orchestration/webhooks/new">
+          <Link href="/admin/orchestration/event-subscriptions/new">
             <Plus className="mr-2 h-4 w-4" />
             New subscription
           </Link>
@@ -205,7 +205,7 @@ export function WebhooksTable({ initialWebhooks, initialMeta }: WebhooksTablePro
                 <TableRow key={wh.id} className={loading ? 'opacity-50' : ''}>
                   <TableCell>
                     <Link
-                      href={`/admin/orchestration/webhooks/${wh.id}`}
+                      href={`/admin/orchestration/event-subscriptions/${wh.id}`}
                       className="font-mono text-sm hover:underline"
                     >
                       {truncateUrl(wh.url)}
@@ -253,7 +253,9 @@ export function WebhooksTable({ initialWebhooks, initialMeta }: WebhooksTablePro
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
-                          onClick={() => router.push(`/admin/orchestration/webhooks/${wh.id}`)}
+                          onClick={() =>
+                            router.push(`/admin/orchestration/event-subscriptions/${wh.id}`)
+                          }
                         >
                           <Edit className="mr-2 h-4 w-4" />
                           Edit

@@ -16,7 +16,7 @@ export default function NewWebhookPage() {
           AI Orchestration
         </Link>
         {' / '}
-        <Link href="/admin/orchestration/webhooks" className="hover:underline">
+        <Link href="/admin/orchestration/event-subscriptions" className="hover:underline">
           Event Subscriptions
         </Link>
         {' / '}
