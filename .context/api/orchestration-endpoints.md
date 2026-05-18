@@ -823,19 +823,21 @@ Used by the "Compare embedding providers" modal on the Knowledge Base page.
 
 ## Conversations
 
-**All conversation endpoints are scoped to `session.user.id`. Cross-user → 404.**
+**Conversation endpoints are consent-gated.** Read access (list / detail / messages / provenance / provenance.md) is granted iff the caller owns the conversation OR the owner has created an active `AiConversationShare` (see the [consumer share endpoints](#consumer-chat-share-routes) below). Cross-user without an active share → 404 (never 403 — we don't confirm existence). Mutations (PATCH / DELETE) stay strictly owner-only: a share grants view consent, not write-or-destroy consent. The bulk export endpoint is also caller-only by design; bulk-sharing is a privacy footgun, the per-conversation provenance route covers the cross-user audit-export case.
+
+The shared authorization helper is `adminCanViewConversation` at [`lib/orchestration/access/conversation-access.ts`](../../lib/orchestration/access/conversation-access.ts). Every cross-user read writes an `AiAdminAuditLog` row via `logConversationAccess` with `accessBasis: 'shared'` + `conversationOwnerId` so compliance can query "which other users' conversations did admin X view this month?".
 
 ### `GET /conversations`
 
-Paginated list of the caller's conversations. Query: `page`, `limit`, `agentId`, `isActive`, `q`, `messageSearch` (`listConversationsQuerySchema`). `messageSearch` filters to conversations containing at least one message whose `content` matches the search string (case-insensitive).
+Paginated list of the caller's conversations **plus conversations actively shared with admins**. Query: `page`, `limit`, `agentId`, `isActive`, `q`, `messageSearch` (`listConversationsQuerySchema`). The visibility clause is `OR: [{userId: caller}, {share: active}]`; filters are AND'd alongside.
 
 ### `DELETE /conversations/:id`
 
-Ownership-checked by `findFirst({ where: { id, userId: session.user.id } })`. Missing OR cross-user → `404`. Messages cascade.
+Owner-only. `findFirst({ where: { id, userId: session.user.id } })` — missing OR non-owner → `404`. Messages cascade. PATCH follows the same posture.
 
 ### `GET /conversations/:id/messages`
 
-Paginated. Same ownership check.
+Paginated. Consent-gated via `adminCanViewConversation` — owner OR active share. Shared-basis reads write an audit row with `action: 'conversation.messages_viewed'` + `accessBasis: 'shared'` + `conversationOwnerId`.
 
 ### `GET /conversations/:id/provenance`
 
@@ -910,6 +912,41 @@ Scope:
 - `allUsers: true` → across all users (mutually exclusive with `userId`)
 
 Cross-user deletions emit an `AiAdminAuditLog` entry (`conversation.bulk_clear`). Returns `{ deletedCount }`.
+
+---
+
+## Consumer chat — share routes
+
+End-user mechanism for granting cross-user conversation access to admins. The owner controls the share / revoke lifecycle on their own conversations; without an active share, admins see only their own conversations.
+
+These endpoints exist on the consumer chat namespace (`/api/v1/chat/conversations/...`) — `withAuth` (not admin-only), rate-limited via `apiLimiter`. Downstream apps that consume Sunrise build the "Share with support" UI against these routes; Sunrise itself ships only the API.
+
+### `POST /api/v1/chat/conversations/:id/share`
+
+Grant cross-user admin access to a conversation owned by the caller. Body (`shareConversationSchema`):
+
+```jsonc
+{
+  "reason": "Customer complaint about refund #4421", // optional, ≤500 chars
+  "expiresInDays": 7, // optional, 1–90, defaults to 7
+}
+```
+
+POST with an empty body is permitted and creates a default 7-day share.
+
+Behaviour:
+
+- **Owner-only.** `findFirst({ id, userId: session.user.id })` — cross-user → 404.
+- **Upsert.** One row per conversation. Re-sharing a previously-revoked conversation refreshes the existing row (clear `revokedAt`, set new `expiresAt`).
+- Returns `{ shareId, conversationId, expiresAt }`.
+
+### `DELETE /api/v1/chat/conversations/:id/share`
+
+Revoke the conversation's active share. Owner-only. **Idempotent**: revoking a missing share or already-revoked share returns 200 with `{ revoked: false }`. Active revocation returns `{ revoked: true }`. Callers don't need to track share existence before calling.
+
+### Future: compliance officer role
+
+A separate `COMPLIANCE_OFFICER` role (deferred) will bypass the consent gate for documented legal-basis access. Every such access writes an audit row with a mandatory justification and triggers a user-facing notification. The current consent-gated model is the routine path; the compliance path is the named exception with stricter accountability.
 
 ---
 

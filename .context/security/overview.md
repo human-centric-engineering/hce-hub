@@ -4,7 +4,10 @@
 
 Sunrise implements **defense in depth** with multiple layers of protection from network to application code. This document covers general application security measures that apply across all features, not just authentication.
 
-For authentication-specific security (password hashing, sessions, OAuth), see [Auth Security](../auth/security.md).
+For authentication-specific security (password hashing, sessions, OAuth), see [Auth Security](../auth/security.md). For domain-specific privacy posture, see:
+
+- [Conversation access — consent-gated cross-user access](./conversation-access.md) — admins see only what users explicitly share.
+- [PII redaction at the capability layer](./pii-redaction.md) — write-time redaction so PII never enters the audit substrate raw.
 
 ## Security Utilities
 
