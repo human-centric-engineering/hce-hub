@@ -164,6 +164,11 @@ vi.mock('@/lib/orchestration/capabilities/dispatcher', () => ({
     clearCache: vi.fn(),
     loadFromDatabase: vi.fn().mockResolvedValue(undefined),
     has: vi.fn().mockReturnValue(false),
+    // `buildToolCallTrace` calls `getHandler(slug)` to apply the
+    // capability's `redactProvenance()` before persistence. Returning
+    // `undefined` falls through to the default preview formatter —
+    // matches the pre-redactor behavior these tests originally asserted.
+    getHandler: vi.fn().mockReturnValue(undefined),
   },
 }));
 
