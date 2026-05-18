@@ -112,3 +112,48 @@ describe('BaseCapability helpers', () => {
     expect(result.error?.code).toBe('not_found');
   });
 });
+
+describe('BaseCapability.processesPii and redactProvenance defaults', () => {
+  it('defaults processesPii to false', () => {
+    const cap = new WithSchema();
+    expect(cap.processesPii).toBe(false);
+  });
+
+  it('redactProvenance returns args verbatim by default', () => {
+    const cap = new WithSchema();
+    const args: Args = { n: 7 };
+    const result: CapabilityResult<Data> = { success: true, data: { doubled: 14 } };
+    const redacted = cap.redactProvenance(args, result);
+    expect(redacted.args).toEqual({ n: 7 });
+  });
+
+  it('redactProvenance produces a JSON-stringified result preview by default', () => {
+    const cap = new WithSchema();
+    const result: CapabilityResult<Data> = { success: true, data: { doubled: 14 } };
+    const redacted = cap.redactProvenance({ n: 7 }, result);
+    expect(redacted.resultPreview).toBe('{"success":true,"data":{"doubled":14}}');
+  });
+
+  it('redactProvenance truncates oversized previews with an ellipsis', () => {
+    const cap = new PassthroughSchema();
+    const huge = 'x'.repeat(5000);
+    const result: CapabilityResult<{ echoed: unknown }> = {
+      success: true,
+      data: { echoed: huge },
+    };
+    const redacted = cap.redactProvenance({ anything: 'whatever' }, result);
+    expect(redacted.resultPreview.length).toBe(480);
+    expect(redacted.resultPreview.endsWith('…')).toBe(true);
+  });
+
+  it('redactProvenance falls back gracefully on non-serialisable results', () => {
+    const cap = new WithSchema();
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    // The default implementation should not throw on a cyclic input —
+    // it falls back to String(result), which produces "[object Object]".
+    expect(() =>
+      cap.redactProvenance({ n: 1 }, cyclic as unknown as CapabilityResult<Data>)
+    ).not.toThrow();
+  });
+});
