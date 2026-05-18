@@ -150,7 +150,7 @@ export function WebhookForm({ mode, webhook }: WebhookFormProps) {
       {/* Sticky action bar */}
       <div className="bg-background/95 sticky top-0 z-10 -mx-2 flex items-center justify-between border-b px-2 py-3 backdrop-blur">
         <h1 className="text-xl font-semibold">
-          {isEdit ? 'Edit webhook' : 'New webhook subscription'}
+          {isEdit ? 'Edit subscription' : 'New event subscription'}
         </h1>
         <div className="flex items-center gap-2">
           <Button type="button" variant="outline" asChild>
@@ -165,7 +165,7 @@ export function WebhookForm({ mode, webhook }: WebhookFormProps) {
             ) : (
               <>
                 <Save className="mr-2 h-4 w-4" />
-                {isEdit ? 'Save changes' : 'Create webhook'}
+                {isEdit ? 'Save changes' : 'Create subscription'}
               </>
             )}
           </Button>
