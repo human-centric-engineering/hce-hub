@@ -29,6 +29,7 @@ import { adminLimiter, createRateLimitResponse } from '@/lib/security/rate-limit
 import { getClientIP } from '@/lib/security/ip';
 import { cuidSchema } from '@/lib/validations/common';
 import { executionTraceSchema } from '@/lib/validations/orchestration';
+import { overlayStepDescriptions } from '@/lib/orchestration/trace/overlay-descriptions';
 
 // `executionTraceSchema` is `z.array(...).catch([])` — parsing always succeeds,
 // returning `[]` for malformed rows. Don't add a "trace corrupted" error path
@@ -60,13 +61,34 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
 
   const execution = await prisma.aiWorkflowExecution.findUnique({
     where: { id },
-    include: { workflow: { select: { id: true, name: true, slug: true } } },
+    include: {
+      workflow: { select: { id: true, name: true, slug: true } },
+      // Load the pinned version's snapshot so we can overlay step
+      // descriptions onto historical trace entries. Trace entries
+      // emitted before the description field existed (or before the
+      // seed backfilled the snapshots) have no `description` on
+      // them; the overlay below fills it from the snapshot's step
+      // definitions so the expanded accordion body always shows the
+      // copy that's available today. The trace entry wins when it
+      // already carries a description — that's the audit-honest
+      // pinned-in-time value.
+      version: { select: { snapshot: true } },
+    },
   });
   if (!execution || execution.userId !== session.user.id) {
     throw new NotFoundError(`Execution ${id} not found`);
   }
 
-  const trace = executionTraceSchema.parse(execution.executionTrace);
+  const parsedTrace = executionTraceSchema.parse(execution.executionTrace);
+  // For each trace entry that lacks a `description`, fill it from the
+  // pinned version's snapshot. Old executions ran before descriptions
+  // were a thing — without this overlay their expanded rows would
+  // show nothing. Entries that already carry a description keep it
+  // (those are audit-honest pinned-in-time values).
+  const trace = overlayStepDescriptions({
+    trace: parsedTrace,
+    snapshot: execution.version?.snapshot ?? null,
+  });
 
   // Pull every cost log attributed to this execution. Older rows in
   // production may have null metadata or no stepId — those are filtered
