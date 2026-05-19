@@ -55,12 +55,25 @@ vi.mock('@/lib/api/sse', () => ({
 // engine creates a DB row — we don't want that here. The mock uses a
 // real `function` (not an arrow) because vitest's mock-as-class
 // detection requires the constructor to be invocable via `new`.
-const engineExecuteMock = vi.fn(() => {
-  // The route passes the AsyncIterable to sseResponse, which we have
-  // mocked above — so the iterable is never actually consumed in the
-  // test. Returning an empty async iterator keeps types happy.
-  return (async function* () {})();
-});
+// The explicit signature is necessary so `mock.calls[i][n]` is
+// indexable as a tuple at the assertion site — without it vitest
+// types `mock.calls` as `[][]` and TS rejects the destructuring.
+const engineExecuteMock = vi.fn(
+  (
+    _workflow: { id: string; versionId: string },
+    _inputData: Record<string, unknown>,
+    _options: {
+      userId: string;
+      budgetLimitUsd?: number;
+      parentExecutionId?: string;
+    }
+  ): AsyncIterable<unknown> => {
+    // The route passes the AsyncIterable to sseResponse, which we have
+    // mocked above — so the iterable is never actually consumed in the
+    // test. Returning an empty async iterator keeps types happy.
+    return (async function* () {})();
+  }
+);
 vi.mock('@/lib/orchestration/engine/orchestration-engine', () => ({
   OrchestrationEngine: function OrchestrationEngineMock() {
     return { execute: engineExecuteMock };
