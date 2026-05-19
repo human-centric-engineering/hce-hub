@@ -27,6 +27,8 @@
  * return 404 (not 403) so existence isn't leaked.
  */
 
+import { z } from 'zod';
+
 import { withAdminAuth } from '@/lib/auth/guards';
 import { prisma } from '@/lib/db/client';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
@@ -100,10 +102,10 @@ export const POST = withAdminAuth<{ id: string }>(async (request, session, { par
   });
 
   // `inputData` is `Json` on the row — Prisma's runtime shape for that
-  // column is `JsonValue`. The engine accepts a typed
-  // `Record<string, unknown>` and JsonValue is structurally compatible
-  // for plain objects (which all our inputData rows are).
-  const inputData = (original.inputData ?? {}) as Record<string, unknown>;
+  // column is `JsonValue`. Zod-parse it before handing to the engine so a
+  // stored string / number / array / null surfaces as a clear validation
+  // error instead of an unexpected shape downstream.
+  const inputData = z.record(z.string(), z.unknown()).parse(original.inputData ?? {});
 
   // Budget: caller override wins; else preserve the original's value.
   // null on the original means "no limit" which the engine treats by
