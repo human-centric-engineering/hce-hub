@@ -2303,9 +2303,9 @@ export const updateOrchestrationSettingsSchema = z
 // ============================================================================
 // TurnEntry — multi-turn step checkpoint shapes
 // ============================================================================
-// Discriminated by `kind`. Used for the row-level `currentStepTurns` column
-// (mid-flight) and the trace entry's `turns` field (post-termination). The
-// shapes mirror the discriminated union in `types/orchestration.ts`.
+// Discriminated by `kind`. Used for the per-step `AiWorkflowRunningStep.turns`
+// column (mid-flight) and the trace entry's `turns` field (post-termination).
+// The shapes mirror the discriminated union in `types/orchestration.ts`.
 
 const agentCallTurnContinuingSchema = z.object({
   kind: z.literal('agent_call'),

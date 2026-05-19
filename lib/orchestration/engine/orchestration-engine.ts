@@ -707,7 +707,7 @@ export class OrchestrationEngine {
     /**
      * Called BEFORE each retry attempt (i.e. after attempt 0 fails, before attempt 1 runs;
      * never before attempt 0). Lets callers reset per-attempt state — multi-turn checkpoint
-     * accumulators in `executeSingleStep` use this to clear `currentStepTurns` so failed
+     * accumulators in `executeSingleStep` use this to clear the running-step row's `turns` so failed
      * attempts' turns don't leak into the next attempt's history.
      */
     onAttemptStart?: (attempt: number) => Promise<void>
@@ -769,9 +769,10 @@ export class OrchestrationEngine {
       let accumulatedCost = 0;
       for (let attempt = 0; attempt <= retryCount; attempt++) {
         if (attempt > 0 && onAttemptStart) {
-          // Reset per-attempt accumulators (e.g. multi-turn `currentStepTurns`)
-          // so the next attempt starts fresh. Cost accumulators above persist
-          // across attempts intentionally — they reflect billing reality.
+          // Reset per-attempt accumulators (e.g. the running-step row's
+          // `turns` column) so the next attempt starts fresh. Cost accumulators
+          // above persist across attempts intentionally — they reflect billing
+          // reality.
           await onAttemptStart(attempt);
         }
         try {
@@ -1027,9 +1028,9 @@ export class OrchestrationEngine {
     let stepError: ExecutorError | null = null;
 
     // Multi-turn checkpoint plumbing. `stepTurns` is the in-memory accumulator
-    // for this step; it seeds from `ctx.resumeTurns` (set by initRun on the
-    // resume path) so a re-driven step picks up where it left off. The closure
-    // bound to `ctx.recordTurn` mirrors the array to this step's
+    // for this step; it seeds from `ctx.resumeTurns` (set by `startOrResume`
+    // on the resume path) so a re-driven step picks up where it left off. The
+    // closure bound to `ctx.recordTurn` mirrors the array to this step's
     // `AiWorkflowRunningStep.turns` column on each call. The accumulator is
     // also captured by reference into the per-attempt reset callback below,
     // so retry attempts start fresh — see `onAttemptStart`.
@@ -1083,10 +1084,11 @@ export class OrchestrationEngine {
           ...rollupTelemetry(telemetryOut),
           ...(stepTurns.length > 0 ? { turns: [...stepTurns] } : {}),
         });
-        // The pause path's column DOES retain currentStepTurns on purpose:
-        // pauseForApproval doesn't touch it, and the column is what
-        // approval-resume's initRun reads to repopulate ctx.resumeTurns. The
-        // trace entry's `turns` field is for observability; the column is for
+        // The pause path keeps the running-step row alive on purpose:
+        // `pauseForApproval` doesn't call `clearRunningStep`, so the row
+        // (with its `turns`) survives the pause and approval-resume's
+        // initRun reads it back into `ctx.resumeTurns`. The trace entry's
+        // `turns` field is for observability; the running-step row is for
         // resume.
         //
         // Clearing both context fields here prevents the next step's executor

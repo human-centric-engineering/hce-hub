@@ -6,18 +6,18 @@
  * Designed for high-frequency (~1s) polling from the execution detail page.
  * Returns everything the live view needs in one round-trip:
  *
- *   - `snapshot`           — the same narrow fields as `/status` (status,
- *                            currentStep, errorMessage, tokens, cost, dates).
- *   - `trace`              — persisted step trace (steps that have terminated).
- *   - `costEntries`        — per-LLM-call cost rows attributed to this run.
- *   - `currentStepDetails` — { stepId, label, type, startedAt } when the
- *                            execution is in a running/paused status AND the
- *                            engine has written the live-running columns.
- *                            Null otherwise.
+ *   - `snapshot`             — the same narrow fields as `/status` (status,
+ *                              currentStep, errorMessage, tokens, cost, dates).
+ *   - `trace`                — persisted step trace (steps that have terminated).
+ *   - `costEntries`          — per-LLM-call cost rows attributed to this run.
+ *   - `currentRunningSteps`  — array of `{ stepId, label, stepType, startedAt }`
+ *                              for every step currently in flight. During a
+ *                              `parallel` step's fan-out this carries one
+ *                              entry per branch; empty array on terminal rows.
  *
- * `currentStepDetails` is sourced from the `currentStep*` columns on
- * `AiWorkflowExecution` (populated by `markCurrentStep` in the engine) so
- * we don't have to parse the workflow version snapshot per poll.
+ * `currentRunningSteps` is read from `AiWorkflowRunningStep` (side table; one
+ * row per in-flight step) so the detail view can render every branch
+ * simultaneously instead of just the most-recently-entered one.
  *
  * Ownership: rows are scoped to `session.user.id`. Cross-user access
  * returns 404 (not 403) — we never confirm existence of another user's row.
