@@ -154,23 +154,25 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
     });
   }
 
-  // `currentStepDetails` mirrors the shape returned by /executions/:id/live so
-  // the page's initial paint can seed the live-poll hook directly. Only
-  // populated when status is non-terminal AND all three live columns are set.
+  // `currentRunningSteps` mirrors the shape returned by /executions/:id/live so
+  // the page's initial paint can seed the live-poll hook directly. Empty for
+  // terminal rows; one entry per in-flight step otherwise (a `parallel`
+  // fan-out yields one entry per branch).
   const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
-  const currentStepDetails =
-    !TERMINAL_STATUSES.has(execution.status) &&
-    execution.currentStep &&
-    execution.currentStepLabel &&
-    execution.currentStepType &&
-    execution.currentStepStartedAt
-      ? {
-          stepId: execution.currentStep,
-          label: execution.currentStepLabel,
-          stepType: execution.currentStepType,
-          startedAt: execution.currentStepStartedAt.toISOString(),
-        }
-      : null;
+  const currentRunningSteps = TERMINAL_STATUSES.has(execution.status)
+    ? []
+    : (
+        await prisma.aiWorkflowRunningStep.findMany({
+          where: { executionId: id },
+          orderBy: { startedAt: 'asc' },
+          select: { stepId: true, label: true, stepType: true, startedAt: true },
+        })
+      ).map((row) => ({
+        stepId: row.stepId,
+        label: row.label,
+        stepType: row.stepType,
+        startedAt: row.startedAt.toISOString(),
+      }));
 
   return successResponse({
     execution: {
@@ -204,7 +206,7 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
     },
     trace,
     costEntries,
-    currentStepDetails,
+    currentRunningSteps,
   });
 });
 

@@ -66,9 +66,6 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
       userId: true,
       status: true,
       currentStep: true,
-      currentStepLabel: true,
-      currentStepType: true,
-      currentStepStartedAt: true,
       errorMessage: true,
       totalTokensUsed: true,
       totalCostUsd: true,
@@ -115,24 +112,25 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
     });
   }
 
-  // Only surface running-step details for non-terminal executions whose
-  // live columns are all populated. Terminal rows (and rows whose engine
-  // hasn't yet entered a step) get null so the UI can drop the running
-  // indicator cleanly.
+  // Surface every in-flight step on terminal-status-aware reads. During
+  // a `parallel` fan-out each branch lands as its own row, so the array
+  // can carry N entries — the detail view synthesises one "running"
+  // trace row per entry. Empty array on terminal rows.
   const isTerminal = TERMINAL_STATUSES.has(execution.status);
-  const currentStepDetails =
-    !isTerminal &&
-    execution.currentStep &&
-    execution.currentStepLabel &&
-    execution.currentStepType &&
-    execution.currentStepStartedAt
-      ? {
-          stepId: execution.currentStep,
-          label: execution.currentStepLabel,
-          stepType: execution.currentStepType,
-          startedAt: execution.currentStepStartedAt.toISOString(),
-        }
-      : null;
+  const currentRunningSteps = isTerminal
+    ? []
+    : (
+        await prisma.aiWorkflowRunningStep.findMany({
+          where: { executionId: id },
+          orderBy: { startedAt: 'asc' },
+          select: { stepId: true, label: true, stepType: true, startedAt: true },
+        })
+      ).map((row) => ({
+        stepId: row.stepId,
+        label: row.label,
+        stepType: row.stepType,
+        startedAt: row.startedAt.toISOString(),
+      }));
 
   return successResponse({
     snapshot: {
@@ -148,7 +146,7 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
     },
     trace,
     costEntries,
-    currentStepDetails,
+    currentRunningSteps,
   });
 });
 
