@@ -20,6 +20,7 @@ import {
   Download,
   Eye,
   Loader2,
+  Repeat,
   RotateCcw,
   StopCircle,
   ThumbsUp,
@@ -73,6 +74,7 @@ import { buildParallelBranchMap } from '@/lib/orchestration/trace/aggregate';
 import { getApprovalPrompt } from '@/lib/orchestration/trace/approval-prompt';
 import { buildInterpolationContextFromTrace } from '@/lib/orchestration/engine/interpolate-from-trace';
 import { ExecutionStatusSynopsis } from '@/components/admin/orchestration/execution-status-synopsis';
+import { RerunExecutionDialog } from '@/components/admin/orchestration/rerun-execution-dialog';
 import type { ExecutionTraceEntry } from '@/types/orchestration';
 import { supervisorReportSchema } from '@/lib/validations/orchestration';
 
@@ -81,6 +83,19 @@ import { supervisorReportSchema } from '@/lib/validations/orchestration';
 export interface ExecutionInfo {
   id: string;
   workflowId: string;
+  /**
+   * Pinned `AiWorkflowVersion.id`. Null on legacy executions from
+   * before the immutable-version model. The re-run dialog uses this
+   * as the anchor for "show versions added since the original run".
+   */
+  versionId?: string | null;
+  /**
+   * When set, this execution was created by the rerun endpoint and
+   * this points at the execution it was rerun from. The detail view
+   * surfaces it as a "Re-run of execution X" breadcrumb. Null for
+   * normal (non-rerun) executions.
+   */
+  parentExecutionId?: string | null;
   status: string;
   totalTokensUsed: number;
   totalCostUsd: number;
@@ -747,6 +762,7 @@ export function ExecutionDetailView({
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectLoading, setRejectLoading] = useState(false);
+  const [rerunDialogOpen, setRerunDialogOpen] = useState(false);
 
   const handleReject = useCallback(async () => {
     setRejectLoading(true);
@@ -879,11 +895,37 @@ export function ExecutionDetailView({
     liveSnap.status === 'failed' ||
     liveSnap.status === 'cancelled';
 
+  // Re-run is available for any terminal execution. We disable it for
+  // in-flight runs (running / paused_for_approval) — those still have
+  // moves left, so "re-run now" is almost certainly the wrong action.
+  const canRerun =
+    liveSnap.status === 'completed' ||
+    liveSnap.status === 'failed' ||
+    liveSnap.status === 'cancelled' ||
+    liveSnap.status === 'rejected';
+
   // Extract approval prompt from awaiting trace entry
   const approvalPrompt = canApprove ? getApprovalPrompt(displayTrace) : null;
 
   return (
     <div className="space-y-6">
+      {/* Re-run lineage breadcrumb. Only renders when this execution
+          was created via the rerun endpoint. Plain anchor (not Next
+          Link) is fine because the target is admin-only and we want
+          a full reload to refresh the live-poll hook against the new
+          execution's status. */}
+      {execution.parentExecutionId && (
+        <p className="text-muted-foreground text-xs" data-testid="execution-parent-breadcrumb">
+          Re-run of execution{' '}
+          <a
+            href={`/admin/orchestration/executions/${execution.parentExecutionId}`}
+            className="hover:text-foreground underline underline-offset-2"
+          >
+            {execution.parentExecutionId.slice(0, 8)}…
+          </a>
+        </p>
+      )}
+
       {/* Action result banner */}
       {actionResult && (
         <div
@@ -905,7 +947,7 @@ export function ExecutionDetailView({
       )}
 
       {/* Action buttons */}
-      {(canCancel || canApprove || (canRetry && failedStepId) || canReview) && (
+      {(canCancel || canApprove || (canRetry && failedStepId) || canReview || canRerun) && (
         <div className="flex flex-wrap gap-2">
           {canApprove && (
             <Button size="sm" onClick={() => void handleApprove()} disabled={actionLoading}>
@@ -982,6 +1024,18 @@ export function ExecutionDetailView({
                 regardless of whether the workflow includes a <code>report</code> step.
               </FieldHelp>
             </div>
+          )}
+          {canRerun && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setRerunDialogOpen(true)}
+              disabled={actionLoading}
+              data-testid="execution-rerun-button"
+            >
+              <Repeat className="mr-2 h-4 w-4" />
+              Re-run
+            </Button>
           )}
         </div>
       )}
@@ -1411,6 +1465,16 @@ export function ExecutionDetailView({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <RerunExecutionDialog
+        open={rerunDialogOpen}
+        onOpenChange={setRerunDialogOpen}
+        execution={{
+          id: execution.id,
+          workflowId: execution.workflowId,
+          versionId: execution.versionId ?? null,
+        }}
+      />
     </div>
   );
 }

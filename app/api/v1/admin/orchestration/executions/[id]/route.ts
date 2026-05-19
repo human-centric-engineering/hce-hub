@@ -147,6 +147,11 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
     execution: {
       id: execution.id,
       workflowId: execution.workflowId,
+      // `versionId` and `parentExecutionId` feed the re-run dialog
+      // (which needs to know which version this ran against and offer
+      // versions added since) and the parent-lineage breadcrumb.
+      versionId: execution.versionId,
+      parentExecutionId: execution.parentExecutionId,
       status: execution.status,
       totalTokensUsed: execution.totalTokensUsed,
       totalCostUsd: execution.totalCostUsd,

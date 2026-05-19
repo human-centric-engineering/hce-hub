@@ -25,6 +25,8 @@ export const metadata: Metadata = {
 interface ExecutionDetail {
   id: string;
   workflowId: string;
+  versionId: string | null;
+  parentExecutionId: string | null;
   status: string;
   totalTokensUsed: number;
   totalCostUsd: number;

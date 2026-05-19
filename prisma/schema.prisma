@@ -512,6 +512,14 @@ model AiWorkflowExecution {
   supervisorScore      Float?
   supervisorReport     Json?
   supervisorReviewedAt DateTime?
+  // Lineage: when this execution was triggered via the rerun endpoint
+  // (`POST /executions/:id/rerun`) this points at the execution it was
+  // rerun from. The admin UI surfaces this as a "Re-run of execution X"
+  // breadcrumb. NULL for normal executions and for the parent of a
+  // rerun chain. `onDelete: SetNull` so deleting the parent doesn't
+  // cascade away children's history — the lineage link goes muted but
+  // the child stays.
+  parentExecutionId String?
   userId            String
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -520,6 +528,8 @@ model AiWorkflowExecution {
   workflow       AiWorkflow               @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   version        AiWorkflowVersion?       @relation(fields: [versionId], references: [id], onDelete: SetNull)
   user           User                     @relation("AiWorkflowExecutionUser", fields: [userId], references: [id])
+  parent         AiWorkflowExecution?     @relation("ExecutionLineage", fields: [parentExecutionId], references: [id], onDelete: SetNull)
+  reruns         AiWorkflowExecution[]    @relation("ExecutionLineage")
   costLogs       AiCostLog[]
   stepDispatches AiWorkflowStepDispatch[]
 
@@ -538,6 +548,7 @@ model AiWorkflowExecution {
   @@index([status, updatedAt]) // Abandoned-approval reaper
   @@index([status, leaseExpiresAt]) // Orphan sweep: RUNNING rows with expired lease
   @@index([userId, status, createdAt]) // Execution list with user + status + sort
+  @@index([parentExecutionId]) // "find all reruns of this execution" lookup
   @@map("ai_workflow_execution")
 }
 
