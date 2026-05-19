@@ -5364,4 +5364,248 @@ describe('OrchestrationEngine', () => {
       expect(turnsWritten).not.toContainEqual(turn0);
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Running-step side table — behavioural coverage for the refactor that
+  // replaced the scalar currentStep*Label/Type/StartedAt/Turns columns
+  // with a normalised AiWorkflowRunningStep table. The headline reason
+  // for the change is parallel fan-out — that test is first.
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('running-step side table', () => {
+    // Independent copies of the helpers used by `multi-turn checkpoint
+    // plumbing` — keeping them local so this describe block can run on
+    // its own and a future contributor doesn't accidentally entangle
+    // the two suites' state.
+    const EXEC_ID = 'exec_runningstep';
+    const makeTurn = (iteration: number): TurnEntry => ({
+      kind: 'reflect',
+      iteration,
+      draft: `draft-${iteration}`,
+      converged: false,
+      tokensUsed: 10 + iteration,
+      costUsd: 0.01 + iteration * 0.001,
+    });
+    const stepACompletedTrace = [
+      {
+        stepId: 'a',
+        stepType: 'llm_call',
+        label: 'Step A',
+        status: 'completed',
+        output: 'prior-out',
+        tokensUsed: 0,
+        costUsd: 0,
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        durationMs: 1,
+      },
+    ];
+
+    beforeEach(() => {
+      // Default the side-table writes so engine paths under test don't
+      // trip the non-fatal error logger and assertions stay focused on
+      // intent.
+      vi.mocked(prisma.aiWorkflowRunningStep.upsert).mockResolvedValue({} as never);
+      vi.mocked(prisma.aiWorkflowRunningStep.update).mockResolvedValue({} as never);
+      vi.mocked(prisma.aiWorkflowRunningStep.updateMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiWorkflowRunningStep.deleteMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiWorkflowRunningStep.findUnique).mockResolvedValue(null);
+    });
+
+    it('parallel fan-out: each branch produces its own upsert with a distinct stepId', async () => {
+      // The bug this refactor fixes: when a parallel step fans out to N
+      // branches, every branch's markCurrentStep used to overwrite the
+      // same scalar columns on ai_workflow_execution (last-writer-wins),
+      // so only one branch ever surfaced as "running" in the UI. Now each
+      // branch produces a distinct (executionId, stepId) row.
+      registerStepType('parallel', async (step) => ({
+        output: { parallel: true, branches: step.nextSteps.map((e) => e.targetStepId) },
+        tokensUsed: 0,
+        costUsd: 0,
+      }));
+      registerStepType('llm_call', async () => ({ output: 'ok', tokensUsed: 0, costUsd: 0 }));
+
+      const def: WorkflowDefinition = {
+        steps: [
+          {
+            id: 'fork',
+            name: 'Fork',
+            type: 'parallel',
+            config: {},
+            nextSteps: [
+              { targetStepId: 'branch_a' },
+              { targetStepId: 'branch_b' },
+              { targetStepId: 'branch_c' },
+            ],
+          },
+          { id: 'branch_a', name: 'Branch A', type: 'llm_call', config: {}, nextSteps: [] },
+          { id: 'branch_b', name: 'Branch B', type: 'llm_call', config: {}, nextSteps: [] },
+          { id: 'branch_c', name: 'Branch C', type: 'llm_call', config: {}, nextSteps: [] },
+        ],
+        entryStepId: 'fork',
+        errorStrategy: 'fail',
+      };
+
+      await collect(new OrchestrationEngine(), makeWorkflow(def));
+
+      // Headline assertion: every branch produced an upsert with its own
+      // stepId. If the refactor regresses (last-writer-wins), the upserts
+      // would still fire but with overlapping stepIds — checking the set
+      // here makes that regression obvious.
+      const branchUpserts = vi
+        .mocked(prisma.aiWorkflowRunningStep.upsert)
+        .mock.calls.map((c) => {
+          const args = c[0] as { where: { executionId_stepId: { stepId: string } } };
+          return args.where.executionId_stepId.stepId;
+        })
+        .filter((stepId) => stepId.startsWith('branch_'));
+      expect(new Set(branchUpserts)).toEqual(new Set(['branch_a', 'branch_b', 'branch_c']));
+    });
+
+    it('successful step termination: clearRunningStep deletes the row', async () => {
+      registerStepType('llm_call', async () => ({ output: 'ok', tokensUsed: 0, costUsd: 0 }));
+
+      await collect(
+        new OrchestrationEngine(),
+        makeWorkflow({
+          steps: [{ id: 'a', name: 'A', type: 'llm_call', config: {}, nextSteps: [] }],
+          entryStepId: 'a',
+          errorStrategy: 'fail',
+        })
+      );
+
+      // The per-step delete fires with the stepId AND executionId so a
+      // concurrent re-drive of a different step doesn't collide.
+      expect(prisma.aiWorkflowRunningStep.deleteMany).toHaveBeenCalledWith({
+        where: { executionId: 'exec_test', stepId: 'a' },
+      });
+    });
+
+    it('failed step termination: clearRunningStep deletes the row', async () => {
+      registerStepType('llm_call', async (step) => {
+        throw new ExecutorError(step.id, 'executor_threw', 'boom');
+      });
+
+      await collect(
+        new OrchestrationEngine(),
+        makeWorkflow({
+          steps: [{ id: 'a', name: 'A', type: 'llm_call', config: {}, nextSteps: [] }],
+          entryStepId: 'a',
+          errorStrategy: 'fail',
+        })
+      );
+
+      expect(prisma.aiWorkflowRunningStep.deleteMany).toHaveBeenCalledWith({
+        where: { executionId: 'exec_test', stepId: 'a' },
+      });
+    });
+
+    it('skipped step termination: clearRunningStep deletes the row', async () => {
+      registerStepType('llm_call', async (step) => {
+        throw new ExecutorError(step.id, 'executor_threw', 'boom');
+      });
+
+      await collect(
+        new OrchestrationEngine(),
+        makeWorkflow({
+          steps: [
+            {
+              id: 'a',
+              name: 'A',
+              type: 'llm_call',
+              config: { errorStrategy: 'skip' },
+              nextSteps: [],
+            },
+          ],
+          entryStepId: 'a',
+          errorStrategy: 'fail',
+        })
+      );
+
+      expect(prisma.aiWorkflowRunningStep.deleteMany).toHaveBeenCalledWith({
+        where: { executionId: 'exec_test', stepId: 'a' },
+      });
+    });
+
+    it('pauseForApproval: leaves the running-step row intact (no per-step delete fires)', async () => {
+      // Pause is "in flight, awaiting input". The row must survive so the
+      // detail view continues to render the step as awaiting_approval and
+      // the resume path can re-read its `turns`.
+      registerStepType('human_approval', async (step) => {
+        throw new PausedForApproval(step.id, { prompt: 'Approve?' });
+      });
+
+      await collect(
+        new OrchestrationEngine(),
+        makeWorkflow({
+          steps: [
+            {
+              id: 'review',
+              name: 'Review',
+              type: 'human_approval',
+              config: { prompt: 'Approve?' },
+              nextSteps: [],
+            },
+          ],
+          entryStepId: 'review',
+          errorStrategy: 'fail',
+        })
+      );
+
+      // No per-step delete should fire for the paused step. (Other deletes
+      // for unrelated stepIds are still acceptable — we filter precisely.)
+      const reviewDeletes = vi
+        .mocked(prisma.aiWorkflowRunningStep.deleteMany)
+        .mock.calls.filter((c) => {
+          const args = c[0] as { where: { stepId?: string } };
+          return args.where.stepId === 'review';
+        });
+      expect(reviewDeletes).toHaveLength(0);
+    });
+
+    it('resume: clears every running-step row for the execution before re-entry', async () => {
+      // Sibling rows from a pre-crash parallel fan-out must be swept on
+      // resume — the engine re-walks the DAG single-cursor, so leaving
+      // stale siblings would surface ghost branches in the UI.
+      const resumeTurn = makeTurn(0);
+      vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValueOnce({
+        id: EXEC_ID,
+        workflowId: 'wf_test',
+        userId: USER_ID,
+        status: 'paused_for_approval',
+        inputData: {},
+        executionTrace: stepACompletedTrace,
+        totalTokensUsed: 0,
+        totalCostUsd: 0,
+        budgetLimitUsd: null,
+        currentStep: 'a',
+        startedAt: new Date(),
+        completedAt: null,
+        outputData: null,
+        errorMessage: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as never);
+      vi.mocked(prisma.aiWorkflowRunningStep.findUnique).mockResolvedValueOnce({
+        turns: [resumeTurn],
+      } as never);
+
+      registerStepType('llm_call', async () => ({ output: 'ok', tokensUsed: 0, costUsd: 0 }));
+
+      await collect(new OrchestrationEngine(), makeWorkflow(linearDefinition()), {
+        userId: USER_ID,
+        resumeFromExecutionId: EXEC_ID,
+      });
+
+      // The execution-wide deleteMany fires once during resume to wipe
+      // sibling/orphan rows. Per-step deletes for completed steps fire
+      // separately with a stepId in the where clause — those don't count.
+      const wholeExecDeletes = vi
+        .mocked(prisma.aiWorkflowRunningStep.deleteMany)
+        .mock.calls.filter((c) => {
+          const args = c[0] as { where: { executionId?: string; stepId?: string } };
+          return args.where.executionId === EXEC_ID && args.where.stepId === undefined;
+        });
+      expect(wholeExecDeletes.length).toBeGreaterThanOrEqual(1);
+    });
+  });
 });

@@ -367,4 +367,28 @@ describe('POST /api/v1/admin/orchestration/executions/:id/reject', () => {
     const response = await POST(makePostRequest({ reason: 'Rejected' }), makeParams(EXECUTION_ID));
     expect(response.status).toBe(404);
   });
+
+  describe('Running-step cleanup', () => {
+    it('sweeps ai_workflow_running_step rows when the status flip succeeds', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecution() as never);
+      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+
+      await POST(makePostRequest({ reason: 'Rejected' }), makeParams(EXECUTION_ID));
+
+      expect(prisma.aiWorkflowRunningStep.deleteMany).toHaveBeenCalledWith({
+        where: { executionId: EXECUTION_ID },
+      });
+    });
+
+    it('does not sweep ai_workflow_running_step rows when the status guard fails', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecution() as never);
+      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 } as never);
+
+      await POST(makePostRequest({ reason: 'Rejected' }), makeParams(EXECUTION_ID));
+
+      expect(prisma.aiWorkflowRunningStep.deleteMany).not.toHaveBeenCalled();
+    });
+  });
 });

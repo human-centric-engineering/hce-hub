@@ -161,4 +161,55 @@ describe('reapZombieExecutions', () => {
     expect(Date.now() - approvalCutoff.getTime()).toBeGreaterThan(oneDay - 2000);
     expect(Date.now() - approvalCutoff.getTime()).toBeLessThan(oneDay + 2000);
   });
+
+  // ─── Running-step orphan sweep (one tick at the end of the reaper) ───────
+  // The reaper's normal job is to flip stale executions to FAILED. Once
+  // that's done, every running-step row whose parent execution is now in
+  // a terminal status (completed/failed/cancelled) is stale by
+  // definition — the engine's per-step delete and finalize sweep should
+  // have caught them, but this is the self-healing fallback.
+
+  it('always runs a single orphan-sweep deleteMany at the end of the tick', async () => {
+    mockCounts(0, 0, 0);
+
+    await reapZombieExecutions();
+
+    // Even when no executions were reaped this tick, the sweep still
+    // fires — orphans from prior incidents need cleaning up too.
+    expect(mockRunningStepDeleteMany).toHaveBeenCalledTimes(1);
+    const args = mockRunningStepDeleteMany.mock.calls[0][0];
+    expect(args).toEqual({
+      where: { execution: { status: { in: ['completed', 'failed', 'cancelled'] } } },
+    });
+  });
+
+  it('logs the orphan-sweep count when > 0', async () => {
+    mockCounts(0, 0, 0);
+    mockRunningStepDeleteMany.mockResolvedValueOnce({ count: 4 });
+
+    await reapZombieExecutions();
+
+    const { logger } = (await import('@/lib/logging')) as {
+      logger: { warn: ReturnType<typeof vi.fn> };
+    };
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Reaped orphan running-step rows',
+      expect.objectContaining({ count: 4 })
+    );
+  });
+
+  it('does not log the orphan-sweep when count = 0', async () => {
+    mockCounts(0, 0, 0);
+    mockRunningStepDeleteMany.mockResolvedValueOnce({ count: 0 });
+
+    await reapZombieExecutions();
+
+    const { logger } = (await import('@/lib/logging')) as {
+      logger: { warn: ReturnType<typeof vi.fn> };
+    };
+    const orphanWarns = logger.warn.mock.calls.filter(([msg]) =>
+      String(msg).includes('orphan running-step')
+    );
+    expect(orphanWarns).toHaveLength(0);
+  });
 });
