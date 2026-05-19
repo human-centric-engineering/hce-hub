@@ -165,13 +165,16 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
         await prisma.aiWorkflowRunningStep.findMany({
           where: { executionId: id },
           orderBy: { startedAt: 'asc' },
-          select: { stepId: true, label: true, stepType: true, startedAt: true },
+          select: { stepId: true, label: true, stepType: true, startedAt: true, turns: true },
         })
       ).map((row) => ({
         stepId: row.stepId,
         label: row.label,
         stepType: row.stepType,
         startedAt: row.startedAt.toISOString(),
+        // See live route for rationale — surfaces in-flight progress on
+        // multi-turn steps so a slow agent_call doesn't look frozen.
+        turnCount: Array.isArray(row.turns) ? row.turns.length : 0,
       }));
 
   return successResponse({

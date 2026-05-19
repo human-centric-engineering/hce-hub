@@ -55,12 +55,19 @@ export interface ExecutionLiveSnapshot {
  * One in-flight step. During a `parallel` step's fan-out, the live
  * endpoint returns one entry per branch. Otherwise the array carries
  * zero or one entries.
+ *
+ * `turnCount` is the number of `recordTurn` calls the executor has made
+ * so far for this step. Always 0 for single-shot step types; grows for
+ * `agent_call` / `orchestrator` / `reflect` as the model fires more
+ * iterations. The detail view renders it as a small progress indicator
+ * on the running row so long agent_calls don't look frozen.
  */
 export interface RunningStep {
   stepId: string;
   label: string;
   stepType: string;
   startedAt: string;
+  turnCount: number;
 }
 
 export interface ExecutionLiveCostEntry {

@@ -123,6 +123,7 @@ describe('GET /api/v1/admin/orchestration/executions/:id', () => {
       label: 'Analyse',
       stepType: 'llm_call',
       startedAt: new Date('2025-01-01T00:00:02Z'),
+      turns: null,
       ...overrides,
     };
   }
@@ -270,6 +271,7 @@ describe('GET /api/v1/admin/orchestration/executions/:id', () => {
         label: 'Analyse',
         stepType: 'llm_call',
         startedAt: '2025-01-01T00:00:02.000Z',
+        turnCount: 0,
       },
     ]);
   });

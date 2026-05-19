@@ -123,13 +123,20 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
         await prisma.aiWorkflowRunningStep.findMany({
           where: { executionId: id },
           orderBy: { startedAt: 'asc' },
-          select: { stepId: true, label: true, stepType: true, startedAt: true },
+          select: { stepId: true, label: true, stepType: true, startedAt: true, turns: true },
         })
       ).map((row) => ({
         stepId: row.stepId,
         label: row.label,
         stepType: row.stepType,
         startedAt: row.startedAt.toISOString(),
+        // Progress indicator for multi-turn steps (`agent_call`,
+        // `orchestrator`, `reflect`). Each `recordTurn` call adds an
+        // entry, so on a long-running agent_call this ticks up as the
+        // model fires more tool iterations — lets the operator see
+        // forward progress instead of staring at a frozen "Running"
+        // badge. Always 0 for single-shot step types.
+        turnCount: Array.isArray(row.turns) ? row.turns.length : 0,
       }));
 
   return successResponse({

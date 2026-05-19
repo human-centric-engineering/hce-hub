@@ -21,11 +21,13 @@ vi.mock('@/lib/logging', () => ({
 }));
 
 import { prisma } from '@/lib/db/client';
+import { logger } from '@/lib/logging';
 
 const mockUpdateMany = prisma.aiWorkflowExecution.updateMany as ReturnType<typeof vi.fn>;
 const mockRunningStepDeleteMany = prisma.aiWorkflowRunningStep.deleteMany as ReturnType<
   typeof vi.fn
 >;
+const mockLoggerWarn = logger.warn as unknown as ReturnType<typeof vi.fn>;
 
 /** Helper: mock all three updateMany calls with given counts. */
 function mockCounts(running: number, pending: number, approvals: number) {
@@ -189,10 +191,7 @@ describe('reapZombieExecutions', () => {
 
     await reapZombieExecutions();
 
-    const { logger } = (await import('@/lib/logging')) as {
-      logger: { warn: ReturnType<typeof vi.fn> };
-    };
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
       'Reaped orphan running-step rows',
       expect.objectContaining({ count: 4 })
     );
@@ -204,10 +203,7 @@ describe('reapZombieExecutions', () => {
 
     await reapZombieExecutions();
 
-    const { logger } = (await import('@/lib/logging')) as {
-      logger: { warn: ReturnType<typeof vi.fn> };
-    };
-    const orphanWarns = logger.warn.mock.calls.filter(([msg]) =>
+    const orphanWarns = mockLoggerWarn.mock.calls.filter(([msg]) =>
       String(msg).includes('orphan running-step')
     );
     expect(orphanWarns).toHaveLength(0);

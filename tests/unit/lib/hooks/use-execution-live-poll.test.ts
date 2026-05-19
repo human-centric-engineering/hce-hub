@@ -56,6 +56,7 @@ function makePayload(overrides: Partial<ExecutionLivePayload> = {}): ExecutionLi
         label: 'Load models',
         stepType: 'llm_call',
         startedAt: '2026-05-01T12:00:01Z',
+        turnCount: 0,
       },
     ],
     ...overrides,
@@ -131,6 +132,7 @@ describe('useExecutionLivePoll', () => {
           label: 'Analyse',
           stepType: 'llm_call',
           startedAt: '2026-05-01T12:00:10Z',
+          turnCount: 0,
         },
       ],
     });

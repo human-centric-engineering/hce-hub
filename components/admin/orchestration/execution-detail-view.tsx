@@ -604,6 +604,16 @@ export function ExecutionDetailView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveTrace, liveRunningSteps, tickClock]);
 
+  // Per-step turnCount lookup for the synthesized running rows. Lives
+  // outside the trace entry shape because ExecutionTraceEntry is also
+  // used for persisted entries (where turnCount has no meaning), so
+  // threading it as a side-channel keeps the trace type clean.
+  const turnCountByStepId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of liveRunningSteps) map.set(r.stepId, r.turnCount);
+    return map;
+  }, [liveRunningSteps]);
+
   // Interpolation context for the per-row "Show resolved" toggle.
   // Re-derives the LLM input client-side from the trace; vars set by the
   // engine's retry path (e.g. `vars.__retryContext`) aren't persisted in
@@ -1343,6 +1353,7 @@ export function ExecutionDetailView({
                   provenance={entry.provenance}
                   agent={entry.agent}
                   retries={entry.retries}
+                  turnCount={turnCountByStepId.get(entry.stepId)}
                   highlighted={highlightedStepId === entry.stepId}
                   forkNumber={parallelForkNumberByStepId.get(entry.stepId)}
                   parallelBranchOfNumber={parallelBranchOfByStepId.get(entry.stepId)}

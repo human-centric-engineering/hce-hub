@@ -781,6 +781,7 @@ describe('ExecutionDetailView', () => {
               label: 'Analyse data',
               stepType: 'llm_call',
               startedAt: '2025-01-01T10:00:05.000Z',
+              turnCount: 0,
             },
           ]}
         />
@@ -816,6 +817,7 @@ describe('ExecutionDetailView', () => {
               label: 'Analyse data',
               stepType: 'llm_call',
               startedAt: '2025-01-01T10:00:05.000Z',
+              turnCount: 0,
             },
           ]}
         />
@@ -850,6 +852,7 @@ describe('ExecutionDetailView', () => {
               label: 'Analyse data',
               stepType: 'llm_call',
               startedAt: '2025-01-01T10:00:05.000Z',
+              turnCount: 0,
             },
           ]}
         />
@@ -877,6 +880,87 @@ describe('ExecutionDetailView', () => {
       // an extra segment like `trace-entry-step-type-…`). The "step-2"
       // running-row testid must not appear.
       expect(screen.queryByTestId('trace-entry-step-2')).not.toBeInTheDocument();
+    });
+
+    it('renders a turnCount indicator on running rows for multi-turn steps', () => {
+      // Long agent_call / orchestrator / reflect steps surface their
+      // in-flight progress via `turnCount`. Without this, a 4-minute
+      // agent_call shows as a frozen "Running" spinner with no signal
+      // that the model is making forward progress.
+      render(
+        <ExecutionDetailView
+          execution={makeExecution({
+            status: 'running',
+            completedAt: null,
+            currentStep: 'step-2',
+          })}
+          trace={[]}
+          initialRunningSteps={[
+            {
+              stepId: 'step-2',
+              label: 'Discover models',
+              stepType: 'agent_call',
+              startedAt: '2025-01-01T10:00:05.000Z',
+              turnCount: 7,
+            },
+          ]}
+        />
+      );
+
+      const indicator = screen.getByTestId('trace-entry-turn-count-step-2');
+      expect(indicator).toBeInTheDocument();
+      expect(indicator).toHaveTextContent('7 turns');
+    });
+
+    it('does not render the turnCount indicator when turnCount is 0', () => {
+      // Single-shot steps (`llm_call`) always report turnCount: 0 because
+      // they don't use ctx.recordTurn. The indicator should not appear
+      // for them — would just be noise.
+      render(
+        <ExecutionDetailView
+          execution={makeExecution({
+            status: 'running',
+            completedAt: null,
+            currentStep: 'step-2',
+          })}
+          trace={[]}
+          initialRunningSteps={[
+            {
+              stepId: 'step-2',
+              label: 'Analyse',
+              stepType: 'llm_call',
+              startedAt: '2025-01-01T10:00:05.000Z',
+              turnCount: 0,
+            },
+          ]}
+        />
+      );
+
+      expect(screen.queryByTestId('trace-entry-turn-count-step-2')).not.toBeInTheDocument();
+    });
+
+    it('renders the singular form when turnCount is 1', () => {
+      render(
+        <ExecutionDetailView
+          execution={makeExecution({
+            status: 'running',
+            completedAt: null,
+            currentStep: 'step-2',
+          })}
+          trace={[]}
+          initialRunningSteps={[
+            {
+              stepId: 'step-2',
+              label: 'Discover',
+              stepType: 'agent_call',
+              startedAt: '2025-01-01T10:00:05.000Z',
+              turnCount: 1,
+            },
+          ]}
+        />
+      );
+
+      expect(screen.getByTestId('trace-entry-turn-count-step-2')).toHaveTextContent('1 turn');
     });
   });
 

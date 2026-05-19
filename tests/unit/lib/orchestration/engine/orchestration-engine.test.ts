@@ -4940,7 +4940,8 @@ describe('OrchestrationEngine', () => {
         return Array.isArray(data.turns) && (data.turns as TurnEntry[]).length === 2;
       });
       expect(turnsWrite).toBeDefined();
-      const turnsWritten = (turnsWrite![0] as { data: { turns: TurnEntry[] } }).data.turns;
+      const turnsWritten = (turnsWrite![0] as unknown as { data: { turns: TurnEntry[] } }).data
+        .turns;
       expect(turnsWritten).toEqual([resumeTurn, newTurn]);
     });
 
@@ -5359,7 +5360,8 @@ describe('OrchestrationEngine', () => {
             'expected at least one write with turn1 after onAttemptStart cleared the accumulator'
         );
       }
-      const turnsWritten = (lastNonEmptyWrite[0] as { data: { turns: TurnEntry[] } }).data.turns;
+      const turnsWritten = (lastNonEmptyWrite[0] as unknown as { data: { turns: TurnEntry[] } })
+        .data.turns;
       expect(turnsWritten).toEqual([turn1]);
       expect(turnsWritten).not.toContainEqual(turn0);
     });

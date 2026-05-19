@@ -89,6 +89,9 @@ function makeRunningStepRow(overrides: Record<string, unknown> = {}) {
     label: 'Analyse models',
     stepType: 'llm_call',
     startedAt: new Date('2026-05-01T12:00:05Z'),
+    // Default `turns: null` — single-shot steps and freshly-started
+    // multi-turn steps both surface as turnCount: 0 in the response.
+    turns: null,
     ...overrides,
   };
 }
@@ -200,8 +203,51 @@ describe('GET /api/v1/admin/orchestration/executions/:id/live', () => {
         label: 'Analyse models',
         stepType: 'llm_call',
         startedAt: '2026-05-01T12:00:05.000Z',
+        turnCount: 0,
       },
     ]);
+  });
+
+  it('exposes turnCount from running-step `turns` length so long agent_calls show forward progress', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecutionRow() as never);
+    vi.mocked(prisma.aiWorkflowRunningStep.findMany).mockResolvedValue([
+      makeRunningStepRow({
+        stepId: 'discover_new_models',
+        label: 'Discover new models',
+        stepType: 'agent_call',
+        turns: Array.from({ length: 7 }, (_, i) => ({
+          kind: 'agent_call',
+          phase: 'continuing',
+          index: i,
+        })),
+      }),
+    ] as never);
+
+    const response = await GET(makeRequest(), makeParams(EXECUTION_ID));
+    const body = await parseJson<{ data: { currentRunningSteps: Array<{ turnCount: number }> } }>(
+      response
+    );
+
+    expect(body.data.currentRunningSteps[0]?.turnCount).toBe(7);
+  });
+
+  it('returns turnCount=0 when running-step has no turns persisted yet', async () => {
+    // Either the executor doesn't use `recordTurn` (single-shot) or the
+    // step just started and hasn't fired its first turn yet. Either way
+    // the UI should treat it as "no progress signal" and hide the chip.
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecutionRow() as never);
+    vi.mocked(prisma.aiWorkflowRunningStep.findMany).mockResolvedValue([
+      makeRunningStepRow({ turns: null }),
+    ] as never);
+
+    const response = await GET(makeRequest(), makeParams(EXECUTION_ID));
+    const body = await parseJson<{ data: { currentRunningSteps: Array<{ turnCount: number }> } }>(
+      response
+    );
+
+    expect(body.data.currentRunningSteps[0]?.turnCount).toBe(0);
   });
 
   it('returns empty currentRunningSteps when status is terminal', async () => {

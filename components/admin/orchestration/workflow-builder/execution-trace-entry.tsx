@@ -120,6 +120,15 @@ export interface ExecutionTraceEntryRowProps {
    * attempts ran, and why each one failed.
    */
   retries?: ExecutionTraceEntry['retries'];
+  /**
+   * Live progress indicator for multi-turn steps. The detail view sets
+   * this on the synthesized "running" row from `currentRunningSteps[*].
+   * turnCount`. Renders as a small "N turns" pill next to the duration
+   * so long `agent_call` / `orchestrator` / `reflect` steps show
+   * forward progress instead of looking frozen. Only honored when
+   * `status === 'running'`; ignored on persisted/completed rows.
+   */
+  turnCount?: number;
   /** When true, render with a highlighted background (used by timeline-strip clicks). */
   highlighted?: boolean;
   /** Fires when the user clicks "Retry" on a failed step. */
@@ -192,6 +201,7 @@ export function ExecutionTraceEntryRow({
   provenance,
   agent,
   retries,
+  turnCount,
   highlighted,
   onRetry,
   forkNumber,
@@ -303,6 +313,11 @@ export function ExecutionTraceEntryRow({
           <div className="text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
             <span>{style.text}</span>
             {typeof durationMs === 'number' && <span>{durationMs.toLocaleString()} ms</span>}
+            {status === 'running' && typeof turnCount === 'number' && turnCount > 0 && (
+              <span data-testid={`trace-entry-turn-count-${stepId}`}>
+                {turnCount === 1 ? '1 turn' : `${turnCount.toLocaleString()} turns`}
+              </span>
+            )}
             {typeof llmDurationMs === 'number' && llmDurationMs > 0 && otherMs !== null && (
               <span data-testid={`trace-entry-latency-breakdown-${stepId}`}>
                 LLM {llmDurationMs.toLocaleString()} ms · other {otherMs.toLocaleString()} ms
