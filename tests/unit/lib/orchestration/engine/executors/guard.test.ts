@@ -415,6 +415,92 @@ describe('executeGuard', () => {
       });
     });
 
+    // ── JSON-string unwrap ─────────────────────────────────────────────
+    // `llm_call` and `agent_call` step outputs arrive as raw response
+    // strings even when the prompt asks for JSON. The guard's schema
+    // mode unwraps those before handing them to Zod — otherwise a
+    // workflow like the audit template (where three parallel LLM steps
+    // feed into a compound schema guard) would fail with the unhelpful
+    // "expected object, received string" message on every run.
+    it('inputStepIds: unwraps JSON-string outputs before schema validation', async () => {
+      registerSchema(
+        'audit-shape',
+        z.object({
+          branch_a: z.object({ a: z.string() }),
+          branch_b: z.object({ b: z.number() }),
+        })
+      );
+      const step = makeGuardStep({
+        mode: 'schema',
+        schemaName: 'audit-shape',
+        inputStepIds: ['branch_a', 'branch_b'],
+        rules: undefined,
+      });
+      const ctx = makeCtx({
+        stepOutputs: {
+          // Both outputs are JSON-encoded strings, matching how
+          // `llm_call` returns them in practice.
+          branch_a: '{"a":"ok"}',
+          branch_b: '{"b":42}',
+        },
+      });
+
+      const result = await executeGuard(step, ctx);
+
+      expect(result.output).toMatchObject({ passed: true, verdict: 'pass' });
+    });
+
+    it('inputStepId: unwraps a JSON-string output before schema validation', async () => {
+      registerSchema('proposals', z.object({ items: z.array(z.string()) }));
+      const step = makeGuardStep({
+        mode: 'schema',
+        schemaName: 'proposals',
+        inputStepId: 'producer',
+        rules: undefined,
+      });
+      const ctx = makeCtx({
+        stepOutputs: {
+          producer: '{"items":["a","b","c"]}',
+        },
+      });
+
+      const result = await executeGuard(step, ctx);
+
+      expect(result.output).toMatchObject({ passed: true, verdict: 'pass' });
+    });
+
+    it('inputStepIds: malformed JSON in one branch falls through and fails validation cleanly', async () => {
+      // Malformed JSON should NOT throw a SyntaxError — the unwrap
+      // helper returns the original string on parse failure and Zod
+      // produces the actionable "expected object, received string"
+      // path the retry context can quote back to the producer.
+      registerSchema(
+        'audit-shape',
+        z.object({
+          branch_a: z.object({ a: z.string() }),
+          branch_b: z.object({ b: z.number() }),
+        })
+      );
+      const step = makeGuardStep({
+        mode: 'schema',
+        schemaName: 'audit-shape',
+        inputStepIds: ['branch_a', 'branch_b'],
+        rules: undefined,
+      });
+      const ctx = makeCtx({
+        stepOutputs: {
+          branch_a: '{"a":"ok"}',
+          branch_b: '{this is not valid json',
+        },
+      });
+
+      const result = await executeGuard(step, ctx);
+
+      expect(result.output).toMatchObject({ passed: false, verdict: 'fail' });
+      const issues = (result.output as { issues?: Array<{ path: string[] }> }).issues;
+      expect(issues?.[0]?.path).toContain('branch_b');
+    });
+
     it('flag mode: schema failure still routes to pass edge', async () => {
       registerSchema('strict', z.object({ required: z.string() }));
       const step = makeGuardStep({

@@ -44,6 +44,7 @@ import { registerStepType } from '@/lib/orchestration/engine/executor-registry';
 // `audit-proposals.ts`) get a chance to register at import time.
 // The barrel re-exports `getSchema` so this stays a one-liner.
 import { getSchema } from '@/lib/orchestration/schemas';
+import { maybeParseJson } from '@/lib/orchestration/engine/maybe-parse-json';
 
 export async function executeGuard(
   step: WorkflowStep,
@@ -110,6 +111,12 @@ export async function executeGuard(
     // so only one branch fires per step. Each variant surfaces a
     // typed `input_step_not_found` ExecutorError if a referenced
     // step has not completed — silent undefineds would mask wiring bugs.
+    // Step outputs from `llm_call` / `agent_call` arrive as JSON strings
+    // — unwrap before handing to Zod. Other consumers (review-schema
+    // source paths, `{{step.output.foo}}` drilling) do the same; the
+    // guard's schema-mode resolution would otherwise see a string at the
+    // position where a structured object is expected and fail with the
+    // confusing "expected object, received string" error.
     const inputStepIds = config.inputStepIds;
     const inputStepId = config.inputStepId;
     let inputValue: unknown;
@@ -123,7 +130,7 @@ export async function executeGuard(
             `guard step references inputStepIds[*] "${sid}" but no such step has completed before this guard. Check the DAG wiring.`
           );
         }
-        compound[sid] = ctx.stepOutputs[sid];
+        compound[sid] = maybeParseJson(ctx.stepOutputs[sid]);
       }
       inputValue = compound;
     } else if (typeof inputStepId === 'string' && inputStepId.length > 0) {
@@ -134,7 +141,7 @@ export async function executeGuard(
           `guard step references inputStepId "${inputStepId}" but no such step has completed before this guard. Check the DAG wiring.`
         );
       }
-      inputValue = ctx.stepOutputs[inputStepId];
+      inputValue = maybeParseJson(ctx.stepOutputs[inputStepId]);
     } else {
       inputValue = ctx.inputData;
     }
