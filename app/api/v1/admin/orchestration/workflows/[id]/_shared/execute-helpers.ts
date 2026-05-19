@@ -14,6 +14,7 @@ import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { validateWorkflow, semanticValidateWorkflow } from '@/lib/orchestration/workflows';
 import { workflowDefinitionSchema } from '@/lib/validations/orchestration';
 import { cuidSchema } from '@/lib/validations/common';
+import { modelRegistry } from '@/lib/orchestration/llm';
 import type { WorkflowDefinition } from '@/types/orchestration';
 
 interface PrepareResult {
@@ -115,6 +116,16 @@ export async function prepareWorkflowExecution(
       workflowDefinition: dag.errors,
     });
   }
+
+  // Pull operator-curated `AiProviderModel` rows into the in-memory model
+  // registry before semantic validation runs. Without this, a step that
+  // sets `modelOverride: 'gpt-5'` semantic-validates to UNKNOWN_MODEL_OVERRIDE
+  // because the registry's hardcoded fallback only knows about a small
+  // baseline set — even though the operator added gpt-5 via the admin Model
+  // Matrix. The hydration is throttled per process (60 s TTL) so back-to-back
+  // executions don't thrash the DB. Soft fail — a missing model still
+  // surfaces as UNKNOWN_MODEL_OVERRIDE below, which is the right outcome.
+  await modelRegistry.hydrateFromDb();
 
   const semantic = await semanticValidateWorkflow(definition);
   if (!semantic.ok) {
