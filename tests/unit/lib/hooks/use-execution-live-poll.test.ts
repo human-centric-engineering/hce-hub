@@ -50,12 +50,14 @@ function makePayload(overrides: Partial<ExecutionLivePayload> = {}): ExecutionLi
     },
     trace: [],
     costEntries: [],
-    currentStepDetails: {
-      stepId: 'step-1',
-      label: 'Load models',
-      stepType: 'llm_call',
-      startedAt: '2026-05-01T12:00:01Z',
-    },
+    currentRunningSteps: [
+      {
+        stepId: 'step-1',
+        label: 'Load models',
+        stepType: 'llm_call',
+        startedAt: '2026-05-01T12:00:01Z',
+      },
+    ],
     ...overrides,
   };
 }
@@ -88,7 +90,7 @@ describe('useExecutionLivePoll', () => {
     const { result } = renderHook(() => useExecutionLivePoll(EXECUTION_ID, initial));
 
     expect(result.current.snapshot).toEqual(initial.snapshot);
-    expect(result.current.currentStepDetails).toEqual(initial.currentStepDetails);
+    expect(result.current.currentRunningSteps).toEqual(initial.currentRunningSteps);
     expect(result.current.isPolling).toBe(true);
     expect(apiClient.get).not.toHaveBeenCalled();
   });
@@ -96,7 +98,7 @@ describe('useExecutionLivePoll', () => {
   it('fires exactly one final reconcile fetch + router.refresh when initial status is already terminal', async () => {
     const initial = makePayload({
       snapshot: { ...makePayload().snapshot, status: 'completed' },
-      currentStepDetails: null,
+      currentRunningSteps: [],
     });
     vi.mocked(apiClient.get).mockResolvedValue(initial);
 
@@ -123,12 +125,14 @@ describe('useExecutionLivePoll', () => {
     const initial = makePayload();
     const fresh = makePayload({
       snapshot: { ...initial.snapshot, currentStep: 'step-2', totalCostUsd: 0.05 },
-      currentStepDetails: {
-        stepId: 'step-2',
-        label: 'Analyse',
-        stepType: 'llm_call',
-        startedAt: '2026-05-01T12:00:10Z',
-      },
+      currentRunningSteps: [
+        {
+          stepId: 'step-2',
+          label: 'Analyse',
+          stepType: 'llm_call',
+          startedAt: '2026-05-01T12:00:10Z',
+        },
+      ],
     });
     vi.mocked(apiClient.get).mockResolvedValue(fresh);
 
@@ -143,7 +147,7 @@ describe('useExecutionLivePoll', () => {
     );
     expect(result.current.snapshot.currentStep).toBe('step-2');
     expect(result.current.snapshot.totalCostUsd).toBe(0.05);
-    expect(result.current.currentStepDetails?.stepId).toBe('step-2');
+    expect(result.current.currentRunningSteps[0]?.stepId).toBe('step-2');
   });
 
   it('fires final reconcile fetch + router.refresh on terminal transition', async () => {
@@ -154,7 +158,7 @@ describe('useExecutionLivePoll', () => {
         status: 'completed',
         completedAt: '2026-05-01T12:01:00Z',
       },
-      currentStepDetails: null,
+      currentRunningSteps: [],
     });
     vi.mocked(apiClient.get).mockResolvedValue(completed);
 
@@ -308,7 +312,7 @@ describe('useExecutionLivePoll', () => {
     // Seed terminal so the finalise branch runs immediately.
     const initial = makePayload({
       snapshot: { ...makePayload().snapshot, status: 'completed' },
-      currentStepDetails: null,
+      currentRunningSteps: [],
     });
     vi.mocked(apiClient.get).mockRejectedValueOnce(new APIClientError('boom', 'BOOM', 500));
 
@@ -330,7 +334,7 @@ describe('useExecutionLivePoll', () => {
     // the setPayload + router.refresh calls.
     const initial = makePayload({
       snapshot: { ...makePayload().snapshot, status: 'completed' },
-      currentStepDetails: null,
+      currentRunningSteps: [],
     });
 
     let resolveFetch: (v: ExecutionLivePayload) => void = () => undefined;
@@ -402,7 +406,7 @@ describe('useExecutionLivePoll', () => {
     // arm and re-threw, exercising the `throw err` branch.
     const initial = makePayload({
       snapshot: { ...makePayload().snapshot, status: 'completed' },
-      currentStepDetails: null,
+      currentRunningSteps: [],
     });
     vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('boom'));
 

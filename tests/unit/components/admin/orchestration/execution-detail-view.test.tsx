@@ -760,8 +760,8 @@ describe('ExecutionDetailView', () => {
   });
 
   // ─── Live execution paths ───────────────────────────────────────────────
-  // Exercise the synthesised "running" trace entry that the view appends
-  // when the live-poll hook returns currentStepDetails. The hook mock at
+  // Exercise the synthesised "running" trace rows that the view appends
+  // when the live-poll hook returns currentRunningSteps. The hook mock at
   // the top of this file passes the seed payload through unchanged, so we
   // shape the props to mirror what the page server-fetches.
 
@@ -775,12 +775,14 @@ describe('ExecutionDetailView', () => {
             currentStep: 'step-2',
           })}
           trace={[]}
-          currentStepDetails={{
-            stepId: 'step-2',
-            label: 'Analyse data',
-            stepType: 'llm_call',
-            startedAt: '2025-01-01T10:00:05.000Z',
-          }}
+          initialRunningSteps={[
+            {
+              stepId: 'step-2',
+              label: 'Analyse data',
+              stepType: 'llm_call',
+              startedAt: '2025-01-01T10:00:05.000Z',
+            },
+          ]}
         />
       );
 
@@ -799,7 +801,7 @@ describe('ExecutionDetailView', () => {
       expect(screen.queryByTestId('execution-live-pill')).not.toBeInTheDocument();
     });
 
-    it('synthesises a running trace row from currentStepDetails', () => {
+    it('synthesises a running trace row from initialRunningSteps', () => {
       render(
         <ExecutionDetailView
           execution={makeExecution({
@@ -808,12 +810,14 @@ describe('ExecutionDetailView', () => {
             currentStep: 'step-2',
           })}
           trace={[TRACE_ENTRY]}
-          currentStepDetails={{
-            stepId: 'step-2',
-            label: 'Analyse data',
-            stepType: 'llm_call',
-            startedAt: '2025-01-01T10:00:05.000Z',
-          }}
+          initialRunningSteps={[
+            {
+              stepId: 'step-2',
+              label: 'Analyse data',
+              stepType: 'llm_call',
+              startedAt: '2025-01-01T10:00:05.000Z',
+            },
+          ]}
         />
       );
 
@@ -828,8 +832,8 @@ describe('ExecutionDetailView', () => {
 
     it('drops a persisted entry that collides with the running stepId (race guard)', () => {
       // If a step transitions running → completed between server polls, the
-      // persisted entry could appear in `trace` at the same time as
-      // `currentStepDetails`. The view filters out the persisted dup so
+      // persisted entry could appear in `trace` at the same time as an entry
+      // in `initialRunningSteps`. The view filters out the persisted dup so
       // there's only ONE row for that stepId — the synthesised running one.
       const persisted = { ...TRACE_ENTRY, stepId: 'step-2', label: 'Persisted (stale)' };
       render(
@@ -840,12 +844,14 @@ describe('ExecutionDetailView', () => {
             currentStep: 'step-2',
           })}
           trace={[persisted]}
-          currentStepDetails={{
-            stepId: 'step-2',
-            label: 'Analyse data',
-            stepType: 'llm_call',
-            startedAt: '2025-01-01T10:00:05.000Z',
-          }}
+          initialRunningSteps={[
+            {
+              stepId: 'step-2',
+              label: 'Analyse data',
+              stepType: 'llm_call',
+              startedAt: '2025-01-01T10:00:05.000Z',
+            },
+          ]}
         />
       );
 
@@ -856,12 +862,12 @@ describe('ExecutionDetailView', () => {
       expect(rows[0]).toHaveTextContent('Analyse data');
     });
 
-    it('does not synthesise a running row when currentStepDetails is null', () => {
+    it('does not synthesise a running row when initialRunningSteps is empty', () => {
       render(
         <ExecutionDetailView
           execution={makeExecution({ status: 'running', completedAt: null })}
           trace={[TRACE_ENTRY]}
-          currentStepDetails={null}
+          initialRunningSteps={[]}
         />
       );
 

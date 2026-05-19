@@ -26,15 +26,24 @@ vi.mock('next/headers', () => ({
   headers: vi.fn(() => Promise.resolve(new Headers())),
 }));
 
-vi.mock('@/lib/db/client', () => ({
-  prisma: {
+vi.mock('@/lib/db/client', () => {
+  // The retry-step route wraps the status flip + defensive running-step
+  // sweep in a callback transaction. Pass `prisma` itself as the `tx` arg
+  // so the callback's `tx.aiWorkflowExecution.updateMany` etc. reach the
+  // same mocks asserted at the top level.
+  const prisma = {
     aiWorkflowExecution: {
       findUnique: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
     },
-  },
-}));
+    aiWorkflowRunningStep: {
+      deleteMany: vi.fn(),
+    },
+    $transaction: vi.fn(async <T>(cb: (tx: unknown) => Promise<T>) => cb(prisma)),
+  };
+  return { prisma };
+});
 
 // ─── Imports after mocks ─────────────────────────────────────────────────────
 

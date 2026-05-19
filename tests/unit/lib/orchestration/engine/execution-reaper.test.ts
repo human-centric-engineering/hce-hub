@@ -10,6 +10,9 @@ vi.mock('@/lib/db/client', () => ({
     aiWorkflowExecution: {
       updateMany: vi.fn(),
     },
+    aiWorkflowRunningStep: {
+      deleteMany: vi.fn(),
+    },
   },
 }));
 
@@ -20,6 +23,9 @@ vi.mock('@/lib/logging', () => ({
 import { prisma } from '@/lib/db/client';
 
 const mockUpdateMany = prisma.aiWorkflowExecution.updateMany as ReturnType<typeof vi.fn>;
+const mockRunningStepDeleteMany = prisma.aiWorkflowRunningStep.deleteMany as ReturnType<
+  typeof vi.fn
+>;
 
 /** Helper: mock all three updateMany calls with given counts. */
 function mockCounts(running: number, pending: number, approvals: number) {
@@ -32,6 +38,9 @@ function mockCounts(running: number, pending: number, approvals: number) {
 describe('reapZombieExecutions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reaper always sweeps orphan running-step rows at the end of its tick.
+    // Default to count=0 so existing tests that don't care can ignore it.
+    mockRunningStepDeleteMany.mockResolvedValue({ count: 0 });
   });
 
   it('marks stale running executions as failed with errorMessage', async () => {

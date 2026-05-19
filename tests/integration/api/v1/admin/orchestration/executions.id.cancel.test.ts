@@ -33,14 +33,23 @@ vi.mock('next/headers', () => ({
   headers: vi.fn(() => Promise.resolve(new Headers())),
 }));
 
-vi.mock('@/lib/db/client', () => ({
-  prisma: {
+vi.mock('@/lib/db/client', () => {
+  // The route wraps the status flip + running-step sweep in a callback
+  // transaction. Build `prisma` as a self-referential const so the
+  // `$transaction` callback can pass `prisma` itself as the `tx` arg —
+  // assertions at the top level then see the mock calls made via `tx`.
+  const prisma = {
     aiWorkflowExecution: {
       findUnique: vi.fn(),
       updateMany: vi.fn(),
     },
-  },
-}));
+    aiWorkflowRunningStep: {
+      deleteMany: vi.fn(),
+    },
+    $transaction: vi.fn(async <T>(cb: (tx: unknown) => Promise<T>) => cb(prisma)),
+  };
+  return { prisma };
+});
 
 vi.mock('@/lib/security/rate-limit', () => ({
   adminLimiter: { check: vi.fn(() => ({ success: true })) },
