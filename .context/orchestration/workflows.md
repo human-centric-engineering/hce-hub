@@ -30,11 +30,14 @@ interface WorkflowDefinition {
 interface WorkflowStep {
   id: string;
   name: string;
+  description?: string; // optional 1–2 sentence operator-facing context; capped at 500 chars
   type: 'llm_call' | 'tool_call' | 'human_approval' | 'chain' | /* ... */;
   config: Record<string, unknown>;
   nextSteps: ConditionalEdge[]; // { targetStepId: string; condition?: string; maxRetries?: number }
 }
 ```
+
+The optional `description` is the "why this step exists and what it contributes" hover text shown in the execution trace viewer (on hover and in the expanded row). Authoring guidance lives in [`workflow-builder.md` § Step description](../admin/workflow-builder.md#step-description). Capped at 500 chars by the Zod schema; `.trim()` is applied so a paste-with-blank-lines doesn't persist.
 
 Zod validates the **shape** (in `createWorkflowSchema` / `updateWorkflowSchema`). `validateWorkflow` validates the **structure**: reachability, cycles, per-type config requirements.
 

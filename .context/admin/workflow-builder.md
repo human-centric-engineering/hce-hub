@@ -195,6 +195,7 @@ Structure (top to bottom):
 
 - Read-only type badge (category colour + icon + label) and a **Delete** button that removes the node + incident edges and clears the selection.
 - Editable **Name** `<Input>` with `<FieldHelp title="Step name">`. Writes back via `onLabelChange(id, value)`.
+- Editable **Description (optional)** `<Textarea>` (3 rows, 500-char `maxLength`, inline counter) with `<FieldHelp title="Step description">`. Writes back via `onDescriptionChange(id, value)`; round-trips through `PatternNodeData.description` ↔ `WorkflowStep.description` via `workflow-mappers.ts`. See § Step description below for authoring guidance.
 - Read-only **Step ID** with a copy-to-clipboard button. IDs are generated via `makeStepId()` (`step_<random8>`) and never change.
 - A type-specific **editor** section picked from `block-editors/` via a single `switch (node.data.type)`. Each editor receives `{ config, onChange, capabilities? }` per the `EditorProps<TConfig>` interface in `block-editors/index.ts`. `onChange(partial)` bubbles to `onConfigChange(nodeId, partial)` on the builder shell, which shallow-merges the partial into `data.config`.
 - An **Error handling** section (below the type-specific editor) with:
@@ -235,6 +236,19 @@ All editors live under `components/admin/orchestration/workflow-builder/block-ed
 ### Default configuration
 
 `lib/orchestration/engine/step-registry.ts` holds a `defaultConfig` per entry that matches the editor fields. Dropping a fresh block onto the canvas gives it sensible initial values so the first validation pass highlights only the empty _required_ fields.
+
+### Step description
+
+Optional field on every step. One or two sentences explaining what the step does and what it contributes downstream — operator-facing, not author-facing. Shown on hover in the execution trace viewer (a `title` tooltip on the step label plus an ⓘ icon next to it) and as a muted paragraph at the top of the expanded row when an operator clicks to inspect a step.
+
+Authoring guidance (used to backfill every step in the 12 seed templates):
+
+- Write to the operator reading a trace, not to the workflow author.
+- Explain _what happens to the result_, not the step type — names already carry the verb.
+- Mention placeholder-replacement steps (e.g. "Replace with your real source after cloning the template") when relevant.
+- Skip it when the step name is already self-explanatory — empty is better than a description that adds noise.
+
+The textarea has `maxLength={500}` matching `workflowStepSchema.description.max(500)` (`lib/validations/orchestration.ts`). `.trim()` is applied at parse time so a paste-with-blank-lines doesn't persist. Round-trip wiring lives in `workflow-mappers.ts` (`PatternNodeData.description` ↔ `WorkflowStep.description`); the engine carries the description onto every `ExecutionTraceEntry` it yields (six `trace.push` sites in `orchestration-engine.ts`) and onto the `step_started` SSE event so the live execution panel surfaces it without waiting for the persisted trace.
 
 ## Validation
 
