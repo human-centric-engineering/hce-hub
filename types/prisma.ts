@@ -30,6 +30,7 @@ export type {
   ContactSubmission,
   FeatureFlag,
   AiAgent,
+  AiAgentProfile,
   AiCapability,
   AiAgentCapability,
   AiWorkflow,

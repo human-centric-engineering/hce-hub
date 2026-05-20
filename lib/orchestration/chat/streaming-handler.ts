@@ -20,7 +20,7 @@
  *   is surfaced as a final `{ type: 'error' }` event.
  */
 
-import type { AiAgent, AiConversation, AiMessage, Prisma } from '@/types/prisma';
+import type { AiAgent, AiAgentProfile, AiConversation, AiMessage, Prisma } from '@/types/prisma';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import type {
@@ -45,6 +45,7 @@ import {
   type AttachmentCapability,
 } from '@/lib/orchestration/llm/provider-manager';
 import { resolveAgentProviderAndModel } from '@/lib/orchestration/llm/agent-resolver';
+import { resolveEffectivePrompt } from '@/lib/orchestration/agents/resolve-effective-prompt';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
 import { calculateCost, checkBudget, logCost } from '@/lib/orchestration/llm/cost-tracker';
 import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
@@ -239,6 +240,13 @@ export class ChatError extends Error {
     this.name = 'ChatError';
   }
 }
+
+/**
+ * Agent row plus its (optional) inheritance profile. The chat loader
+ * eagerly includes the profile so the system-prompt resolver doesn't
+ * incur a second round-trip per turn.
+ */
+type AgentWithProfile = AiAgent & { profile: AiAgentProfile | null };
 
 interface PersistMessageParams {
   conversationId: string;
@@ -685,15 +693,34 @@ export class StreamingChatHandler {
       const modelInfo = getModel(resolvedModel);
       const contextWindowTokens = agent.maxHistoryTokens ?? modelInfo?.maxContext ?? undefined;
 
+      // Resolve persona / voice / guardrails against the agent's profile
+      // (if any). The agent's own values either inherit (blank), replace
+      // (override mode), or extend (append mode) the profile defaults —
+      // see lib/orchestration/agents/resolve-effective-prompt.ts.
+      const resolvedPrompt = resolveEffectivePrompt(
+        {
+          systemInstructions: agent.systemInstructions,
+          persona: agent.persona,
+          brandVoiceInstructions: agent.brandVoiceInstructions,
+          guardrails: agent.guardrails,
+          personaMode: agent.personaMode as 'override' | 'append',
+          voiceMode: agent.voiceMode as 'override' | 'append',
+          guardrailsMode: agent.guardrailsMode as 'override' | 'append',
+        },
+        agent.profile
+      );
+
       const { messages: initialMessages, breakdown: initialBreakdown } = buildMessagesAndBreakdown({
-        systemInstructions: agent.systemInstructions,
+        systemInstructions: resolvedPrompt.systemInstructions,
         contextBlock,
         history: historyRows,
         newUserMessage: request.message,
         attachments: request.attachments,
         conversationSummary,
         userMemories: memoryRows.length > 0 ? memoryRows : undefined,
-        brandVoiceInstructions: agent.brandVoiceInstructions,
+        persona: resolvedPrompt.persona,
+        brandVoiceInstructions: resolvedPrompt.brandVoiceInstructions,
+        guardrails: resolvedPrompt.guardrails,
         contextWindowTokens,
         reserveTokens: agent.maxTokens ?? undefined,
         modelId: resolvedModel,
@@ -1822,8 +1849,11 @@ export class StreamingChatHandler {
     }
   }
 
-  private async loadAgent(slug: string): Promise<AiAgent> {
-    const agent = await prisma.aiAgent.findFirst({ where: { slug, isActive: true } });
+  private async loadAgent(slug: string): Promise<AgentWithProfile> {
+    const agent = await prisma.aiAgent.findFirst({
+      where: { slug, isActive: true },
+      include: { profile: true },
+    });
     if (!agent) {
       throw new ChatError('agent_not_found', `Active agent '${slug}' not found`);
     }
