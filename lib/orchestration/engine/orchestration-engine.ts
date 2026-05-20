@@ -1345,27 +1345,43 @@ export class OrchestrationEngine {
 
           try {
             const result = await this.runStepToCompletion(step, ctx, telemetryOut);
-            const durationMs = Date.now() - started;
+            // Capture endedAt *inside* the callback — once per branch, at the
+            // real finish moment. The post-`Promise.allSettled` loop runs
+            // sequentially long after the slowest branch ends, so writing
+            // completedAt there would collapse every branch's end timestamp
+            // to ~the slowest branch's finish (all bars equal width).
+            const endedAt = Date.now();
+            const durationMs = endedAt - started;
             setSpanStatus(span, { code: 'ok' });
+            // Stamp completedAt on this branch's running-step row so the
+            // live poll can show it as "done waiting for siblings" while
+            // slower branches keep going. The post-settle loop deletes
+            // the row once the whole batch wraps.
+            await this.markRunningStepCompleted(executionId, step.id, endedAt, baseLogger);
             return {
               step,
               result,
               durationMs,
               started,
+              endedAt,
               telemetryOut,
               error: null as ExecutorError | null,
             };
           } catch (err) {
-            const durationMs = Date.now() - started;
+            const endedAt = Date.now();
+            const durationMs = endedAt - started;
             if (err instanceof PausedForApproval) {
               // Pause is not a tracer-level error — workflow continues from the
-              // pause point after admin approval.
+              // pause point after admin approval. Do NOT stamp completedAt:
+              // a paused branch is awaiting human input, not sibling
+              // completion, and the UI distinguishes the two states.
               setSpanStatus(span, { code: 'ok' });
               return {
                 step,
                 result: null,
                 durationMs,
                 started,
+                endedAt,
                 telemetryOut,
                 paused: true,
                 payload: err.payload,
@@ -1386,7 +1402,18 @@ export class OrchestrationEngine {
                     err
                   );
             setSpanStatus(span, { code: 'error', message: execErr.message });
-            return { step, result: null, durationMs, started, telemetryOut, error: execErr };
+            // A failed branch is "done" — its wait segment ticks the same
+            // way a successful one's does until the batch settles.
+            await this.markRunningStepCompleted(executionId, step.id, endedAt, baseLogger);
+            return {
+              step,
+              result: null,
+              durationMs,
+              started,
+              endedAt,
+              telemetryOut,
+              error: execErr,
+            };
           }
         },
         { manualStatus: true }
@@ -1401,7 +1428,7 @@ export class OrchestrationEngine {
         // Should not happen — inner function catches all errors.
         continue;
       }
-      const { step, result, durationMs, started, telemetryOut, error } = outcome.value;
+      const { step, result, durationMs, started, endedAt, telemetryOut, error } = outcome.value;
 
       // Handle pause (rare in parallel — only if human_approval is in a branch)
       if ('paused' in outcome.value && outcome.value.paused) {
@@ -1419,7 +1446,7 @@ export class OrchestrationEngine {
           tokensUsed: pausedTokens,
           costUsd: pausedCost,
           startedAt: new Date(started).toISOString(),
-          completedAt: new Date().toISOString(),
+          completedAt: new Date(endedAt).toISOString(),
           durationMs,
           input: step.config,
           ...rollupTelemetry(telemetryOut),
@@ -1464,7 +1491,7 @@ export class OrchestrationEngine {
           tokensUsed: failedTokens,
           costUsd: failedCost,
           startedAt: new Date(started).toISOString(),
-          completedAt: new Date().toISOString(),
+          completedAt: new Date(endedAt).toISOString(),
           durationMs,
           input: step.config,
           ...rollupTelemetry(telemetryOut),
@@ -1501,7 +1528,7 @@ export class OrchestrationEngine {
         tokensUsed: stepResult.tokensUsed,
         costUsd: stepResult.costUsd,
         startedAt: new Date(started).toISOString(),
-        completedAt: new Date().toISOString(),
+        completedAt: new Date(endedAt).toISOString(),
         durationMs,
         input: step.config,
         ...rollupTelemetry(telemetryOut),
@@ -1953,6 +1980,46 @@ export class OrchestrationEngine {
       logger.warn('markCurrentStep: DB update failed (non-fatal)', {
         executionId,
         stepId: step.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
+   * Stamp `completedAt` on a running-step row at the moment a parallel
+   * branch finishes — *without* deleting the row. The post-
+   * `Promise.allSettled` loop in `executeParallelBatch` only persists the
+   * trace and clears the side table after every sibling settles, so a
+   * branch that finished early would otherwise read as "still running"
+   * in the live poll until the slowest sibling caught up. Stamping
+   * `completedAt` here lets the live poll surface a "done waiting for
+   * siblings" state per branch, which the execution timeline strip
+   * renders as a coloured processing portion plus a greyed wait
+   * portion.
+   *
+   * Called from inside each branch's Promise callback in
+   * `executeParallelBatch`. Not called for pause-for-approval — those
+   * branches are awaiting human input, not sibling completion, and the
+   * UI treats them as a separate state.
+   *
+   * Non-fatal: `updateMany` returns count=0 silently if a concurrent
+   * finalize already swept the row.
+   */
+  private async markRunningStepCompleted(
+    executionId: string,
+    stepId: string,
+    endedAt: number,
+    logger: Logger
+  ): Promise<void> {
+    try {
+      await prisma.aiWorkflowRunningStep.updateMany({
+        where: { executionId, stepId },
+        data: { completedAt: new Date(endedAt) },
+      });
+    } catch (err) {
+      logger.warn('markRunningStepCompleted: DB update failed (non-fatal)', {
+        executionId,
+        stepId,
         error: err instanceof Error ? err.message : String(err),
       });
     }

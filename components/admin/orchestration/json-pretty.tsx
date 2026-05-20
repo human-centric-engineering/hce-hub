@@ -5,10 +5,20 @@
  * monospaced block with proper indentation and lightweight syntax
  * highlighting (keys, strings, numbers, booleans, null).
  *
- * Indentation is preserved because the container uses `whitespace-pre`
- * with `overflow-x-auto` — long lines scroll horizontally instead of
- * being broken mid-token, which is what destroys indentation in the
- * default `<pre whitespace-pre-wrap break-all>` styling.
+ * Two layout modes:
+ *
+ * - Default (`wrap` false): `whitespace-pre` + `overflow-x-auto`. Long
+ *   lines scroll horizontally. Best for compact previews where you
+ *   want JSON shape to read clearly even when individual values are
+ *   huge.
+ *
+ * - Wrap (`wrap` true): `whitespace-pre-wrap` + `break-words`. Newlines
+ *   and indent spaces are still preserved (`pre-wrap` keeps them
+ *   verbatim), but long string values wrap at the right margin —
+ *   first at word boundaries, then mid-token if a single string has
+ *   no break opportunities. Keys stay short and don't wrap. This is
+ *   the mode the trace viewer flips into when an operator asks to
+ *   read a long output without horizontal scrolling.
  *
  * The highlighter runs over `JSON.stringify` output, which is always
  * well-formed, so a regex tokenizer is sufficient. The component never
@@ -24,18 +34,26 @@ interface Props {
   data: unknown;
   /** Optional class names (e.g. `max-h-60 overflow-y-auto`). */
   className?: string;
+  /**
+   * Wrap long lines while keeping JSON indentation. Defaults to false
+   * (horizontal scroll). See the file header for the contrast between
+   * the two modes.
+   */
+  wrap?: boolean;
 }
 
 const TOKEN_RE =
   /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
 
-export function JsonPretty({ data, className }: Props) {
+export function JsonPretty({ data, className, wrap = false }: Props) {
   const text = typeof data === 'string' ? data : safeStringify(data);
 
   return (
     <pre
+      data-wrap={wrap ? 'true' : 'false'}
       className={cn(
-        'bg-muted/40 text-foreground/90 overflow-x-auto rounded p-2 font-mono text-xs leading-relaxed whitespace-pre',
+        'bg-muted/40 text-foreground/90 rounded p-2 font-mono text-xs leading-relaxed',
+        wrap ? 'break-words whitespace-pre-wrap' : 'overflow-x-auto whitespace-pre',
         className
       )}
     >

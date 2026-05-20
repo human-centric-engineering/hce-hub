@@ -69,6 +69,20 @@ describe('ExecutionTraceEntryRow', () => {
       render(<ExecutionTraceEntryRow {...BASE_PROPS} costUsd={0.0042} />);
       expect(screen.getByText('$0.0042')).toBeInTheDocument();
     });
+
+    it('shows the parallel-wait annotation when parallelWaitMs > 0', () => {
+      render(<ExecutionTraceEntryRow {...BASE_PROPS} durationMs={1234} parallelWaitMs={5678} />);
+      expect(screen.getByTestId('trace-entry-parallel-wait-step-1')).toHaveTextContent(
+        /5,?678 ms waited for siblings/
+      );
+    });
+
+    it('omits the parallel-wait annotation when parallelWaitMs is 0 or undefined', () => {
+      const { rerender } = render(<ExecutionTraceEntryRow {...BASE_PROPS} durationMs={1234} />);
+      expect(screen.queryByTestId('trace-entry-parallel-wait-step-1')).not.toBeInTheDocument();
+      rerender(<ExecutionTraceEntryRow {...BASE_PROPS} durationMs={1234} parallelWaitMs={0} />);
+      expect(screen.queryByTestId('trace-entry-parallel-wait-step-1')).not.toBeInTheDocument();
+    });
   });
 
   // ── Description ─────────────────────────────────────────────────────────
@@ -651,6 +665,101 @@ describe('ExecutionTraceEntryRow', () => {
       // No error escapes the click — the component catches in its IIFE.
       await user.click(copyBtn);
       expect(writeText).toHaveBeenCalled();
+    });
+  });
+
+  describe('JsonPane wrap toggle', () => {
+    it('starts in horizontal-scroll mode and flips to wrap on click', async () => {
+      // Default: long values run off-screen via overflow-x-auto. The
+      // operator clicks Wrap and the pre switches to whitespace-pre-wrap
+      // so values break at the right margin.
+      const user = userEvent.setup();
+      render(<ExecutionTraceEntryRow {...BASE_PROPS} output={{ k: 'v' }} />);
+      fireEvent.click(screen.getAllByRole('button')[0]);
+
+      const outputPane = screen.getByTestId('trace-entry-output-step-1');
+      const pre = outputPane.querySelector('pre');
+      expect(pre).toHaveAttribute('data-wrap', 'false');
+
+      const wrapBtn = screen.getByTestId('trace-entry-output-step-1-wrap-toggle');
+      expect(wrapBtn).toHaveAttribute('aria-pressed', 'false');
+      await user.click(wrapBtn);
+
+      expect(pre).toHaveAttribute('data-wrap', 'true');
+      expect(wrapBtn).toHaveAttribute('aria-pressed', 'true');
+      // Label updates so the operator knows the next click reverts.
+      expect(wrapBtn).toHaveTextContent(/no wrap/i);
+    });
+
+    it('omits the wrap toggle when the pane is rendering markdown', () => {
+      // Markdown wraps naturally — a wrap toggle on the prose view would
+      // be both confusing and a no-op.
+      render(
+        <ExecutionTraceEntryRow
+          {...BASE_PROPS}
+          // Multi-line markdown content trips isMarkdown.
+          output={'# heading\n\n* item one\n* item two'}
+        />
+      );
+      fireEvent.click(screen.getAllByRole('button')[0]);
+      expect(screen.queryByTestId('trace-entry-output-step-1-wrap-toggle')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('JsonPane Expand → Dialog', () => {
+    it('opens a dialog containing the same data when the Expand button is clicked', async () => {
+      const user = userEvent.setup();
+      render(<ExecutionTraceEntryRow {...BASE_PROPS} output={{ k: 'value-in-dialog' }} />);
+      fireEvent.click(screen.getAllByRole('button')[0]);
+
+      // Closed by default — no dialog content yet.
+      expect(screen.queryByTestId('trace-entry-output-step-1-dialog')).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId('trace-entry-output-step-1-expand'));
+
+      const dialog = await screen.findByTestId('trace-entry-output-step-1-dialog');
+      expect(dialog).toBeInTheDocument();
+      // The dialog re-renders the same data, so the recognisable value
+      // shows up there too.
+      expect(dialog).toHaveTextContent('value-in-dialog');
+    });
+
+    it('defaults the dialog wrap to ON — the whole point of the bigger viewer is reading long values', async () => {
+      const user = userEvent.setup();
+      render(<ExecutionTraceEntryRow {...BASE_PROPS} output={{ k: 'v' }} />);
+      fireEvent.click(screen.getAllByRole('button')[0]);
+      await user.click(screen.getByTestId('trace-entry-output-step-1-expand'));
+
+      const dialog = await screen.findByTestId('trace-entry-output-step-1-dialog');
+      const pre = dialog.querySelector('pre');
+      expect(pre).toHaveAttribute('data-wrap', 'true');
+
+      const dialogWrap = screen.getByTestId('trace-entry-output-step-1-dialog-wrap-toggle');
+      expect(dialogWrap).toHaveAttribute('aria-pressed', 'true');
+      await user.click(dialogWrap);
+      expect(pre).toHaveAttribute('data-wrap', 'false');
+    });
+
+    it('keeps the inline wrap state independent of the dialog wrap state', async () => {
+      // Toggling Wrap inside the dialog must NOT affect the inline
+      // pane, and vice versa — they're separate viewing contexts.
+      const user = userEvent.setup();
+      render(<ExecutionTraceEntryRow {...BASE_PROPS} output={{ k: 'v' }} />);
+      fireEvent.click(screen.getAllByRole('button')[0]);
+
+      const inlinePane = screen.getByTestId('trace-entry-output-step-1');
+      const inlinePre = inlinePane.querySelector('pre');
+      expect(inlinePre).toHaveAttribute('data-wrap', 'false');
+
+      await user.click(screen.getByTestId('trace-entry-output-step-1-expand'));
+      const dialog = await screen.findByTestId('trace-entry-output-step-1-dialog');
+      // Dialog defaults to wrap=true; the inline pane stays at wrap=false.
+      expect(dialog.querySelector('pre')).toHaveAttribute('data-wrap', 'true');
+      expect(inlinePre).toHaveAttribute('data-wrap', 'false');
+
+      // Flip the dialog's wrap off — inline still unaffected.
+      await user.click(screen.getByTestId('trace-entry-output-step-1-dialog-wrap-toggle'));
+      expect(inlinePre).toHaveAttribute('data-wrap', 'false');
     });
   });
 

@@ -579,27 +579,36 @@ export function ExecutionDetailView({
   // filter drops any persisted entry with a stepId we're about to render
   // as running, in case a tick races the engine writing both. `tickClock`
   // is included so durationMs recomputes every second between server polls.
+  //
+  // When a parallel branch's running-step row carries `completedAt`, the
+  // branch has finished but its sibling batch hasn't settled yet. Synth
+  // it as `status: 'completed'` with the real completedAt — the timeline
+  // strip uses it to render the coloured processing portion plus a
+  // greyed wait portion that grows until the slowest sibling ends.
   const displayTrace: ExecutionTraceEntry[] = useMemo(() => {
     if (liveRunningSteps.length === 0) return liveTrace;
     const runningStepIds = new Set(liveRunningSteps.map((r) => r.stepId));
     const persisted = liveTrace.filter((e) => !runningStepIds.has(e.stepId));
-    const synth = liveRunningSteps.map(
-      (r) =>
-        ({
-          stepId: r.stepId,
-          stepType: r.stepType,
-          label: r.label,
-          // The `status` union on persisted entries doesn't include 'running' —
-          // the trace-row component locally widens it. Cast here intentionally
-          // so the view-only display type stays narrow at the prop boundary.
-          status: 'running',
-          output: undefined,
-          tokensUsed: 0,
-          costUsd: 0,
-          startedAt: r.startedAt,
-          durationMs: Math.max(0, Date.now() - new Date(r.startedAt).getTime()),
-        }) as unknown as ExecutionTraceEntry
-    );
+    const synth = liveRunningSteps.map((r) => {
+      const startMs = new Date(r.startedAt).getTime();
+      const completed = r.completedAt !== null;
+      const endMs = completed ? new Date(r.completedAt!).getTime() : Date.now();
+      return {
+        stepId: r.stepId,
+        stepType: r.stepType,
+        label: r.label,
+        // The `status` union on persisted entries doesn't include 'running' —
+        // the trace-row component locally widens it. Cast here intentionally
+        // so the view-only display type stays narrow at the prop boundary.
+        status: completed ? 'completed' : 'running',
+        output: undefined,
+        tokensUsed: 0,
+        costUsd: 0,
+        startedAt: r.startedAt,
+        ...(completed ? { completedAt: r.completedAt! } : {}),
+        durationMs: Math.max(0, endMs - startMs),
+      } as unknown as ExecutionTraceEntry;
+    });
     return [...persisted, ...synth];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveTrace, liveRunningSteps, tickClock]);
@@ -672,6 +681,72 @@ export function ExecutionDetailView({
     }
     return { parallelForkNumberByStepId: forkNumbers, parallelBranchOfByStepId: branchOf };
   }, [displayTrace]);
+
+  // Per-branch "wait time" — how long a parallel branch sat after it
+  // finished before the slowest sibling did. Surfaced as the small
+  // "+Xs waited for slower siblings" line under the duration in each
+  // branch's trace row. The map is keyed by stepId; absence (or zero)
+  // means no wait segment is shown for that row.
+  //
+  // While any sibling is still running, the wait is computed against
+  // the wall clock (`Date.now()`), so depending on tickClock keeps the
+  // displayed value ticking up smoothly between server polls.
+  const parallelWaitMsByStepId = useMemo(() => {
+    const map = new Map<string, number>();
+    const branchMap = buildParallelBranchMap(displayTrace);
+    if (branchMap.size === 0) return map;
+
+    // Pass 1: latest sibling end per fork + any-running flag.
+    const joinByFork = new Map<string, number>();
+    const stillRunningByFork = new Map<string, boolean>();
+    const endOf = (entry: ExecutionTraceEntry): number => {
+      if (entry.completedAt) {
+        const t = new Date(entry.completedAt).getTime();
+        if (Number.isFinite(t)) return t;
+      }
+      if (entry.startedAt) {
+        const s = new Date(entry.startedAt).getTime();
+        if (Number.isFinite(s)) return s + Math.max(0, entry.durationMs);
+      }
+      return NaN;
+    };
+
+    for (const entry of displayTrace) {
+      const parentFork = branchMap.get(entry.stepId);
+      if (!parentFork) continue;
+      if ((entry.status as string) === 'running') {
+        stillRunningByFork.set(parentFork, true);
+        continue;
+      }
+      const endMs = endOf(entry);
+      if (!Number.isFinite(endMs)) continue;
+      const cur = joinByFork.get(parentFork);
+      if (cur === undefined || endMs > cur) joinByFork.set(parentFork, endMs);
+    }
+
+    const nowMs = Date.now();
+    for (const [forkId, joinEnd] of joinByFork.entries()) {
+      if (stillRunningByFork.get(forkId)) {
+        joinByFork.set(forkId, Math.max(joinEnd, nowMs));
+      }
+    }
+
+    // Pass 2: per-branch wait.
+    for (const entry of displayTrace) {
+      const parentFork = branchMap.get(entry.stepId);
+      if (!parentFork) continue;
+      if ((entry.status as string) === 'running') continue;
+      const endMs = endOf(entry);
+      const joinMs = joinByFork.get(parentFork);
+      if (!Number.isFinite(endMs) || joinMs === undefined) continue;
+      const waitMs = joinMs - endMs;
+      if (waitMs > 0) map.set(entry.stepId, waitMs);
+    }
+
+    return map;
+    // tickClock keeps the wait ticking for still-running forks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayTrace, tickClock]);
 
   // Filter chip state — local to this view; not persisted.
   const [filter, setFilter] = useState<TraceFilter>('all');
@@ -1370,6 +1445,7 @@ export function ExecutionDetailView({
                   highlighted={highlightedStepId === entry.stepId}
                   forkNumber={parallelForkNumberByStepId.get(entry.stepId)}
                   parallelBranchOfNumber={parallelBranchOfByStepId.get(entry.stepId)}
+                  parallelWaitMs={parallelWaitMsByStepId.get(entry.stepId)}
                   expanded={expandedStepKey === rowKey}
                   onExpandedChange={(next) => setExpandedStepKey(next ? rowKey : null)}
                   interpolationContext={interpolationContext}

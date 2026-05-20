@@ -288,6 +288,105 @@ describe('ExecutionTimelineStrip', () => {
     expect(parseFloat(a.style.width)).toBeGreaterThan(parseFloat(b.style.width));
   });
 
+  // ─── Parallel-branch wait segment ───────────────────────────────────────
+
+  it('renders a greyed wait segment on a parallel branch that finished before its sibling', () => {
+    // Fork → A (3 s) and B (5 s). The fork settles at 5 s, so A's bar
+    // gets a coloured 3 s processing segment plus a hashed grey 2 s wait
+    // segment trailing it. B is the slowest branch — no wait segment.
+    render(
+      <ExecutionTimelineStrip
+        trace={[
+          entry({
+            stepId: 'fork',
+            stepType: 'parallel',
+            startedAt: '2026-01-01T00:00:00.000Z',
+            completedAt: '2026-01-01T00:00:00.100Z',
+            durationMs: 100,
+            output: { parallel: true, branches: ['a', 'b'] },
+          }),
+          entry({
+            stepId: 'a',
+            startedAt: '2026-01-01T00:00:00.100Z',
+            completedAt: '2026-01-01T00:00:03.100Z',
+            durationMs: 3_000,
+          }),
+          entry({
+            stepId: 'b',
+            startedAt: '2026-01-01T00:00:00.100Z',
+            completedAt: '2026-01-01T00:00:05.100Z',
+            durationMs: 5_000,
+          }),
+        ]}
+      />
+    );
+
+    // The short branch picks up a wait overlay.
+    const aWait = screen.getByTestId('timeline-bar-wait-a');
+    expect(aWait).toHaveAttribute('data-parallel-wait', 'true');
+    // The slowest branch does not.
+    expect(screen.queryByTestId('timeline-bar-wait-b')).not.toBeInTheDocument();
+    // And the wait suffix shows up in the duration column.
+    expect(screen.getByTestId('timeline-wait-suffix-a')).toHaveTextContent(/wait/);
+  });
+
+  it('places the wait segment flush against the right edge of the processing bar', () => {
+    render(
+      <ExecutionTimelineStrip
+        trace={[
+          entry({
+            stepId: 'fork',
+            stepType: 'parallel',
+            startedAt: '2026-01-01T00:00:00.000Z',
+            completedAt: '2026-01-01T00:00:00.100Z',
+            durationMs: 100,
+            output: { parallel: true, branches: ['a', 'b'] },
+          }),
+          entry({
+            stepId: 'a',
+            startedAt: '2026-01-01T00:00:00.100Z',
+            completedAt: '2026-01-01T00:00:02.100Z',
+            durationMs: 2_000,
+          }),
+          entry({
+            stepId: 'b',
+            startedAt: '2026-01-01T00:00:00.100Z',
+            completedAt: '2026-01-01T00:00:06.100Z',
+            durationMs: 6_000,
+          }),
+        ]}
+      />
+    );
+
+    const fill = screen.getByTestId('timeline-bar-fill-a');
+    const wait = screen.getByTestId('timeline-bar-wait-a');
+    const fillRight = parseFloat(fill.style.left) + parseFloat(fill.style.width);
+    expect(parseFloat(wait.style.left)).toBeCloseTo(fillRight, 1);
+    // And the wait segment is meaningfully wide (~4s of ~6s wall-clock).
+    expect(parseFloat(wait.style.width)).toBeGreaterThan(20);
+  });
+
+  it('renders no wait segment for steps that are not parallel branches', () => {
+    // Sequential steps shouldn't pick up a wait segment even if a later
+    // sibling-of-something is slower — the branch map is empty here.
+    render(
+      <ExecutionTimelineStrip
+        trace={[
+          entry({ stepId: 'a', durationMs: 1_000 }),
+          entry({
+            stepId: 'b',
+            startedAt: '2026-01-01T00:00:01.000Z',
+            completedAt: '2026-01-01T00:00:06.000Z',
+            durationMs: 5_000,
+          }),
+        ]}
+      />
+    );
+
+    expect(screen.queryByTestId('timeline-bar-wait-a')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('timeline-bar-wait-b')).not.toBeInTheDocument();
+  });
+
   // ─── Step-type colours (workflow-builder palette) ──────────────────────
 
   it('renders the agent category colour for llm_call steps', () => {

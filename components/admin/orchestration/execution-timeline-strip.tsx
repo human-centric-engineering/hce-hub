@@ -101,6 +101,15 @@ const STRIPED_AMBER =
 const HASHED_COMPRESSED =
   'bg-[image:repeating-linear-gradient(135deg,rgba(251,191,36,0.7)_0_3px,rgba(120,53,15,0.5)_3px_6px)]';
 
+// A subtle diagonal grey hatch for the "waited for siblings" portion of a
+// parallel branch. The processing segment keeps its category colour at full
+// opacity; the wait segment sits flush to its right edge until the slowest
+// sibling settles (or "now" while siblings are still running). Hatch (not
+// solid grey) signals "the engine wasn't doing useful work here" without
+// fighting the colour palette of the bar itself.
+const HASHED_PARALLEL_WAIT =
+  'bg-[image:repeating-linear-gradient(135deg,rgba(140,140,150,0.22)_0_4px,rgba(140,140,150,0.40)_4px_8px)]';
+
 function barAppearance(entry: ExecutionTraceEntry): {
   className: string;
   striped: boolean;
@@ -293,6 +302,28 @@ export function ExecutionTimelineStrip({
     }
   });
 
+  // Per-fork "join time" = the moment the whole fan-out is considered
+  // settled, which is the latest sibling's end timestamp. A branch that
+  // finished early renders its bar as a coloured processing segment
+  // followed by a greyed wait segment that extends to this join time.
+  // The map keeps the computation O(n) — one sweep over the trace —
+  // instead of doing an O(n²) sibling scan per row.
+  //
+  // No explicit `Date.now()` here: while any sibling is still running,
+  // the parent view synthesises its trace entry with `durationMs =
+  // now − startedAt`, so its rawEnd (and therefore its `timings[i].end`)
+  // is already "now". Picking the per-fork max naturally pulls the
+  // join time up to the live clock through the running sibling.
+  const joinTimeByFork = new Map<string, number>();
+  trace.forEach((entry, idx) => {
+    const parentFork = parallelBranchMap.get(entry.stepId);
+    if (!parentFork) return;
+    const end = timings[idx].end;
+    if (!Number.isFinite(end)) return;
+    const cur = joinTimeByFork.get(parentFork);
+    if (cur === undefined || end > cur) joinTimeByFork.set(parentFork, end);
+  });
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -337,6 +368,14 @@ export function ExecutionTimelineStrip({
                 indicating which fork it belongs to. Branch bars typically share a left edge with
                 the fork — that&apos;s the visual signal of concurrency. (Indigo is reserved for
                 this structural accent; purple bars are reserved for the orchestrator step type.)
+              </p>
+              <p className="text-foreground mt-2 font-medium">Parallel wait</p>
+              <p>
+                Branches that finish before the slowest sibling get a hashed grey segment trailing
+                their coloured bar — that&apos;s the time spent waiting for the join. The grey grows
+                live as siblings keep running, then freezes when the whole fork settles. The
+                duration column shows the wait as a small{' '}
+                <span className="font-mono">+Xs wait</span> line beneath the processing time.
               </p>
               <p className="text-foreground mt-2 font-medium">Interaction</p>
               <p>Click any bar to jump to that step in the trace below.</p>
@@ -429,6 +468,12 @@ export function ExecutionTimelineStrip({
                 // Position on the (possibly compressed) shared wall-clock axis.
                 let leftPct = 0;
                 let widthPct: number;
+                // For a parallel branch that finished before its siblings:
+                // `waitWidthPct` carries the trailing greyed segment from
+                // this branch's end to the fork's join time. Zero for
+                // everything else (sequential steps, still-running branches,
+                // the slowest branch in a fan-out).
+                let waitWidthPct = 0;
                 if (useGantt && Number.isFinite(timing.start)) {
                   leftPct = Math.max(
                     0,
@@ -443,6 +488,22 @@ export function ExecutionTimelineStrip({
                   // single-instant trace).
                   const rawPct = maxDuration > 0 ? (entry.durationMs / maxDuration) * 100 : 25;
                   widthPct = isRunning ? Math.min(100, Math.max(rawPct, 25)) : rawPct;
+                }
+
+                // Compute the parallel-branch wait segment, if any. Skip
+                // for running branches (no end yet) and for the slowest
+                // sibling (joinTime == its own end). Only meaningful on
+                // the Gantt path — the legacy fallback has no shared axis.
+                const parentForkForWait = parallelBranchMap.get(entry.stepId);
+                if (useGantt && parentForkForWait && !isRunning && Number.isFinite(timing.end)) {
+                  const joinTimeMs = joinTimeByFork.get(parentForkForWait);
+                  if (joinTimeMs !== undefined && joinTimeMs > timing.end) {
+                    const rawWait = ((joinTimeMs - timing.end) / totalSpan) * 100;
+                    // Cap so the combined bar can't exceed the axis. The
+                    // floor at 0 drops noise sub-pixel waits that would
+                    // otherwise sit as a hairline next to the bar.
+                    waitWidthPct = Math.max(0, Math.min(100 - leftPct - widthPct, rawWait));
+                  }
                 }
 
                 const { className: colourClass, striped, pulsing, category } = barAppearance(entry);
@@ -476,6 +537,18 @@ export function ExecutionTimelineStrip({
                 const realDurationMs = Number.isFinite(timing.originalDurationMs)
                   ? timing.originalDurationMs
                   : entry.durationMs;
+
+                // The wait portion in raw ms. Recomputed from the same
+                // numbers as `waitWidthPct` so the displayed value and
+                // the segment width stay in lock-step (rounding in
+                // `toFixed(2)` aside).
+                const waitMs =
+                  useGantt && parentForkForWait && !isRunning && Number.isFinite(timing.end)
+                    ? Math.max(
+                        0,
+                        (joinTimeByFork.get(parentForkForWait) ?? timing.end) - timing.end
+                      )
+                    : 0;
 
                 return (
                   <Tooltip key={`${entry.stepId}-${idx}`}>
@@ -559,9 +632,33 @@ export function ExecutionTimelineStrip({
                               width: `${widthPct.toFixed(2)}%`,
                             }}
                           />
+                          {waitWidthPct > 0 && (
+                            <span
+                              data-testid={`timeline-bar-wait-${entry.stepId}`}
+                              data-parallel-wait="true"
+                              className={cn(
+                                'absolute inset-y-0 transition-[width,left]',
+                                HASHED_PARALLEL_WAIT
+                              )}
+                              style={{
+                                left: `${(leftPct + widthPct).toFixed(2)}%`,
+                                width: `${waitWidthPct.toFixed(2)}%`,
+                              }}
+                              title="Waited for slower parallel siblings to finish"
+                            />
+                          )}
                         </span>
                         <span className="text-muted-foreground w-20 shrink-0 text-right tabular-nums">
                           {formatDuration(realDurationMs, unit)}
+                          {waitMs > 0 && (
+                            <span
+                              data-testid={`timeline-wait-suffix-${entry.stepId}`}
+                              className="text-muted-foreground/70 ml-1 block text-[10px]"
+                              title="Time spent waiting for slower sibling branches to finish"
+                            >
+                              +{formatDuration(waitMs, unit)} wait
+                            </span>
+                          )}
                         </span>
                       </button>
                     </TooltipTrigger>
@@ -587,6 +684,12 @@ export function ExecutionTimelineStrip({
                         <dd>{endedLabel}</dd>
                         <dt className="text-primary-foreground/70">Duration</dt>
                         <dd>{formatDuration(realDurationMs, unit)}</dd>
+                        {waitMs > 0 && (
+                          <>
+                            <dt className="text-primary-foreground/70">Waited</dt>
+                            <dd>{formatDuration(waitMs, unit)} for slower siblings</dd>
+                          </>
+                        )}
                         {/* The trace row below the bar shows this same
                             reason inline; the tooltip is useful when the
                             operator is scanning bars in the Gantt and
