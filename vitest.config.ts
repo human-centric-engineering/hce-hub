@@ -64,9 +64,9 @@ export default defineConfig({
       // ioredis is an optional peer dependency not installed in this project.
       // Aliasing it to the manual mock stub allows RedisRateLimitStore to be
       // imported in unit tests without a real Redis connection.
-      ioredis: path.resolve(__dirname, './__mocks__/ioredis.ts'),
+      ioredis: path.resolve(__dirname, './tests/mocks/ioredis.ts'),
       // Allow tests to import mock helpers via @mocks/ alias
-      '@mocks': path.resolve(__dirname, './__mocks__'),
+      '@mocks': path.resolve(__dirname, './tests/mocks'),
     },
   },
 });

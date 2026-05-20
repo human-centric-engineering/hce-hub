@@ -67,7 +67,7 @@ export class RedisRateLimitStore implements RateLimitStore {
       // The magic comments tell webpack and Turbopack not to statically
       // resolve the specifier, silencing the dev-time "Module not found"
       // warning. Vite's test transform still honors the literal string
-      // and resolves it via the `ioredis` → __mocks__/ioredis.ts alias
+      // and resolves it via the `ioredis` → tests/mocks/ioredis.ts alias
       // in vitest.config.ts. The runtime catch handles real failures.
       const { default: Redis } = await import(
         /* webpackIgnore: true */ /* turbopackIgnore: true */ 'ioredis'
