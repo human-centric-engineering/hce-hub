@@ -6,6 +6,7 @@ import { FieldHelp } from '@/components/ui/field-help';
 import { API } from '@/lib/api/endpoints';
 import { parseApiResponse, serverFetch } from '@/lib/api/server-fetch';
 import { parsePaginationMeta } from '@/lib/validations/common';
+import { getOrchestrationSettings } from '@/lib/orchestration/settings';
 import { logger } from '@/lib/logging';
 import type { PaginationMeta } from '@/types/api';
 import type { ExecutionListItem } from '@/types/orchestration';
@@ -54,7 +55,13 @@ export default async function ExecutionsListPage({ searchParams }: PageProps) {
     typeof resolvedParams.workflowId === 'string' ? resolvedParams.workflowId : undefined;
   const initialStatus =
     typeof resolvedParams.status === 'string' ? resolvedParams.status : undefined;
-  const { executions, meta } = await getExecutions(workflowId, initialStatus);
+  // Threshold lives on the singleton settings row — fetch in parallel
+  // with the executions page so the table can highlight stuck rows
+  // without a separate client round-trip.
+  const [{ executions, meta }, settings] = await Promise.all([
+    getExecutions(workflowId, initialStatus),
+    getOrchestrationSettings(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -90,6 +97,7 @@ export default async function ExecutionsListPage({ searchParams }: PageProps) {
         initialMeta={meta}
         initialWorkflowId={workflowId}
         initialStatus={initialStatus}
+        stuckThresholdMins={settings.stuckExecutionThresholdMins}
       />
     </div>
   );

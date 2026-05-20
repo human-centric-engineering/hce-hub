@@ -131,6 +131,13 @@ export const API = {
       workflowSaveAsTemplate: (id: string): string =>
         `/api/v1/admin/orchestration/workflows/${id}/save-as-template`,
       EXECUTIONS: '/api/v1/admin/orchestration/executions',
+      // Live-engine dashboard snapshot (collection-scoped — running /
+      // queued / orphaned counts + per-provider in-flight). NOT the
+      // per-execution SSE stream below (`executionLive(id)`).
+      EXECUTIONS_LIVE_SNAPSHOT: '/api/v1/admin/orchestration/executions/live',
+      executionForceFail: (id: string): string =>
+        `/api/v1/admin/orchestration/executions/${id}/force-fail`,
+      executionLease: (id: string): string => `/api/v1/admin/orchestration/executions/${id}/lease`,
       executionById: (id: string): string => `/api/v1/admin/orchestration/executions/${id}`,
       executionStatus: (id: string): string =>
         `/api/v1/admin/orchestration/executions/${id}/status`,

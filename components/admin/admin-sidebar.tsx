@@ -31,6 +31,7 @@ import {
   Settings,
   Hammer,
   Activity,
+  Gauge,
   ClipboardList,
   ShieldCheck,
   PlayCircle,
@@ -163,6 +164,12 @@ const navSections: NavSection[] = [
             label: 'Executions',
             icon: PlayCircle,
             description: 'Runtime history',
+          },
+          {
+            href: '/admin/orchestration/executions/live',
+            label: 'Live Engine',
+            icon: Gauge,
+            description: 'In-flight executions and stuck workflows',
           },
           {
             href: '/admin/orchestration/conversations',
