@@ -47,6 +47,7 @@ import {
   generateLeaseToken,
   leaseExpiry,
   recordForceFailEvent,
+  recordReleaseEvent,
   redactLeaseToken,
   refreshLease,
   releaseLease,
@@ -924,5 +925,53 @@ describe('recordForceFailEvent', () => {
 
     // metadata: undefined means Prisma omits the column — no stray {} stored
     expect(data['metadata']).toBeUndefined();
+  });
+});
+
+// ─── recordReleaseEvent ────────────────────────────────────────────────────────
+//
+// Engine paths null the lease columns inside their own conditional UPDATE
+// for atomicity; this helper only writes the event row so the inspector
+// has a "released at T" entry to pair with the original "claimed at T-N".
+// `releaseLease()` is the wrong shape for those paths because its WHERE
+// clause requires a non-null token, which the engine has already cleared.
+describe('recordReleaseEvent', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('writes a "released" event with the redacted prior token and the passed reason', async () => {
+    await recordReleaseEvent('exec-rel-1', 'prior-token-abcde', 'engine-terminal');
+
+    expect(mockLeaseEventCreate).toHaveBeenCalledTimes(1);
+    const data = (mockLeaseEventCreate.mock.calls[0]?.[0] as { data: Record<string, unknown> })
+      .data;
+    expect(data['executionId']).toBe('exec-rel-1');
+    expect(data['event']).toBe('released');
+    expect(data['leaseToken']).toBe('…abcde');
+    expect(data['reason']).toBe('engine-terminal');
+  });
+
+  it('passes metadata through to the event row when provided', async () => {
+    await recordReleaseEvent('exec-rel-2', 'tail-12345', 'recovery-exhausted', { attempts: 3 });
+
+    const data = (mockLeaseEventCreate.mock.calls[0]?.[0] as { data: Record<string, unknown> })
+      .data;
+    expect(data['metadata']).toEqual({ attempts: 3 });
+  });
+
+  it('accepts a null prior token (used by drainEngine crash-repair where the handle is gone)', async () => {
+    await recordReleaseEvent('exec-rel-3', null, 'crash-repair');
+
+    const data = (mockLeaseEventCreate.mock.calls[0]?.[0] as { data: Record<string, unknown> })
+      .data;
+    expect(data['leaseToken']).toBeNull();
+    expect(data['reason']).toBe('crash-repair');
+  });
+
+  it('does NOT call updateMany — column mutation is the caller’s responsibility', async () => {
+    await recordReleaseEvent('exec-rel-4', 'tail-99999', 'reaper-sweep');
+
+    expect(mockUpdateMany).not.toHaveBeenCalled();
   });
 });

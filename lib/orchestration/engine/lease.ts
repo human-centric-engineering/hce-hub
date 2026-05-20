@@ -282,6 +282,33 @@ export async function recordForceFailEvent(
 }
 
 /**
+ * Record a `released` event without mutating lease columns.
+ *
+ * Engine paths (`finalize`, `drainEngine` crash repair, the four
+ * `processOrphanedExecutions` terminate paths, reaper sweep) all clear
+ * `leaseToken` / `leaseExpiresAt` as part of their own conditional
+ * UPDATE so the clear is atomic with the status flip. Calling
+ * `releaseLease()` from there would be a second UPDATE that races —
+ * worse, on the post-clear row it would always return false (the
+ * WHERE leaseToken IS NOT NULL guard fails) and never record the
+ * event. This helper is the right shape for that pattern: the column
+ * mutation has already happened; we just want the inspector entry.
+ *
+ * `reason` should be short and operator-meaningful — e.g.
+ * `'engine-terminal'`, `'crash-repair'`, `'recovery-exhausted'`,
+ * `'reaper-sweep'`, `'workflow-deactivated'`. The inspector renders
+ * it verbatim.
+ */
+export async function recordReleaseEvent(
+  executionId: string,
+  priorToken: string | null,
+  reason: string,
+  metadata?: Record<string, unknown>
+): Promise<void> {
+  await recordLeaseEvent(executionId, 'released', priorToken, reason, metadata);
+}
+
+/**
  * Cap on consecutive heartbeat refresh THROWS (not lease-lost — that's a separate signal).
  * After this many DB-throw refreshes in a row, the heartbeat self-cancels with an error log
  * rather than spinning forever. Set to 3 — roughly one lease window of failed refreshes,

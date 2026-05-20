@@ -93,6 +93,7 @@ function makeExecution(overrides: Partial<Record<string, unknown>> = {}): Record
     workflowId: WORKFLOW_ID,
     status: 'running',
     leaseToken: LEASE_TOKEN,
+    workflow: { name: 'Compliance Review' },
     ...overrides,
   };
 }
@@ -287,12 +288,16 @@ describe('POST /executions/:id/force-fail', () => {
       expect.objectContaining({ actorUserId: USER_ID, previousStatus: 'running' })
     );
 
-    // logAdminAction records the audit entry with the correct action
+    // logAdminAction records the audit entry with the correct action,
+    // and entityName carries the human-readable workflow name (not the
+    // workflow CUID) so audit-log table rows are readable in the admin
+    // UI without joining back to AiWorkflow.
     expect(logAdminAction).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'execution.force_failed',
         entityType: 'execution',
         entityId: EXEC_ID,
+        entityName: 'Compliance Review',
         metadata: expect.objectContaining({ previousStatus: 'running' }),
       })
     );
@@ -393,6 +398,24 @@ describe('POST /executions/:id/force-fail', () => {
       expect.objectContaining({
         metadata: expect.objectContaining({ reason: null }),
       })
+    );
+  });
+
+  it('falls back to entityName=workflowId when the joined workflow is null (deleted workflow)', async () => {
+    // Edge case: the workflow has been deleted between the execution
+    // starting and the admin acting. Prisma returns workflow=null;
+    // the route falls back to workflowId so the audit row is still
+    // useful (the admin can correlate by id even if name is lost).
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValueOnce(
+      makeExecution({ workflow: null }) as never
+    );
+    txExecutionUpdateMany.mockResolvedValue({ count: 1 });
+
+    await POST(makeRequest(), makeContext());
+
+    expect(logAdminAction).toHaveBeenCalledWith(
+      expect.objectContaining({ entityName: WORKFLOW_ID })
     );
   });
 });

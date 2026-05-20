@@ -118,9 +118,13 @@ export function LeaseInspectorDialog({
         <DialogHeader>
           <DialogTitle>Lease inspector</DialogTitle>
           <DialogDescription>
-            {executionId
-              ? `Execution ${executionId.slice(0, 8)}… — current lease holder and recent transitions.`
-              : null}
+            {executionId ? (
+              <>
+                Execution {executionId.slice(0, 8)}… — current lease holder and recent transitions.
+                Lease tokens are shown as a 5-char tail (e.g. <code>…ab12c</code>); the full token
+                is a write-capability secret and never leaves the server.
+              </>
+            ) : null}
           </DialogDescription>
         </DialogHeader>
 

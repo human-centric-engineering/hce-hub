@@ -267,6 +267,69 @@ describe('getLiveEngineSnapshot', () => {
     // Assert: the string is the exact ISO representation of the frozen instant
     expect(snapshot.generatedAt).toBe(FROZEN_ISO);
   });
+
+  // User-scope tests — the live route passes `{ userId: session.user.id }`
+  // so the snapshot matches the per-user executions list. The provider
+  // in-flight card is intentionally NOT scoped (process-wide counter
+  // with no user attribution) — that behaviour is also asserted here.
+  describe('user-scoped snapshot', () => {
+    it('applies userId to all three execution-row queries when provided', async () => {
+      const userId = 'user-abc';
+
+      await getLiveEngineSnapshot({ userId });
+
+      // The running count, queued aggregate, and orphaned count must
+      // each carry `userId: 'user-abc'` in their where clause.
+      const runningCall = vi.mocked(prisma.aiWorkflowExecution.count).mock.calls[0]?.[0];
+      const queuedCall = vi.mocked(prisma.aiWorkflowExecution.aggregate).mock.calls[0]?.[0];
+      const orphanedCall = vi.mocked(prisma.aiWorkflowExecution.count).mock.calls[1]?.[0];
+      expect(runningCall?.where).toMatchObject({ userId });
+      expect(queuedCall?.where).toMatchObject({ userId });
+      expect(orphanedCall?.where).toMatchObject({ userId });
+    });
+
+    it('applies userId to the running-step age query via the execution relation', async () => {
+      const userId = 'user-def';
+
+      await getLiveEngineSnapshot({ userId });
+
+      const stepCall = vi.mocked(prisma.aiWorkflowRunningStep.findMany).mock.calls[0]?.[0];
+      // The step table has no userId column — scoping goes through the
+      // parent execution relation so a partner admin doesn't see ages
+      // from other partners' running steps.
+      expect(stepCall?.where).toMatchObject({
+        completedAt: null,
+        execution: { userId },
+      });
+    });
+
+    it('omits userId scope when no options are passed (backwards compat path)', async () => {
+      await getLiveEngineSnapshot();
+
+      const runningCall = vi.mocked(prisma.aiWorkflowExecution.count).mock.calls[0]?.[0];
+      const stepCall = vi.mocked(prisma.aiWorkflowRunningStep.findMany).mock.calls[0]?.[0];
+      expect(runningCall?.where).not.toHaveProperty('userId');
+      expect(stepCall?.where).not.toHaveProperty('execution');
+    });
+
+    it('returns provider in-flight counts unchanged regardless of userId scope', async () => {
+      const { getInFlightCounts } = await import('@/lib/orchestration/llm/in-flight-counter');
+      vi.mocked(getInFlightCounts).mockReturnValue([
+        { provider: 'anthropic', inFlight: 3 },
+        { provider: 'openai', inFlight: 1 },
+      ]);
+
+      const scoped = await getLiveEngineSnapshot({ userId: 'user-xyz' });
+
+      // Provider counts are process-wide — no user attribution exists
+      // at the proxy boundary, and they reflect the whole worker's
+      // load. Operators understand this from the new live-engine doc.
+      expect(scoped.providers).toEqual([
+        { provider: 'anthropic', inFlight: 3 },
+        { provider: 'openai', inFlight: 1 },
+      ]);
+    });
+  });
 });
 
 // ─── percentile ───────────────────────────────────────────────────────────────

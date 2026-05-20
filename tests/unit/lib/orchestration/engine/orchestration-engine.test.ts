@@ -76,6 +76,10 @@ vi.mock('@/lib/orchestration/engine/lease', () => ({
   generateLeaseToken: vi.fn().mockReturnValue('lease-token-test'),
   leaseExpiry: vi.fn().mockReturnValue(new Date()),
   startHeartbeat: vi.fn().mockReturnValue(vi.fn()),
+  // Fire-and-forget — engine `finalize()` calls this after every
+  // terminal write to populate the lease inspector. Tests don't care
+  // about the call here; a no-op resolved mock keeps them green.
+  recordReleaseEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 // ─── Imports (after mocks) ──────────────────────────────────────────────────

@@ -45,17 +45,43 @@ export interface LiveEngineSnapshot {
  */
 const RUNNING_AGE_SAMPLE_CAP = 500;
 
-export async function getLiveEngineSnapshot(): Promise<LiveEngineSnapshot> {
+/**
+ * Options for the live-engine snapshot.
+ *
+ * `userId`, when provided, restricts the running / queued / orphaned
+ * counts and the age sample to executions owned by that user.
+ *
+ * The four executions-row counts MUST be user-scoped to match the
+ * executions list, force-fail, lease inspector, and cancel routes —
+ * all of which gate on `userId === session.user.id`. Without this
+ * scoping, an admin would see card counts they couldn't drill into
+ * or act on (their own list would only show a subset of "running",
+ * and clicking the card would reveal an empty filter mismatch).
+ *
+ * Provider in-flight counts have no per-user attribution available
+ * (the proxy wraps at the cached provider level; the in-flight set
+ * is process-wide). They are intentionally NOT user-scoped — the
+ * card surfaces the whole process workload. Operators understand
+ * "the worker my admin tab hit is currently handling N calls."
+ */
+export interface LiveEngineSnapshotOptions {
+  userId?: string;
+}
+
+export async function getLiveEngineSnapshot(
+  options: LiveEngineSnapshotOptions = {}
+): Promise<LiveEngineSnapshot> {
   const now = new Date();
+  const userScope = options.userId ? { userId: options.userId } : {};
 
   // Four reads in parallel — each is small (count or capped page) and
   // hits an existing index. Provider counts come from in-memory state.
   const [runningCount, queuedAgg, orphanedCount, runningAges] = await Promise.all([
     prisma.aiWorkflowExecution.count({
-      where: { status: WorkflowStatus.RUNNING },
+      where: { status: WorkflowStatus.RUNNING, ...userScope },
     }),
     prisma.aiWorkflowExecution.aggregate({
-      where: { status: WorkflowStatus.PENDING },
+      where: { status: WorkflowStatus.PENDING, ...userScope },
       _count: { _all: true },
       _min: { createdAt: true },
     }),
@@ -63,6 +89,7 @@ export async function getLiveEngineSnapshot(): Promise<LiveEngineSnapshot> {
       where: {
         status: WorkflowStatus.RUNNING,
         leaseExpiresAt: { lt: now },
+        ...userScope,
       },
     }),
     // Age of each running execution's current step. Joined off the
@@ -70,8 +97,13 @@ export async function getLiveEngineSnapshot(): Promise<LiveEngineSnapshot> {
     // execution we may have multiple branch rows (parallel fan-out);
     // we use MIN(startedAt) per execution so a long-running branch
     // dominates the age — that's the operator's "stuck" question.
+    // User scope is applied via the parent execution relation so a
+    // partner admin doesn't see step ages from other partners' rows.
     prisma.aiWorkflowRunningStep.findMany({
-      where: { completedAt: null },
+      where: {
+        completedAt: null,
+        ...(options.userId ? { execution: { userId: options.userId } } : {}),
+      },
       select: { executionId: true, startedAt: true },
       orderBy: { startedAt: 'asc' },
       take: RUNNING_AGE_SAMPLE_CAP,

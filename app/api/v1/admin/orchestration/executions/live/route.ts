@@ -19,13 +19,17 @@ import { adminLimiter, createRateLimitResponse } from '@/lib/security/rate-limit
 import { getClientIP } from '@/lib/security/ip';
 import { getLiveEngineSnapshot } from '@/lib/orchestration/admin/live-engine-snapshot';
 
-export const GET = withAdminAuth(async (request) => {
+export const GET = withAdminAuth(async (request, session) => {
   const clientIP = getClientIP(request);
   const rateLimit = adminLimiter.check(clientIP);
   if (!rateLimit.success) return createRateLimitResponse(rateLimit);
 
   const log = await getRouteLogger(request);
-  const snapshot = await getLiveEngineSnapshot();
+  // User-scope the counts so they match the executions list, the
+  // force-fail / lease / cancel routes — all of which are scoped to
+  // `session.user.id`. The provider in-flight counts are process-wide
+  // (no user attribution available) and are intentionally not scoped.
+  const snapshot = await getLiveEngineSnapshot({ userId: session.user.id });
   log.info('Live engine snapshot served', {
     running: snapshot.running.count,
     queued: snapshot.queued.count,

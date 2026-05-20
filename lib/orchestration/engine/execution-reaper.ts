@@ -16,6 +16,7 @@
 
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
+import { recordReleaseEvent } from '@/lib/orchestration/engine/lease';
 import { WorkflowStatus } from '@/types/orchestration';
 
 // Mirrors the closed set used by the live route. Defined locally
@@ -60,8 +61,13 @@ export async function reapZombieExecutions(
   // coherent with `claimLease`'s expectations. Without this, a reaper-killed RUNNING row
   // could keep its (now-expired) lease columns set and feed the orphan-sweep race that
   // `claimLease`'s status guard exists to defend against. Belt-and-braces with the guard.
-  const [runningResult, pendingResult, approvalResult] = await Promise.all([
-    prisma.aiWorkflowExecution.updateMany({
+  //
+  // Two-step (findMany → updateMany) per category so we can record per-execution
+  // `released` lease events for the inspector. The find is index-friendly
+  // (`status, updatedAt` / `status, createdAt`) and returns zero rows the
+  // overwhelming majority of ticks — typical maintenance-tick cost stays flat.
+  const [runningTargets, pendingTargets, approvalTargets] = await Promise.all([
+    prisma.aiWorkflowExecution.findMany({
       where: {
         status: WorkflowStatus.RUNNING,
         // Use updatedAt (not startedAt) so resumed executions aren't
@@ -70,45 +76,81 @@ export async function reapZombieExecutions(
         // to RUNNING.
         updatedAt: { lt: runningCutoff },
       },
-      data: {
-        status: WorkflowStatus.FAILED,
-        completedAt: new Date(),
-        errorMessage: 'Execution reaped: exceeded zombie threshold without completing',
-        leaseToken: null,
-        leaseExpiresAt: null,
-      },
+      select: { id: true, leaseToken: true },
     }),
     // Use createdAt (not updatedAt) so incidental DB writes don't reset
     // the reap timer — a PENDING row should be reaped based on when it
     // was created, not when it was last touched.
-    prisma.aiWorkflowExecution.updateMany({
+    prisma.aiWorkflowExecution.findMany({
       where: {
         status: WorkflowStatus.PENDING,
         createdAt: { lt: pendingCutoff },
       },
-      data: {
-        status: WorkflowStatus.FAILED,
-        completedAt: new Date(),
-        errorMessage:
-          'Execution reaped: client did not reconnect within 1 hour after approve/retry',
-        leaseToken: null,
-        leaseExpiresAt: null,
-      },
+      select: { id: true, leaseToken: true },
     }),
-    prisma.aiWorkflowExecution.updateMany({
+    prisma.aiWorkflowExecution.findMany({
       where: {
         status: WorkflowStatus.PAUSED_FOR_APPROVAL,
         updatedAt: { lt: approvalCutoff },
       },
-      data: {
-        status: WorkflowStatus.FAILED,
-        completedAt: new Date(),
-        errorMessage: 'Execution reaped: approval not received within 7 days',
-        leaseToken: null,
-        leaseExpiresAt: null,
-      },
+      select: { id: true, leaseToken: true },
     }),
   ]);
+
+  const [runningResult, pendingResult, approvalResult] = await Promise.all([
+    runningTargets.length > 0
+      ? prisma.aiWorkflowExecution.updateMany({
+          where: { id: { in: runningTargets.map((r) => r.id) } },
+          data: {
+            status: WorkflowStatus.FAILED,
+            completedAt: new Date(),
+            errorMessage: 'Execution reaped: exceeded zombie threshold without completing',
+            leaseToken: null,
+            leaseExpiresAt: null,
+          },
+        })
+      : Promise.resolve({ count: 0 }),
+    pendingTargets.length > 0
+      ? prisma.aiWorkflowExecution.updateMany({
+          where: { id: { in: pendingTargets.map((r) => r.id) } },
+          data: {
+            status: WorkflowStatus.FAILED,
+            completedAt: new Date(),
+            errorMessage:
+              'Execution reaped: client did not reconnect within 1 hour after approve/retry',
+            leaseToken: null,
+            leaseExpiresAt: null,
+          },
+        })
+      : Promise.resolve({ count: 0 }),
+    approvalTargets.length > 0
+      ? prisma.aiWorkflowExecution.updateMany({
+          where: { id: { in: approvalTargets.map((r) => r.id) } },
+          data: {
+            status: WorkflowStatus.FAILED,
+            completedAt: new Date(),
+            errorMessage: 'Execution reaped: approval not received within 7 days',
+            leaseToken: null,
+            leaseExpiresAt: null,
+          },
+        })
+      : Promise.resolve({ count: 0 }),
+  ]);
+
+  // Lease inspector entries — fire-and-forget. A failure here is logged
+  // inside the helper and never propagates; a missed event is a missed
+  // inspector entry, not a correctness issue.
+  for (const row of runningTargets) {
+    void recordReleaseEvent(row.id, row.leaseToken, 'reaper-sweep', { kind: 'zombie' });
+  }
+  for (const row of pendingTargets) {
+    void recordReleaseEvent(row.id, row.leaseToken, 'reaper-sweep', { kind: 'stale-pending' });
+  }
+  for (const row of approvalTargets) {
+    void recordReleaseEvent(row.id, row.leaseToken, 'reaper-sweep', {
+      kind: 'abandoned-approval',
+    });
+  }
 
   if (runningResult.count > 0) {
     logger.warn('Reaped zombie workflow executions', { count: runningResult.count, thresholdMs });

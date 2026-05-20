@@ -27,6 +27,8 @@ that fans four index-friendly Prisma queries in parallel. The route
 | **Orphaned**           | `count(WHERE status='running' AND leaseExpiresAt < now)`. Strict subset of Running — the dashboard does NOT subtract; both numbers are shown as-is and the doc here is the source of truth on the relationship                                                                             | Links to `?status=running`. Card border goes amber when > 0. |
 | **Provider in-flight** | In-memory per-process counter (`lib/orchestration/llm/in-flight-counter.ts`) read via the `track()` / `trackStream()` proxy wrap installed in `getProvider()`. Counts live calls to `chat`, `chatStream`, `embed`, `transcribe` — NOT admin metadata like `listModels` / `testConnection`. | None — counts are process-local.                             |
 
+**Scoping.** The three execution-row cards (Running, Queued, Orphaned) are scoped to the authenticated admin's `userId` so the numbers match what the executions list, force-fail, and lease inspector routes — all of which gate on `userId === session.user.id` — will let them act on. Without that match an admin would see "5 running" on the dashboard but find only 2 on their own list, with no way to drill into the other 3. The Provider in-flight card is process-wide on purpose: the in-flight counter has no user attribution at the proxy boundary, and operators read it as "the worker my admin tab hit is currently handling N calls." For a genuinely global "is the engine healthy?" lens across users, see priorities-doc #41 (Workflow-execution health dashboard) — explicitly a separate concern.
+
 The bottom of the page shows the snapshot's `generatedAt` plus the
 poll interval. On a transient fetch failure the last-good snapshot
 stays visible and a red banner names the error — the page does not
@@ -97,16 +99,21 @@ tail; that's enough to answer "is the same host still driving this?"
 
 **What the events mean.** From `lib/orchestration/engine/lease.ts`:
 
-| Event            | Written when                                                                        |
-| ---------------- | ----------------------------------------------------------------------------------- |
-| `claimed`        | `claimLease(reason='fresh-resume')` succeeded — clean state-machine transition.     |
-| `orphan-resume`  | `claimLease(reason='orphan-resume')` succeeded — sweep re-claimed an expired lease. |
-| `refresh-failed` | `refreshLease()` saw a token mismatch — another host has taken the row.             |
-| `released`       | `releaseLease()` cleared the lease on a clean terminal write.                       |
-| `force-failed`   | Admin force-fail route terminated the row.                                          |
+| Event            | Written when                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `claimed`        | `claimLease(reason='fresh-resume')` succeeded — clean state-machine transition.                                                                                                                                                                                                                                                                                                                                                                    |
+| `orphan-resume`  | `claimLease(reason='orphan-resume')` succeeded — orphan sweep re-claimed an expired lease.                                                                                                                                                                                                                                                                                                                                                         |
+| `refresh-failed` | `refreshLease()` saw a token mismatch — another host has taken the row.                                                                                                                                                                                                                                                                                                                                                                            |
+| `released`       | Engine cleared the lease as part of a terminal write. `reason` field distinguishes call sites: `engine-terminal` (normal `finalize()`), `crash-repair` (`drainEngine` catch block), `recovery-exhausted` (past `MAX_RECOVERY_ATTEMPTS`), `workflow-deactivated` / `no-published-version` / `invalid-definition` (the other three orphan-resume sweep paths), `reaper-sweep` (`metadata.kind` = `zombie` / `stale-pending` / `abandoned-approval`). |
+| `force-failed`   | Admin force-fail route terminated the row.                                                                                                                                                                                                                                                                                                                                                                                                         |
 
-Successful `refreshLease` calls are deliberately not recorded — they would
-dominate the table at roughly one event per minute per running row.
+Every successful claim has a matching termination event in the
+inspector — operators can answer "did this run complete cleanly, get
+recovered, get reaped, or get killed?" by reading a single timeline.
+
+Successful `refreshLease` calls are deliberately not recorded — they
+would dominate the table at roughly one event per minute per running
+row, drowning out the transitions that actually matter.
 
 ## Settings
 

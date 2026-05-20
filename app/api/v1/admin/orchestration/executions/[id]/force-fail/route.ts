@@ -74,6 +74,11 @@ export const POST = withAdminAuth<{ id: string }>(async (request, session, { par
       workflowId: true,
       status: true,
       leaseToken: true,
+      // Pulled through for the audit log's `entityName` (human-readable
+      // at time of action). Falling back to the workflow id keeps the
+      // audit row useful even if the workflow has been deleted between
+      // the execution starting and the admin acting.
+      workflow: { select: { name: true } },
     },
   });
   if (!existing) {
@@ -134,7 +139,7 @@ export const POST = withAdminAuth<{ id: string }>(async (request, session, { par
     action: 'execution.force_failed',
     entityType: 'execution',
     entityId: id,
-    entityName: existing.workflowId,
+    entityName: existing.workflow?.name ?? existing.workflowId,
     metadata: {
       previousStatus: existing.status,
       reason: reason ?? null,

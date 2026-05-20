@@ -302,7 +302,7 @@ export function ExecutionsTable({
               </TableHead>
               <TableHead>
                 <Tip
-                  label={`Time in current step. Highlighted amber after ${stuckThresholdMins}m.`}
+                  label={`Time the running step has been in flight. Rows past ${stuckThresholdMins}m are highlighted amber but NOT auto-failed — use the row menu to force-fail if needed.`}
                 >
                   <span>Step age</span>
                 </Tip>
@@ -454,7 +454,9 @@ export function ExecutionsTable({
             <AlertDialogDescription>
               The execution will be transitioned to <strong>failed</strong> immediately. Any
               partially-completed side-effects (external calls, notifications) remain — this action
-              does not roll them back. The reason is recorded in the admin audit log.
+              does not roll them back. The reason is recorded in the admin audit log, and any
+              subscribers to <code>workflow.failed</code> or <code>execution.force_failed</code>{' '}
+              hooks will be notified.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-2">

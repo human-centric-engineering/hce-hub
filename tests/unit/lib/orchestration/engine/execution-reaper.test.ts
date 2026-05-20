@@ -8,10 +8,18 @@ import { reapZombieExecutions } from '@/lib/orchestration/engine/execution-reape
 vi.mock('@/lib/db/client', () => ({
   prisma: {
     aiWorkflowExecution: {
+      // The reaper now does a `findMany` per category to collect ids
+      // for the lease-event writes, in addition to the `updateMany`
+      // that flips the rows. Default findMany to [] so the existing
+      // updateMany-only tests continue to short-circuit.
+      findMany: vi.fn().mockResolvedValue([]),
       updateMany: vi.fn(),
     },
     aiWorkflowRunningStep: {
       deleteMany: vi.fn(),
+    },
+    aiWorkflowExecutionLeaseEvent: {
+      create: vi.fn().mockResolvedValue({ id: 'evt-test' }),
     },
   },
 }));
@@ -24,17 +32,30 @@ import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 
 const mockUpdateMany = prisma.aiWorkflowExecution.updateMany as ReturnType<typeof vi.fn>;
+const mockFindMany = prisma.aiWorkflowExecution.findMany as ReturnType<typeof vi.fn>;
 const mockRunningStepDeleteMany = prisma.aiWorkflowRunningStep.deleteMany as ReturnType<
   typeof vi.fn
 >;
 const mockLoggerWarn = logger.warn as unknown as ReturnType<typeof vi.fn>;
 
-/** Helper: mock all three updateMany calls with given counts. */
+/**
+ * Mock the three (findMany → updateMany) pairs the reaper now uses.
+ * Each "count" maps to a row array of that length so the reaper's
+ * inner length-check still triggers the updateMany call (it now
+ * short-circuits to `{count: 0}` when findMany returns []).
+ */
 function mockCounts(running: number, pending: number, approvals: number) {
-  mockUpdateMany
-    .mockResolvedValueOnce({ count: running })
-    .mockResolvedValueOnce({ count: pending })
-    .mockResolvedValueOnce({ count: approvals });
+  const fakeRow = (i: number) => ({ id: `exec-${i}`, leaseToken: null });
+  const runningRows = Array.from({ length: running }, (_, i) => fakeRow(i));
+  const pendingRows = Array.from({ length: pending }, (_, i) => fakeRow(running + i));
+  const approvalRows = Array.from({ length: approvals }, (_, i) => fakeRow(running + pending + i));
+  mockFindMany
+    .mockResolvedValueOnce(runningRows)
+    .mockResolvedValueOnce(pendingRows)
+    .mockResolvedValueOnce(approvalRows);
+  if (running > 0) mockUpdateMany.mockResolvedValueOnce({ count: running });
+  if (pending > 0) mockUpdateMany.mockResolvedValueOnce({ count: pending });
+  if (approvals > 0) mockUpdateMany.mockResolvedValueOnce({ count: approvals });
 }
 
 describe('reapZombieExecutions', () => {
@@ -53,12 +74,21 @@ describe('reapZombieExecutions', () => {
     expect(result.reaped).toBe(3);
     expect(result.stalePending).toBe(0);
     expect(result.abandonedApprovals).toBe(0);
-    expect(mockUpdateMany).toHaveBeenCalledWith(
+    // The status/threshold filter now lives on `findMany` (which
+    // collects the ids); `updateMany` then flips just those ids. We
+    // assert both halves so a future change that drops either filter
+    // surfaces here.
+    expect(mockFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           status: 'running',
           updatedAt: expect.objectContaining({ lt: expect.any(Date) }),
         }),
+      })
+    );
+    expect(mockUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: expect.objectContaining({ in: expect.any(Array) }) }),
         data: expect.objectContaining({
           status: 'failed',
           completedAt: expect.any(Date),
@@ -76,12 +106,17 @@ describe('reapZombieExecutions', () => {
     expect(result.reaped).toBe(0);
     expect(result.stalePending).toBe(2);
     expect(result.abandonedApprovals).toBe(0);
-    expect(mockUpdateMany).toHaveBeenCalledWith(
+    expect(mockFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           status: 'pending',
           createdAt: expect.objectContaining({ lt: expect.any(Date) }),
         }),
+      })
+    );
+    expect(mockUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: expect.objectContaining({ in: expect.any(Array) }) }),
         data: expect.objectContaining({
           status: 'failed',
           completedAt: expect.any(Date),
@@ -99,12 +134,17 @@ describe('reapZombieExecutions', () => {
     expect(result.reaped).toBe(0);
     expect(result.stalePending).toBe(0);
     expect(result.abandonedApprovals).toBe(2);
-    expect(mockUpdateMany).toHaveBeenCalledWith(
+    expect(mockFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           status: 'paused_for_approval',
           updatedAt: expect.objectContaining({ lt: expect.any(Date) }),
         }),
+      })
+    );
+    expect(mockUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: expect.objectContaining({ in: expect.any(Array) }) }),
         data: expect.objectContaining({
           status: 'failed',
           completedAt: expect.any(Date),
@@ -148,17 +188,19 @@ describe('reapZombieExecutions', () => {
     const oneDay = 24 * 60 * 60 * 1000;
     await reapZombieExecutions(fiveMinutes, thirtyMinutes, oneDay);
 
-    const runningCall = mockUpdateMany.mock.calls[0][0];
+    // The threshold cutoffs now live on `findMany` (the id-collection
+    // pass), not `updateMany` (which targets ids by primary key).
+    const runningCall = mockFindMany.mock.calls[0][0];
     const runningCutoff = runningCall.where.updatedAt.lt as Date;
     expect(Date.now() - runningCutoff.getTime()).toBeGreaterThan(fiveMinutes - 2000);
     expect(Date.now() - runningCutoff.getTime()).toBeLessThan(fiveMinutes + 2000);
 
-    const pendingCall = mockUpdateMany.mock.calls[1][0];
+    const pendingCall = mockFindMany.mock.calls[1][0];
     const pendingCutoff = pendingCall.where.createdAt.lt as Date;
     expect(Date.now() - pendingCutoff.getTime()).toBeGreaterThan(thirtyMinutes - 2000);
     expect(Date.now() - pendingCutoff.getTime()).toBeLessThan(thirtyMinutes + 2000);
 
-    const approvalCall = mockUpdateMany.mock.calls[2][0];
+    const approvalCall = mockFindMany.mock.calls[2][0];
     const approvalCutoff = approvalCall.where.updatedAt.lt as Date;
     expect(Date.now() - approvalCutoff.getTime()).toBeGreaterThan(oneDay - 2000);
     expect(Date.now() - approvalCutoff.getTime()).toBeLessThan(oneDay + 2000);

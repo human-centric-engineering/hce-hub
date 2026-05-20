@@ -54,6 +54,7 @@ vi.mock('@/lib/orchestration/engine/lease', () => ({
   generateLeaseToken: vi.fn().mockReturnValue('lease-token-test'),
   leaseExpiry: vi.fn().mockReturnValue(new Date()),
   startHeartbeat: vi.fn().mockReturnValue(vi.fn()),
+  recordReleaseEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { OrchestrationEngine } from '@/lib/orchestration/engine/orchestration-engine';

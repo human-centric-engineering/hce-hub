@@ -141,20 +141,24 @@ function withInFlightTracking(provider: LlmProvider, slug: string): LlmProvider 
   return new Proxy(provider, {
     get(target, prop, receiver): unknown {
       const value: unknown = Reflect.get(target, prop, receiver);
-      if (typeof value !== 'function') return value;
-      const name = typeof prop === 'string' ? prop : '';
+      // Symbol-keyed accesses (e.g. Symbol.toPrimitive, Symbol.iterator)
+      // and non-function properties pass through unwrapped. Wrapping a
+      // Symbol-keyed function as if it were a tracked method would
+      // double-count or corrupt host-runtime behaviour (e.g. JSON
+      // serialisation calling `Symbol.toPrimitive`).
+      if (typeof prop !== 'string' || typeof value !== 'function') return value;
       const fn = value as (this: LlmProvider, ...args: unknown[]) => unknown;
-      if (TRACKED_METHODS.has(name)) {
+      if (TRACKED_METHODS.has(prop)) {
         return (...args: unknown[]): Promise<unknown> =>
           track(slug, () => fn.apply(target, args) as Promise<unknown>);
       }
-      if (STREAM_METHODS.has(name)) {
+      if (STREAM_METHODS.has(prop)) {
         return (...args: unknown[]): AsyncIterable<unknown> =>
           trackStream(slug, () => fn.apply(target, args) as AsyncIterable<unknown>);
       }
-      // Everything else (listModels, testConnection, accessors, etc.)
-      // is forwarded bound to the original instance so `this`
-      // resolution inside the SDK call stays intact.
+      // Everything else (listModels, testConnection, helper methods,
+      // accessors) is forwarded bound to the original instance so
+      // `this` resolution inside the SDK call stays intact.
       return fn.bind(target);
     },
   });

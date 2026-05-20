@@ -27,6 +27,14 @@ vi.mock('@/lib/db/client', () => ({
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    // The scheduler's terminate paths call `recordReleaseEvent` for
+    // the lease inspector, which writes through this model. Tests
+    // don't assert on the call; the fire-and-forget helper swallows
+    // errors, but unmocked it would still hit "create is not a
+    // function" before the catch.
+    aiWorkflowExecutionLeaseEvent: {
+      create: vi.fn().mockResolvedValue({ id: 'evt-test' }),
+    },
   },
 }));
 

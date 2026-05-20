@@ -157,7 +157,14 @@ describe('GET /api/v1/admin/orchestration/executions/live', () => {
     await GET(makeRequest());
 
     expect(getLiveEngineSnapshot).toHaveBeenCalledTimes(1);
-    expect(getLiveEngineSnapshot).toHaveBeenCalledWith();
+    // The route now scopes the snapshot to the authenticated admin's
+    // userId so the counts match what they can see on the executions
+    // list. Asserting the exact call argument guards against a future
+    // regression that drops the scope and silently returns a global
+    // count to a partner admin.
+    expect(getLiveEngineSnapshot).toHaveBeenCalledWith({
+      userId: mockAdminUser().user.id,
+    });
   });
 
   it('passes through all four cards and generatedAt from the snapshot', async () => {
