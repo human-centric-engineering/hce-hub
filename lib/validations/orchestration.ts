@@ -1380,6 +1380,95 @@ export const listProvidersQuerySchema = paginationQuerySchema.extend({
 });
 
 // ============================================================================
+// Agent Profiles — inheritable persona / brand voice / guardrails library
+// ============================================================================
+// Profiles supply default text for any agent that points at them. Agents
+// can override or append per field via the *Mode columns on AiAgent — see
+// lib/orchestration/agents/resolve-effective-prompt.ts for the rules.
+
+/** Text length cap shared by persona / brandVoice / guardrails fields. */
+const PROFILE_TEXT_MAX = 10_000;
+
+/** Create payload — POST /api/v1/admin/orchestration/agent-profiles */
+export const agentProfileFormSchema = z.object({
+  name: z
+    .string()
+    .min(1, 'Name is required')
+    .max(100, 'Name must be less than 100 characters')
+    .trim(),
+
+  slug: slugSchema.pipe(z.string().max(80, 'Slug must be less than 80 characters')),
+
+  description: z
+    .string()
+    .max(500, 'Description must be less than 500 characters')
+    .trim()
+    .nullable()
+    .optional(),
+
+  persona: z
+    .string()
+    .max(PROFILE_TEXT_MAX, `Persona must be less than ${PROFILE_TEXT_MAX} characters`)
+    .nullable()
+    .optional(),
+
+  brandVoiceInstructions: z
+    .string()
+    .max(PROFILE_TEXT_MAX, `Brand voice must be less than ${PROFILE_TEXT_MAX} characters`)
+    .nullable()
+    .optional(),
+
+  guardrails: z
+    .string()
+    .max(PROFILE_TEXT_MAX, `Guardrails must be less than ${PROFILE_TEXT_MAX} characters`)
+    .nullable()
+    .optional(),
+});
+
+/** Update payload — PATCH /api/v1/admin/orchestration/agent-profiles/[id] */
+export const updateAgentProfileSchema = z.object({
+  name: z
+    .string()
+    .min(1, 'Name cannot be empty')
+    .max(100, 'Name must be less than 100 characters')
+    .trim()
+    .optional(),
+
+  // Slug intentionally not patchable — keeps URL identifiers stable; rename
+  // by creating a new profile and re-pointing agents.
+
+  description: z
+    .string()
+    .max(500, 'Description must be less than 500 characters')
+    .trim()
+    .nullable()
+    .optional(),
+
+  persona: z
+    .string()
+    .max(PROFILE_TEXT_MAX, `Persona must be less than ${PROFILE_TEXT_MAX} characters`)
+    .nullable()
+    .optional(),
+
+  brandVoiceInstructions: z
+    .string()
+    .max(PROFILE_TEXT_MAX, `Brand voice must be less than ${PROFILE_TEXT_MAX} characters`)
+    .nullable()
+    .optional(),
+
+  guardrails: z
+    .string()
+    .max(PROFILE_TEXT_MAX, `Guardrails must be less than ${PROFILE_TEXT_MAX} characters`)
+    .nullable()
+    .optional(),
+});
+
+/** List query — GET /api/v1/admin/orchestration/agent-profiles */
+export const listAgentProfilesQuerySchema = paginationQuerySchema.extend({
+  q: z.string().trim().max(200).optional(),
+});
+
+// ============================================================================
 // Provider Models (Selection Matrix)
 // ============================================================================
 
@@ -3244,6 +3333,9 @@ export type CostQueryInput = z.infer<typeof costQuerySchema>;
 export type ProviderConfigInput = z.infer<typeof providerConfigSchema>;
 export type UpdateProviderConfigInput = z.infer<typeof updateProviderConfigSchema>;
 export type ListProvidersQuery = z.infer<typeof listProvidersQuerySchema>;
+export type AgentProfileFormInput = z.infer<typeof agentProfileFormSchema>;
+export type UpdateAgentProfileInput = z.infer<typeof updateAgentProfileSchema>;
+export type ListAgentProfilesQuery = z.infer<typeof listAgentProfilesQuerySchema>;
 export type ListWorkflowsQuery = z.infer<typeof listWorkflowsQuerySchema>;
 export type ListExecutionsQuery = z.infer<typeof listExecutionsQuerySchema>;
 export type ExecuteWorkflowBodyInput = z.infer<typeof executeWorkflowBodySchema>;
