@@ -20,7 +20,7 @@
     ],
     "paths": {
       "@/*": ["./*"],
-      "@mocks/*": ["./__mocks__/*"]
+      "@mocks/*": ["./tests/mocks/*"]
     },
     "forceConsistentCasingInFileNames": true,
     "noUnusedLocals": true,

@@ -23,7 +23,7 @@ vi.mock('@/lib/logging', () => ({
 // Imports
 // ---------------------------------------------------------------------------
 
-// ioredis is aliased to __mocks__/ioredis.ts in vitest.config.ts so that Vite can
+// ioredis is aliased to tests/mocks/ioredis.ts in vitest.config.ts so that Vite can
 // resolve it even though the real ioredis package is not installed.
 // The mock file exports `ioredisState` — tests mutate this to control behaviour.
 
@@ -395,7 +395,7 @@ describe('createAsyncDynamicLimiter', () => {
 // ---------------------------------------------------------------------------
 
 describe('RedisRateLimitStore', () => {
-  // The ioredis module is aliased to __mocks__/ioredis.ts via vitest.config.ts.
+  // The ioredis module is aliased to tests/mocks/ioredis.ts via vitest.config.ts.
   // The vi.mock('ioredis', factory) at the top of this file overrides that alias
   // with a controllable mock whose behaviour is driven by three module-scope vars:
   //   ioredisEvalResults         — queue of values to return from eval()
