@@ -16,11 +16,14 @@ import {
   Copy,
   GitBranch,
   Loader2,
+  Maximize2,
   RotateCcw,
+  WrapText,
   XCircle,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getStepMetadata, type StepCategory } from '@/lib/orchestration/engine/step-registry';
 import { cn } from '@/lib/utils';
@@ -617,6 +620,16 @@ function JsonPane({
   const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
   const showMarkdown = isMarkdown(data);
   const [copied, setCopied] = useState(false);
+  // Inline wrap is off by default — the original horizontal-scroll layout
+  // is still useful for skimming JSON shape. The operator opts in when a
+  // single value is too long to read sideways.
+  const [wrap, setWrap] = useState(false);
+  const [expandOpen, setExpandOpen] = useState(false);
+  // Dialog has its own wrap state, defaulted ON because the whole point
+  // of opening the bigger viewer is to read long values comfortably.
+  // Independent of the inline state so closing the dialog leaves the
+  // compact view untouched.
+  const [dialogWrap, setDialogWrap] = useState(true);
 
   const handleCopy = (e: React.MouseEvent): void => {
     e.stopPropagation();
@@ -631,6 +644,29 @@ function JsonPane({
     })();
   };
 
+  const copyButton = (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      className="h-6 gap-1 px-1.5 text-[11px]"
+      onClick={handleCopy}
+      aria-label={`Copy ${label}`}
+    >
+      {copied ? (
+        <>
+          <Check className="h-3 w-3" />
+          Copied
+        </>
+      ) : (
+        <>
+          <Copy className="h-3 w-3" />
+          Copy
+        </>
+      )}
+    </Button>
+  );
+
   return (
     <div data-testid={testId}>
       <div className="mb-1 flex items-center justify-between gap-2">
@@ -639,33 +675,101 @@ function JsonPane({
         </p>
         <div className="flex items-center gap-2">
           {toolbar}
+          {/* Wrap toggle is only meaningful for the JSON path. Markdown
+              wraps naturally via prose styling, and the raw fallback in
+              MarkdownOrRawView already breaks on whitespace. */}
+          {!showMarkdown && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-6 gap-1 px-1.5 text-[11px]"
+              onClick={(e) => {
+                e.stopPropagation();
+                setWrap((v) => !v);
+              }}
+              aria-pressed={wrap}
+              aria-label={wrap ? `Stop wrapping ${label}` : `Wrap long ${label} lines`}
+              data-testid={`${testId}-wrap-toggle`}
+              title={
+                wrap
+                  ? 'Showing wrapped — click to revert to horizontal scroll'
+                  : 'Wrap long lines while keeping JSON indentation'
+              }
+            >
+              <WrapText className="h-3 w-3" />
+              {wrap ? 'No wrap' : 'Wrap'}
+            </Button>
+          )}
           <Button
             type="button"
             size="sm"
             variant="ghost"
             className="h-6 gap-1 px-1.5 text-[11px]"
-            onClick={handleCopy}
-            aria-label={`Copy ${label}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpandOpen(true);
+            }}
+            aria-label={`Expand ${label}`}
+            data-testid={`${testId}-expand`}
+            title="Open in a larger viewer"
           >
-            {copied ? (
-              <>
-                <Check className="h-3 w-3" />
-                Copied
-              </>
-            ) : (
-              <>
-                <Copy className="h-3 w-3" />
-                Copy
-              </>
-            )}
+            <Maximize2 className="h-3 w-3" />
+            Expand
           </Button>
+          {copyButton}
         </div>
       </div>
       {showMarkdown ? (
         <MarkdownOrRawView content={text} rawMaxHeightClass="max-h-60 overflow-y-auto" />
       ) : (
-        <JsonPretty data={data} className="max-h-60 overflow-y-auto" />
+        <JsonPretty data={data} wrap={wrap} className="max-h-60 overflow-y-auto" />
       )}
+
+      <Dialog open={expandOpen} onOpenChange={setExpandOpen}>
+        <DialogContent
+          className="max-h-[90vh] max-w-5xl gap-3"
+          data-testid={`${testId}-dialog`}
+          onClick={(e) => e.stopPropagation()}
+          // The title (e.g. "Input" / "Output") plus the toolbar context
+          // is enough — no separate description sentence to add.
+          aria-describedby={undefined}
+        >
+          <DialogHeader className="pr-8">
+            <DialogTitle className="text-sm font-medium tracking-wide uppercase">
+              {label}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {/* Re-mount the same toolbar slot here so the input pane's
+                "Show resolved" toggle is available without leaving the
+                dialog. State is owned by the parent, so flipping it
+                inside the dialog updates the inline view too — and
+                vice versa. */}
+            {toolbar}
+            {!showMarkdown && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-6 gap-1 px-1.5 text-[11px]"
+                onClick={() => setDialogWrap((v) => !v)}
+                aria-pressed={dialogWrap}
+                data-testid={`${testId}-dialog-wrap-toggle`}
+              >
+                <WrapText className="h-3 w-3" />
+                {dialogWrap ? 'No wrap' : 'Wrap'}
+              </Button>
+            )}
+            {copyButton}
+          </div>
+          {showMarkdown ? (
+            <MarkdownOrRawView content={text} rawMaxHeightClass="max-h-[70vh] overflow-y-auto" />
+          ) : (
+            <JsonPretty data={data} wrap={dialogWrap} className="max-h-[70vh] overflow-y-auto" />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

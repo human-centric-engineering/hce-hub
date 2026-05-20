@@ -86,4 +86,30 @@ describe('JsonPretty', () => {
     const { container } = render(<JsonPretty data={{ n: -1.5e-3 }} />);
     expect(container.textContent).toContain('-0.0015');
   });
+
+  it('defaults to whitespace-pre + overflow-x-auto (no wrap)', () => {
+    const { container } = render(<JsonPretty data={{ a: 1 }} />);
+    const pre = container.querySelector('pre');
+    expect(pre).toHaveAttribute('data-wrap', 'false');
+    expect(pre?.className).toContain('whitespace-pre');
+    expect(pre?.className).toContain('overflow-x-auto');
+    // whitespace-pre-wrap and break-words belong to the wrap path; they
+    // must not leak into the default.
+    expect(pre?.className).not.toContain('whitespace-pre-wrap');
+    expect(pre?.className).not.toContain('break-words');
+  });
+
+  it('uses whitespace-pre-wrap + break-words when wrap=true', () => {
+    // Regression for "long string values run off-screen horizontally":
+    // wrap mode must swap the layout classes so the pre wraps at the
+    // right margin while still respecting JSON's structural newlines.
+    const { container } = render(<JsonPretty data={{ a: 1 }} wrap />);
+    const pre = container.querySelector('pre');
+    expect(pre).toHaveAttribute('data-wrap', 'true');
+    expect(pre?.className).toContain('whitespace-pre-wrap');
+    expect(pre?.className).toContain('break-words');
+    // The horizontal-scroll fallback must drop out — keeping both would
+    // leave the pre wider than the parent, defeating the wrap.
+    expect(pre?.className).not.toContain('overflow-x-auto');
+  });
 });
