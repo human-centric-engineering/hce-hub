@@ -40,6 +40,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { apiClient, APIClientError } from '@/lib/api/client';
 import { API } from '@/lib/api/endpoints';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  resolveEffectivePrompt,
+  composeSystemPromptString,
+} from '@/lib/orchestration/agents/resolve-effective-prompt';
 import { ChatInterface } from '@/components/admin/orchestration/chat/chat-interface';
 import { CliAuthoringHint } from '@/components/admin/orchestration/cli-authoring-hint';
 import { InstructionsHistoryPanel } from '@/components/admin/orchestration/instructions-history-panel';
@@ -69,6 +74,13 @@ const agentFormSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   slug: slugSchema.min(1, 'Slug is required').max(100),
   description: z.string().min(1, 'Description is required').max(5000),
+  // Profile inheritance — see lib/orchestration/agents/resolve-effective-prompt.ts.
+  profileId: z.string().nullable().optional(),
+  persona: z.string().max(50000).nullable().optional(),
+  guardrails: z.string().max(10000).nullable().optional(),
+  personaMode: z.enum(['override', 'append']),
+  voiceMode: z.enum(['override', 'append']),
+  guardrailsMode: z.enum(['override', 'append']),
   systemInstructions: z.string().min(1, 'System instructions are required').max(50000),
   provider: z.string().min(1, 'Provider is required'),
   model: z.string().min(1, 'Model is required'),
@@ -112,6 +124,16 @@ export type AgentWithGrants = AiAgent & {
   grantedDocumentIds?: string[];
 };
 
+/** Slim profile summary passed to the form for the dropdown + preview. */
+export interface AgentProfileSummary {
+  id: string;
+  name: string;
+  slug: string;
+  persona: string | null;
+  brandVoiceInstructions: string | null;
+  guardrails: string | null;
+}
+
 export interface AgentFormProps {
   mode: 'create' | 'edit';
   agent?: AgentWithGrants;
@@ -124,6 +146,12 @@ export interface AgentFormProps {
    * deployment. Optional for backwards-compatibility with older callers.
    */
   effectiveDefaults?: EffectiveAgentDefaults;
+  /**
+   * Available inheritance profiles, loaded by the parent server page so
+   * the dropdown populates without a client-side fetch. Optional — when
+   * omitted, the profile selector is hidden (agent behaves as today).
+   */
+  profiles?: AgentProfileSummary[];
 }
 
 function toSlug(value: string): string {
@@ -136,7 +164,14 @@ function toSlug(value: string): string {
     .slice(0, 100);
 }
 
-export function AgentForm({ mode, agent, providers, models, effectiveDefaults }: AgentFormProps) {
+export function AgentForm({
+  mode,
+  agent,
+  providers,
+  models,
+  effectiveDefaults,
+  profiles,
+}: AgentFormProps) {
   const router = useRouter();
   const isEdit = mode === 'edit';
 
@@ -197,6 +232,12 @@ export function AgentForm({ mode, agent, providers, models, effectiveDefaults }:
       knowledgeDocumentIds: agent?.grantedDocumentIds ?? [],
       topicBoundaries: agent?.topicBoundaries?.join(', ') ?? '',
       brandVoiceInstructions: agent?.brandVoiceInstructions ?? null,
+      profileId: agent?.profileId ?? null,
+      persona: agent?.persona ?? null,
+      guardrails: agent?.guardrails ?? null,
+      personaMode: (agent?.personaMode as 'override' | 'append') ?? 'override',
+      voiceMode: (agent?.voiceMode as 'override' | 'append') ?? 'override',
+      guardrailsMode: (agent?.guardrailsMode as 'override' | 'append') ?? 'override',
     },
   });
 
@@ -213,6 +254,47 @@ export function AgentForm({ mode, agent, providers, models, effectiveDefaults }:
   const currentOutputGuard = watch('outputGuardMode');
   const currentCitationGuard = watch('citationGuardMode');
   const currentVisibility = watch('visibility');
+  const currentProfileId = watch('profileId');
+  const currentPersona = watch('persona');
+  const currentGuardrails = watch('guardrails');
+  const currentVoice = watch('brandVoiceInstructions');
+  const currentPersonaMode = watch('personaMode');
+  const currentVoiceMode = watch('voiceMode');
+  const currentGuardrailsMode = watch('guardrailsMode');
+
+  // Resolve the live effective prompt for the preview card on the
+  // Instructions tab. Uses the same pure helper that the chat handler
+  // and workflow agent_call executor use, so what the operator sees in
+  // the preview is byte-identical to what the LLM will receive.
+  const selectedProfile = useMemo(
+    () => (currentProfileId ? (profiles?.find((p) => p.id === currentProfileId) ?? null) : null),
+    [profiles, currentProfileId]
+  );
+  const effectivePrompt = useMemo(
+    () =>
+      resolveEffectivePrompt(
+        {
+          systemInstructions: currentInstructions ?? '',
+          persona: currentPersona,
+          brandVoiceInstructions: currentVoice,
+          guardrails: currentGuardrails,
+          personaMode: currentPersonaMode,
+          voiceMode: currentVoiceMode,
+          guardrailsMode: currentGuardrailsMode,
+        },
+        selectedProfile
+      ),
+    [
+      currentInstructions,
+      currentPersona,
+      currentVoice,
+      currentGuardrails,
+      currentPersonaMode,
+      currentVoiceMode,
+      currentGuardrailsMode,
+      selectedProfile,
+    ]
+  );
 
   // Auto-generate slug from name in create mode until the user edits the slug.
   useEffect(() => {
@@ -532,6 +614,47 @@ export function AgentForm({ mode, agent, providers, models, effectiveDefaults }:
               <p className="text-destructive text-xs">{errors.description.message}</p>
             )}
           </div>
+
+          {profiles && profiles.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="profileId">
+                Inherit from profile{' '}
+                <FieldHelp title="Agent profile" contentClassName="w-96">
+                  <p>
+                    Profiles supply default <strong>persona</strong>, <strong>brand voice</strong>,
+                    and <strong>guardrails</strong>. Pick one to inherit them; leave the matching
+                    fields below blank to use the profile&apos;s text, populate them to override on
+                    this agent only.
+                  </p>
+                  <p className="mt-2">
+                    Use the{' '}
+                    <Link href="/admin/orchestration/agent-profiles" className="underline">
+                      Agent Profiles
+                    </Link>{' '}
+                    page to create, edit, and review what each profile defines.
+                  </p>
+                </FieldHelp>
+              </Label>
+              <Select
+                value={currentProfileId ?? '__none__'}
+                onValueChange={(v) =>
+                  setValue('profileId', v === '__none__' ? null : v, { shouldDirty: true })
+                }
+              >
+                <SelectTrigger id="profileId">
+                  <SelectValue placeholder="No profile" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No profile (agent-only)</SelectItem>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="flex items-center justify-between rounded-lg border p-4">
             <div className="space-y-0.5">
@@ -1212,16 +1335,61 @@ export function AgentForm({ mode, agent, providers, models, effectiveDefaults }:
         </TabsContent>
 
         {/* ================= TAB 3 — INSTRUCTIONS ================= */}
-        <TabsContent value="instructions" className="space-y-4 pt-4">
+        <TabsContent value="instructions" className="space-y-6 pt-4">
+          {/* Persona — inheritable */}
+          <div className="grid gap-2">
+            <Label htmlFor="persona">
+              Persona{' '}
+              <FieldHelp title="Who the agent is">
+                Identity, role, perspective, backstory. Goes into the LLM&apos;s system message
+                under a <code>[Persona]</code> header before the instructions below. Inheritable
+                from the selected profile — leave blank to inherit, or populate to override (or
+                append, see the checkbox).
+              </FieldHelp>
+            </Label>
+            {selectedProfile?.persona && !currentPersona && (
+              <p className="text-muted-foreground text-xs">
+                Inheriting from profile &ldquo;{selectedProfile.name}&rdquo;.
+              </p>
+            )}
+            <Textarea
+              id="persona"
+              rows={5}
+              placeholder={
+                selectedProfile?.persona
+                  ? `Profile says: ${selectedProfile.persona.slice(0, 80)}${selectedProfile.persona.length > 80 ? '…' : ''}`
+                  : 'You are Sky, a calm senior support specialist...'
+              }
+              {...register('persona', { setValueAs: (v: string) => (v === '' ? null : v) })}
+            />
+            {selectedProfile && currentPersona && (
+              <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                <Checkbox
+                  id="personaAppend"
+                  checked={currentPersonaMode === 'append'}
+                  onCheckedChange={(v) =>
+                    setValue('personaMode', v ? 'append' : 'override', { shouldDirty: true })
+                  }
+                />
+                <Label
+                  htmlFor="personaAppend"
+                  className="text-muted-foreground text-xs font-normal"
+                >
+                  Append to profile (otherwise this overrides the profile&apos;s persona)
+                </Label>
+              </div>
+            )}
+            {errors.persona && <p className="text-destructive text-xs">{errors.persona.message}</p>}
+          </div>
+
+          {/* System instructions — never inherited */}
           <div className="grid gap-2">
             <Label htmlFor="systemInstructions">
               System instructions{' '}
-              <FieldHelp title="The persona and task">
-                The instructions the AI reads before every conversation — its personality, what it
-                should and shouldn&apos;t do, and any formatting rules. Think of it as a job
-                description the model follows on every reply. Every time you save changes here, a
-                timestamped copy is kept in the version history below so you can compare or roll
-                back.
+              <FieldHelp title="What the agent does">
+                The task description — what this agent is for, what it should and shouldn&apos;t do,
+                formatting rules. Always agent-specific, never inherited from a profile. Every save
+                snapshots the previous value to the version history below for compare and rollback.
               </FieldHelp>
             </Label>
             <Textarea
@@ -1242,28 +1410,102 @@ export function AgentForm({ mode, agent, providers, models, effectiveDefaults }:
             </div>
           </div>
 
+          {/* Guardrails — inheritable */}
           <div className="grid gap-2">
-            <Label htmlFor="brandVoiceInstructions">
-              Brand voice instructions{' '}
-              <FieldHelp title="Tone and style rules">
-                Additional instructions appended to the system prompt that define the agent&apos;s
-                tone, vocabulary, and style. For example: &ldquo;Use a friendly, professional tone.
-                Avoid jargon. Address the user by first name.&rdquo; Leave blank if no specific
-                brand voice is needed.
+            <Label htmlFor="guardrails">
+              Guardrails{' '}
+              <FieldHelp title="What the agent must not do">
+                Refusals, escalation triggers, topic boundaries. Goes into the system message under
+                a <code>[Guardrails]</code> header after the instructions. Inheritable from the
+                selected profile. For hard enforcement use the workflow guard step — this is
+                in-prompt steering.
               </FieldHelp>
             </Label>
+            {selectedProfile?.guardrails && !currentGuardrails && (
+              <p className="text-muted-foreground text-xs">
+                Inheriting from profile &ldquo;{selectedProfile.name}&rdquo;.
+              </p>
+            )}
+            <Textarea
+              id="guardrails"
+              rows={4}
+              placeholder={
+                selectedProfile?.guardrails
+                  ? `Profile says: ${selectedProfile.guardrails.slice(0, 80)}${selectedProfile.guardrails.length > 80 ? '…' : ''}`
+                  : 'Never give medical or legal advice...'
+              }
+              {...register('guardrails', { setValueAs: (v: string) => (v === '' ? null : v) })}
+            />
+            {selectedProfile && currentGuardrails && (
+              <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                <Checkbox
+                  id="guardrailsAppend"
+                  checked={currentGuardrailsMode === 'append'}
+                  onCheckedChange={(v) =>
+                    setValue('guardrailsMode', v ? 'append' : 'override', { shouldDirty: true })
+                  }
+                />
+                <Label
+                  htmlFor="guardrailsAppend"
+                  className="text-muted-foreground text-xs font-normal"
+                >
+                  Append to profile (otherwise this overrides the profile&apos;s guardrails)
+                </Label>
+              </div>
+            )}
+            {errors.guardrails && (
+              <p className="text-destructive text-xs">{errors.guardrails.message}</p>
+            )}
+          </div>
+
+          {/* Brand voice — inheritable */}
+          <div className="grid gap-2">
+            <Label htmlFor="brandVoiceInstructions">
+              Brand voice{' '}
+              <FieldHelp title="How the agent should sound">
+                Tone, register, style — short rules. Goes into the system message under a{' '}
+                <code>[Brand Voice]</code> header as the final section. Inheritable from the
+                selected profile.
+              </FieldHelp>
+            </Label>
+            {selectedProfile?.brandVoiceInstructions && !currentVoice && (
+              <p className="text-muted-foreground text-xs">
+                Inheriting from profile &ldquo;{selectedProfile.name}&rdquo;.
+              </p>
+            )}
             <Textarea
               id="brandVoiceInstructions"
               rows={4}
-              placeholder="e.g. Use a friendly, professional tone. Avoid jargon."
+              placeholder={
+                selectedProfile?.brandVoiceInstructions
+                  ? `Profile says: ${selectedProfile.brandVoiceInstructions.slice(0, 80)}${selectedProfile.brandVoiceInstructions.length > 80 ? '…' : ''}`
+                  : 'e.g. Use a friendly, professional tone. Avoid jargon.'
+              }
               {...register('brandVoiceInstructions', {
                 setValueAs: (v: string) => (v === '' ? null : v),
               })}
             />
+            {selectedProfile && currentVoice && (
+              <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                <Checkbox
+                  id="voiceAppend"
+                  checked={currentVoiceMode === 'append'}
+                  onCheckedChange={(v) =>
+                    setValue('voiceMode', v ? 'append' : 'override', { shouldDirty: true })
+                  }
+                />
+                <Label htmlFor="voiceAppend" className="text-muted-foreground text-xs font-normal">
+                  Append to profile (otherwise this overrides the profile&apos;s brand voice)
+                </Label>
+              </div>
+            )}
             {errors.brandVoiceInstructions && (
               <p className="text-destructive text-xs">{errors.brandVoiceInstructions.message}</p>
             )}
           </div>
+
+          {/* Effective prompt preview — live merge of agent + profile */}
+          <EffectivePromptPreview resolved={effectivePrompt} profile={selectedProfile} />
 
           <KnowledgeAccessSection
             mode={watch('knowledgeAccessMode')}
@@ -1452,5 +1694,77 @@ export function AgentForm({ mode, agent, providers, models, effectiveDefaults }:
         </TabsContent>
       </Tabs>
     </form>
+  );
+}
+
+/**
+ * Live preview of the merged system prompt the LLM will actually receive.
+ * Composes via the same helper that the chat handler and workflow
+ * agent_call executor use, so what shows here is what the model gets.
+ */
+function EffectivePromptPreview({
+  resolved,
+  profile,
+}: {
+  resolved: ReturnType<typeof resolveEffectivePrompt>;
+  profile: AgentProfileSummary | null;
+}) {
+  const composed = composeSystemPromptString(resolved);
+  const sources = resolved.sources;
+
+  function sourceLabel(source: typeof sources.persona): { label: string; tone: string } {
+    switch (source) {
+      case 'profile':
+        return { label: `from profile "${profile?.name ?? ''}"`, tone: 'text-muted-foreground' };
+      case 'agent':
+        return { label: 'override', tone: 'text-amber-700 dark:text-amber-400' };
+      case 'profile+agent':
+        return {
+          label: 'profile + agent additions',
+          tone: 'text-blue-700 dark:text-blue-400',
+        };
+      case 'none':
+      default:
+        return { label: 'unset', tone: 'text-muted-foreground' };
+    }
+  }
+
+  return (
+    <details className="bg-muted/20 rounded-md border">
+      <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+        Effective prompt preview{' '}
+        <span className="text-muted-foreground font-normal">— what the LLM actually sees</span>
+      </summary>
+      <div className="space-y-3 border-t px-4 py-3 text-sm">
+        {/* Per-section source labels */}
+        <div className="grid grid-cols-2 gap-1 text-xs sm:grid-cols-4">
+          {(['persona', 'systemInstructions', 'guardrails', 'brandVoiceInstructions'] as const).map(
+            (key) => {
+              const label =
+                key === 'systemInstructions'
+                  ? 'Instructions'
+                  : key === 'brandVoiceInstructions'
+                    ? 'Brand voice'
+                    : key === 'persona'
+                      ? 'Persona'
+                      : 'Guardrails';
+              const src = key === 'systemInstructions' ? 'agent' : sources[key];
+              const { label: sl, tone } = sourceLabel(src);
+              return (
+                <div key={key}>
+                  <div className="text-muted-foreground font-medium">{label}</div>
+                  <div className={tone}>{sl}</div>
+                </div>
+              );
+            }
+          )}
+        </div>
+
+        {/* Composed text */}
+        <pre className="bg-background max-h-96 overflow-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap">
+          {composed || '(empty)'}
+        </pre>
+      </div>
+    </details>
   );
 }

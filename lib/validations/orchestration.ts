@@ -299,6 +299,22 @@ export const updateAgentSchema = z.object({
     .nullable()
     .optional(),
 
+  // Agent-profile inheritance — see lib/orchestration/agents/resolve-effective-prompt.ts.
+  profileId: cuidSchema.nullable().optional(),
+  persona: z
+    .string()
+    .max(50000, 'Persona must be less than 50,000 characters')
+    .nullable()
+    .optional(),
+  guardrails: z
+    .string()
+    .max(10000, 'Guardrails must be less than 10,000 characters')
+    .nullable()
+    .optional(),
+  personaMode: z.enum(['override', 'append']).optional(),
+  voiceMode: z.enum(['override', 'append']).optional(),
+  guardrailsMode: z.enum(['override', 'append']).optional(),
+
   enableVoiceInput: z.boolean().optional(),
 
   enableImageInput: z.boolean().optional(),

@@ -152,6 +152,19 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
   if (body.enableVoiceInput !== undefined) data.enableVoiceInput = body.enableVoiceInput;
   if (body.enableImageInput !== undefined) data.enableImageInput = body.enableImageInput;
   if (body.enableDocumentInput !== undefined) data.enableDocumentInput = body.enableDocumentInput;
+  // Agent-profile inheritance fields.
+  if (body.persona !== undefined) data.persona = body.persona;
+  if (body.guardrails !== undefined) data.guardrails = body.guardrails;
+  if (body.personaMode !== undefined) data.personaMode = body.personaMode;
+  if (body.voiceMode !== undefined) data.voiceMode = body.voiceMode;
+  if (body.guardrailsMode !== undefined) data.guardrailsMode = body.guardrailsMode;
+  if (body.profileId !== undefined) {
+    // Use the relation form so null cleanly detaches the agent. Setting
+    // the scalar `profileId` directly works for non-null values but
+    // Prisma 7 prefers `disconnect` for clears.
+    data.profile =
+      body.profileId === null ? { disconnect: true } : { connect: { id: body.profileId } };
+  }
 
   // Audit: if systemInstructions actually changed, push the old value
   // onto the history column before writing the new one.
@@ -212,6 +225,16 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
     'enableVoiceInput',
     'enableImageInput',
     'enableDocumentInput',
+    'persona',
+    'guardrails',
+    'personaMode',
+    'voiceMode',
+    'guardrailsMode',
+    // profileId intentionally excluded from VERSIONED_FIELDS — `data` uses
+    // the Prisma relation form (`profile: { connect }` / `disconnect`), so
+    // the scalar key isn't in `data`. The profile linkage is a pointer
+    // rather than content; the inheritance change shows up implicitly
+    // through the persona/voice/guardrails effective values.
   ] as const;
 
   // Only treat a versioned field as "changed" if the new value actually

@@ -1,12 +1,27 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { AgentForm } from '@/components/admin/orchestration/agent-form';
+import { AgentForm, type AgentProfileSummary } from '@/components/admin/orchestration/agent-form';
+import { API } from '@/lib/api/endpoints';
+import { parseApiResponse, serverFetch } from '@/lib/api/server-fetch';
+import { logger } from '@/lib/logging';
 import {
   getAgentModels,
   getEffectiveAgentDefaults,
   getProviders,
 } from '@/lib/orchestration/prefetch-helpers';
+
+async function getAgentProfiles(): Promise<AgentProfileSummary[]> {
+  try {
+    const res = await serverFetch(`${API.ADMIN.ORCHESTRATION.AGENT_PROFILES}?page=1&limit=100`);
+    if (!res.ok) return [];
+    const body = await parseApiResponse<AgentProfileSummary[]>(res);
+    return body.success ? body.data : [];
+  } catch (err) {
+    logger.error('new agent page: profiles fetch failed', err);
+    return [];
+  }
+}
 
 export const metadata: Metadata = {
   title: 'New agent · AI Orchestration',
@@ -27,10 +42,11 @@ export const metadata: Metadata = {
  */
 
 export default async function NewAgentPage() {
-  const [providers, models, effectiveDefaults] = await Promise.all([
+  const [providers, models, effectiveDefaults, profiles] = await Promise.all([
     getProviders(),
     getAgentModels(),
     getEffectiveAgentDefaults({ provider: '', model: '' }),
+    getAgentProfiles(),
   ]);
 
   return (
@@ -52,6 +68,7 @@ export default async function NewAgentPage() {
         providers={providers}
         models={models}
         effectiveDefaults={effectiveDefaults}
+        profiles={profiles}
       />
     </div>
   );

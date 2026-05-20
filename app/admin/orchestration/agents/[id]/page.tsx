@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { AgentForm } from '@/components/admin/orchestration/agent-form';
+import { AgentForm, type AgentProfileSummary } from '@/components/admin/orchestration/agent-form';
 import {
   EvaluationTrendChart,
   type EvaluationTrendPoint,
@@ -57,6 +57,18 @@ async function getAgent(id: string): Promise<AiAgent | null> {
   }
 }
 
+async function getAgentProfiles(): Promise<AgentProfileSummary[]> {
+  try {
+    const res = await serverFetch(`${API.ADMIN.ORCHESTRATION.AGENT_PROFILES}?page=1&limit=100`);
+    if (!res.ok) return [];
+    const body = await parseApiResponse<AgentProfileSummary[]>(res);
+    return body.success ? body.data : [];
+  } catch (err) {
+    logger.error('edit agent page: profiles fetch failed', err);
+    return [];
+  }
+}
+
 async function getEvaluationTrend(id: string): Promise<EvaluationTrendPoint[]> {
   try {
     const res = await serverFetch(API.ADMIN.ORCHESTRATION.agentEvaluationTrend(id));
@@ -72,11 +84,12 @@ async function getEvaluationTrend(id: string): Promise<EvaluationTrendPoint[]> {
 
 export default async function EditAgentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [agent, providers, models, trend] = await Promise.all([
+  const [agent, providers, models, trend, profiles] = await Promise.all([
     getAgent(id),
     getProviders(),
     getAgentModels(),
     getEvaluationTrend(id),
+    getAgentProfiles(),
   ]);
 
   if (!agent) notFound();
@@ -108,6 +121,7 @@ export default async function EditAgentPage({ params }: { params: Promise<{ id: 
         providers={providers}
         models={models}
         effectiveDefaults={effectiveDefaults}
+        profiles={profiles}
       />
     </div>
   );
