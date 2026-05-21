@@ -84,6 +84,16 @@ const SAMPLE_ESTIMATE = {
   sampleSize: 7,
   modelUsed: 'claude-sonnet-4-6',
   judgeModelUsed: null,
+  modelMix: [
+    {
+      modelId: 'claude-sonnet-4-6',
+      role: 'work' as const,
+      inputTokens: 12_000,
+      outputTokens: 4_000,
+      costUsd: 0.42,
+      pricingKnown: true,
+    },
+  ],
   workflowHasSupervisor: false,
   llmStepCount: 5,
   notes: 'Calibrated from 7 past runs.',

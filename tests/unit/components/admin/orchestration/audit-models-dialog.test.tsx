@@ -1010,6 +1010,18 @@ describe('AuditModelsDialog', () => {
         sampleSize: 7,
         modelUsed: 'claude-sonnet-4-6',
         judgeModelUsed: null,
+        modelMix: [
+          {
+            modelId: 'claude-sonnet-4-6',
+            role: 'work',
+            inputTokens: 12_000,
+            outputTokens: 4_000,
+            costUsd: 0.42,
+            pricingKnown: true,
+          },
+        ],
+        workflowHasSupervisor: false,
+        llmStepCount: 5,
         notes: 'Calibrated from 7 past runs.',
       });
 
@@ -1038,6 +1050,26 @@ describe('AuditModelsDialog', () => {
         sampleSize: 0,
         modelUsed: 'claude-sonnet-4-6',
         judgeModelUsed: 'claude-sonnet-4-6',
+        modelMix: [
+          {
+            modelId: 'claude-sonnet-4-6',
+            role: 'work',
+            inputTokens: 24_000,
+            outputTokens: 6_000,
+            costUsd: 0.4,
+            pricingKnown: true,
+          },
+          {
+            modelId: 'claude-sonnet-4-6',
+            role: 'supervisor',
+            inputTokens: 18_000,
+            outputTokens: 2_500,
+            costUsd: 0.1,
+            pricingKnown: true,
+          },
+        ],
+        workflowHasSupervisor: true,
+        llmStepCount: 5,
         notes: 'Rough heuristic.',
       });
       const { apiClient } = await import('@/lib/api/client');

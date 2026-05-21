@@ -878,6 +878,58 @@ describe('registerModels', () => {
     expect(registry.getModel('gpt-4o-mini')?.name).toBe('GPT-4o Mini (Operator-curated)');
   });
 
+  it('preserves existing pricing when the incoming entry has zero cost', () => {
+    // AiProviderModel.costPerMillionTokens is nullable and many matrix
+    // rows leave it empty; dbModelToModelInfo coerces null → 0. If
+    // registerModels naively overrode the registry, that would clobber
+    // the OpenRouter / fallback pricing and zero out every cost
+    // estimate downstream (audit dialog showed $0.00 in dev because
+    // of this).
+    const before = registry.getModel('gpt-4o-mini');
+    expect(before?.inputCostPerMillion).toBeGreaterThan(0);
+    expect(before?.outputCostPerMillion).toBeGreaterThan(0);
+
+    registry.registerModels([
+      {
+        id: 'gpt-4o-mini',
+        name: 'GPT-4o Mini',
+        provider: 'openai',
+        tier: 'budget',
+        inputCostPerMillion: 0,
+        outputCostPerMillion: 0,
+        maxContext: 0,
+        supportsTools: true,
+      },
+    ]);
+
+    const after = registry.getModel('gpt-4o-mini');
+    expect(after?.inputCostPerMillion).toBe(before?.inputCostPerMillion);
+    expect(after?.outputCostPerMillion).toBe(before?.outputCostPerMillion);
+    expect(after?.maxContext).toBe(before?.maxContext);
+  });
+
+  it('does override pricing when the incoming entry has a non-zero cost', () => {
+    // Operators who genuinely want to override pricing for a local /
+    // custom model can still do so — only zero is treated as "unfilled".
+    registry.registerModels([
+      {
+        id: 'gpt-4o-mini',
+        name: 'GPT-4o Mini',
+        provider: 'openai',
+        tier: 'budget',
+        inputCostPerMillion: 1.23,
+        outputCostPerMillion: 4.56,
+        maxContext: 64_000,
+        supportsTools: true,
+      },
+    ]);
+
+    const after = registry.getModel('gpt-4o-mini');
+    expect(after?.inputCostPerMillion).toBe(1.23);
+    expect(after?.outputCostPerMillion).toBe(4.56);
+    expect(after?.maxContext).toBe(64_000);
+  });
+
   it('no-op when called with an empty array', () => {
     const before = registry.getAvailableModels().length;
     registry.registerModels([]);

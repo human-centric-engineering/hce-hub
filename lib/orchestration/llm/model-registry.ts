@@ -168,14 +168,34 @@ export async function refreshFromProvider(provider: LlmProvider): Promise<ModelI
  * barrel — to depend on the Prisma client (and transitively on `pg`,
  * `dns`, etc., which break the browser bundle).
  *
- * Last-write-wins on key conflict: passed-in entries override whatever
- * the fallback map or OpenRouter feed produced. That matches the admin
- * Model Matrix being the operator-authoritative source.
+ * Last-write-wins on key conflict — EXCEPT pricing + context length,
+ * which fall back to the existing entry when the incoming row carries
+ * zero. The matrix is authoritative for capabilities / tier /
+ * availability, but `AiProviderModel.costPerMillionTokens` is nullable
+ * (and unfilled rows coerce to 0 via `dbModelToModelInfo`); clobbering
+ * a known OpenRouter price with 0 would silently zero out every
+ * downstream cost estimate. Operators who genuinely want to override
+ * pricing for a local / custom model can still do so by setting a
+ * non-zero value in the matrix.
  */
 export function registerModels(infos: ModelInfo[]): void {
   if (infos.length === 0) return;
   const merged = new Map(state.models);
-  for (const info of infos) merged.set(info.id, info);
+  for (const info of infos) {
+    const existing = merged.get(info.id);
+    if (!existing) {
+      merged.set(info.id, info);
+      continue;
+    }
+    merged.set(info.id, {
+      ...info,
+      inputCostPerMillion:
+        info.inputCostPerMillion > 0 ? info.inputCostPerMillion : existing.inputCostPerMillion,
+      outputCostPerMillion:
+        info.outputCostPerMillion > 0 ? info.outputCostPerMillion : existing.outputCostPerMillion,
+      maxContext: info.maxContext > 0 ? info.maxContext : existing.maxContext,
+    });
+  }
   state = { ...state, models: merged };
 }
 

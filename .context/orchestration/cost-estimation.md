@@ -25,6 +25,22 @@ The estimator picks one of two modes based on data availability for the specific
 
 This is the load-bearing trick: past run token _usage_ is preserved, but **dollar amounts are recomputed at the workflow's currently-configured chat default and judge model**. So a past run on Sonnet still informs a future run on Haiku — token shape carries over, pricing doesn't. This means you can switch the chat default model without invalidating accumulated calibration history.
 
+### Registry warmup
+
+`estimateWorkflowCost` calls `refreshFromOpenRouter()` and `hydrateFromDb()` (via `Promise.allSettled`) before pricing. Both are heavily cached (24h / 60s TTLs) so the cost is paid once per process — the cold first-call path takes ~500ms-2s, every subsequent estimate is instant. Without the warmup, a cost-estimate served before any other code path (the chat path, the provider-models endpoint, a workflow execute) triggered the lazy OpenRouter refresh sees only the small static fallback catalogue, and any operator-curated model id prices to $0. The `allSettled` guard means a transient OR outage or DB blip degrades the estimate to whatever the registry already had instead of failing the dialog.
+
+### Per-step model resolution
+
+LLM-producing steps don't all run on the chat default — a step can pin its own model via `config.modelOverride`, and `agent_call` steps inherit the bound model on the referenced agent. The estimator walks the published workflow definition and resolves each step's model under the chain:
+
+1. `step.config.modelOverride` (string) → use that
+2. `agent_call` → look up the agent's `model` via `AiAgent.findMany({ where: { slug: { in: ... } } })`
+3. Fallback to the chat default
+
+Tokens are then allocated to each model's bucket (one bucket per distinct model id), the per-item bonus is distributed pro-rata by the model's share of the step-multiplier budget, and each bucket is priced separately at its model's current rate. The supervisor step uses its own `modelOverride` (if set) → `JUDGE_MODEL` env var → chat default chain.
+
+The response exposes this as `modelMix: WorkflowCostEstimateModel[]` — one entry per (model, role) pair with `inputTokens`, `outputTokens`, and `costUsd`. UIs surface this in a FieldHelp breakdown so an operator can see exactly which model is driving the estimate; that matters when a workflow pins one expensive step (e.g. validation on gpt-5 inside a default-Haiku pipeline).
+
 ### Heuristic shape detection
 
 The heuristic auto-derives from the workflow's published definition:
@@ -68,17 +84,27 @@ GET /api/v1/admin/orchestration/workflows/:id/cost-estimate
 **Response:**
 
 ```ts
+interface WorkflowCostEstimateModel {
+  modelId: string;
+  role: 'work' | 'supervisor';
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  pricingKnown: boolean; // false when getModel(modelId) returns undefined or has zero pricing — UI should render "pricing unknown" instead of $0
+}
+
 interface WorkflowCostEstimate {
   midUsd: number;
   lowUsd: number;
   highUsd: number;
   basedOn: 'empirical' | 'heuristic';
   sampleSize: number;
-  modelUsed: string; // chat default — prices non-supervisor steps
-  judgeModelUsed: string | null; // judge model — prices the supervisor step (null when supervisor: false or workflow has no supervisor)
-  workflowHasSupervisor: boolean; // does the workflow include a supervisor step at all
-  llmStepCount: number; // count of LLM-producing steps in the published definition
-  notes: string; // short explanation rendered in trigger-UI popovers
+  modelUsed: string; // chat default — kept for backward compat; modelMix is authoritative
+  judgeModelUsed: string | null; // judge model used for the supervisor step (null when supervisor inactive)
+  modelMix: WorkflowCostEstimateModel[]; // per-(model, role) breakdown — includes modelOverride + agent-bound models
+  workflowHasSupervisor: boolean;
+  llmStepCount: number;
+  notes: string;
 }
 ```
 
@@ -134,7 +160,7 @@ To add a cost estimate to a workflow trigger dialog:
    }
    ```
 
-4. **Always show the model(s)** in the FieldHelp popover — `estimate.modelUsed` is the chat-default rate the bulk of the workflow is priced against. When `judgeModelUsed` is non-null, the supervisor segment is priced at a different (potentially stronger) rate; surfacing both lets the operator reason about the breakdown.
+4. **Show the model mix** in the FieldHelp popover — iterate `estimate.modelMix` and render one row per entry (`<code>{m.modelId}</code> — {formatUsd(m.costUsd)}`, suffix with `(supervisor)` when `m.role === 'supervisor'`). When `m.pricingKnown === false`, render "pricing unknown" (in an amber/warning colour) instead of `$0.00` and add a footnote pointing at the matrix row that needs `costPerMillionTokens` filled in — silent $0 reads as "free" to operators. For workflows that pin one step to an expensive model (or use agent_call into a frontier agent), the breakdown is the only way the operator sees that contribution. The legacy `estimate.modelUsed` field still resolves to the chat default and is fine to mention as a sentence under the list ("Other steps fall back to the chat default `<modelUsed>`.").
 5. **Treat the number as planning-grade.** Don't gate the action button on it. The estimator returns silently if the past-runs query fails — the dialog should still let the operator proceed.
 
 ## Reference implementation

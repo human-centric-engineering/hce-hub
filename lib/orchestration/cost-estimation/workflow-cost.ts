@@ -39,7 +39,8 @@
 
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
-import { getModel } from '@/lib/orchestration/llm/model-registry';
+import { getModel, refreshFromOpenRouter } from '@/lib/orchestration/llm/model-registry';
+import { hydrateFromDb as hydrateModelRegistryFromDb } from '@/lib/orchestration/llm/model-registry-db-hydrate';
 import { getDefaultModelForTaskOrNull } from '@/lib/orchestration/llm/settings-resolver';
 import { JUDGE_MODEL } from '@/lib/orchestration/evaluations/judge-model';
 import { workflowDefinitionSchema } from '@/lib/validations/orchestration';
@@ -114,13 +115,39 @@ const EMPIRICAL_RANGE_MAX = 0.6;
 const HEURISTIC_LOW_MULT = 0.5;
 const HEURISTIC_HIGH_MULT = 2.0;
 
+export interface WorkflowCostEstimateModel {
+  modelId: string;
+  /** 'work' = non-supervisor LLM steps; 'supervisor' = supervisor step. */
+  role: 'work' | 'supervisor';
+  /** Tokens attributed to this model (after empirical calibration if applicable). */
+  inputTokens: number;
+  outputTokens: number;
+  /** USD cost contribution at the current model rates. */
+  costUsd: number;
+  /**
+   * Whether the registry has pricing data for `modelId`. False when
+   * `getModel(modelId)` returns undefined — typically a model id that
+   * isn't in the static fallback, isn't in the OpenRouter catalogue,
+   * and has no matrix row supplying `costPerMillionTokens`. The cost
+   * contribution is $0 in that case; the UI should surface it as
+   * "pricing unknown" so the operator knows the overall estimate is
+   * missing a slice rather than reading $0 as "free".
+   */
+  pricingKnown: boolean;
+}
+
 export interface WorkflowCostEstimate {
   midUsd: number;
   lowUsd: number;
   highUsd: number;
   basedOn: 'empirical' | 'heuristic';
   sampleSize: number;
-  /** Chat-default model used to price non-supervisor LLM steps. */
+  /**
+   * Chat-default model used to price non-supervisor LLM steps that
+   * don't carry a `modelOverride` and aren't `agent_call`s into agents
+   * with their own bound model. Kept on the response for backward
+   * compatibility — `modelMix` is the authoritative per-step breakdown.
+   */
   modelUsed: string;
   /**
    * Judge model used to price the supervisor step.
@@ -129,6 +156,14 @@ export interface WorkflowCostEstimate {
    * supervisor toggle.
    */
   judgeModelUsed: string | null;
+  /**
+   * Per-model token + cost breakdown. Captures step-level
+   * `modelOverride` and the agent-bound model used by `agent_call`
+   * steps — so an audit workflow that pins one step to gpt-5 prices
+   * that step at gpt-5 even when the chat default is gpt-4o-mini.
+   * Empty array when the workflow has no LLM steps at all.
+   */
+  modelMix: WorkflowCostEstimateModel[];
   /** Whether the workflow has a supervisor step at all. */
   workflowHasSupervisor: boolean;
   /** Count of LLM-producing steps in the workflow (excluding supervisor). */
@@ -147,16 +182,42 @@ interface PastRunSummary {
   supOutputTokens: number;
 }
 
+/** Per-step model + LLM-call multiplier — drives per-model token allocation. */
+interface StepModelEntry {
+  stepId: string;
+  type: string;
+  modelId: string;
+  /** STEP_LLM_MULTIPLIERS lookup; 1 for plain LLM steps. */
+  multiplier: number;
+}
+
 interface WorkflowShape {
   llmStepCount: number;
   hasSupervisor: boolean;
   /** Step ids that have type 'supervisor' — used to split past run costs. */
   supervisorStepIds: ReadonlySet<string>;
+  /**
+   * One entry per non-supervisor LLM-producing step, in definition order,
+   * with the model that step will use at runtime (modelOverride →
+   * agent_call agent.model → chat default).
+   */
+  workSteps: StepModelEntry[];
+  /** Resolved model for the (single) supervisor step, if any. */
+  supervisorModelId: string | null;
+}
+
+interface PerModelTokens {
+  inputTokens: number;
+  outputTokens: number;
 }
 
 interface HeuristicTokens {
+  /** Per-model token allocation for non-supervisor LLM steps. */
+  workByModel: Map<string, PerModelTokens>;
+  /** Aggregate tokens (sum across models) — used by the empirical ratio. */
   workInputTokens: number;
   workOutputTokens: number;
+  /** Supervisor lives on a single model (judge), so a plain pair is enough. */
   supInputTokens: number;
   supOutputTokens: number;
 }
@@ -164,18 +225,110 @@ interface HeuristicTokens {
 function predictHeuristic(
   shape: WorkflowShape,
   itemCount: number,
-  supervisor: boolean
+  supervisor: boolean,
+  chatModelId: string
 ): HeuristicTokens {
-  const llmSteps = Math.max(shape.llmStepCount, 1); // at least one step
+  const workByModel = new Map<string, PerModelTokens>();
+
+  // Effective step count for the per-item bonus + the "at least one
+  // step" floor. Workflows whose definition has no LLM-producing steps
+  // (e.g. all non-LLM rag/tool pipelines) still produce a tiny heuristic
+  // so the UI doesn't render "$0.00" as if the run is free; attribute
+  // the floor to the chat default.
+  const effectiveSteps = shape.workSteps.length > 0 ? shape.workSteps : null;
+  const totalMultiplier = effectiveSteps
+    ? effectiveSteps.reduce((sum, s) => sum + s.multiplier, 0)
+    : 1;
+
+  if (effectiveSteps) {
+    for (const step of effectiveSteps) {
+      bumpModel(
+        workByModel,
+        step.modelId,
+        HEURISTIC.INPUT_TOKENS_PER_LLM_STEP * step.multiplier,
+        HEURISTIC.OUTPUT_TOKENS_PER_LLM_STEP * step.multiplier
+      );
+    }
+  } else {
+    bumpModel(
+      workByModel,
+      chatModelId,
+      HEURISTIC.INPUT_TOKENS_PER_LLM_STEP,
+      HEURISTIC.OUTPUT_TOKENS_PER_LLM_STEP
+    );
+  }
+
+  // Per-item scaling — distribute proportionally to each model's share
+  // of the step-multiplier budget. Workflows whose itemCount scales
+  // linearly across all steps (the common case, e.g. the audit's
+  // "process N models") share the bump correctly; workflows whose
+  // per-item work concentrates on one step still get a reasonable
+  // approximation under this model.
+  if (itemCount > 0 && totalMultiplier > 0) {
+    for (const [modelId, tokens] of workByModel) {
+      const share = modelMultiplierShare(modelId, effectiveSteps, totalMultiplier);
+      tokens.inputTokens += HEURISTIC.PER_ITEM_INPUT_TOKENS * itemCount * share;
+      tokens.outputTokens += HEURISTIC.PER_ITEM_OUTPUT_TOKENS * itemCount * share;
+    }
+  }
+
+  let workInputTokens = 0;
+  let workOutputTokens = 0;
+  for (const { inputTokens, outputTokens } of workByModel.values()) {
+    workInputTokens += inputTokens;
+    workOutputTokens += outputTokens;
+  }
+
   return {
-    workInputTokens:
-      HEURISTIC.INPUT_TOKENS_PER_LLM_STEP * llmSteps + HEURISTIC.PER_ITEM_INPUT_TOKENS * itemCount,
-    workOutputTokens:
-      HEURISTIC.OUTPUT_TOKENS_PER_LLM_STEP * llmSteps +
-      HEURISTIC.PER_ITEM_OUTPUT_TOKENS * itemCount,
+    workByModel,
+    workInputTokens,
+    workOutputTokens,
     supInputTokens: supervisor && shape.hasSupervisor ? HEURISTIC.SUPERVISOR_INPUT_TOKENS : 0,
     supOutputTokens: supervisor && shape.hasSupervisor ? HEURISTIC.SUPERVISOR_OUTPUT_TOKENS : 0,
   };
+}
+
+function bumpModel(
+  bucket: Map<string, PerModelTokens>,
+  modelId: string,
+  input: number,
+  output: number
+): void {
+  const cur = bucket.get(modelId);
+  if (cur) {
+    cur.inputTokens += input;
+    cur.outputTokens += output;
+  } else {
+    bucket.set(modelId, { inputTokens: input, outputTokens: output });
+  }
+}
+
+function modelMultiplierShare(
+  modelId: string,
+  steps: StepModelEntry[] | null,
+  totalMultiplier: number
+): number {
+  if (!steps || totalMultiplier === 0) return 1;
+  let mult = 0;
+  for (const step of steps) if (step.modelId === modelId) mult += step.multiplier;
+  return mult / totalMultiplier;
+}
+
+/**
+ * Scale a per-model token allocation in place. Returns the same map
+ * (mutated) for caller convenience. `ratio === 1` is a no-op aside
+ * from the allocation.
+ */
+function scalePerModel(
+  bucket: Map<string, PerModelTokens>,
+  ratio: number
+): Map<string, PerModelTokens> {
+  if (ratio === 1) return bucket;
+  for (const tokens of bucket.values()) {
+    tokens.inputTokens *= ratio;
+    tokens.outputTokens *= ratio;
+  }
+  return bucket;
 }
 
 function priceTokens(modelId: string, inputTokens: number, outputTokens: number): number {
@@ -227,14 +380,28 @@ export async function estimateWorkflowCost(
 ): Promise<WorkflowCostEstimate> {
   const { workflowId, itemCount = 0, supervisor = false } = input;
 
+  // Warm the in-memory model registry before pricing. Without this,
+  // a cost-estimate served before any other code path triggered the
+  // lazy OpenRouter refresh sees an empty registry beyond the small
+  // static fallback, and any operator-curated id (e.g. `gpt-5`) prices
+  // to $0. Both helpers are heavily cached (24h / 60s TTLs), so the
+  // cold path pays the network/DB cost once and every subsequent call
+  // is a no-op. `allSettled` so a transient OR outage doesn't block
+  // the DB hydration (and vice versa).
+  await Promise.allSettled([refreshFromOpenRouter(), hydrateModelRegistryFromDb()]);
+
   const chatModelId = (await getDefaultModelForTaskOrNull('chat')) ?? FALLBACK_MODEL_ID;
 
   // Workflow shape — drives the heuristic + supervisor detection.
-  const shape = await loadWorkflowShape(workflowId);
+  // Resolves each LLM-producing step's model via the lookup chain
+  // step.config.modelOverride → agent_call agent.model → chat default.
+  const shape = await loadWorkflowShape(workflowId, chatModelId);
   const supervisorActive = supervisor && shape.hasSupervisor;
-  const judgeModelId = supervisorActive ? (JUDGE_MODEL ?? chatModelId) : null;
+  const judgeModelId = supervisorActive
+    ? (shape.supervisorModelId ?? JUDGE_MODEL ?? chatModelId)
+    : null;
 
-  const heuristic = predictHeuristic(shape, itemCount, supervisor);
+  const heuristic = predictHeuristic(shape, itemCount, supervisor, chatModelId);
 
   let pastRuns: PastRunSummary[] = [];
   try {
@@ -283,11 +450,15 @@ function buildEmpiricalEstimate(params: {
   const { shape, heuristic, matchingRuns, chatModelId, judgeModelId } = params;
 
   // Per-run ratio between actual and heuristic prediction. The ratio
-  // captures prompt-evolution and tokeniser drift in one number.
+  // captures prompt-evolution and tokeniser drift in one number, then
+  // gets applied uniformly across all per-model token buckets. Past
+  // runs whose model mix differed from the current definition still
+  // inform shape drift but don't shift the per-model attribution —
+  // that's read from the *current* workflow definition.
   const workRatios: number[] = [];
   const supRatios: number[] = [];
   for (const run of matchingRuns) {
-    const pred = predictHeuristic(shape, run.itemCount, run.supervisor);
+    const pred = predictHeuristic(shape, run.itemCount, run.supervisor, chatModelId);
     const actualWork = run.workInputTokens + run.workOutputTokens;
     const predWork = pred.workInputTokens + pred.workOutputTokens;
     if (predWork > 0 && actualWork > 0) workRatios.push(actualWork / predWork);
@@ -303,14 +474,16 @@ function buildEmpiricalEstimate(params: {
   const workRatio = workRatios.length > 0 ? median(workRatios) : 1;
   const supRatio = supRatios.length > 0 ? median(supRatios) : 1;
 
-  const scaledWorkInput = heuristic.workInputTokens * workRatio;
-  const scaledWorkOutput = heuristic.workOutputTokens * workRatio;
+  const scaledWork = scalePerModel(cloneTokenMap(heuristic.workByModel), workRatio);
   const scaledSupInput = heuristic.supInputTokens * supRatio;
   const scaledSupOutput = heuristic.supOutputTokens * supRatio;
 
-  const midUsd =
-    priceTokens(chatModelId, scaledWorkInput, scaledWorkOutput) +
-    (judgeModelId ? priceTokens(judgeModelId, scaledSupInput, scaledSupOutput) : 0);
+  const { midUsd, modelMix } = priceModelMix({
+    workByModel: scaledWork,
+    judgeModelId,
+    supInputTokens: scaledSupInput,
+    supOutputTokens: scaledSupOutput,
+  });
 
   const rawSpread = relativeMad(workRatios, workRatio);
   const spread = Math.max(EMPIRICAL_RANGE_MIN, Math.min(rawSpread, EMPIRICAL_RANGE_MAX));
@@ -323,11 +496,12 @@ function buildEmpiricalEstimate(params: {
     sampleSize: matchingRuns.length,
     modelUsed: chatModelId,
     judgeModelUsed: judgeModelId,
+    modelMix,
     workflowHasSupervisor: shape.hasSupervisor,
     llmStepCount: shape.llmStepCount,
     notes: `Calibrated from ${matchingRuns.length} past run${
       matchingRuns.length === 1 ? '' : 's'
-    } — token usage repriced at current model rates.`,
+    } — token usage repriced at current per-model rates.`,
   };
 }
 
@@ -340,11 +514,12 @@ function buildHeuristicEstimate(params: {
 }): WorkflowCostEstimate {
   const { shape, heuristic, chatModelId, judgeModelId, sampleSize } = params;
 
-  const midUsd =
-    priceTokens(chatModelId, heuristic.workInputTokens, heuristic.workOutputTokens) +
-    (judgeModelId
-      ? priceTokens(judgeModelId, heuristic.supInputTokens, heuristic.supOutputTokens)
-      : 0);
+  const { midUsd, modelMix } = priceModelMix({
+    workByModel: cloneTokenMap(heuristic.workByModel),
+    judgeModelId,
+    supInputTokens: heuristic.supInputTokens,
+    supOutputTokens: heuristic.supOutputTokens,
+  });
 
   return {
     midUsd,
@@ -354,6 +529,7 @@ function buildHeuristicEstimate(params: {
     sampleSize,
     modelUsed: chatModelId,
     judgeModelUsed: judgeModelId,
+    modelMix,
     workflowHasSupervisor: shape.hasSupervisor,
     llmStepCount: shape.llmStepCount,
     notes:
@@ -368,6 +544,74 @@ function buildHeuristicEstimate(params: {
 }
 
 /**
+ * Price each model's token allocation independently and assemble the
+ * `modelMix` array. A model that resolves to a registry entry with
+ * zero pricing (unknown id, free-tier local model) contributes $0 but
+ * still appears in the mix so the operator can see *which* model the
+ * estimator considered — surfacing the unknown explicitly beats
+ * silently dropping the row.
+ */
+function priceModelMix(params: {
+  workByModel: Map<string, PerModelTokens>;
+  judgeModelId: string | null;
+  supInputTokens: number;
+  supOutputTokens: number;
+}): { midUsd: number; modelMix: WorkflowCostEstimateModel[] } {
+  const { workByModel, judgeModelId, supInputTokens, supOutputTokens } = params;
+  const modelMix: WorkflowCostEstimateModel[] = [];
+  let midUsd = 0;
+
+  for (const [modelId, tokens] of workByModel) {
+    const pricingKnown = isModelPriced(modelId);
+    const cost = priceTokens(modelId, tokens.inputTokens, tokens.outputTokens);
+    midUsd += cost;
+    modelMix.push({
+      modelId,
+      role: 'work',
+      inputTokens: tokens.inputTokens,
+      outputTokens: tokens.outputTokens,
+      costUsd: cost,
+      pricingKnown,
+    });
+  }
+
+  if (judgeModelId && (supInputTokens > 0 || supOutputTokens > 0)) {
+    const pricingKnown = isModelPriced(judgeModelId);
+    const cost = priceTokens(judgeModelId, supInputTokens, supOutputTokens);
+    midUsd += cost;
+    modelMix.push({
+      modelId: judgeModelId,
+      role: 'supervisor',
+      inputTokens: supInputTokens,
+      outputTokens: supOutputTokens,
+      costUsd: cost,
+      pricingKnown,
+    });
+  }
+
+  return { midUsd, modelMix };
+}
+
+/**
+ * A model is "priced" when the registry has a row for it AND that row
+ * carries non-zero pricing. A zero-cost registry entry (e.g. a local
+ * provider with no operator-supplied rate) is still treated as unknown
+ * for UI purposes — a $0 estimate masquerading as accurate is worse
+ * than an explicit "pricing unknown" callout.
+ */
+function isModelPriced(modelId: string): boolean {
+  const m = getModel(modelId);
+  if (!m) return false;
+  return m.inputCostPerMillion > 0 || m.outputCostPerMillion > 0;
+}
+
+function cloneTokenMap(src: Map<string, PerModelTokens>): Map<string, PerModelTokens> {
+  const dst = new Map<string, PerModelTokens>();
+  for (const [k, v] of src) dst.set(k, { ...v });
+  return dst;
+}
+
+/**
  * Read the workflow's published definition and derive its cost shape:
  *   - count of LLM-producing steps (excludes supervisor — tracked separately)
  *   - whether there's a supervisor step
@@ -377,7 +621,10 @@ function buildHeuristicEstimate(params: {
  * can't be loaded or the definition fails schema validation — better
  * to surface a low-confidence estimate than crash the dialog.
  */
-async function loadWorkflowShape(workflowId: string): Promise<WorkflowShape> {
+async function loadWorkflowShape(
+  workflowId: string,
+  chatDefaultModelId: string
+): Promise<WorkflowShape> {
   try {
     const workflow = await prisma.aiWorkflow.findUnique({
       where: { id: workflowId },
@@ -385,7 +632,7 @@ async function loadWorkflowShape(workflowId: string): Promise<WorkflowShape> {
     });
 
     const snapshot = workflow?.publishedVersion?.snapshot;
-    if (!snapshot) return { llmStepCount: 1, hasSupervisor: false, supervisorStepIds: new Set() };
+    if (!snapshot) return degenerateShape(chatDefaultModelId);
 
     const parsed = workflowDefinitionSchema.safeParse(snapshot);
     if (!parsed.success) {
@@ -393,36 +640,128 @@ async function loadWorkflowShape(workflowId: string): Promise<WorkflowShape> {
         workflowId,
         issues: parsed.error.issues.length,
       });
-      return { llmStepCount: 1, hasSupervisor: false, supervisorStepIds: new Set() };
+      return degenerateShape(chatDefaultModelId);
     }
 
-    return summariseShape(parsed.data);
+    return await summariseShape(parsed.data, chatDefaultModelId);
   } catch (err) {
     logger.warn('loadWorkflowShape: query failed', {
       workflowId,
       error: err instanceof Error ? err.message : String(err),
     });
-    return { llmStepCount: 1, hasSupervisor: false, supervisorStepIds: new Set() };
+    return degenerateShape(chatDefaultModelId);
   }
 }
 
-export function summariseShape(definition: WorkflowDefinition): WorkflowShape {
-  let llmStepCount = 0;
+function degenerateShape(_chatDefaultModelId: string): WorkflowShape {
+  return {
+    llmStepCount: 1,
+    hasSupervisor: false,
+    supervisorStepIds: new Set(),
+    workSteps: [],
+    supervisorModelId: null,
+  };
+}
+
+export async function summariseShape(
+  definition: WorkflowDefinition,
+  chatDefaultModelId: string
+): Promise<WorkflowShape> {
   const supervisorStepIds = new Set<string>();
+  const workSteps: StepModelEntry[] = [];
+  let supervisorModelId: string | null = null;
+  let supervisorOverride: string | null = null;
+
+  // First pass: collect agent slugs we need to resolve and detect the
+  // supervisor step. The supervisor's modelOverride wins; otherwise the
+  // engine resolves to JUDGE_MODEL at runtime, which we honour
+  // separately in `estimateWorkflowCost`.
+  const agentSlugs = new Set<string>();
   for (const step of definition.steps) {
     if (step.type === SUPERVISOR_STEP_TYPE) {
       supervisorStepIds.add(step.id);
+      const override = readModelOverride(step.config);
+      if (override) supervisorOverride = override;
       continue;
     }
-    if (LLM_STEP_TYPES.has(step.type)) {
-      llmStepCount += STEP_LLM_MULTIPLIERS[step.type] ?? 1;
+    if (!LLM_STEP_TYPES.has(step.type)) continue;
+    if (step.type === 'agent_call' && !readModelOverride(step.config)) {
+      const slug = readAgentSlug(step.config);
+      if (slug) agentSlugs.add(slug);
     }
   }
+
+  // Resolve agent slugs → bound model in one round-trip. Agents
+  // without a bound `model` (rare; the form requires it) fall back to
+  // the chat default.
+  const agentModelBySlug = await loadAgentModels(agentSlugs);
+
+  // Second pass: build the per-step entry list using resolved data.
+  for (const step of definition.steps) {
+    if (step.type === SUPERVISOR_STEP_TYPE) continue;
+    if (!LLM_STEP_TYPES.has(step.type)) continue;
+
+    const override = readModelOverride(step.config);
+    let modelId: string;
+    if (override) {
+      modelId = override;
+    } else if (step.type === 'agent_call') {
+      const slug = readAgentSlug(step.config);
+      const bound = slug ? agentModelBySlug.get(slug) : null;
+      modelId = bound ?? chatDefaultModelId;
+    } else {
+      modelId = chatDefaultModelId;
+    }
+
+    workSteps.push({
+      stepId: step.id,
+      type: step.type,
+      modelId,
+      multiplier: STEP_LLM_MULTIPLIERS[step.type] ?? 1,
+    });
+  }
+
+  const llmStepCount = workSteps.reduce((sum, s) => sum + s.multiplier, 0);
+  supervisorModelId = supervisorOverride;
+
   return {
     llmStepCount,
     hasSupervisor: supervisorStepIds.size > 0,
     supervisorStepIds,
+    workSteps,
+    supervisorModelId,
   };
+}
+
+function readModelOverride(config: Record<string, unknown>): string | null {
+  const val = config.modelOverride;
+  return typeof val === 'string' && val.length > 0 ? val : null;
+}
+
+function readAgentSlug(config: Record<string, unknown>): string | null {
+  const val = config.agentSlug;
+  return typeof val === 'string' && val.length > 0 ? val : null;
+}
+
+async function loadAgentModels(slugs: Set<string>): Promise<Map<string, string | null>> {
+  if (slugs.size === 0) return new Map();
+  try {
+    const rows = await prisma.aiAgent.findMany({
+      where: { slug: { in: Array.from(slugs) } },
+      select: { slug: true, model: true },
+    });
+    const result = new Map<string, string | null>();
+    for (const row of rows) {
+      result.set(row.slug, row.model && row.model.length > 0 ? row.model : null);
+    }
+    return result;
+  } catch (err) {
+    logger.warn('loadAgentModels: query failed', {
+      slugs: Array.from(slugs),
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return new Map();
+  }
 }
 
 async function loadPastRuns(
