@@ -140,6 +140,7 @@ function initialState(
     description: workflow.description,
     errorStrategy: def?.errorStrategy ?? 'fail',
     isTemplate: workflow.isTemplate,
+    maxCostPerExecutionUsd: workflow.maxCostPerExecutionUsd ?? null,
   };
 
   if (!def || !Array.isArray(def.steps)) {
