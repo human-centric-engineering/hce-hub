@@ -149,6 +149,11 @@ describe('searchKnowledge', () => {
 
     expect(sql).toContain('"chunkType" = $4');
     expect(params[3]).toBe('pattern');
+    // Guard: column was renamed contentHash → fileHash; raw SQL bypasses Prisma's typed
+    // client so column-rename drift is invisible until prod. This assertion locks in both
+    // the current column name (fileHash) and the alias (documentContentHash) that the
+    // downstream Citation plumbing depends on.
+    expect(sql).toContain('d."fileHash" AS "documentContentHash"');
   });
 
   it('should add patternNumber filter when provided', async () => {
@@ -444,6 +449,11 @@ describe('searchKnowledge — hybrid mode', () => {
     expect(sql).toContain('ORDER BY final_score DESC');
     // The legacy keyword_boost CASE expression must NOT appear in hybrid mode
     expect(sql).not.toContain('AS keyword_boost');
+    // Guard: column was renamed contentHash → fileHash; raw SQL bypasses Prisma's typed
+    // client so column-rename drift is invisible until prod. This assertion locks in both
+    // the current column name (fileHash) and the alias (documentContentHash) that the
+    // downstream Citation plumbing depends on.
+    expect(sql).toContain('d."fileHash" AS "documentContentHash"');
   });
 
   it('keeps using the legacy SQL when hybridEnabled is false (regression guard)', async () => {

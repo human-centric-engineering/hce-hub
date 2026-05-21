@@ -343,4 +343,34 @@ describe('WorkflowDefinitionHistoryPanel', () => {
       expect(screen.getByText(/rollback denied by server/i)).toBeInTheDocument();
     });
   });
+
+  // Guard: FieldHelp's Radix Popover trigger previously rendered nested inside
+  // the toggle <button>, producing a <button> descendant of <button>. jsdom does
+  // NOT enforce React's HTML-validation hydration check, so a render-without-warning
+  // assertion won't catch it — a structural DOM check is the only practical guard.
+  it('toggle button has no descendant <button>', () => {
+    render(<WorkflowDefinitionHistoryPanel workflowId={WORKFLOW_ID} />);
+
+    const toggle = screen.getByRole('button', { name: /definition history/i });
+    expect(toggle.querySelector('button')).toBeNull();
+  });
+
+  it('clicking the FieldHelp ⓘ does NOT toggle the panel', async () => {
+    // Mock apiClient.get with a concrete return value so the "not called" assertion
+    // is meaningful — an unmocked .get returning undefined would also satisfy
+    // not.toHaveBeenCalled() even if a toggle DID fire (the lazy-fetch path would
+    // crash silently). The baseline mock makes the negative assertion honest.
+    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse() as never);
+    const user = userEvent.setup();
+    render(<WorkflowDefinitionHistoryPanel workflowId={WORKFLOW_ID} />);
+
+    // Click the FieldHelp ⓘ button (More information) — not the toggle
+    await user.click(screen.getByRole('button', { name: /more information/i }));
+
+    // Panel must still be collapsed: toggle aria-expanded should remain false
+    const toggle = screen.getByRole('button', { name: /definition history/i });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    // Lazy-fetch must NOT have fired — the panel was not toggled
+    expect(apiClient.get).not.toHaveBeenCalled();
+  });
 });

@@ -1487,7 +1487,7 @@ function SmokeTestStatusIcon({ status }: { status: TestStatus }): React.ReactEle
 // Step 4 — Done / next steps
 // ----------------------------------------------------------------------------
 
-function StepDone() {
+export function StepDone() {
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-4 text-sm dark:border-green-900/50 dark:bg-green-900/10">

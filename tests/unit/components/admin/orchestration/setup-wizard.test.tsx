@@ -20,7 +20,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { SetupWizard } from '@/components/admin/orchestration/setup-wizard';
+import { SetupWizard, StepDone } from '@/components/admin/orchestration/setup-wizard';
 import {
   STORAGE_KEY,
   makeFetchMock,
@@ -325,5 +325,21 @@ describe('SetupWizard', () => {
     // Clicking a completed step jumps the wizard back to it.
     await user.click(buttons[0]);
     await waitFor(() => expect(screen.getByText(/Step 1 of 4/i)).toBeInTheDocument());
+  });
+
+  // Guard: the original Explore patterns link shipped pointing at /admin/orchestration/learning
+  // (404) because StepDone was never rendered in tests. All three "next steps" links are asserted
+  // here so a future href change on any of them is caught before it ships.
+  it('StepDone renders the three "next steps" links with correct hrefs', () => {
+    render(<StepDone />);
+
+    const exploreLink = screen.getByRole('link', { name: /explore patterns/i });
+    expect(exploreLink).toHaveAttribute('href', '/admin/orchestration/learn');
+
+    const knowledgeLink = screen.getByRole('link', { name: /add knowledge docs/i });
+    expect(knowledgeLink).toHaveAttribute('href', '/admin/orchestration/knowledge');
+
+    const workflowLink = screen.getByRole('link', { name: /build a workflow/i });
+    expect(workflowLink).toHaveAttribute('href', '/admin/orchestration/workflows');
   });
 });
