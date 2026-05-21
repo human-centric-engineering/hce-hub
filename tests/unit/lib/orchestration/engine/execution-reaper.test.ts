@@ -74,8 +74,9 @@ describe('reapZombieExecutions', () => {
     expect(result.reaped).toBe(3);
     expect(result.stalePending).toBe(0);
     expect(result.abandonedApprovals).toBe(0);
-    // The status/threshold filter now lives on `findMany` (which
-    // collects the ids); `updateMany` then flips just those ids. We
+    // The status/threshold filter lives on BOTH `findMany` (the id
+    // collection pass) AND `updateMany` (the write itself, as a
+    // belt-and-braces predicate against a race between the two). We
     // assert both halves so a future change that drops either filter
     // surfaces here.
     expect(mockFindMany).toHaveBeenCalledWith(
@@ -88,7 +89,11 @@ describe('reapZombieExecutions', () => {
     );
     expect(mockUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ id: expect.objectContaining({ in: expect.any(Array) }) }),
+        where: expect.objectContaining({
+          id: expect.objectContaining({ in: expect.any(Array) }),
+          status: 'running',
+          updatedAt: expect.objectContaining({ lt: expect.any(Date) }),
+        }),
         data: expect.objectContaining({
           status: 'failed',
           completedAt: expect.any(Date),
@@ -116,7 +121,11 @@ describe('reapZombieExecutions', () => {
     );
     expect(mockUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ id: expect.objectContaining({ in: expect.any(Array) }) }),
+        where: expect.objectContaining({
+          id: expect.objectContaining({ in: expect.any(Array) }),
+          status: 'pending',
+          createdAt: expect.objectContaining({ lt: expect.any(Date) }),
+        }),
         data: expect.objectContaining({
           status: 'failed',
           completedAt: expect.any(Date),
@@ -144,7 +153,11 @@ describe('reapZombieExecutions', () => {
     );
     expect(mockUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ id: expect.objectContaining({ in: expect.any(Array) }) }),
+        where: expect.objectContaining({
+          id: expect.objectContaining({ in: expect.any(Array) }),
+          status: 'paused_for_approval',
+          updatedAt: expect.objectContaining({ lt: expect.any(Date) }),
+        }),
         data: expect.objectContaining({
           status: 'failed',
           completedAt: expect.any(Date),
@@ -188,8 +201,9 @@ describe('reapZombieExecutions', () => {
     const oneDay = 24 * 60 * 60 * 1000;
     await reapZombieExecutions(fiveMinutes, thirtyMinutes, oneDay);
 
-    // The threshold cutoffs now live on `findMany` (the id-collection
-    // pass), not `updateMany` (which targets ids by primary key).
+    // The threshold cutoffs live on both `findMany` (the id-collection
+    // pass) AND `updateMany` (as the race-window guard); asserting the
+    // findMany cutoff is enough for the threshold-plumbing contract.
     const runningCall = mockFindMany.mock.calls[0][0];
     const runningCutoff = runningCall.where.updatedAt.lt as Date;
     expect(Date.now() - runningCutoff.getTime()).toBeGreaterThan(fiveMinutes - 2000);
@@ -204,6 +218,51 @@ describe('reapZombieExecutions', () => {
     const approvalCutoff = approvalCall.where.updatedAt.lt as Date;
     expect(Date.now() - approvalCutoff.getTime()).toBeGreaterThan(oneDay - 2000);
     expect(Date.now() - approvalCutoff.getTime()).toBeLessThan(oneDay + 2000);
+  });
+
+  // ─── Race-window guard: status + cutoff predicates on updateMany + ──────
+  // confirmation query before emitting release events. Without these, a row
+  // whose status legitimately changed between findMany and updateMany would
+  // be clobbered back to FAILED, and the unconditional release-event loop
+  // would write a phantom inspector entry for it.
+
+  it('skips the confirmation findMany when updateMany.count matches targets.length', async () => {
+    // Happy path — every targeted row flipped, so the post-update
+    // confirmation query is not needed and must not be issued.
+    mockCounts(2, 0, 0);
+
+    await reapZombieExecutions();
+
+    // Only the three category findMany calls; no fourth confirmation call.
+    expect(mockFindMany).toHaveBeenCalledTimes(3);
+  });
+
+  it('issues a confirmation findMany when updateMany.count diverges from targets.length', async () => {
+    // Race path — one of the two running targets had its status flipped
+    // by another writer between our findMany and our updateMany, so the
+    // updateMany count is 1, not 2. We must re-query to discover which
+    // row we actually reaped before emitting release events.
+    const fakeRow = (i: number) => ({ id: `exec-${i}`, leaseToken: null });
+    mockFindMany
+      .mockResolvedValueOnce([fakeRow(0), fakeRow(1)]) // running targets
+      .mockResolvedValueOnce([]) // pending targets
+      .mockResolvedValueOnce([]) // approval targets
+      .mockResolvedValueOnce([{ id: 'exec-0' }]); // confirmation: only exec-0 flipped
+    mockUpdateMany.mockResolvedValueOnce({ count: 1 });
+
+    await reapZombieExecutions();
+
+    // Three category findMany + one confirmation findMany = four total.
+    expect(mockFindMany).toHaveBeenCalledTimes(4);
+    // The confirmation findMany filters by status=FAILED AND the
+    // reaper's exact errorMessage sentinel; this is what makes the
+    // result the set of rows *this* sweep reaped (not rows reaped by a
+    // prior sweep or terminated by some other writer).
+    const confirmationCall = mockFindMany.mock.calls[3][0];
+    expect(confirmationCall.where).toMatchObject({
+      status: 'failed',
+      errorMessage: expect.stringContaining('zombie threshold'),
+    });
   });
 
   // ─── Running-step orphan sweep (one tick at the end of the reaper) ───────
