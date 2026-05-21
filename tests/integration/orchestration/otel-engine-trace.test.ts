@@ -51,6 +51,7 @@ vi.mock('@/lib/orchestration/engine/lease', () => ({
   generateLeaseToken: vi.fn().mockReturnValue('lease-token-test'),
   leaseExpiry: vi.fn().mockReturnValue(new Date()),
   startHeartbeat: vi.fn().mockReturnValue(vi.fn()),
+  recordReleaseEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock approval-related helpers so PausedForApproval tests don't need crypto setup.

@@ -25,6 +25,7 @@ import { logger } from '@/lib/logging';
 import { checkSafeProviderUrl } from '@/lib/security/safe-url';
 import { AnthropicProvider } from '@/lib/orchestration/llm/anthropic';
 import { getBreaker } from '@/lib/orchestration/llm/circuit-breaker';
+import { track, trackStream } from '@/lib/orchestration/llm/in-flight-counter';
 import { OpenAiCompatibleProvider } from '@/lib/orchestration/llm/openai-compatible';
 import {
   ProviderError,
@@ -106,12 +107,61 @@ export async function getProvider(slugOrName: string): Promise<LlmProvider> {
     });
   }
 
-  const instance = buildProviderFromConfig(config);
+  const instance = withInFlightTracking(buildProviderFromConfig(config), config.slug);
   const entry: CachedProvider = { provider: instance, cachedAt: Date.now() };
   instanceCache.set(config.slug, entry);
   // Also key by name so callers that already looked up via name are consistent.
   if (slugOrName !== config.slug) instanceCache.set(slugOrName, entry);
   return instance;
+}
+
+/**
+ * Wrap a freshly-built provider so its long-running calls (chat,
+ * chatStream, embed, transcribe) are accounted in the in-flight
+ * counter under `slug`. Short admin-metadata methods (`listModels`,
+ * `testConnection`) are NOT tracked — they're not part of the runtime
+ * workload the dashboard is measuring.
+ *
+ * Uses a `Proxy` so the returned value preserves the original
+ * prototype — existing call sites (and tests) doing
+ * `instanceof AnthropicProvider` keep working. The handler intercepts
+ * the four tracked methods and rebinds them to the original target so
+ * `this` inside the SDK call is the real provider instance.
+ *
+ * Wrapping happens once per cache miss, not per call, so the proxy
+ * cost is negligible. Returns the original instance unchanged when
+ * `slug` is empty (defensive — should not happen with current
+ * call sites).
+ */
+const TRACKED_METHODS = new Set(['chat', 'embed', 'transcribe']);
+const STREAM_METHODS = new Set(['chatStream']);
+
+function withInFlightTracking(provider: LlmProvider, slug: string): LlmProvider {
+  if (!slug) return provider;
+  return new Proxy(provider, {
+    get(target, prop, receiver): unknown {
+      const value: unknown = Reflect.get(target, prop, receiver);
+      // Symbol-keyed accesses (e.g. Symbol.toPrimitive, Symbol.iterator)
+      // and non-function properties pass through unwrapped. Wrapping a
+      // Symbol-keyed function as if it were a tracked method would
+      // double-count or corrupt host-runtime behaviour (e.g. JSON
+      // serialisation calling `Symbol.toPrimitive`).
+      if (typeof prop !== 'string' || typeof value !== 'function') return value;
+      const fn = value as (this: LlmProvider, ...args: unknown[]) => unknown;
+      if (TRACKED_METHODS.has(prop)) {
+        return (...args: unknown[]): Promise<unknown> =>
+          track(slug, () => fn.apply(target, args) as Promise<unknown>);
+      }
+      if (STREAM_METHODS.has(prop)) {
+        return (...args: unknown[]): AsyncIterable<unknown> =>
+          trackStream(slug, () => fn.apply(target, args) as AsyncIterable<unknown>);
+      }
+      // Everything else (listModels, testConnection, helper methods,
+      // accessors) is forwarded bound to the original instance so
+      // `this` resolution inside the SDK call stays intact.
+      return fn.bind(target);
+    },
+  });
 }
 
 /**

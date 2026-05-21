@@ -18,6 +18,7 @@ import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { WorkflowStatus, type WorkflowDefinition } from '@/types/orchestration';
 import { OrchestrationEngine } from '@/lib/orchestration/engine/orchestration-engine';
+import { recordReleaseEvent } from '@/lib/orchestration/engine/lease';
 import { emitHookEvent } from '@/lib/orchestration/hooks/registry';
 import { dispatchWebhookEvent } from '@/lib/orchestration/webhooks/dispatcher';
 import { workflowDefinitionSchema } from '@/lib/validations/orchestration';
@@ -137,6 +138,10 @@ export async function drainEngine(
           leaseExpiresAt: null,
         },
       });
+      // Lease inspector entry. The lease token isn't in scope here
+      // (the crash happened inside the executor; the engine's lease
+      // handle is gone with the stack frame), so we record without it.
+      void recordReleaseEvent(executionId, null, 'crash-repair');
     } catch (updateErr) {
       logger.error('Scheduler: failed to mark crashed execution as failed', {
         executionId,
@@ -623,6 +628,9 @@ export async function processOrphanedExecutions(): Promise<OrphanSweepResult> {
             leaseExpiresAt: null,
           },
         });
+        void recordReleaseEvent(execution.id, execution.leaseToken, 'recovery-exhausted', {
+          attempts: execution.recoveryAttempts,
+        });
         const sanitisedError = sanitiseHookErrorMessage(errorMessage);
         const crashPayload = {
           executionId: execution.id,
@@ -659,6 +667,7 @@ export async function processOrphanedExecutions(): Promise<OrphanSweepResult> {
             leaseExpiresAt: null,
           },
         });
+        void recordReleaseEvent(execution.id, execution.leaseToken, 'workflow-deactivated');
         result.errors.push({ executionId: execution.id, error: 'Workflow deactivated' });
         continue;
       }
@@ -678,6 +687,7 @@ export async function processOrphanedExecutions(): Promise<OrphanSweepResult> {
             leaseExpiresAt: null,
           },
         });
+        void recordReleaseEvent(execution.id, execution.leaseToken, 'no-published-version');
         result.errors.push({
           executionId: execution.id,
           error: 'No published version to resume',
@@ -697,6 +707,7 @@ export async function processOrphanedExecutions(): Promise<OrphanSweepResult> {
             leaseExpiresAt: null,
           },
         });
+        void recordReleaseEvent(execution.id, execution.leaseToken, 'invalid-definition');
         result.errors.push({ executionId: execution.id, error: 'Invalid workflow definition' });
         continue;
       }

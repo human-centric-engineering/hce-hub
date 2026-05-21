@@ -162,7 +162,7 @@ const navSections: NavSection[] = [
             href: '/admin/orchestration/executions',
             label: 'Executions',
             icon: PlayCircle,
-            description: 'Runtime history',
+            description: 'Live engine state and runtime history',
           },
           {
             href: '/admin/orchestration/conversations',

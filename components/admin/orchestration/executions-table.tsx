@@ -10,13 +10,41 @@
  *   - Row links to /admin/orchestration/executions/:id for trace detail.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  KeyRound,
+  MoreHorizontal,
+  StopCircle,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -33,6 +61,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tip } from '@/components/ui/tooltip';
+import { LeaseInspectorDialog } from '@/components/admin/orchestration/lease-inspector-dialog';
 import { API } from '@/lib/api/endpoints';
 import { parseApiResponse } from '@/lib/api/parse-response';
 import { formatDuration } from '@/lib/utils/format-duration';
@@ -65,14 +94,23 @@ export interface ExecutionsTableProps {
   initialMeta: PaginationMeta;
   initialWorkflowId?: string;
   initialStatus?: string;
+  /**
+   * Minutes a running step may run before its row is highlighted as
+   * stuck-looking. Sourced from `AiOrchestrationSettings`; falls back
+   * to 5 if missing.
+   */
+  stuckThresholdMins?: number;
 }
+
+const FORCE_FAILABLE = new Set<string>(['running', 'pending', 'paused_for_approval']);
 
 export function ExecutionsTable({
   initialExecutions,
   initialMeta,
   initialWorkflowId,
   initialStatus,
-}: ExecutionsTableProps) {
+  stuckThresholdMins = 5,
+}: ExecutionsTableProps): ReactElement {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [executions, setExecutions] = useState(initialExecutions);
@@ -81,6 +119,13 @@ export function ExecutionsTable({
   const [workflowId] = useState(initialWorkflowId ?? '');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [leaseInspectorId, setLeaseInspectorId] = useState<string | null>(null);
+  const [forceFailTarget, setForceFailTarget] = useState<ExecutionListItem | null>(null);
+  const [forceFailReason, setForceFailReason] = useState('');
+  const [forceFailError, setForceFailError] = useState<string | null>(null);
+  const [forceFailSubmitting, setForceFailSubmitting] = useState(false);
+
+  const stuckThresholdMs = Math.max(1, stuckThresholdMins) * 60_000;
 
   const fetchExecutions = useCallback(
     async (page = 1, overrides?: { status?: string }) => {
@@ -133,12 +178,92 @@ export function ExecutionsTable({
     [fetchExecutions, router, searchParams]
   );
 
+  // React to externally-driven `status` changes — e.g. the live-engine
+  // dashboard cards sitting above the table pushing `?status=running`
+  // via `router.replace`. Without this effect the URL would update but
+  // the table state and fetched rows would not, so clicking the
+  // Running card would silently do nothing.
+  //
+  // Two guards:
+  //  1. `mountedRef` skips the first render. `initialStatus` already
+  //     reflects the URL at SSR time (the page reads
+  //     `resolvedParams.status` and passes it down); re-reading
+  //     `searchParams` on mount and overwriting it would clobber a
+  //     server-rendered filter when `searchParams` is briefly empty
+  //     during hydration.
+  //  2. `urlStatus === statusFilter` short-circuits the case where
+  //     the in-table dropdown initiated the URL change itself
+  //     (`handleStatusChange` sets state AND pushes the URL).
+  const mountedRef = useRef(false);
+  // Depend on the stable string form (`searchParams.toString()`), NOT
+  // on `searchParams` itself. The Next.js mock in tests returns a
+  // fresh `URLSearchParams` instance per render — using the reference
+  // as a dep would fire this effect on every render and overwrite
+  // local state. In production `useSearchParams()` is stable across
+  // re-renders within the same URL, but the string is the
+  // value-equality form we actually care about either way.
+  const searchParamsKey = searchParams.toString();
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+    const urlStatus = new URLSearchParams(searchParamsKey).get('status') ?? 'all';
+    if (urlStatus !== statusFilter) {
+      setStatusFilter(urlStatus);
+      void fetchExecutions(1, { status: urlStatus });
+    }
+    // `fetchExecutions` is stable per (limit, statusFilter, workflowId)
+    // — `statusFilter` is intentionally absent from the deps to avoid
+    // a feedback loop on the same render that sets it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParamsKey]);
+
   const handlePage = useCallback(
     (page: number) => {
       void fetchExecutions(page);
     },
     [fetchExecutions]
   );
+
+  const handleForceFailConfirm = useCallback(async () => {
+    if (!forceFailTarget) return;
+    setForceFailSubmitting(true);
+    setForceFailError(null);
+    try {
+      const reason = forceFailReason.trim();
+      const res = await fetch(API.ADMIN.ORCHESTRATION.executionForceFail(forceFailTarget.id), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reason ? { reason } : {}),
+      });
+      if (!res.ok) {
+        // Surface the server's error message from the shared
+        // `{ success:false, error: { message } }` envelope when present;
+        // otherwise fall back to the HTTP status. JSON parse failures
+        // are intentionally swallowed to the same fallback so a malformed
+        // body never replaces a meaningful status code.
+        const parsed: unknown = await res.json().catch(() => null);
+        let message = `HTTP ${res.status}`;
+        if (parsed && typeof parsed === 'object' && 'error' in parsed) {
+          const err = (parsed as { error?: unknown }).error;
+          if (err && typeof err === 'object' && 'message' in err) {
+            const m = (err as { message?: unknown }).message;
+            if (typeof m === 'string' && m.length > 0) message = m;
+          }
+        }
+        throw new Error(message);
+      }
+      setForceFailTarget(null);
+      setForceFailReason('');
+      void fetchExecutions(meta.page);
+    } catch (err) {
+      setForceFailError(err instanceof Error ? err.message : 'Force-fail failed');
+    } finally {
+      setForceFailSubmitting(false);
+    }
+  }, [fetchExecutions, forceFailReason, forceFailTarget, meta.page]);
 
   function formatDate(iso: string): string {
     return new Date(iso).toLocaleString(undefined, {
@@ -147,6 +272,19 @@ export function ExecutionsTable({
       hour: '2-digit',
       minute: '2-digit',
     });
+  }
+
+  /**
+   * Render the step-age column as the largest sensible unit. Sub-
+   * second values stay in ms because the only time you see one is a
+   * fresh fast step caught mid-poll; everything else rounds to whole
+   * units so the column stays narrow.
+   */
+  function formatStepAge(ms: number): string {
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+    if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`;
+    return `${(ms / 3_600_000).toFixed(1)}h`;
   }
 
   return (
@@ -203,6 +341,13 @@ export function ExecutionsTable({
                   <span>Duration</span>
                 </Tip>
               </TableHead>
+              <TableHead>
+                <Tip
+                  label={`Time the running step has been in flight. Rows past ${stuckThresholdMins}m are highlighted amber but NOT auto-failed — use the row menu to force-fail if needed. Threshold is set in Settings → Limits.`}
+                >
+                  <span>Step age</span>
+                </Tip>
+              </TableHead>
               <TableHead>Started</TableHead>
               <TableHead className="w-10" />
             </TableRow>
@@ -210,68 +355,179 @@ export function ExecutionsTable({
           <TableBody>
             {isLoading && executions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
+                <TableCell colSpan={9} className="h-24 text-center">
                   Loading…
                 </TableCell>
               </TableRow>
             ) : executions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
+                <TableCell colSpan={9} className="h-24 text-center">
                   No executions found.
                 </TableCell>
               </TableRow>
             ) : (
-              executions.map((ex) => (
-                <TableRow key={ex.id}>
-                  <TableCell className="font-mono text-xs">
-                    <Link
-                      href={`/admin/orchestration/executions/${ex.id}`}
-                      className="hover:underline"
-                    >
-                      {ex.id.slice(0, 8)}…
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/admin/orchestration/workflows/${ex.workflowId}`}
-                      className="hover:underline"
-                    >
-                      {ex.workflow.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANT[ex.status] ?? 'outline'}>
-                      {formatStatus(ex.status)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right text-xs tabular-nums">
-                    {ex.totalTokensUsed.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-right text-xs tabular-nums">
-                    ${ex.totalCostUsd.toFixed(4)}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {formatDuration(ex.startedAt, ex.completedAt)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
-                    {formatDate(ex.createdAt)}
-                  </TableCell>
-                  <TableCell>
-                    <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0">
+              executions.map((ex) => {
+                const isStuck =
+                  ex.timeInCurrentStepMs !== null && ex.timeInCurrentStepMs >= stuckThresholdMs;
+                const canForceFail = FORCE_FAILABLE.has(ex.status);
+                return (
+                  <TableRow
+                    key={ex.id}
+                    className={isStuck ? 'bg-amber-50 dark:bg-amber-950/30' : undefined}
+                  >
+                    <TableCell className="font-mono text-xs">
                       <Link
                         href={`/admin/orchestration/executions/${ex.id}`}
-                        title="View execution trace"
+                        className="hover:underline"
                       >
-                        <ExternalLink className="h-4 w-4" />
+                        {ex.id.slice(0, 8)}…
                       </Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/admin/orchestration/workflows/${ex.workflowId}`}
+                        className="hover:underline"
+                      >
+                        {ex.workflow.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANT[ex.status] ?? 'outline'}>
+                        {formatStatus(ex.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">
+                      {ex.totalTokensUsed.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">
+                      ${ex.totalCostUsd.toFixed(4)}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {formatDuration(ex.startedAt, ex.completedAt)}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {ex.timeInCurrentStepMs === null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <span
+                          className={
+                            isStuck
+                              ? 'inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-300'
+                              : undefined
+                          }
+                          title={
+                            isStuck
+                              ? `Exceeds the ${stuckThresholdMins}m stuck threshold`
+                              : undefined
+                          }
+                        >
+                          {isStuck && <AlertTriangle className="h-3 w-3" aria-hidden />}
+                          {formatStepAge(ex.timeInCurrentStepMs)}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {formatDate(ex.createdAt)}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <span className="sr-only">Row actions</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Execution actions</DropdownMenuLabel>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/admin/orchestration/executions/${ex.id}`}>
+                              <ExternalLink className="mr-2 h-4 w-4" />
+                              View trace
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setLeaseInspectorId(ex.id)}>
+                            <KeyRound className="mr-2 h-4 w-4" />
+                            View lease
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            disabled={!canForceFail}
+                            onSelect={() => {
+                              if (!canForceFail) return;
+                              setForceFailTarget(ex);
+                              setForceFailReason('');
+                              setForceFailError(null);
+                            }}
+                            className="text-red-600 focus:text-red-700"
+                          >
+                            <StopCircle className="mr-2 h-4 w-4" />
+                            Force fail…
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </div>
+
+      <LeaseInspectorDialog
+        executionId={leaseInspectorId}
+        onClose={() => setLeaseInspectorId(null)}
+      />
+
+      <AlertDialog
+        open={forceFailTarget !== null}
+        onOpenChange={(next) => {
+          if (!next && !forceFailSubmitting) {
+            setForceFailTarget(null);
+            setForceFailReason('');
+            setForceFailError(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Force-fail this execution?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The execution will be transitioned to <strong>failed</strong> immediately. Any
+              partially-completed side-effects (external calls, notifications) remain — this action
+              does not roll them back. The reason is recorded in the admin audit log, and any
+              subscribers to <code>workflow.failed</code> or <code>execution.force_failed</code>{' '}
+              hooks will be notified.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="force-fail-reason">Reason (optional)</Label>
+            <Textarea
+              id="force-fail-reason"
+              value={forceFailReason}
+              onChange={(e) => setForceFailReason(e.target.value)}
+              maxLength={500}
+              placeholder="e.g. Vendor API returning malformed data; engineering investigating."
+              rows={3}
+              disabled={forceFailSubmitting}
+            />
+          </div>
+          {forceFailError && <p className="text-destructive text-sm">{forceFailError}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={forceFailSubmitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={forceFailSubmitting}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleForceFailConfirm();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {forceFailSubmitting ? 'Force-failing…' : 'Force fail'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="flex items-center justify-between">
         <p className="text-muted-foreground text-sm">

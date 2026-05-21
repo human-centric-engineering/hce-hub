@@ -715,6 +715,16 @@ export interface ExecutionListItem {
   createdAt: string;
   completedAt: string | null;
   workflow: { id: string; name: string };
+  /**
+   * Milliseconds the execution has spent in its current step (oldest
+   * branch wins for parallel fan-out). Computed server-side from the
+   * `AiWorkflowRunningStep` side table at list time. `null` for any
+   * execution that is not currently running, has no recorded running
+   * step row, or has reached a terminal state. The admin executions
+   * list highlights the row when this exceeds the configured stuck
+   * threshold in minutes.
+   */
+  timeInCurrentStepMs: number | null;
 }
 
 // ============================================================================
@@ -1442,6 +1452,13 @@ export interface OrchestrationSettings {
    * column level. See `lib/orchestration/knowledge/embedder.ts`.
    */
   activeEmbeddingModelId: string | null;
+  /**
+   * Minutes a running execution may spend in its current step before
+   * the executions list flags the row as "stuck-looking" and the
+   * live-engine dashboard counts it in the stuck-age band. Clamped to
+   * [1, 1440] on read and write; default 5.
+   */
+  stuckExecutionThresholdMins: number;
   createdAt: Date;
   updatedAt: Date;
 }

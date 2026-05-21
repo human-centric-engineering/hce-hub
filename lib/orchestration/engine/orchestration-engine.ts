@@ -77,6 +77,7 @@ import {
   claimLease,
   generateLeaseToken,
   leaseExpiry,
+  recordReleaseEvent,
   startHeartbeat,
   type ClaimReason,
   type LeaseHandle,
@@ -2295,6 +2296,11 @@ export class OrchestrationEngine {
           error: err instanceof Error ? err.message : String(err),
         });
       }
+      // Lease inspector entry — pairs with the `claimed` event at run
+      // start so operators can see "claimed at T, released at T+N" for
+      // every normal terminal. Fire-and-forget; failures logged inside
+      // the helper, never block the engine.
+      void recordReleaseEvent(executionId, token, 'engine-terminal', { status });
       return true;
     } catch (err) {
       ctx.logger.error('finalize: DB update failed — execution row is stale', err, {
