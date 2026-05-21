@@ -5,7 +5,7 @@
  * - Renders one draggable block per registry entry (9 blocks)
  * - Blocks are grouped under four category headers: Agents, Decisions, Inputs, Outputs
  * - Dragstart sets dataTransfer application/reactflow to the step type string
- * - "Learn more" links point to /admin/orchestration/learning/patterns/<patternNumber>
+ * - "Learn more" links point to /admin/orchestration/learn/patterns/<patternNumber>
  * - Info button renders next to the "Patterns" heading
  * - Clicking the Info button opens PatternCoverageDialog with title "Pattern Coverage"
  * - PatternCoverageDialog is not visible before the Info button is clicked

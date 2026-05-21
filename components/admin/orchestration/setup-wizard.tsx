@@ -1502,7 +1502,7 @@ function StepDone() {
 
       <ul className="space-y-2 text-sm">
         <li>
-          <Link href="/admin/orchestration/learning" className="font-medium underline">
+          <Link href="/admin/orchestration/learn" className="font-medium underline">
             Explore patterns
           </Link>{' '}
           — browse agentic design patterns for inspiration.
