@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { queryByTestId, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { AuditModelsDialog } from '@/components/admin/orchestration/audit-models-dialog';
@@ -712,6 +712,62 @@ describe('AuditModelsDialog', () => {
       };
       expect(parsed.executionId).toBe('exec-bg');
       expect(parsed.label).toBe('Provider Model Audit');
+    });
+
+    it('resets the post-submit state on dismiss so a reopened dialog shows the fresh picker form', async () => {
+      // Regression: after submitting an audit, dismissing the dialog left
+      // `submittedExecution` set in component state, so the next time
+      // the parent set open=true the dialog body showed the stale
+      // inline-progress panel for the previous run (looking like the
+      // new audit had already started/failed) instead of the model
+      // picker. `handleDismiss` now clears the post-submit state.
+      //
+      // The parent (provider-models-matrix) keeps this dialog mounted
+      // and toggles `open`, so the component instance — and its
+      // useState — survive between opens. Driving the dismiss path on a
+      // mounted-and-open instance asserts the same state-clearing the
+      // reopen scenario depends on.
+      const { apiClient } = await import('@/lib/api/client');
+      vi.mocked(apiClient.get).mockResolvedValue([
+        { id: 'wf-123', slug: 'tpl-provider-model-audit', name: 'Provider Model Audit' },
+      ]);
+      fetchMock.mockResolvedValueOnce(sseExecuteResponse('exec-stale'));
+
+      const onOpenChange = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <AuditModelsDialog
+          open={true}
+          onOpenChange={onOpenChange}
+          models={[MODEL_OPENAI, MODEL_ANTHROPIC]}
+        />
+      );
+
+      // Initiate an audit so the dialog swaps into the inline-progress view.
+      await user.click(screen.getByRole('button', { name: /^select all$/i }));
+      await user.click(screen.getByRole('button', { name: /audit 2 models/i }));
+      await waitFor(() => screen.getByTestId('execution-progress-inline'));
+
+      // Dismiss via the running-state "Run in background" footer button —
+      // mirrors what a real operator would do once they've kicked off
+      // the audit and are returning to the matrix.
+      await user.click(screen.getByTestId('audit-run-in-background'));
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+
+      // The dialog is still rendered (the spy doesn't actually update
+      // the `open` prop), but the post-submit state is cleared: the
+      // inline-progress panel is gone and the picker form is back.
+      await waitFor(() => {
+        expect(queryByTestId(document.body, 'execution-progress-inline')).toBeNull();
+      });
+      // Picker form is back: the provider filter, select/deselect-all
+      // toggle, and the initiating submit button are all rendered again.
+      // The running-state footer buttons are gone.
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^(select|deselect) all$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /audit \d+ models?/i })).toBeInTheDocument();
+      expect(queryByTestId(document.body, 'audit-run-in-background')).toBeNull();
+      expect(queryByTestId(document.body, 'audit-view-full-details')).toBeNull();
     });
 
     it('"View full details" navigates AND preserves the in-flight localStorage entry', async () => {

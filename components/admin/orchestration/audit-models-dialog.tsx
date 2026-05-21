@@ -428,6 +428,16 @@ export function AuditModelsDialog({
       } else if (!isRunning && submittedExecution === null) {
         // Idle form dismissal — no-op on localStorage.
       }
+      // Reset the post-submit view state so the next open lands on the
+      // fresh model-picker form. Without this, a terminal-status run
+      // (especially a failed one) lingers as the dialog body the next
+      // time the operator clicks "Audit Models", looking like the new
+      // audit they expected to initiate has already finished/failed.
+      // The peek-banner / executions page remain the canonical place to
+      // watch a backgrounded run; the dialog's job is to start one.
+      setSubmittedExecution(null);
+      setTerminalStatus(null);
+      setError(null);
       onOpenChange(false);
     },
     [submittedExecution, terminalStatus, clearInFlight, onOpenChange]
