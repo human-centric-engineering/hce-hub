@@ -32,6 +32,7 @@ Admin UI for managing webhook subscriptions. Full CRUD with delivery history, re
 - Signing secret input with auto-generate button (`whsec_` prefix + 32 random hex chars)
 - 12 event checkboxes from `WEBHOOK_EVENT_TYPES` (including `execution_crashed` for engine-crash alerts — see [Hooks](../orchestration/hooks.md#event-types))
 - Description textarea
+- Retry policy block: `maxAttempts` (1–10) and `retryBackoffSeconds` (comma-separated seconds, each 1–86400). Form input is seconds; API field is `retryBackoffMs` (millisecond array). Defaults: 3 attempts with `10, 60, 300` seconds. The form blocks submit unless the array has at least `maxAttempts - 1` entries.
 - Active toggle
 - In edit mode, empty secret field = keep current secret
 

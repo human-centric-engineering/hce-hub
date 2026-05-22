@@ -813,33 +813,78 @@ export const WEBHOOK_EVENT_TYPES = [
 
 export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number];
 
-export const createWebhookSchema = z.object({
-  url: z
-    .string()
-    .url('Must be a valid URL')
-    .max(2000)
-    .refine((url) => isSafeProviderUrl(url), 'URL is not allowed (private or internal address)'),
-  secret: z.string().min(16, 'Secret must be at least 16 characters').max(256),
-  events: z
-    .array(z.enum(WEBHOOK_EVENT_TYPES))
-    .min(1, 'At least one event type is required')
-    .max(WEBHOOK_EVENT_TYPES.length),
-  description: z.string().max(500).optional(),
-  isActive: z.boolean().optional(),
-});
+/**
+ * Retry policy bounds — picked to keep behaviour predictable for partners.
+ * 10 attempts × 24h ceiling per backoff entry is enough headroom for any
+ * realistic notification stream while preventing a misconfigured row from
+ * holding deliveries indefinitely.
+ */
+export const WEBHOOK_MAX_ATTEMPTS_MIN = 1;
+export const WEBHOOK_MAX_ATTEMPTS_MAX = 10;
+export const WEBHOOK_BACKOFF_MIN_MS = 1_000; // 1s
+export const WEBHOOK_BACKOFF_MAX_MS = 24 * 60 * 60 * 1_000; // 24h
 
-export const updateWebhookSchema = z.object({
-  url: z
-    .string()
-    .url('Must be a valid URL')
-    .max(2000)
-    .refine((url) => isSafeProviderUrl(url), 'URL is not allowed (private or internal address)')
-    .optional(),
-  secret: z.string().min(16).max(256).optional(),
-  events: z.array(z.enum(WEBHOOK_EVENT_TYPES)).min(1).max(WEBHOOK_EVENT_TYPES.length).optional(),
-  description: z.string().max(500).nullable().optional(),
-  isActive: z.boolean().optional(),
-});
+const retryPolicyFields = {
+  maxAttempts: z.number().int().min(WEBHOOK_MAX_ATTEMPTS_MIN).max(WEBHOOK_MAX_ATTEMPTS_MAX),
+  retryBackoffMs: z
+    .array(z.number().int().min(WEBHOOK_BACKOFF_MIN_MS).max(WEBHOOK_BACKOFF_MAX_MS))
+    .max(WEBHOOK_MAX_ATTEMPTS_MAX - 1),
+};
+
+/**
+ * Ensure the backoff array has enough entries for the configured attempts.
+ * With N attempts you need N-1 delays between them.
+ */
+function refineBackoffLength<T extends { maxAttempts?: number; retryBackoffMs?: number[] }>(
+  schema: z.ZodType<T>
+): z.ZodType<T> {
+  return schema.refine(
+    (data) => {
+      if (data.maxAttempts === undefined || data.retryBackoffMs === undefined) return true;
+      return data.retryBackoffMs.length >= data.maxAttempts - 1;
+    },
+    {
+      message: 'retryBackoffMs must contain at least (maxAttempts - 1) entries',
+      path: ['retryBackoffMs'],
+    }
+  );
+}
+
+export const createWebhookSchema = refineBackoffLength(
+  z.object({
+    url: z
+      .string()
+      .url('Must be a valid URL')
+      .max(2000)
+      .refine((url) => isSafeProviderUrl(url), 'URL is not allowed (private or internal address)'),
+    secret: z.string().min(16, 'Secret must be at least 16 characters').max(256),
+    events: z
+      .array(z.enum(WEBHOOK_EVENT_TYPES))
+      .min(1, 'At least one event type is required')
+      .max(WEBHOOK_EVENT_TYPES.length),
+    description: z.string().max(500).optional(),
+    isActive: z.boolean().optional(),
+    maxAttempts: retryPolicyFields.maxAttempts.optional(),
+    retryBackoffMs: retryPolicyFields.retryBackoffMs.optional(),
+  })
+);
+
+export const updateWebhookSchema = refineBackoffLength(
+  z.object({
+    url: z
+      .string()
+      .url('Must be a valid URL')
+      .max(2000)
+      .refine((url) => isSafeProviderUrl(url), 'URL is not allowed (private or internal address)')
+      .optional(),
+    secret: z.string().min(16).max(256).optional(),
+    events: z.array(z.enum(WEBHOOK_EVENT_TYPES)).min(1).max(WEBHOOK_EVENT_TYPES.length).optional(),
+    description: z.string().max(500).nullable().optional(),
+    isActive: z.boolean().optional(),
+    maxAttempts: retryPolicyFields.maxAttempts.optional(),
+    retryBackoffMs: retryPolicyFields.retryBackoffMs.optional(),
+  })
+);
 
 export const listWebhooksQuerySchema = paginationQuerySchema.extend({
   isActive: queryBooleanSchema.optional(),

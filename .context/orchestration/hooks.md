@@ -8,10 +8,10 @@ In-process event dispatch for orchestration lifecycle events. Admins configure h
 
 These are two different subsystems — don't confuse them:
 
-| System                     | Model                                         | Purpose                                                      | Signing                             | Retry                     |
-| -------------------------- | --------------------------------------------- | ------------------------------------------------------------ | ----------------------------------- | ------------------------- |
-| **Event Hooks** (this doc) | `AiEventHook` / `AiEventHookDelivery`         | Lightweight fire-and-forget dispatch on lifecycle events     | Optional HMAC-SHA256 (`secret` set) | 3 attempts (10s/60s/300s) |
-| Webhook Subscriptions      | `AiWebhookSubscription` / `AiWebhookDelivery` | Durable outbound notifications with per-delivery audit trail | HMAC-SHA256 via `secret` field      | 3 attempts (10s/60s/300s) |
+| System                     | Model                                         | Purpose                                                      | Signing                             | Retry                                      |
+| -------------------------- | --------------------------------------------- | ------------------------------------------------------------ | ----------------------------------- | ------------------------------------------ |
+| **Event Hooks** (this doc) | `AiEventHook` / `AiEventHookDelivery`         | Lightweight fire-and-forget dispatch on lifecycle events     | Optional HMAC-SHA256 (`secret` set) | 3 attempts (10s/60s/300s)                  |
+| Webhook Subscriptions      | `AiWebhookSubscription` / `AiWebhookDelivery` | Durable outbound notifications with per-delivery audit trail | HMAC-SHA256 via `secret` field      | Per-subscription (default 3: 10s/60s/300s) |
 
 Both subsystems can sign outbound payloads. Pick the subsystem based on delivery semantics (lightweight in-process dispatch vs. durable per-delivery audit); for signing setup and headers, see the table above.
 

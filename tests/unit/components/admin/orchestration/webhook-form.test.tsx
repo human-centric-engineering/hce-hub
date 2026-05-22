@@ -149,6 +149,100 @@ describe('WebhookForm', () => {
     });
   });
 
+  // ── Retry policy ─────────────────────────────────────────────────────────────
+
+  it('renders retry policy fields with sensible defaults in create mode', () => {
+    render(<WebhookForm mode="create" />);
+
+    const maxAttempts = document.getElementById('maxAttempts') as HTMLInputElement;
+    const backoff = document.getElementById('retryBackoffSeconds') as HTMLInputElement;
+    // test-review:accept tobe_literal — default values are part of the form contract
+    expect(maxAttempts.value).toBe('3');
+    expect(backoff.value).toBe('10, 60, 300');
+  });
+
+  it('pre-fills retry policy fields from an existing webhook in edit mode', () => {
+    const webhook = {
+      id: 'wh-policy',
+      url: 'https://x.com',
+      events: ['budget_exceeded'],
+      isActive: true,
+      description: null,
+      maxAttempts: 5,
+      retryBackoffMs: [15_000, 60_000, 120_000, 600_000],
+    };
+    render(<WebhookForm mode="edit" webhook={webhook} />);
+
+    const maxAttempts = document.getElementById('maxAttempts') as HTMLInputElement;
+    const backoff = document.getElementById('retryBackoffSeconds') as HTMLInputElement;
+    expect(maxAttempts.value).toBe('5');
+    // Stored as ms — displayed as seconds.
+    expect(backoff.value).toBe('15, 60, 120, 600');
+  });
+
+  it('submits retry policy as an ms array even though the field is entered in seconds', async () => {
+    const { apiClient } = await import('@/lib/api/client');
+    vi.mocked(apiClient.post).mockResolvedValue({ success: true });
+    const user = userEvent.setup();
+    render(<WebhookForm mode="create" />);
+
+    await user.type(
+      screen.getByRole('textbox', { name: /endpoint url/i }),
+      'https://example.com/hook'
+    );
+    await user.click(screen.getByTitle(/generate a random secret/i));
+    await user.click(screen.getAllByRole('checkbox')[0]);
+
+    // Change attempts to 4 and backoff to "5, 15, 45"
+    const maxAttempts = document.getElementById('maxAttempts') as HTMLInputElement;
+    await user.clear(maxAttempts);
+    await user.type(maxAttempts, '4');
+    const backoff = document.getElementById('retryBackoffSeconds') as HTMLInputElement;
+    await user.clear(backoff);
+    await user.type(backoff, '5, 15, 45');
+
+    await user.click(screen.getByRole('button', { name: /create subscription/i }));
+
+    await waitFor(() => {
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/v1/admin/orchestration/webhooks',
+        expect.objectContaining({
+          body: expect.objectContaining({
+            maxAttempts: 4,
+            retryBackoffMs: [5_000, 15_000, 45_000],
+          }),
+        })
+      );
+    });
+  });
+
+  it('blocks submission when backoff has fewer entries than maxAttempts - 1', async () => {
+    const { apiClient } = await import('@/lib/api/client');
+    const user = userEvent.setup();
+    render(<WebhookForm mode="create" />);
+
+    await user.type(
+      screen.getByRole('textbox', { name: /endpoint url/i }),
+      'https://example.com/hook'
+    );
+    await user.click(screen.getByTitle(/generate a random secret/i));
+    await user.click(screen.getAllByRole('checkbox')[0]);
+
+    const maxAttempts = document.getElementById('maxAttempts') as HTMLInputElement;
+    await user.clear(maxAttempts);
+    await user.type(maxAttempts, '5'); // needs 4 backoff entries
+    const backoff = document.getElementById('retryBackoffSeconds') as HTMLInputElement;
+    await user.clear(backoff);
+    await user.type(backoff, '10, 60'); // only 2 entries
+
+    await user.click(screen.getByRole('button', { name: /create subscription/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/at least \(maxAttempts - 1\) backoff/i)).toBeInTheDocument();
+    });
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
   // ── New tests ────────────────────────────────────────────────────────────────
 
   it('shows events validation error when no event is selected on submit', async () => {
@@ -217,6 +311,8 @@ describe('WebhookForm', () => {
       events: ['budget_exceeded'],
       isActive: false,
       description: 'note',
+      maxAttempts: 3,
+      retryBackoffMs: [10000, 60000],
     };
 
     // Act
@@ -257,6 +353,8 @@ describe('WebhookForm', () => {
       events: ['budget_exceeded'],
       isActive: true,
       description: 'note',
+      maxAttempts: 3,
+      retryBackoffMs: [10000, 60000],
     };
     const user = userEvent.setup();
     render(<WebhookForm mode="edit" webhook={webhook} />);
@@ -292,6 +390,8 @@ describe('WebhookForm', () => {
       events: ['workflow_failed'],
       isActive: true,
       description: null,
+      maxAttempts: 3,
+      retryBackoffMs: [10000, 60000],
     };
     const user = userEvent.setup();
     render(<WebhookForm mode="edit" webhook={webhook} />);
@@ -329,6 +429,8 @@ describe('WebhookForm', () => {
       events: ['budget_exceeded'],
       isActive: true,
       description: null,
+      maxAttempts: 3,
+      retryBackoffMs: [10000, 60000],
     };
     const user = userEvent.setup();
     render(<WebhookForm mode="edit" webhook={webhook} />);
@@ -422,6 +524,8 @@ describe('WebhookForm', () => {
       events: ['budget_exceeded'],
       isActive: true,
       description: null,
+      maxAttempts: 3,
+      retryBackoffMs: [10000, 60000],
     };
     const user = userEvent.setup();
     render(<WebhookForm mode="edit" webhook={webhook} />);

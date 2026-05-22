@@ -53,6 +53,8 @@ function makeSub(overrides: Record<string, unknown> = {}) {
     events: ['budget_exceeded', 'workflow_failed'],
     isActive: true,
     description: null,
+    maxAttempts: 3,
+    retryBackoffMs: [10_000, 60_000, 300_000],
     createdBy: 'user-1',
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -303,19 +305,17 @@ describe('processPendingRetries', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
-  it('queries for failed deliveries past their nextRetryAt with attempts < MAX', async () => {
+  it('queries for failed deliveries past their nextRetryAt without an attempts cap', async () => {
+    // With per-subscription maxAttempts the cap is enforced in code, not SQL —
+    // `status='failed'` already implies attempts < maxAttempts since the
+    // dispatcher transitions to `exhausted` at the cap.
     vi.mocked(prisma.aiWebhookDelivery.findMany).mockResolvedValue([]);
 
     await processPendingRetries();
 
-    expect(prisma.aiWebhookDelivery.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          status: 'failed',
-          attempts: { lt: 3 },
-        }),
-      })
-    );
+    const callArg = vi.mocked(prisma.aiWebhookDelivery.findMany).mock.calls[0][0];
+    expect(callArg?.where).toMatchObject({ status: 'failed' });
+    expect((callArg?.where as Record<string, unknown>).attempts).toBeUndefined();
   });
 });
 
@@ -422,6 +422,90 @@ describe('delivery failure behaviour', () => {
       'Webhook delivery failed',
       expect.objectContaining({ error: expect.stringContaining('aborted') })
     );
+  });
+});
+
+// ─── Per-subscription retry policy ──────────────────────────────────────────
+
+describe('per-subscription retry policy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery() as never);
+    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery() as never);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('marks delivery exhausted after the subscription-configured maxAttempts is reached', async () => {
+    // Subscription configured with maxAttempts=2 → after attempt 2 fails, exhausted.
+    vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
+      makeSub({ maxAttempts: 2, retryBackoffMs: [5_000] }),
+    ] as never);
+    // Delivery already has 1 attempt — next attempt becomes #2.
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
+      makeDelivery({ attempts: 1 }) as never
+    );
+    mockFetch.mockResolvedValue({ ok: false, status: 500 });
+
+    await dispatchWebhookEvent('budget_exceeded', { agentId: 'a' });
+
+    expect(prisma.aiWebhookDelivery.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'exhausted' }),
+      })
+    );
+  });
+
+  it('uses the subscription retryBackoffMs schedule for nextRetryAt', async () => {
+    // Custom schedule [5s, 30s] — verify the FIRST failure schedules the 5s delay.
+    vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
+      makeSub({ maxAttempts: 3, retryBackoffMs: [5_000, 30_000] }),
+    ] as never);
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
+      makeDelivery({ attempts: 0 }) as never
+    );
+    const beforeMs = Date.now();
+    mockFetch.mockResolvedValue({ ok: false, status: 500 });
+
+    await dispatchWebhookEvent('budget_exceeded', {});
+
+    // Locate the update call that records the failure with a nextRetryAt.
+    const failUpdate = vi
+      .mocked(prisma.aiWebhookDelivery.update)
+      .mock.calls.find((c) => (c[0]?.data as Record<string, unknown>)?.status === 'failed');
+    expect(failUpdate).toBeDefined();
+    const nextRetryAt = (failUpdate?.[0]?.data as Record<string, unknown>)?.nextRetryAt as Date;
+    expect(nextRetryAt).toBeInstanceOf(Date);
+    // Should land ~5s after the dispatch start (with a wide tolerance for fake-timer clocks).
+    expect(nextRetryAt.getTime() - beforeMs).toBeGreaterThanOrEqual(4_000);
+    expect(nextRetryAt.getTime() - beforeMs).toBeLessThan(10_000);
+  });
+
+  it('falls back to the last backoff entry when the array is shorter than maxAttempts-1', async () => {
+    // maxAttempts=4 needs 3 backoff entries; provide only 1.
+    vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
+      makeSub({ maxAttempts: 4, retryBackoffMs: [7_000] }),
+    ] as never);
+    // Delivery has 2 attempts; next failure is attempt #3 → would normally
+    // need retryBackoffMs[2], but we only have index 0.
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
+      makeDelivery({ attempts: 2 }) as never
+    );
+    mockFetch.mockResolvedValue({ ok: false, status: 500 });
+    const beforeMs = Date.now();
+
+    await dispatchWebhookEvent('budget_exceeded', {});
+
+    const failUpdate = vi
+      .mocked(prisma.aiWebhookDelivery.update)
+      .mock.calls.find((c) => (c[0]?.data as Record<string, unknown>)?.status === 'failed');
+    const nextRetryAt = (failUpdate?.[0]?.data as Record<string, unknown>)?.nextRetryAt as Date;
+    // Should fall back to the single configured entry (7s).
+    expect(nextRetryAt.getTime() - beforeMs).toBeGreaterThanOrEqual(6_000);
+    expect(nextRetryAt.getTime() - beforeMs).toBeLessThan(15_000);
   });
 });
 
