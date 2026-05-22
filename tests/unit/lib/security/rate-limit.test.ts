@@ -15,6 +15,9 @@ import {
   authLimiter,
   apiLimiter,
   passwordResetLimiter,
+  adminLimiter,
+  orchestrationAdminLimiter,
+  RATE_LIMIT_TIERS,
   getRateLimitHeaders,
   createRateLimitResponse,
 } from '@/lib/security/rate-limit';
@@ -505,6 +508,55 @@ describe('Rate Limiter', () => {
       // Assert
       // test-review:accept tobe_true — structural assertion on rate limiter success field
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('Tier registry (admin sections)', () => {
+    it('orchestrationAdminLimiter is configured with the orchestration tier limit (default 120)', () => {
+      // Arrange: unique token to avoid cross-test bucket contamination
+      const token = `orch-admin-test-${Date.now()}`;
+
+      try {
+        // Act: single check exercises the constant → config → instance integration path
+        const result = orchestrationAdminLimiter.check(token);
+
+        // Assert: result.limit is what the limiter was configured with — not a raw constant read
+        expect(result.limit).toBe(120);
+        // test-review:accept tobe_true — structural assertion verifying the limiter accepted the first request
+        expect(result.success).toBe(true);
+      } finally {
+        orchestrationAdminLimiter.reset(token);
+      }
+    });
+
+    it('RATE_LIMIT_TIERS resolves tier names to the correct singleton limiter instances', () => {
+      // Arrange: no setup needed — registry is module-level state
+
+      // Assert: reference identity — the registry must return the SAME instance, not a copy
+      expect(RATE_LIMIT_TIERS.admin).toBe(adminLimiter);
+      expect(RATE_LIMIT_TIERS.orchestration).toBe(orchestrationAdminLimiter);
+    });
+
+    it('RATE_LIMIT_TIERS.orchestration enforces its configured limit when the bucket is exhausted', () => {
+      // Arrange: unique token so exhaustion in this test cannot bleed into neighbours
+      const token = `tier-orch-exhaust-${Date.now()}`;
+
+      try {
+        // Act: exhaust the 120-request budget
+        for (let i = 0; i < 120; i++) {
+          const result = RATE_LIMIT_TIERS.orchestration.check(token);
+          // test-review:accept tobe_true — structural assertion verifying each of 120 allowed requests succeeds
+          expect(result.success).toBe(true);
+          expect(result.remaining).toBe(119 - i);
+        }
+
+        // Assert: 121st request must be denied — proves the registry entry actually rate-limits
+        const blocked = RATE_LIMIT_TIERS.orchestration.check(token);
+        expect(blocked.success).toBe(false);
+        expect(blocked.remaining).toBe(0);
+      } finally {
+        RATE_LIMIT_TIERS.orchestration.reset(token);
+      }
     });
   });
 
