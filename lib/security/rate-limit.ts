@@ -259,37 +259,6 @@ export const orchestrationAdminLimiter = createRateLimiter({
   uniqueTokenPerInterval: SECURITY_CONSTANTS.RATE_LIMIT.MAX_UNIQUE_TOKENS,
 });
 
-// =============================================================================
-// Admin Rate-Limit Tier Registry
-// =============================================================================
-
-/**
- * Named tiers used by `withAdminAuth({ rateLimit: ... })`.
- *
- * - `'admin'` — core admin (users, logs, invitations, feature flags). 30/min.
- *   Fail-safe default if no tier is specified.
- * - `'orchestration'` — admin/orchestration UI (agents, workflows, knowledge,
- *   executions). 120/min. Opt in explicitly.
- *
- * Extending: add a new tier here and update the {@link RATE_LIMIT_TIERS}
- * registry below. Keep the union narrow — tier names should describe the
- * *section* of the admin UI, not the specific endpoint. Per-endpoint caps
- * (chat stream, audio, image, invite, upload, etc.) layer on top of the
- * section tier via their own dedicated limiters.
- */
-export type AdminRateLimitTier = 'admin' | 'orchestration';
-
-/**
- * Resolve a tier name to its concrete limiter.
- *
- * Used by `withAdminAuth` — route handlers should not read this directly;
- * declare the tier on the wrapper instead.
- */
-export const RATE_LIMIT_TIERS: Record<AdminRateLimitTier, RateLimiter> = {
-  admin: adminLimiter,
-  orchestration: orchestrationAdminLimiter,
-};
-
 /**
  * Rate limiter for accept-invite endpoint
  * Limit: 5 attempts per 15 minutes per IP
@@ -414,6 +383,44 @@ export const inboundLimiter = createRateLimiter({
   maxRequests: 60,
   uniqueTokenPerInterval: SECURITY_CONSTANTS.RATE_LIMIT.MAX_UNIQUE_TOKENS,
 });
+
+// =============================================================================
+// Rate-Limit Tier Registry
+// =============================================================================
+
+/**
+ * Named tiers consumed by the rate-limit middleware
+ * (`lib/security/rate-limit-middleware.ts`) via the policy table at
+ * `lib/security/rate-limit-policy.ts`.
+ *
+ * Tiers are *section-level* caps. Each tier corresponds to one limiter
+ * instance and one rate. The middleware picks a tier for every API request
+ * based on the path; per-flow tighter caps (chat-stream, audio, image, upload,
+ * invite, password-reset) stay in the route handler as additive checks against
+ * their own dedicated limiters — they're not tiers.
+ *
+ * - `'admin'` — core admin endpoints (users, logs, invitations, feature flags, stats). 30/min.
+ * - `'orchestration'` — admin/orchestration UI (agents, workflows, knowledge, executions). 120/min.
+ * - `'api'` — general authenticated API + consumer surfaces. 100/min.
+ * - `'auth'` — authentication endpoints (login, signup, password reset). 5/min per IP.
+ *
+ * Add new tiers here, add a matching entry to {@link RATE_LIMIT_TIERS}, then
+ * reference the tier from `RATE_LIMIT_POLICY`.
+ */
+export type RateLimitTier = 'admin' | 'orchestration' | 'api' | 'auth';
+
+/**
+ * Resolve a tier name to its concrete limiter instance.
+ *
+ * Consumed by the rate-limit middleware. Route handlers should not read this
+ * directly — let the middleware do tier resolution from the policy table.
+ */
+export const RATE_LIMIT_TIERS: Record<RateLimitTier, RateLimiter> = {
+  admin: adminLimiter,
+  orchestration: orchestrationAdminLimiter,
+  api: apiLimiter,
+  auth: authLimiter,
+};
 
 // =============================================================================
 // Dynamic Rate Limiter Factory
