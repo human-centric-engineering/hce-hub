@@ -83,6 +83,69 @@ describe('rate-limit-policy', () => {
       expect(userRule?.key).toBe('session-user');
     });
 
+    it("webhook paths use the 'api' tier with 'api-key' keying", () => {
+      // Arrange — webhook callers authenticate via Authorization: Bearer <key>,
+      // not session cookies. Keying on the API key (instead of session-user or IP)
+      // means each key gets its own bucket — a customer can't grief another
+      // customer's webhook budget just by sharing infrastructure.
+      const pathname = '/api/v1/webhooks/trigger';
+
+      // Act
+      const rule = findRateLimitRule(pathname);
+
+      // Assert — same section cap as other api routes (100/min), but keyed differently
+      expect(rule).not.toBeNull();
+      expect(rule?.tier).toBe('api');
+      expect(rule?.key).toBe('api-key');
+    });
+
+    it("embed paths use the 'api' tier with 'embed-token' keying", () => {
+      // Arrange — embed widgets are anonymous from a session perspective; the embed
+      // token identifies the embedding site. The middleware composes
+      // `embed:${token}:${ip}` so two sites with the same token but different IPs
+      // (or two anonymous users on the same embedded page) get independent buckets.
+      const pathname = '/api/v1/embed/chat';
+
+      // Act
+      const rule = findRateLimitRule(pathname);
+
+      // Assert
+      expect(rule).not.toBeNull();
+      expect(rule?.tier).toBe('api');
+      expect(rule?.key).toBe('embed-token');
+    });
+
+    it("inbound trigger paths use the 'api' tier with 'ip' keying", () => {
+      // Arrange — Slack app-mention webhooks, Postmark inbound email, and generic
+      // HMAC-signed senders are server-to-server. No session, no API key in the
+      // conventional sense — keyed on the remote IP so a noisy sender can be
+      // rate-limited without affecting other channels.
+      const pathname = '/api/v1/inbound/slack/agent-slug';
+
+      // Act
+      const rule = findRateLimitRule(pathname);
+
+      // Assert
+      expect(rule).not.toBeNull();
+      expect(rule?.tier).toBe('api');
+      expect(rule?.key).toBe('ip');
+    });
+
+    it("the contact form path uses the 'api' tier with 'ip' keying", () => {
+      // Arrange — contact form is unauthenticated public submission. The
+      // per-flow contactLimiter (5/hour) provides the real protection inside
+      // the handler; this section tier is defense-in-depth above that.
+      const pathname = '/api/v1/contact';
+
+      // Act
+      const rule = findRateLimitRule(pathname);
+
+      // Assert
+      expect(rule).not.toBeNull();
+      expect(rule?.tier).toBe('api');
+      expect(rule?.key).toBe('ip');
+    });
+
     it('returns null for non-API paths (page routes, static assets, root)', () => {
       // Arrange — middleware should never rate-limit page routes; these paths must
       // fall through all rules and return null so the dispatcher is a no-op.
@@ -114,24 +177,61 @@ describe('rate-limit-policy', () => {
       expect(rule?.tier).toBe('orchestration');
       expect(rule?.tier).not.toBe('admin');
     });
+
+    it('consumer-specific rules resolve before the api catch-all', () => {
+      // Arrange — each consumer rule (webhooks, embed, inbound, contact) needs to
+      // resolve to its own keying strategy, NOT fall through to the catch-all's
+      // 'session-user' key. If a consumer rule is accidentally moved below the
+      // catch-all, this test fails: the catch-all matches `/api/v1/anything` so
+      // it would silently swallow webhooks/embed/inbound/contact traffic with the
+      // wrong keying. That's a real security regression worth a dedicated guard.
+      const cases: Array<[string, 'api-key' | 'embed-token' | 'ip']> = [
+        ['/api/v1/webhooks/trigger', 'api-key'],
+        ['/api/v1/embed/chat', 'embed-token'],
+        ['/api/v1/inbound/slack/agent-slug', 'ip'],
+        ['/api/v1/contact', 'ip'],
+      ];
+
+      for (const [pathname, expectedKey] of cases) {
+        // Act
+        const rule = findRateLimitRule(pathname);
+
+        // Assert — the consumer-specific rule won; catch-all (which would yield
+        // 'session-user') did not. Failure message names the path so the cause
+        // is obvious if a rule is moved.
+        expect(rule, `expected a rule for ${pathname}`).not.toBeNull();
+        expect(rule?.key, `expected ${expectedKey} keying for ${pathname}`).toBe(expectedKey);
+        expect(rule?.key, `${pathname} should not fall through to session-user`).not.toBe(
+          'session-user'
+        );
+      }
+    });
   });
 
   describe('RATE_LIMIT_POLICY — declared order', () => {
     it('policy array is ordered from most-specific to least-specific', () => {
       // Assert — ordering IS the API. If someone reorders the array, this test
-      // surfaces the breakage immediately. The order here encodes the first-match-wins
-      // contract explicitly so it can be verified without running path matching.
+      // surfaces the breakage immediately. The order here encodes the
+      // first-match-wins contract explicitly so it can be verified without
+      // running path matching. Tiers alone aren't enough to disambiguate (most
+      // consumer rules share the 'api' tier) so we also assert the key strategy.
       expect(RATE_LIMIT_POLICY[0].tier).toBe('orchestration');
       expect(RATE_LIMIT_POLICY[1].tier).toBe('admin');
       expect(RATE_LIMIT_POLICY[2].tier).toBe('auth'); // /api/v1/auth/
       expect(RATE_LIMIT_POLICY[3].tier).toBe('auth'); // /api/auth/ (better-auth routes)
-      expect(RATE_LIMIT_POLICY[4].tier).toBe('api'); // catch-all
+      // Consumer-specific rules — same tier ('api') but distinct keying.
+      expect(RATE_LIMIT_POLICY[4]).toMatchObject({ tier: 'api', key: 'api-key' }); // webhooks
+      expect(RATE_LIMIT_POLICY[5]).toMatchObject({ tier: 'api', key: 'embed-token' }); // embed
+      expect(RATE_LIMIT_POLICY[6]).toMatchObject({ tier: 'api', key: 'ip' }); // inbound
+      expect(RATE_LIMIT_POLICY[7]).toMatchObject({ tier: 'api', key: 'ip' }); // contact
+      // Catch-all — must remain LAST so the consumer rules above it have a chance to match.
+      expect(RATE_LIMIT_POLICY[8]).toMatchObject({ tier: 'api', key: 'session-user' });
     });
 
-    it('has exactly 5 rules (catches unintended additions or deletions)', () => {
+    it('has exactly 9 rules (catches unintended additions or deletions)', () => {
       // A length change is a signal that the policy changed. This test surfaces
       // that signal without being prescriptive about what was added/removed.
-      expect(RATE_LIMIT_POLICY).toHaveLength(5);
+      expect(RATE_LIMIT_POLICY).toHaveLength(9);
     });
   });
 

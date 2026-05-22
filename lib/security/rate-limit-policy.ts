@@ -123,14 +123,54 @@ export const RATE_LIMIT_POLICY: readonly RateLimitRule[] = [
     key: 'ip',
   },
 
-  // ── General API ──────────────────────────────────────────────────────────
+  // ── Consumer surfaces with non-session keying ────────────────────────────
+  // These all use the `'api'` tier (100/min) for the section cap, but the
+  // *keying* differs from the default `session-user` because the caller's
+  // identity is established by something other than a session cookie.
+  // Per-flow tighter caps (apiKeyChatLimiter, embedChatLimiter, inboundLimiter,
+  // contactLimiter) layer on top inside their respective handlers.
+
+  // Webhook triggers authenticate via API key (Authorization: Bearer <key>);
+  // there is no user session, and keying on IP would incorrectly group all
+  // calls from a single sender even if they hold distinct keys.
+  {
+    match: /^\/api\/v1\/webhooks\//,
+    tier: 'api',
+    key: 'api-key',
+  },
+  // Embed widgets are anonymous; the embed token identifies the embedding
+  // site. Token + IP composite (built by the middleware) mirrors the
+  // long-shipping `embed:user:${token}:${ip}` convention used by the
+  // per-flow `embedChatLimiter`.
+  {
+    match: /^\/api\/v1\/embed\//,
+    tier: 'api',
+    key: 'embed-token',
+  },
+  // Inbound triggers (Slack app-mention webhooks, Postmark email parses,
+  // generic HMAC-signed senders) are server-to-server. No session, no
+  // API key in the conventional sense — keyed on the remote IP.
+  {
+    match: /^\/api\/v1\/inbound\//,
+    tier: 'api',
+    key: 'ip',
+  },
+  // Contact form is unauthenticated public submission. Per-flow
+  // contactLimiter inside the handler enforces the tight 5/hour cap;
+  // the section tier here is a defense-in-depth upper bound.
+  {
+    match: /^\/api\/v1\/contact/,
+    tier: 'api',
+    key: 'ip',
+  },
+
+  // ── General authenticated API ────────────────────────────────────────────
   // Catch-all for every other route under /api/v1/. Default 100/min,
   // keyed on session. Anonymous traffic falls back to IP keying inside
-  // the middleware.
-  //
-  // Routes that need a TIGHTER per-flow cap on top of this (chat-stream,
-  // audio, image, upload, invite, password-reset, etc.) keep their
-  // sub-limiter call in the handler — it's additive to this section tier.
+  // the middleware. Routes that need a TIGHTER per-flow cap on top of
+  // this (chat-stream, audio, image, upload, invite, password-reset, etc.)
+  // keep their sub-limiter call in the handler — it's additive to this
+  // section tier.
   {
     match: /^\/api\/v1\//,
     tier: 'api',
