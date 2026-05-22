@@ -3,7 +3,8 @@
  *
  * Single source of truth for which rate-limit tier applies to which API path.
  * Consumed by `lib/security/rate-limit-middleware.ts`, which runs from
- * `middleware.ts` at the project root on every API request.
+ * `proxy.ts` at the project root on every API request (Next.js 16 renamed the
+ * `middleware.ts` file convention to `proxy.ts`).
  *
  * **This is the canonical rate-limit configuration for Sunrise.** Reviewing
  * rate-limit policy = reviewing this one file. Adding a new section to the
@@ -17,7 +18,7 @@
  *
  * @see lib/security/rate-limit-middleware.ts — the dispatcher that consumes this table
  * @see lib/security/rate-limit.ts — tier definitions and limiter instances
- * @see middleware.ts — project-root wiring
+ * @see proxy.ts — project-root wiring
  */
 
 import type { RateLimitTier } from '@/lib/security/rate-limit';
@@ -75,6 +76,27 @@ export interface RateLimitRule {
 }
 
 /**
+ * Credential-surface paths under `/api/auth/**` that warrant the OWASP-grade
+ * 5/min brute-force cap. Anything else under `/api/auth/**` (`get-session`,
+ * `sign-out`, OAuth `callback/*`, `list-sessions`, `revoke-session`) is high-
+ * frequency / bursty-but-legitimate traffic and is skipped by
+ * {@link skipNonCredentialAuthRoutes} so legitimate users on shared NATs don't
+ * collectively hit the cap on session refreshes.
+ */
+const CREDENTIAL_AUTH_PATTERN =
+  /^\/api\/auth\/(sign-in|sign-up|forget-password|reset-password|send-verification-email|verify-email|change-password|accept-invite)(\/|$|\?)/;
+
+/**
+ * Skip predicate for the `/api/auth/**` rule. Returns `true` (skip rate
+ * limiting) for non-credential auth endpoints; returns `false` (apply the
+ * 5/min auth cap) for credential endpoints.
+ */
+function skipNonCredentialAuthRoutes(request: Request): boolean {
+  const { pathname } = new URL(request.url);
+  return !CREDENTIAL_AUTH_PATTERN.test(pathname);
+}
+
+/**
  * The rate-limit policy.
  *
  * **Ordering matters.** Each request is matched against rules top-to-bottom;
@@ -112,6 +134,16 @@ export const RATE_LIMIT_POLICY: readonly RateLimitRule[] = [
   // yet) and capped tight (5/min) per OWASP brute-force guidance.
   // better-auth's own endpoints live under /api/auth/** — Sunrise's
   // application-layer auth lives under /api/v1/auth/**.
+  //
+  // The /api/auth/** rule matches every better-auth endpoint but ALSO
+  // matches frequent non-credential reads — `get-session` fires on every
+  // page focus, `sign-out` is one-shot but legitimate, and OAuth provider
+  // callbacks are bursty by design. The skip predicate keeps the 5/min
+  // brute-force cap targeted at the credential surface (sign-in, sign-up,
+  // forget-password, reset-password, send-verification-email, verify-email,
+  // change-password, accept-invite) and lets the rest through unrated at
+  // the middleware layer — matching the pre-refactor behaviour and
+  // preventing spurious 429s on shared-NAT session refreshes.
   {
     match: /^\/api\/v1\/auth\//,
     tier: 'auth',
@@ -121,6 +153,7 @@ export const RATE_LIMIT_POLICY: readonly RateLimitRule[] = [
     match: /^\/api\/auth\//,
     tier: 'auth',
     key: 'ip',
+    skip: skipNonCredentialAuthRoutes,
   },
 
   // ── Consumer surfaces with non-session keying ────────────────────────────

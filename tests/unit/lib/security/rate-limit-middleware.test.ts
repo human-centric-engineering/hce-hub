@@ -37,6 +37,21 @@ vi.mock('@/lib/auth/config', () => ({
   },
 }));
 
+// ─── Mock @/lib/logging ──────────────────────────────────────────────────────
+// The dispatcher logs in two places worth asserting:
+// - logger.warn when a policy rule's tier isn't in RATE_LIMIT_TIERS (config drift)
+// - logger.error when RATE_LIMIT_BYPASS is on in production (misconfiguration)
+// Both are silent failure modes by default; the tests below assert the log
+// actually fires.
+vi.mock('@/lib/logging', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
 // ─── Mock @/lib/security/rate-limit-policy (partial) ────────────────────────
 // Used ONLY in tests #4 (skip predicate) and #13 (api-key).
 // importOriginal preserves the real policy table so all other tests work normally.
@@ -49,6 +64,7 @@ vi.mock('@/lib/security/rate-limit-policy', async (importOriginal) => {
 });
 
 import { auth } from '@/lib/auth/config';
+import { logger } from '@/lib/logging';
 import { findRateLimitRule, type RateLimitRule } from '@/lib/security/rate-limit-policy';
 
 // ─── Real findRateLimitRule reference ────────────────────────────────────────
@@ -592,12 +608,13 @@ describe('applyRateLimit', () => {
       RATE_LIMIT_TIERS.api.reset(fallbackToken);
     });
 
-    it('returns null (fail-open) when the rule tier is not in the RATE_LIMIT_TIERS registry', async () => {
+    it('returns null (fail-open) AND logs a warning when the rule tier is not in the RATE_LIMIT_TIERS registry', async () => {
       // Arrange: inject a synthetic rule whose tier is NOT in RATE_LIMIT_TIERS.
       // TypeScript prevents this at compile time, but the source has a defensive
       // `if (!limiter) return null` branch to avoid breaking production traffic
-      // if the type contract is somehow violated at runtime. This test proves
-      // that the fail-open behaviour fires rather than throwing.
+      // if the type contract is somehow violated at runtime. The dispatcher MUST
+      // log a warning so operators can detect the config drift; silently returning
+      // null was the original bug.
       //
       // We force the type error intentionally with `as RateLimitTier` to reach
       // the branch the type system makes "unreachable" in normal usage.
@@ -613,10 +630,92 @@ describe('applyRateLimit', () => {
       // Act
       const result = await applyRateLimit(request);
 
-      // Assert: the dispatcher did not throw — it returned null (fail-open),
-      // which means production traffic continues to flow even if a tier is
-      // misconfigured, rather than causing a 500 error cascade.
+      // Assert pass-through: production traffic continues to flow even if a
+      // tier is misconfigured, rather than causing a 500 error cascade.
       expect(result).toBeNull();
+
+      // Assert observable signal: the unreachable branch MUST log a warning
+      // with the tier name and pathname so operators can diagnose config drift.
+      // Silent failure on this branch was the original code-review finding.
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('unknown tier'),
+        expect.objectContaining({
+          tier: 'nonexistent',
+          pathname: '/api/v1/test-missing-tier/resource',
+        })
+      );
+    });
+  });
+
+  // ─── Production-bypass safeguard (3 tests) ───────────────────────────────
+
+  describe('RATE_LIMIT_BYPASS production safeguard', () => {
+    it('logs an error when bypass is active AND NODE_ENV=production', async () => {
+      // Arrange: enable bypass and pin NODE_ENV to production. The dispatcher
+      // is documented to emit a structured logger.error so the misconfiguration
+      // surfaces in production log streams — the only way operators can detect
+      // an accidental .env promotion that silently disables rate limiting.
+      vi.stubEnv('RATE_LIMIT_BYPASS', 'true');
+      vi.stubEnv('NODE_ENV', 'production');
+
+      // Act
+      const result = await applyRateLimit(makeRequest('/api/v1/admin/users'));
+
+      // Assert pass-through (bypass still works — we don't refuse traffic, just log)
+      expect(result).toBeNull();
+
+      // Assert the structured error log fires with actionable context.
+      expect(logger.error).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('RATE_LIMIT_BYPASS'),
+        expect.objectContaining({
+          nodeEnv: 'production',
+        })
+      );
+    });
+
+    it('does NOT log an error when bypass is active in a non-production NODE_ENV', async () => {
+      // Arrange: bypass on, NODE_ENV=test (the normal development/CI mode).
+      // This is the intended use of the flag — no warning should fire and
+      // tests using bypass shouldn't pollute log output.
+      vi.stubEnv('RATE_LIMIT_BYPASS', 'true');
+      vi.stubEnv('NODE_ENV', 'test');
+
+      // Act
+      const result = await applyRateLimit(makeRequest('/api/v1/admin/users'));
+
+      // Assert: bypass works
+      expect(result).toBeNull();
+      // Assert no production warning fired
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('does NOT log an error when bypass is off, regardless of NODE_ENV', async () => {
+      // Arrange: production NODE_ENV but bypass explicitly off. The error log
+      // is gated on bypass-being-active — turning bypass off must produce no
+      // log noise even in production.
+      vi.stubEnv('RATE_LIMIT_BYPASS', '');
+      vi.stubEnv('NODE_ENV', 'production');
+
+      // Set up a real session so the dispatcher gets through to the limiter
+      // (otherwise it falls back to IP keying which is fine but irrelevant).
+      const userId = uniqueUserId();
+      RATE_LIMIT_TIERS.admin.reset(`mw:admin:session-user:user:${userId}`);
+      vi.mocked(auth.api.getSession).mockResolvedValue(
+        createMockSession({ user: { id: userId } }) as never
+      );
+
+      // Act
+      const result = await applyRateLimit(makeRequest('/api/v1/admin/users'));
+
+      // Assert pass-through (under the cap)
+      expect(result).toBeNull();
+      // Assert: no production-bypass warning fired (bypass is off)
+      expect(logger.error).not.toHaveBeenCalled();
+
+      // Cleanup
+      RATE_LIMIT_TIERS.admin.reset(`mw:admin:session-user:user:${userId}`);
     });
   });
 });

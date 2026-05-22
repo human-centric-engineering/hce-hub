@@ -235,6 +235,102 @@ describe('rate-limit-policy', () => {
     });
   });
 
+  describe('/api/auth/** skip predicate — credential vs non-credential routes', () => {
+    // The /api/auth/ rule applies the 5/min auth cap, but its skip predicate
+    // restricts that cap to credential endpoints only. Non-credential routes
+    // (get-session, sign-out, OAuth callbacks) are matched but skipped, so
+    // legitimate users on shared NATs don't collectively hit 5/min on
+    // session refreshes. This describe block locks in which paths get capped
+    // and which get skipped — drift in either direction is a regression.
+
+    const betterAuthRule = RATE_LIMIT_POLICY.find(
+      (r) => r.match instanceof RegExp && r.match.source === '^\\/api\\/auth\\/'
+    );
+
+    function makeRequest(pathname: string): Request {
+      return new Request(`http://localhost:3000${pathname}`);
+    }
+
+    it('the better-auth rule has a skip predicate attached', () => {
+      // Arrange + Assert: the rule exists and the skip predicate is wired.
+      // Without this, the test below would silently pass (skip would be
+      // undefined and never called).
+      expect(betterAuthRule).toBeDefined();
+      expect(betterAuthRule?.skip).toBeTypeOf('function');
+    });
+
+    it.each([
+      '/api/auth/sign-in',
+      '/api/auth/sign-in/email',
+      '/api/auth/sign-up',
+      '/api/auth/sign-up/email',
+      '/api/auth/forget-password',
+      '/api/auth/reset-password',
+      '/api/auth/send-verification-email',
+      '/api/auth/verify-email',
+      '/api/auth/change-password',
+      '/api/auth/accept-invite',
+    ])('does NOT skip credential endpoint %s (returns false → 5/min cap applies)', (pathname) => {
+      // Act
+      const skipped = betterAuthRule?.skip?.(makeRequest(pathname));
+
+      // Assert: skip returned false → the dispatcher will apply the auth tier
+      // cap. These are the endpoints OWASP brute-force guidance targets.
+      expect(skipped).toBe(false);
+    });
+
+    it.each([
+      '/api/auth/get-session',
+      '/api/auth/sign-out',
+      '/api/auth/callback/google',
+      '/api/auth/callback/github',
+      '/api/auth/list-sessions',
+      '/api/auth/revoke-session',
+      '/api/auth/revoke-sessions',
+    ])(
+      'skips non-credential endpoint %s (returns true → no rate limit at middleware layer)',
+      (pathname) => {
+        // Act
+        const skipped = betterAuthRule?.skip?.(makeRequest(pathname));
+
+        // Assert: skip returned true → the dispatcher bypasses rate limiting.
+        // Non-credential routes are not brute-force surfaces; capping them at
+        // 5/min would produce spurious 429s on shared-NAT session refreshes.
+        expect(skipped).toBe(true);
+      }
+    );
+
+    it('does not match credential-prefix-but-not-credential paths (e.g. /api/auth/sign-in-helper)', () => {
+      // Arrange: a hypothetical future route whose name starts with a credential
+      // prefix but isn't itself a credential endpoint. The pattern uses
+      // `(\/|$|\?)` after the credential name to prevent prefix-match drift.
+      // E.g. `/api/auth/sign-in-helper` should be skipped (not capped) because
+      // it isn't `/api/auth/sign-in` itself.
+
+      // Act
+      const skipped = betterAuthRule?.skip?.(makeRequest('/api/auth/sign-in-helper'));
+
+      // Assert: skip returned true — the credential pattern only matches
+      // exact-prefix-followed-by-boundary, so unrelated paths fall through.
+      expect(skipped).toBe(true);
+    });
+
+    it('matches credential paths with query strings (e.g. /api/auth/sign-in?callback=...)', () => {
+      // Arrange: better-auth often appends query strings to credential flows
+      // (callback URLs, error params). The `(\/|$|\?)` boundary in the pattern
+      // explicitly handles the `?` separator so these are still capped.
+
+      // Act
+      const skipped = betterAuthRule?.skip?.(
+        makeRequest('/api/auth/sign-in?callbackUrl=/dashboard')
+      );
+
+      // Assert: skip returned false — query strings on credential paths
+      // must NOT bypass the brute-force cap.
+      expect(skipped).toBe(false);
+    });
+  });
+
   describe('findRateLimitRule — string-prefix match support', () => {
     // `RateLimitRule.match` accepts `RegExp | string`. When `match` is a string,
     // `findRateLimitRule` falls back to `pathname.startsWith(match)`. The current

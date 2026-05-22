@@ -1,7 +1,8 @@
 /**
  * Rate-Limit Middleware Dispatcher
  *
- * Consumed by `middleware.ts` at the project root. Runs on every API request,
+ * Consumed by `proxy.ts` at the project root (Next.js 16 renamed the
+ * `middleware.ts` file convention to `proxy.ts`). Runs on every API request,
  * looks up the matching tier from {@link RATE_LIMIT_POLICY}, identifies the
  * caller, applies the section limiter, and returns a 429 response if the cap
  * is exceeded — otherwise yields control back to the route handler.
@@ -18,11 +19,12 @@
  *
  * @see lib/security/rate-limit-policy.ts — the policy table this consumes
  * @see lib/security/rate-limit.ts — limiter primitives + the tier registry
- * @see middleware.ts — project-root Next.js wiring
+ * @see proxy.ts — project-root Next.js wiring
  */
 
 import type { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth/config';
+import { logger } from '@/lib/logging';
 import { getClientIP } from '@/lib/security/ip';
 import {
   RATE_LIMIT_TIERS,
@@ -71,7 +73,13 @@ export async function applyRateLimit(request: NextRequest): Promise<Response | n
 
   const limiter: RateLimiter | undefined = RATE_LIMIT_TIERS[rule.tier];
   if (!limiter) {
-    // Unreachable under normal type-checked code; defensive.
+    // Unreachable under normal type-checked code. If it fires, the policy
+    // table references a tier name not in RATE_LIMIT_TIERS — surface it loudly
+    // so operators can fix the config drift instead of silently failing open.
+    logger.warn('Rate-limit policy references an unknown tier; skipping limiter', {
+      tier: rule.tier,
+      pathname: request.nextUrl.pathname,
+    });
     return null;
   }
 
@@ -84,17 +92,45 @@ export async function applyRateLimit(request: NextRequest): Promise<Response | n
 }
 
 /**
- * Whether the test/dev bypass is active. Set `RATE_LIMIT_BYPASS=true` in the
- * environment to short-circuit `applyRateLimit`. Used by `tests/setup.ts` so
- * the vast majority of unit tests never have to think about rate-limiting.
+ * Whether the test/dev bypass is active. Set `RATE_LIMIT_BYPASS=true` (or `1`)
+ * in the environment to short-circuit `applyRateLimit`. Used by
+ * `tests/setup.ts` so the vast majority of unit tests never have to think
+ * about rate-limiting.
  *
- * The check is intentionally permissive — any non-falsy value enables the
- * bypass — because the consumers (test setup, dev .env.local) treat it as a
- * boolean flag, not a structured config.
+ * The check is intentionally strict — only the canonical `'true'` / `'1'`
+ * enable the bypass. Plausible-but-non-canonical strings (`'yes'`, `'on'`,
+ * `'TRUE'`) are treated as off, so a stray uppercase or shell-quoting
+ * accident in a CI config can't accidentally disable rate limiting.
+ *
+ * The first call in production logs an error if the bypass is somehow
+ * enabled (see {@link warnIfBypassActiveInProduction}).
  */
 function isBypassEnabled(): boolean {
   const raw = process.env.RATE_LIMIT_BYPASS;
-  return raw === 'true' || raw === '1';
+  const enabled = raw === 'true' || raw === '1';
+  if (enabled) warnIfBypassActiveInProduction();
+  return enabled;
+}
+
+/**
+ * Production safeguard. If `RATE_LIMIT_BYPASS` is on while `NODE_ENV` is
+ * `'production'`, log an error EVERY TIME the dispatcher would have run —
+ * this is a misconfiguration that disables a critical security control, and
+ * the only way an operator finds out is via the log stream. Logging once is
+ * not enough because production deploys often have multiple workers; one
+ * error per worker per request guarantees visibility without flooding (in
+ * the correctly-configured case the warning never fires).
+ *
+ * We do NOT throw or refuse to serve traffic: a hard fail would turn a
+ * config mistake into an outage, which is worse than running with bypass.
+ * The structured log is the alerting hook.
+ */
+function warnIfBypassActiveInProduction(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+  logger.error('RATE_LIMIT_BYPASS=true is set in production — rate limiting is disabled', {
+    nodeEnv: process.env.NODE_ENV,
+    fix: 'Unset RATE_LIMIT_BYPASS in the production environment.',
+  });
 }
 
 /**
