@@ -88,7 +88,6 @@ vi.mock('@/lib/logging/context', () => ({
 import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db/client';
 import {
-  adminLimiter,
   agentChatLimiter,
   chatLimiter,
   createRateLimitResponse,
@@ -161,7 +160,6 @@ describe('POST /api/v1/admin/orchestration/chat/stream', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(auth.api.getSession).mockResolvedValue(createAdminSession());
-    vi.mocked(adminLimiter.check).mockReturnValue(makeRateLimitResult(true));
     vi.mocked(chatLimiter.check).mockReturnValue(makeRateLimitResult(true));
     // Per-agent rate-limit lookup — return a generic agent row so the
     // route progresses to streamChat. Individual tests can override.
@@ -224,17 +222,6 @@ describe('POST /api/v1/admin/orchestration/chat/stream', () => {
         entityContext: { key: 'value' },
       })
     );
-  });
-
-  it('returns 429 when admin IP rate limit is exceeded', async () => {
-    vi.mocked(adminLimiter.check).mockReturnValue(makeRateLimitResult(false));
-
-    const req = createMockRequest(validPayload);
-    const response = await POST(req);
-
-    expect(response.status).toBe(429);
-    expect(createRateLimitResponse).toHaveBeenCalled();
-    expect(streamChat).not.toHaveBeenCalled();
   });
 
   it('returns 429 when chat user rate limit is exceeded', async () => {

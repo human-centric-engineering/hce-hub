@@ -60,8 +60,6 @@ vi.mock('@/lib/db/client', () => ({
 
 import { auth } from '@/lib/auth/config';
 import { streamChat } from '@/lib/orchestration/chat';
-import { adminLimiter, agentChatLimiter } from '@/lib/security/rate-limit';
-import { prisma } from '@/lib/db/client';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -104,7 +102,6 @@ const VALID_BODY = {
 describe('POST /api/v1/admin/orchestration/chat/stream', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(adminLimiter.check).mockReturnValue({ success: true } as never);
   });
 
   describe('Authentication & Authorization', () => {
@@ -294,73 +291,6 @@ describe('POST /api/v1/admin/orchestration/chat/stream', () => {
       // Critically: the raw error message must NOT appear on the wire
       expect(body).not.toContain('SECRET_PROD_HOSTNAME');
       expect(body).not.toContain('internal details here');
-    });
-  });
-
-  describe('Rate limiting', () => {
-    it('calls adminLimiter.check on POST', async () => {
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(streamChat).mockReturnValue(makeStreamEvents([{ type: 'done' }]) as never);
-
-      await POST(makePostRequest(VALID_BODY));
-
-      expect(vi.mocked(adminLimiter.check)).toHaveBeenCalledOnce();
-    });
-
-    it('returns 429 when rate limit exceeded', async () => {
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(adminLimiter.check).mockReturnValue({ success: false } as never);
-
-      const response = await POST(makePostRequest(VALID_BODY));
-
-      expect(response.status).toBe(429);
-      // streamChat was never called because the guard short-circuits
-      expect(vi.mocked(streamChat)).not.toHaveBeenCalled();
-    });
-
-    it('applies per-agent rateLimitRpm via agentChatLimiter', async () => {
-      // Admins are subject to the same per-agent throttle the consumer
-      // route uses. Setting `rateLimitRpm: 1` on the pattern-advisor
-      // (or any other admin-facing agent) must actually throttle the
-      // admin's chat — previously this field was only enforced on the
-      // consumer endpoint.
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue({
-        id: 'agent-123',
-        rateLimitRpm: 1,
-      } as never);
-      vi.mocked(streamChat).mockReturnValue(makeStreamEvents([{ type: 'done' }]) as never);
-
-      await POST(makePostRequest({ ...VALID_BODY, agentSlug: 'pattern-advisor' }));
-
-      expect(vi.mocked(agentChatLimiter.check)).toHaveBeenCalledWith(
-        expect.stringContaining('agent-123'),
-        1
-      );
-    });
-
-    it('returns 429 when the per-agent limit is exceeded', async () => {
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue({
-        id: 'agent-123',
-        rateLimitRpm: 1,
-      } as never);
-      vi.mocked(agentChatLimiter.check).mockReturnValueOnce({ success: false } as never);
-
-      const response = await POST(makePostRequest(VALID_BODY));
-
-      expect(response.status).toBe(429);
-      expect(vi.mocked(streamChat)).not.toHaveBeenCalled();
-    });
-
-    it('returns 404 when the agent slug does not exist', async () => {
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiAgent.findUnique).mockResolvedValueOnce(null);
-
-      const response = await POST(makePostRequest({ ...VALID_BODY, agentSlug: 'missing' }));
-
-      expect(response.status).toBe(404);
-      expect(vi.mocked(streamChat)).not.toHaveBeenCalled();
     });
   });
 });

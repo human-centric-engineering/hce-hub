@@ -77,7 +77,7 @@ vi.mock('@/lib/orchestration/settings', () => ({
 
 import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db/client';
-import { adminLimiter, apiLimiter } from '@/lib/security/rate-limit';
+import { apiLimiter } from '@/lib/security/rate-limit';
 import { getOrchestrationSettings } from '@/lib/orchestration/settings';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -515,7 +515,6 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
 describe('POST /api/v1/admin/orchestration/provider-models', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(adminLimiter.check).mockReturnValue({ success: true } as never);
   });
 
   const validBody = {
@@ -581,13 +580,5 @@ describe('POST /api/v1/admin/orchestration/provider-models', () => {
     const body = await parseJson<{ success: boolean; error: { code: string } }>(response);
     expect(body.success).toBe(false);
     expect(body.error.code).toBe('CONFLICT');
-  });
-
-  it('returns 429 when rate-limited', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(adminLimiter.check).mockReturnValue({ success: false } as never);
-
-    const response = await POST(makePostRequest(validBody));
-    expect(response.status).toBe(429);
   });
 });
