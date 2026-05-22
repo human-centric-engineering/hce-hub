@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Loader2, RotateCcw, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, RotateCcw, Trash2, Repeat } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -142,6 +142,36 @@ export function WebhookDlqTable({
     }
   };
 
+  const handleBulkReplay = async () => {
+    setActionId('bulk');
+    setActionError(null);
+    try {
+      const body: Record<string, unknown> = {};
+      if (subscriptionFilter !== 'all') {
+        body.subscriptionId = subscriptionFilter;
+        if (until) body.before = new Date(until).toISOString();
+      } else {
+        // No subscription selected: replay everything visible on this page.
+        body.deliveryIds = deliveries.map((d) => d.id);
+        if ((body.deliveryIds as string[]).length === 0) {
+          setActionError('Nothing to replay on this page.');
+          setActionId(null);
+          return;
+        }
+      }
+      await apiClient.post(API.ADMIN.ORCHESTRATION.WEBHOOK_DLQ_REPLAY, { body });
+      void fetchPage(meta.page);
+    } catch (err) {
+      setActionError(
+        err instanceof APIClientError
+          ? `Bulk replay failed: ${err.message}`
+          : 'Bulk replay failed. Please try again.'
+      );
+    } finally {
+      setActionId(null);
+    }
+  };
+
   const handleDelete = async (deliveryId: string) => {
     setActionId(deliveryId);
     setActionError(null);
@@ -217,6 +247,27 @@ export function WebhookDlqTable({
             onChange={(e) => setUntil(e.target.value)}
           />
         </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <p className="text-muted-foreground text-xs">
+          {subscriptionFilter === 'all'
+            ? 'Bulk replay re-dispatches every row visible on this page.'
+            : 'Bulk replay re-dispatches every exhausted delivery for the selected subscription (optionally before the "To" date).'}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={actionId !== null}
+          onClick={() => void handleBulkReplay()}
+        >
+          {actionId === 'bulk' ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Repeat className="mr-2 h-4 w-4" />
+          )}
+          Bulk replay
+        </Button>
       </div>
 
       {actionError && <p className="text-destructive text-sm">{actionError}</p>}

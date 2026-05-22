@@ -55,6 +55,7 @@ Admin UI for managing webhook subscriptions. Full CRUD with delivery history, re
 - Filters: subscription, event type, From / To date range. Filter changes refetch from `GET /webhooks/dlq`.
 - Each row links to its parent subscription's edit page and shows event, last response code, attempts, last error.
 - Row actions: retry (calls `POST /webhooks/deliveries/:id/retry`, same path as the per-subscription view) and discard (calls `DELETE /webhooks/deliveries/:id`, AlertDialog confirmation).
+- **Bulk replay** button hits `POST /webhooks/dlq/replay`. With a subscription filter active, replays every exhausted row for that subscription (and respects the "To" date as a cutoff); without one, replays the rows visible on the current page.
 - Pagination through `parsePaginationMeta`.
 
 ### `WebhookDeliveries`
@@ -82,6 +83,7 @@ Uses admin orchestration webhook endpoints:
 - `DELETE /webhooks/deliveries/:id` — permanently delete a delivery row (verifies parent subscription ownership, audit-logged as `webhook_delivery.delete`)
 - `GET /webhooks/dlq?page=&pageSize=&subscriptionId=&eventType=&since=&until=` — list exhausted deliveries across all subscriptions the calling admin owns. Always scoped to `status=exhausted` and the caller's subscriptions; filters narrow further.
 - `GET /webhooks/dlq/stats` — depth signal for the health dashboard. Returns `{ exhausted24h, exhaustedTotal, oldestExhaustedAt }` scoped to the caller's subscriptions. Consumed by improvement #41 (health dashboard).
+- `POST /webhooks/dlq/replay` — bulk replay. Body either `{ deliveryIds: string[] }` (explicit selection, max 500) or `{ subscriptionId, before? }` (replay all exhausted rows for one subscription, optionally capped by `createdAt < before`). Loops `retryDelivery()` with concurrency cap of 5. Ownership filter skips rows the caller doesn't own. Audit-logged as `webhook_delivery.replay_batch`.
 
 Consumer-facing:
 

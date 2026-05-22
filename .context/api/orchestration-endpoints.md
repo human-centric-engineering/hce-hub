@@ -1277,6 +1277,10 @@ List exhausted deliveries across all subscriptions the calling admin owns. Query
 
 Lightweight depth signal for the health dashboard. Returns `{ exhausted24h, exhaustedTotal, oldestExhaustedAt }` scoped to the caller's subscriptions. Improvement #41 (health dashboard) will surface this.
 
+### `POST /webhooks/dlq/replay`
+
+Bulk re-dispatch of exhausted deliveries. Body is either `{ deliveryIds: string[] }` (max 500 entries) or `{ subscriptionId, before?: ISO date }` (replay all exhausted rows for a single subscription, optionally capped by `createdAt < before`). Loops the per-row `retryDelivery()` with concurrency cap 5. Rows not owned by the caller are silently skipped (a partial selection doesn't 403 the batch). Returns `{ replayed, skipped, deliveryIds }`. Audit-logged as `webhook_delivery.replay_batch`.
+
 ---
 
 ## Observability

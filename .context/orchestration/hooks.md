@@ -267,6 +267,7 @@ Delivery rows persist across process restarts so admins can audit failures and m
 - **Setting**: shares the `webhookRetentionDays` column on `AiOrchestrationSettings` with outbound webhook subscriptions — event-hook deliveries and subscription deliveries are the same class of dispatch-audit data.
 - **Null setting → skip**: if `webhookRetentionDays` is unset the sweep is a no-op and rows accumulate indefinitely.
 - **Target table**: `AiEventHookDelivery`. Deletes rows whose `createdAt` is older than `now - webhookRetentionDays`.
+- **DLQ split** (webhook subscriptions only, not event hooks): `pruneWebhookDeliveries` uses `webhookRetentionDays` for `pending`/`delivered`/`failed` rows and `webhookDlqRetentionDays` for `exhausted` rows. When `webhookDlqRetentionDays` is null the prune falls back to the base value so the pre-DLQ unified retention behaviour is preserved.
 
 See [Retention Pruning](./scheduling.md#retention-pruning) for the full list of prune sweeps.
 
