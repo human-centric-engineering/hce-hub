@@ -246,6 +246,48 @@ describe('ChatInterface', () => {
     expect(screen.queryByText(/something went wrong/i)).not.toBeInTheDocument();
   });
 
+  it('processes done AFTER budget_exceeded_per_turn on terminal-turn breaches', async () => {
+    // The terminal-turn cap surface yields cap BEFORE done so both
+    // frames land in the UI: the cap branch sets the error panel
+    // without returning, then `done` follows and updates the
+    // message's content via the SSE read loop. Regression for the
+    // bug where the UI's done handler returned from the read loop
+    // before the cap event arrived, eating the cap signal entirely.
+    const user = userEvent.setup();
+    const capFrame =
+      `event: budget_exceeded_per_turn\n` +
+      `data: ${JSON.stringify({
+        code: 'budget_exceeded_per_turn',
+        message: 'Capped',
+        usedUsd: 0.014,
+        limitUsd: 0.01,
+      })}\n\n`;
+    const stream = makeSseStream([
+      startFrame('conv-1', 'msg-1'),
+      contentFrame('Pattern 3 is the supervisor pattern.'),
+      capFrame,
+      doneFrame(),
+    ]);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: stream }));
+
+    render(<ChatInterface agentSlug="test-agent" />);
+
+    const input = screen.getByPlaceholderText(/type a message/i);
+    await user.type(input, 'what is pattern 3');
+    await user.click(screen.getByRole('button', { name: /send/i }));
+
+    // Both the answer AND the cap panel render — proving the cap
+    // event did NOT short-circuit the read loop before done.
+    await waitFor(
+      () => {
+        expect(screen.getByText(/Pattern 3 is the supervisor pattern/)).toBeInTheDocument();
+        expect(screen.queryAllByText(/Response Cost Limit Reached/i).length).toBeGreaterThan(0);
+      },
+      { timeout: 3000 }
+    );
+  });
+
   it('calls onCapabilityResult when capability_result event arrives', async () => {
     const user = userEvent.setup();
     const onCapabilityResult = vi.fn();

@@ -2242,14 +2242,16 @@ describe('mid-loop budget re-check', () => {
     expect(persistedMeta.budgetExceededDetail).toEqual({ usedUsd: 0.03, limitUsd: 0.02 });
   });
 
-  it('yields budget_exceeded_per_turn AFTER done when a text-only terminal turn breaches the cap', async () => {
+  it('yields budget_exceeded_per_turn BEFORE done when a text-only terminal turn breaches the cap', async () => {
     // Regression guard: the mid-loop cap check only fires after a
     // tool-call iteration, so text-only Q&A turns (the common shape
     // for advisor agents) could silently exceed the cap. The terminal
-    // path now emits the breach event *after* `done` so the user gets
-    // the answer they paid for plus a visible cap warning. Order
-    // matters — the UI's cap branch short-circuits the SSE read loop,
-    // so events emitted after the cap event are dropped client-side.
+    // path now emits the breach event *before* `done` so the UI's cap
+    // handler sets the error panel and `done` then updates the
+    // message's cost / tokenUsage strip. Order matters: the UI's
+    // `done` handler `return`s from the SSE read loop, so anything
+    // after `done` is dropped client-side; cap-before-done lets both
+    // events land.
     (checkBudget as ReturnType<typeof vi.fn>).mockResolvedValue({
       withinBudget: true,
       spent: 0.1,
@@ -2284,9 +2286,11 @@ describe('mid-loop budget re-check', () => {
 
     expect(doneIdx).toBeGreaterThanOrEqual(0);
     expect(breachIdx).toBeGreaterThanOrEqual(0);
-    // Order: done before breach. The UI relies on this so the message's
-    // cost/usage strip is populated before the cap panel renders.
-    expect(breachIdx).toBeGreaterThan(doneIdx);
+    // Order: breach before done. The UI's `done` branch returns from
+    // the SSE read loop, so anything after `done` is dropped; placing
+    // the cap event first lets the UI set the error panel and then
+    // process `done` to update the message's cost/usage strip.
+    expect(breachIdx).toBeLessThan(doneIdx);
 
     const breach = events[breachIdx] as Record<string, unknown>;
     expect(breach).toMatchObject({

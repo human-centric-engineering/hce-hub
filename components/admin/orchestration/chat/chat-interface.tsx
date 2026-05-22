@@ -948,13 +948,19 @@ export function ChatInterface({
                 setError(getUserFacingError(code));
                 return;
               } else if (parsed.type === 'budget_exceeded_per_turn') {
-                // Discrete cap event — render the friendly cap message
-                // and exit. The handler already persisted the partial
-                // assistant message with `endedReason: 'budget_exceeded'`
-                // so a reload will show whatever was streamed.
+                // Discrete cap event — render the friendly cap message.
+                //
+                // The streaming handler emits this BEFORE `done` on the
+                // terminal-turn surface (so cost/usage from `done` still
+                // updates the message strip) and AS the final event on
+                // the mid-loop hard-stop surface (no `done` follows).
+                // In both cases we want to set the error panel and
+                // keep reading — anything after this either updates
+                // the message (terminal) or never arrives (mid-loop,
+                // where the SSE stream closes naturally on the next
+                // reader.read() returning done=true).
                 await ensureMinThinking();
                 setError(getUserFacingError('budget_exceeded_per_turn'));
-                return;
               } else if (parsed.type === 'done') {
                 setWarning(null);
                 typing.flush();

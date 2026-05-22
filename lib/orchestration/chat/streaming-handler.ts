@@ -1356,16 +1356,6 @@ export class StreamingChatHandler {
           if (citations.length > 0) {
             yield { type: 'citations', citations };
           }
-          yield buildDoneEvent(
-            resolvedModel,
-            u,
-            resolvedProviderSlug,
-            request.includeTrace ? initialBreakdown : undefined,
-            aggregateSideEffectModels(
-              turnToolCalls.map((t) => t.sideEffectModel),
-              summarizerSideEffect
-            )
-          );
 
           // Per-turn cap — terminal-turn surface.
           //
@@ -1373,17 +1363,19 @@ export class StreamingChatHandler {
           // before another iteration costs more. On terminal turns the
           // LLM stream has already completed; we know the cost only
           // after `usage` arrives, so there is nothing left to abort.
-          // We still emit `budget_exceeded_per_turn` AFTER `done` so the
-          // user sees the cap was breached and can raise it (or pick a
-          // cheaper model) — without that signal the cap silently does
-          // nothing on chats that resolve in a single iteration, which
-          // is the common case for Q&A-shaped advisor agents.
+          // We still emit `budget_exceeded_per_turn` so the user sees
+          // the cap was breached and can raise it (or pick a cheaper
+          // model) — without that signal the cap silently does nothing
+          // on chats that resolve in a single iteration, which is the
+          // common case for Q&A-shaped advisor agents.
           //
-          // Order matters: `done` updates the assistant message's
-          // costUsd / tokenUsage in the UI; `budget_exceeded_per_turn`
-          // then renders the cap panel. The UI's cap branch short-
-          // circuits the SSE read loop, so anything after this would
-          // be dropped client-side.
+          // Order matters: cap must be emitted BEFORE `done`. The UI's
+          // `done` handler `return`s from the SSE read loop (anything
+          // after it is dropped client-side); the cap handler is
+          // designed to set the error panel and fall through, letting
+          // `done` follow to update the message's cost / tokenUsage
+          // strip. Both events land; the assistant message shows the
+          // answer + cost, and the cap panel surfaces underneath.
           const terminalCap = await resolvePerTurnCap();
           if (terminalCap !== undefined && turnCostUsd > terminalCap) {
             log.warn('Chat per-turn cap exceeded on terminal turn', {
@@ -1410,6 +1402,17 @@ export class StreamingChatHandler {
               limitUsd: terminalCap,
             };
           }
+
+          yield buildDoneEvent(
+            resolvedModel,
+            u,
+            resolvedProviderSlug,
+            request.includeTrace ? initialBreakdown : undefined,
+            aggregateSideEffectModels(
+              turnToolCalls.map((t) => t.sideEffectModel),
+              summarizerSideEffect
+            )
+          );
           return;
         }
 
