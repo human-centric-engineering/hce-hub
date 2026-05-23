@@ -110,8 +110,17 @@ export async function dispatchWebhookEvent(
 
 /**
  * Retry a specific delivery. Used by the manual retry admin endpoint.
+ *
+ * By default the outbound HTTP attempt is fire-and-forget so the single-row
+ * retry endpoint can return immediately (the receiver's response time isn't
+ * in the request budget). Bulk replay opts into `awaitDelivery: true` so
+ * its chunk-by-chunk `Promise.all` actually gates outbound HTTPs and the
+ * stated concurrency cap holds.
  */
-export async function retryDelivery(deliveryId: string): Promise<boolean> {
+export async function retryDelivery(
+  deliveryId: string,
+  options?: { awaitDelivery?: boolean }
+): Promise<boolean> {
   const delivery = await prisma.aiWebhookDelivery.findUnique({
     where: { id: deliveryId },
     include: { subscription: true },
@@ -138,14 +147,20 @@ export async function retryDelivery(deliveryId: string): Promise<boolean> {
     timestamp: new Date().toISOString(),
   });
 
-  // Fire-and-forget — the attempt will update the delivery record
-  void attemptDelivery(
+  const attempt = attemptDelivery(
     deliveryId,
     delivery.subscription.url,
     delivery.subscription.secret,
     body,
     resolveRetryPolicy(delivery.subscription)
   );
+
+  if (options?.awaitDelivery) {
+    await attempt;
+  } else {
+    // Fire-and-forget — the attempt will update the delivery record
+    void attempt;
+  }
 
   return true;
 }

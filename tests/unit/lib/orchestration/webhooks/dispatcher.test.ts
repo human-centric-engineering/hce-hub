@@ -274,6 +274,61 @@ describe('retryDelivery', () => {
       })
     );
   });
+
+  it('default mode returns before the outbound HTTP resolves (fire-and-forget)', async () => {
+    // Single-row retry path: caller shouldn't have to wait for the receiver.
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue({
+      ...makeDelivery({ status: 'exhausted', attempts: 3 }),
+      subscription: makeSub(),
+    } as never);
+
+    // Deferred fetch — only resolves when we explicitly say so.
+    let resolveFetch!: (v: { ok: boolean; status: number }) => void;
+    mockFetch.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveFetch = r;
+      })
+    );
+
+    const promise = retryDelivery('del-1');
+    // Without awaitDelivery, the call resolves before the fetch promise does.
+    await expect(promise).resolves.toBe(true);
+
+    // Drain the still-in-flight fetch so the test doesn't leave a dangling promise.
+    resolveFetch({ ok: true, status: 200 });
+  });
+
+  it('awaitDelivery: true blocks until the outbound HTTP resolves', async () => {
+    // Bulk-replay path: the chunked Promise.all needs the retry to await the
+    // network so the stated concurrency cap actually throttles outbound HTTPs.
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue({
+      ...makeDelivery({ status: 'exhausted', attempts: 3 }),
+      subscription: makeSub(),
+    } as never);
+
+    let resolveFetch!: (v: { ok: boolean; status: number }) => void;
+    let fetchResolved = false;
+    mockFetch.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveFetch = (v) => {
+          fetchResolved = true;
+          r(v);
+        };
+      })
+    );
+
+    const promise = retryDelivery('del-1', { awaitDelivery: true });
+
+    // Give the microtask queue a chance — if the call weren't awaiting fetch,
+    // it would have settled by now.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fetchResolved).toBe(false);
+
+    resolveFetch({ ok: true, status: 200 });
+    await expect(promise).resolves.toBe(true);
+    expect(fetchResolved).toBe(true);
+  });
 });
 
 describe('processPendingRetries', () => {

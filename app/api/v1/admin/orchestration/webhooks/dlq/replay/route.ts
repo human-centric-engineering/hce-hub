@@ -65,9 +65,12 @@ export const POST = withAdminAuth(async (request, session) => {
 
   for (let i = 0; i < ids.length; i += REPLAY_CONCURRENCY) {
     const slice = ids.slice(i, i + REPLAY_CONCURRENCY);
+    // `awaitDelivery: true` so the chunked `Promise.all` actually gates the
+    // outbound HTTP — without it, retryDelivery resolves after the DB reset
+    // and the receiver still gets the whole batch in parallel.
     const results = await Promise.all(
       slice.map(async (id) => {
-        const ok = await retryDelivery(id);
+        const ok = await retryDelivery(id, { awaitDelivery: true });
         return { id, ok };
       })
     );
