@@ -76,6 +76,13 @@ export const SECURITY_CONSTANTS = {
       CONSUMER_CHAT: 10,
       /** Audio transcription: 10 requests per minute per user/session */
       AUDIO: 10,
+      /**
+       * Conversation export (admin): 10 requests per minute per user.
+       * Per-flow sub-cap on top of the orchestration section tier. Export
+       * routes are bulk reads — building a JSON/CSV file from many rows —
+       * so they get a dedicated bucket that's tighter than the section cap.
+       */
+      EXPORT: 10,
       /** Image / PDF attachment chat turn: 20 requests per minute per user/session */
       IMAGE: 20,
     },

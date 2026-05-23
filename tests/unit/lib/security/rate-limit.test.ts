@@ -18,6 +18,7 @@ import {
   adminLimiter,
   orchestrationAdminLimiter,
   mcpLimiter,
+  exportLimiter,
   RATE_LIMIT_TIERS,
   getRateLimitHeaders,
   createRateLimitResponse,
@@ -237,6 +238,26 @@ describe('Rate Limiter', () => {
       } finally {
         // Cleanup
         passwordResetLimiter.reset(token);
+      }
+    });
+
+    it('exportLimiter is configured with the export sub-cap (10/min)', () => {
+      // Arrange: per-flow sub-cap for bulk-read admin endpoints (e.g. the
+      // conversation export route). Sits beneath the orchestration tier
+      // (120/min, applied by the middleware) and provides additional
+      // protection against runaway export pulls.
+      const token = `export-test-${Date.now()}`;
+
+      try {
+        // Act
+        const result = exportLimiter.check(token);
+
+        // Assert: 10/min is what the EXPORT constant resolves to via envInt
+        expect(result.limit).toBe(10);
+        // test-review:accept tobe_true — structural assertion verifying the limiter accepted the first request
+        expect(result.success).toBe(true);
+      } finally {
+        exportLimiter.reset(token);
       }
     });
   });

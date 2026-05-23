@@ -121,6 +121,7 @@ These are NOT tiers. They're tighter caps on specific expensive operations, appl
 | `inviteLimiter`            | 10/15min per IP         | Sending invitations                           |
 | `uploadLimiter`            | 10/15min per IP         | File uploads                                  |
 | `cspReportLimiter`         | 20/min per IP           | CSP violation reports                         |
+| `exportLimiter`            | 10/min per admin user   | Bulk-export endpoints (conversations export)  |
 | `agentChatLimiter`         | per-agent RPM (dynamic) | Consumer chat with `rateLimitRpm` override    |
 | `apiKeyChatLimiter`        | per-key RPM (dynamic)   | Webhook triggers with `rateLimitRpm` override |
 

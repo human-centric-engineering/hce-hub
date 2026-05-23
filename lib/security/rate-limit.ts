@@ -388,6 +388,24 @@ export const embedChatLimiter = createRateLimiter({
 });
 
 /**
+ * Rate limiter for admin bulk-export endpoints (e.g. conversation export).
+ * Limit: 10 requests per minute per user.
+ *
+ * Export routes are bulk reads — building a JSON/CSV file from many rows
+ * is heavier than the typical orchestration list/edit operation. The
+ * orchestration section tier (120/min) already applies via the middleware;
+ * this per-flow sub-cap is the additive defence specifically for the
+ * expensive read pattern. Keyed on the admin user ID via
+ * `export:user:${session.user.id}` so two admins in the same office don't
+ * share a bucket.
+ */
+export const exportLimiter = createRateLimiter({
+  interval: SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_INTERVAL,
+  maxRequests: SECURITY_CONSTANTS.RATE_LIMIT.LIMITS.EXPORT,
+  uniqueTokenPerInterval: SECURITY_CONSTANTS.RATE_LIMIT.MAX_UNIQUE_TOKENS,
+});
+
+/**
  * Inbound trigger limiter — 60 requests per minute per (channel + remote IP).
  * Slack can burst on app-mention storms; Postmark inbound is steadier. The
  * limit lives above expected steady traffic but caps runaway loops or

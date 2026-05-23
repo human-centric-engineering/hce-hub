@@ -58,7 +58,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       );
     }
 
-    // 3. Check MCP server is enabled
+    // 1. Check MCP server is enabled
     const serverState = await getMcpServerConfig();
     if (!serverState.isEnabled) {
       return Response.json(
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       );
     }
 
-    // 4. Parse request body with size limit
+    // 2. Parse request body with size limit
     const contentLength = request.headers.get('content-length');
     if (contentLength && parseInt(contentLength, 10) > MAX_BODY_SIZE) {
       return Response.json(
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       );
     }
 
-    // 5. Detect batch vs single request
+    // 3. Detect batch vs single request
     const isBatch = Array.isArray(rawBody);
     const rawArray = isBatch ? (rawBody as unknown[]) : null;
 
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const sessionManager = getMcpSessionManager();
     const rateLimiter = getMcpRateLimiter();
 
-    // 6. Session management
+    // 4. Session management
     const hasInitialize = validRequests.some((r) => r.method === 'initialize');
     const sessionId = request.headers.get(MCP_SESSION_HEADER);
     let session;
@@ -231,7 +231,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       );
     }
 
-    // 7. Dispatch each request
+    // 5. Dispatch each request
     const handlerContext = { auth, session, serverState, rateLimiter };
     const responses: (JsonRpcResponse | null)[] = [];
 

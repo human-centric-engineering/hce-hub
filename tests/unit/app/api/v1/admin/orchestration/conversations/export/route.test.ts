@@ -26,8 +26,14 @@ vi.mock('@/lib/db/client', () => ({
   },
 }));
 
-vi.mock('@/lib/security/ip', () => ({
-  getClientIP: vi.fn(() => '127.0.0.1'),
+vi.mock('@/lib/security/rate-limit', () => ({
+  // Per-flow sub-cap for export routes (introduced alongside this test pass).
+  // Default: allow every request. Tests that need to drive the 429 path
+  // override the mock return value inline.
+  exportLimiter: { check: vi.fn(() => ({ success: true, limit: 10, remaining: 9, reset: 0 })) },
+  createRateLimitResponse: vi.fn(() =>
+    Response.json({ success: false, error: { code: 'RATE_LIMITED' } }, { status: 429 })
+  ),
 }));
 
 vi.mock('@/lib/api/context', () => ({
