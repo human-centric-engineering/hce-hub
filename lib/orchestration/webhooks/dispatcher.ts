@@ -260,6 +260,19 @@ export async function processPendingRetries(): Promise<number> {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Outcome shape returned by each per-channel adapter.
+ *
+ * `terminal: true` on a failure means the row should be marked exhausted
+ * immediately regardless of attempt count — config-level failures like a
+ * missing HMAC secret or unconfigured Resend can't be fixed by retrying.
+ * The adapters never write the audit row themselves; `attemptDelivery`
+ * owns every write so the state machine has a single source of truth.
+ */
+type DeliveryOutcome =
+  | { delivered: true; statusCode?: number }
+  | { delivered: false; error: string; statusCode?: number; terminal?: boolean };
+
 async function attemptDelivery(
   deliveryId: string,
   sub: SubscriptionLike,
@@ -268,18 +281,10 @@ async function attemptDelivery(
 ): Promise<void> {
   const now = new Date();
 
-  // Per-channel adapter — each returns either a "delivered" outcome with
-  // an optional response code, or a "failed" outcome with an error
-  // message. The retry / exhaustion logic below is channel-agnostic.
-  let outcome:
-    | { delivered: true; statusCode?: number }
-    | { delivered: false; error: string; statusCode?: number };
-
-  if (sub.channel === 'email') {
-    outcome = await attemptEmailDelivery(deliveryId, sub, body, now);
-  } else {
-    outcome = await attemptWebhookDelivery(deliveryId, sub, body, now);
-  }
+  const outcome: DeliveryOutcome =
+    sub.channel === 'email'
+      ? await attemptEmailDelivery(sub, body)
+      : await attemptWebhookDelivery(sub, body);
 
   if (outcome.delivered) {
     await prisma.aiWebhookDelivery.update({
@@ -304,7 +309,8 @@ async function attemptDelivery(
   if (!delivery) return;
 
   const newAttempts = delivery.attempts + 1;
-  const exhausted = newAttempts >= policy.maxAttempts;
+  // `terminal` forces exhausted regardless of attempt count.
+  const exhausted = outcome.terminal === true || newAttempts >= policy.maxAttempts;
 
   // After attempt N fails, the next delay is policy.retryBackoffMs[N-1].
   // If the array is shorter than maxAttempts-1, fall back to the last
@@ -336,6 +342,7 @@ async function attemptDelivery(
     attempt: newAttempts,
     maxAttempts: policy.maxAttempts,
     exhausted,
+    terminal: outcome.terminal === true,
     error: outcome.error,
     statusCode: outcome.statusCode,
   });
@@ -344,42 +351,25 @@ async function attemptDelivery(
 /**
  * HMAC-signed POST to a webhook subscriber. Returns the structured
  * outcome that `attemptDelivery` uses to drive the shared retry / audit
- * write.
+ * write — adapters never write the audit row themselves.
  */
 async function attemptWebhookDelivery(
-  deliveryId: string,
   sub: SubscriptionLike,
-  body: string,
-  now: Date
-): Promise<
-  | { delivered: true; statusCode?: number }
-  | { delivered: false; error: string; statusCode?: number }
-> {
+  body: string
+): Promise<DeliveryOutcome> {
   // Refuse to sign with an empty HMAC key: signatures would be forgeable
-  // by anyone who knows the URL. Mark exhausted so the delivery doesn't
-  // get retried until an admin sets a secret.
+  // by anyone who knows the URL. Terminal — retrying won't conjure a
+  // secret, only admin action will.
   if (!sub.secret) {
-    await prisma.aiWebhookDelivery.update({
-      where: { id: deliveryId },
-      data: {
-        status: 'exhausted',
-        attempts: { increment: 1 },
-        lastAttemptAt: now,
-        lastError: 'Subscription has no signing secret',
-        nextRetryAt: null,
-      },
-    });
-    logger.warn('Webhook delivery skipped: subscription has no signing secret', {
-      deliveryId,
-      url: sub.url,
-    });
-    // Returning "delivered: false" here is misleading — the row is
-    // already marked exhausted. Use a sentinel that the caller skips.
-    return { delivered: true }; // no-op so the caller doesn't double-write
+    return {
+      delivered: false,
+      terminal: true,
+      error: 'Subscription has no signing secret',
+    };
   }
 
   if (!sub.url) {
-    return { delivered: false, error: 'Webhook subscription has no URL' };
+    return { delivered: false, terminal: true, error: 'Webhook subscription has no URL' };
   }
 
   try {
@@ -422,33 +412,22 @@ async function attemptWebhookDelivery(
  * (`{ event, timestamp, data }`) — we parse it and pass the fields
  * into the template as props.
  */
-async function attemptEmailDelivery(
-  deliveryId: string,
-  sub: SubscriptionLike,
-  body: string,
-  now: Date
-): Promise<
-  | { delivered: true; statusCode?: number }
-  | { delivered: false; error: string; statusCode?: number }
-> {
+async function attemptEmailDelivery(sub: SubscriptionLike, body: string): Promise<DeliveryOutcome> {
   if (!sub.emailAddress) {
-    return { delivered: false, error: 'Email subscription has no destination address' };
+    return {
+      delivered: false,
+      terminal: true,
+      error: 'Email subscription has no destination address',
+    };
   }
   if (!isEmailEnabled()) {
-    // No Resend key configured — mark exhausted so the receiver retry
-    // loop doesn't churn against a permanently-broken config.
-    await prisma.aiWebhookDelivery.update({
-      where: { id: deliveryId },
-      data: {
-        status: 'exhausted',
-        attempts: { increment: 1 },
-        lastAttemptAt: now,
-        lastError: 'Email is not configured (RESEND_API_KEY / EMAIL_FROM missing)',
-        nextRetryAt: null,
-      },
-    });
-    logger.warn('Email delivery skipped: email subsystem not configured', { deliveryId });
-    return { delivered: true }; // sentinel — already marked exhausted
+    // No Resend key configured — terminal because the receiver retry
+    // loop can't fix a missing env var; only admin action can.
+    return {
+      delivered: false,
+      terminal: true,
+      error: 'Email is not configured (RESEND_API_KEY / EMAIL_FROM missing)',
+    };
   }
 
   let event: string;

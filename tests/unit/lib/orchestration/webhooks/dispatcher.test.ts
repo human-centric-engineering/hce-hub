@@ -249,17 +249,30 @@ describe('dispatchWebhookEvent', () => {
     await dispatchWebhookEvent('budget_exceeded', { agentId: 'agent-1' });
 
     expect(mockFetch).not.toHaveBeenCalled();
-    expect(prisma.aiWebhookDelivery.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          status: 'exhausted',
-          lastError: 'Subscription has no signing secret',
-        }),
-      })
-    );
+
+    // Exactly one delivery update — terminal failure with exhausted status
+    // and the diagnostic error preserved.
+    const updateCalls = vi.mocked(prisma.aiWebhookDelivery.update).mock.calls;
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0][0]).toMatchObject({
+      data: expect.objectContaining({
+        status: 'exhausted',
+        lastError: 'Subscription has no signing secret',
+        nextRetryAt: null,
+      }),
+    });
+    // Regression guard: no later overwrite to 'delivered' that would
+    // mask a misconfigured subscription as a successful send.
+    expect(updateCalls.every((c) => c[0]?.data?.status !== 'delivered')).toBe(true);
+
     expect(logger.warn).toHaveBeenCalledWith(
-      'Webhook delivery skipped: subscription has no signing secret',
-      expect.objectContaining({ deliveryId: 'del-1' })
+      'Webhook delivery failed',
+      expect.objectContaining({
+        deliveryId: 'del-1',
+        exhausted: true,
+        terminal: true,
+        error: 'Subscription has no signing secret',
+      })
     );
   });
 });
@@ -774,22 +787,26 @@ describe('email-channel delivery', () => {
 
     await dispatchWebhookEvent('workflow_failed', { error: 'step exploded' });
 
-    // The "email not configured" branch marks the row exhausted directly —
-    // no retry would help against a permanently-broken config.
-    expect(prisma.aiWebhookDelivery.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          status: 'exhausted',
-          lastError: expect.stringContaining('Email is not configured'),
-        }),
-      })
-    );
     expect(mockResendSend).not.toHaveBeenCalled();
+
+    // Single update — terminal failure marks the row exhausted with the
+    // diagnostic error and no retry scheduled. Regression guard ensures
+    // it's never overwritten to 'delivered' by a later write.
+    const updateCalls = vi.mocked(prisma.aiWebhookDelivery.update).mock.calls;
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0][0]).toMatchObject({
+      data: expect.objectContaining({
+        status: 'exhausted',
+        lastError: expect.stringContaining('Email is not configured'),
+        nextRetryAt: null,
+      }),
+    });
+    expect(updateCalls.every((c) => c[0]?.data?.status !== 'delivered')).toBe(true);
   });
 
-  it('marks email delivery failed when subscription has no emailAddress', async () => {
+  it('marks email delivery exhausted when subscription has no emailAddress (terminal)', async () => {
     // Defensive branch: row was created as email channel but its destination
-    // is null. Dispatcher must not call Resend and must record the reason.
+    // is null. Treated as terminal — retrying won't conjure an address.
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
       makeEmailSub({ emailAddress: null }),
     ] as never);
@@ -800,13 +817,19 @@ describe('email-channel delivery', () => {
     await dispatchWebhookEvent('workflow_failed', {});
 
     expect(mockResendSend).not.toHaveBeenCalled();
-    const failUpdate = vi
+    const exhaustedUpdate = vi
       .mocked(prisma.aiWebhookDelivery.update)
-      .mock.calls.find((c) => (c[0]?.data as Record<string, unknown>)?.status === 'failed');
-    expect(failUpdate).toBeDefined();
-    expect((failUpdate?.[0]?.data as Record<string, unknown>).lastError).toBe(
+      .mock.calls.find((c) => (c[0]?.data as Record<string, unknown>)?.status === 'exhausted');
+    expect(exhaustedUpdate).toBeDefined();
+    expect((exhaustedUpdate?.[0]?.data as Record<string, unknown>).lastError).toBe(
       'Email subscription has no destination address'
     );
+    // No 'delivered' overwrite should ever happen on a terminal failure.
+    expect(
+      vi
+        .mocked(prisma.aiWebhookDelivery.update)
+        .mock.calls.every((c) => c[0]?.data?.status !== 'delivered')
+    ).toBe(true);
   });
 
   it('marks email delivery failed when getResendClient returns null', async () => {
@@ -917,9 +940,10 @@ describe('webhook-channel delivery edge cases', () => {
     );
   });
 
-  it('marks delivery failed when webhook subscription has a secret but no URL', async () => {
+  it('marks delivery exhausted when webhook subscription has a secret but no URL (terminal)', async () => {
     // Defensive: schema allows url=null only for email channel, but a
     // misconfigured row should still fail cleanly rather than crashing.
+    // Treated as terminal — retrying won't conjure a URL.
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
       makeSub({ url: null }),
     ] as never);
@@ -927,12 +951,17 @@ describe('webhook-channel delivery edge cases', () => {
     await dispatchWebhookEvent('budget_exceeded', {});
 
     expect(mockFetch).not.toHaveBeenCalled();
-    const failUpdate = vi
+    const exhaustedUpdate = vi
       .mocked(prisma.aiWebhookDelivery.update)
-      .mock.calls.find((c) => (c[0]?.data as Record<string, unknown>)?.status === 'failed');
-    expect(failUpdate).toBeDefined();
-    expect((failUpdate?.[0]?.data as Record<string, unknown>).lastError).toBe(
+      .mock.calls.find((c) => (c[0]?.data as Record<string, unknown>)?.status === 'exhausted');
+    expect(exhaustedUpdate).toBeDefined();
+    expect((exhaustedUpdate?.[0]?.data as Record<string, unknown>).lastError).toBe(
       'Webhook subscription has no URL'
     );
+    expect(
+      vi
+        .mocked(prisma.aiWebhookDelivery.update)
+        .mock.calls.every((c) => c[0]?.data?.status !== 'delivered')
+    ).toBe(true);
   });
 });
