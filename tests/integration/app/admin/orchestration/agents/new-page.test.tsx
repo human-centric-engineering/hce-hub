@@ -166,9 +166,7 @@ describe('NewAgentPage (server component)', () => {
     render(await NewAgentPage());
 
     await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: /create agent/i, exact: false })
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /create agent/i })).toBeInTheDocument();
     });
   });
 
