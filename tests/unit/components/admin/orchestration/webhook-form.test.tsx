@@ -547,4 +547,91 @@ describe('WebhookForm', () => {
       expect(budgetCheckbox).not.toBeChecked();
     });
   });
+
+  // ── Secret affordances: reveal / copy / capture cue ─────────────────────────
+
+  it('reveal/copy buttons are disabled when the secret field is empty', () => {
+    render(<WebhookForm mode="create" />);
+
+    const reveal = screen.getByRole('button', { name: /reveal secret/i });
+    const copy = screen.getByRole('button', { name: /copy secret to clipboard/i });
+    expect(reveal).toBeDisabled();
+    expect(copy).toBeDisabled();
+  });
+
+  it('does not show the "copy this secret now" cue when no secret has been entered', () => {
+    render(<WebhookForm mode="create" />);
+    expect(screen.queryByText(/copy this secret now/i)).not.toBeInTheDocument();
+  });
+
+  it('reveals the secret when the eye toggle is clicked', async () => {
+    const user = userEvent.setup();
+    render(<WebhookForm mode="create" />);
+
+    // Generate a secret so the toggle is enabled.
+    await user.click(screen.getByTitle(/generate a random secret/i));
+
+    const secret = document.getElementById('secret') as HTMLInputElement;
+    // The generate action auto-reveals so the user can capture immediately.
+    // test-review:accept tobe_literal — input type is part of the reveal contract
+    expect(secret.type).toBe('text');
+
+    // Click hide.
+    await user.click(screen.getByRole('button', { name: /hide secret/i }));
+    expect(secret.type).toBe('password');
+
+    // Click reveal again.
+    await user.click(screen.getByRole('button', { name: /reveal secret/i }));
+    expect(secret.type).toBe('text');
+  });
+
+  it('shows the capture cue as soon as the secret field has a value', async () => {
+    const user = userEvent.setup();
+    render(<WebhookForm mode="create" />);
+
+    // No cue yet.
+    expect(screen.queryByText(/copy this secret now/i)).not.toBeInTheDocument();
+
+    // Generate.
+    await user.click(screen.getByTitle(/generate a random secret/i));
+
+    await waitFor(() => {
+      expect(screen.getByText(/copy this secret now/i)).toBeInTheDocument();
+    });
+  });
+
+  it('copies the current secret to the clipboard and flashes a confirmation', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(<WebhookForm mode="create" />);
+    await user.click(screen.getByTitle(/generate a random secret/i));
+
+    const secret = (document.getElementById('secret') as HTMLInputElement).value;
+    expect(secret.length).toBeGreaterThan(16);
+
+    await user.click(screen.getByRole('button', { name: /copy secret to clipboard/i }));
+
+    expect(writeText).toHaveBeenCalledWith(secret);
+  });
+
+  it('surfaces a clipboard error when navigator.clipboard rejects', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockRejectedValue(new Error('insecure context')) },
+      configurable: true,
+    });
+
+    render(<WebhookForm mode="create" />);
+    await user.click(screen.getByTitle(/generate a random secret/i));
+    await user.click(screen.getByRole('button', { name: /copy secret to clipboard/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/could not copy to clipboard/i)).toBeInTheDocument();
+    });
+  });
 });

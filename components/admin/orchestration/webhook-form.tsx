@@ -13,7 +13,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { z } from 'zod';
-import { AlertCircle, Loader2, Save, KeyRound } from 'lucide-react';
+import { AlertCircle, Check, Copy, Eye, EyeOff, Loader2, Save, KeyRound } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { FieldHelp } from '@/components/ui/field-help';
@@ -123,6 +123,10 @@ export function WebhookForm({ mode, webhook }: WebhookFormProps) {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [secretRevealed, setSecretRevealed] = useState(false);
+  // Briefly latched to give the copy button a "✓ Copied" affordance.
+  const [secretCopied, setSecretCopied] = useState(false);
+  const [secretCopyError, setSecretCopyError] = useState<string | null>(null);
 
   const defaultBackoffSeconds = webhook?.retryBackoffMs
     ? webhook.retryBackoffMs.map((ms) => Math.round(ms / 1000)).join(', ')
@@ -149,6 +153,22 @@ export function WebhookForm({ mode, webhook }: WebhookFormProps) {
 
   const currentEvents = watch('events');
   const currentIsActive = watch('isActive');
+  const currentSecret = watch('secret');
+  const hasSecretValue = Boolean(currentSecret && currentSecret.length > 0);
+
+  const copySecret = async () => {
+    if (!currentSecret) return;
+    setSecretCopyError(null);
+    try {
+      await navigator.clipboard.writeText(currentSecret);
+      setSecretCopied(true);
+      setTimeout(() => setSecretCopied(false), 2000);
+    } catch {
+      setSecretCopyError(
+        'Could not copy to clipboard. Your browser may require a secure (HTTPS) context.'
+      );
+    }
+  };
 
   const toggleEvent = (event: string) => {
     const current = watch('events');
@@ -270,7 +290,7 @@ export function WebhookForm({ mode, webhook }: WebhookFormProps) {
         <div className="flex gap-2">
           <Input
             id="secret"
-            type="password"
+            type={secretRevealed ? 'text' : 'password'}
             {...register('secret')}
             placeholder={
               isEdit ? 'Leave blank to keep current secret' : 'Enter or generate a secret'
@@ -280,12 +300,47 @@ export function WebhookForm({ mode, webhook }: WebhookFormProps) {
           <Button
             type="button"
             variant="outline"
-            onClick={() => setValue('secret', generateSecret(), { shouldValidate: true })}
+            disabled={!hasSecretValue}
+            onClick={() => setSecretRevealed((v) => !v)}
+            title={secretRevealed ? 'Hide secret' : 'Reveal secret'}
+            aria-label={secretRevealed ? 'Hide secret' : 'Reveal secret'}
+          >
+            {secretRevealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!hasSecretValue}
+            onClick={() => void copySecret()}
+            title="Copy secret to clipboard"
+            aria-label="Copy secret to clipboard"
+          >
+            {secretCopied ? (
+              <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setValue('secret', generateSecret(), { shouldValidate: true });
+              setSecretRevealed(true);
+            }}
             title="Generate a random secret"
+            aria-label="Generate a random secret"
           >
             <KeyRound className="h-4 w-4" />
           </Button>
         </div>
+        {hasSecretValue && (
+          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+            Copy this secret now — Sunrise won&apos;t display it again after you save. Paste it into
+            your receiver so it can verify the <code>X-Webhook-Signature</code> header.
+          </p>
+        )}
+        {secretCopyError && <p className="text-destructive text-xs">{secretCopyError}</p>}
         {errors.secret && <p className="text-destructive text-xs">{errors.secret.message}</p>}
       </div>
 

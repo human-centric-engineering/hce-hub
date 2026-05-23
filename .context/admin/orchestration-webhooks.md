@@ -39,7 +39,7 @@ Admin UI for managing webhook subscriptions. Full CRUD with delivery history, re
 `components/admin/orchestration/webhook-form.tsx`
 
 - URL input (required) with safety hint (private IPs, localhost, metadata endpoints blocked)
-- Signing secret input with auto-generate button (`whsec_` prefix + 32 random hex chars)
+- Signing secret input with auto-generate, reveal/hide eye toggle, and clipboard-copy buttons. Generating a secret auto-reveals it so the user can capture it before saving. While the field has a value, an amber notice reminds the user to copy now — Sunrise never returns the secret again after save (the API's `SAFE_SELECT` strips it from every GET).
 - 12 event checkboxes from `WEBHOOK_EVENT_TYPES` (including `execution_crashed` for engine-crash alerts — see [Hooks](../orchestration/hooks.md#event-types))
 - Description textarea
 - Retry policy block: `maxAttempts` (1–10) and `retryBackoffSeconds` (comma-separated seconds, each 1–86400). Form input is seconds; API field is `retryBackoffMs` (millisecond array). Defaults: 3 attempts with `10, 60, 300` seconds. The form blocks submit unless the array has at least `maxAttempts - 1` entries.
