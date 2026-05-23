@@ -608,7 +608,13 @@ export class OrchestrationEngine {
           // attribution point; fall back to the workflow's entry step
           // if the batch yielded no step ids (degenerate empty batch).
           const attribStep = batchResult.nextIds[0] ?? workflow.definition.entryStepId;
-          yield workflowBudgetExceeded(ctx.totalCostUsd, budgetLimitUsd, attribStep, executionId);
+          yield workflowBudgetExceeded(
+            ctx.totalCostUsd,
+            budgetLimitUsd,
+            attribStep,
+            executionId,
+            ctx.workflowId
+          );
           yield workflowFailed(failureReason, undefined, ctx);
           failed = true;
           break;
@@ -1141,7 +1147,13 @@ export class OrchestrationEngine {
         // the webhook subscriber path is identical regardless of which
         // of the four cap-check sites triggered the breach.
         const reason = formatBudgetExceededReason(err.usedUsd, err.limitUsd);
-        yield workflowBudgetExceeded(err.usedUsd, err.limitUsd, step.id, lease.executionId);
+        yield workflowBudgetExceeded(
+          err.usedUsd,
+          err.limitUsd,
+          step.id,
+          lease.executionId,
+          ctx.workflowId
+        );
         yield workflowFailed(reason, step.id, ctx);
         return {
           failed: true,
@@ -1245,7 +1257,13 @@ export class OrchestrationEngine {
     // intact.
     if (budgetLimitUsd && ctx.totalCostUsd > budgetLimitUsd) {
       const reason = formatBudgetExceededReason(ctx.totalCostUsd, budgetLimitUsd);
-      yield workflowBudgetExceeded(ctx.totalCostUsd, budgetLimitUsd, step.id, lease.executionId);
+      yield workflowBudgetExceeded(
+        ctx.totalCostUsd,
+        budgetLimitUsd,
+        step.id,
+        lease.executionId,
+        ctx.workflowId
+      );
       yield workflowFailed(reason, step.id, ctx);
       return {
         failed: true,
@@ -1617,7 +1635,13 @@ export class OrchestrationEngine {
           'during parallel batch'
         );
         allEvents.push(
-          workflowBudgetExceeded(ctx.totalCostUsd, budgetLimitUsd, step.id, executionId)
+          workflowBudgetExceeded(
+            ctx.totalCostUsd,
+            budgetLimitUsd,
+            step.id,
+            executionId,
+            ctx.workflowId
+          )
         );
         allEvents.push(workflowFailed(reason, step.id, ctx));
         batchFailed = true;

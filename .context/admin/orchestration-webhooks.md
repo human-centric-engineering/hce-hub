@@ -45,7 +45,7 @@ which destination fields are used.
 
 `components/admin/orchestration/webhooks-table.tsx`
 
-- Table columns: URL (truncated + description), events (badges, max 3 + overflow count), delivery count, active Switch, created date, row actions dropdown (Edit, Delete)
+- Table columns: URL (truncated + description), events (badges, max 3 + overflow count, plus a `Scoped` badge when the row has any `agentIds` / `workflowIds` set), delivery count, active Switch, created date, row actions dropdown (Edit, Delete)
 - Active filter dropdown, pagination
 - Inline active/inactive toggle via `Switch` — optimistic update with revert on failure
 - Row actions dropdown with Edit (navigates to edit page) and Delete (AlertDialog confirmation)
@@ -59,6 +59,7 @@ which destination fields are used.
 - Signing secret input with auto-generate, reveal/hide eye toggle, and clipboard-copy buttons. Generating a secret auto-reveals it so the user can capture it before saving. While the field has a value, an amber notice reminds the user to copy now — Sunrise never returns the secret again after save (the API's `SAFE_SELECT` strips it from every GET).
 - 12 event checkboxes from `WEBHOOK_EVENT_TYPES` (including `execution_crashed` for engine-crash alerts — see [Hooks](../orchestration/hooks.md#event-types))
 - Description textarea
+- **Scope block** (between Events and Retry policy): two async-search `MultiSelect`s — "Limit to agents" and "Limit to workflows". Each multi-selects from the matching admin list endpoint (`?q=` server-side search, 50-row page, names rendered on chips via a pre-fetch). Both default to empty = "all agents / all workflows". Cap: 50 entries per dimension. Filters apply **dimension-specifically** (see [Entity-Scoped Subscriptions](../orchestration/hooks.md#entity-scoped-subscriptions)) — an agent filter does not restrict workflow-typed events and vice versa.
 - Retry policy block: `maxAttempts` (1–10) and `retryBackoffSeconds` (comma-separated seconds, each 1–86400). Form input is seconds; API field is `retryBackoffMs` (millisecond array). Defaults: 3 attempts with `10, 60, 300` seconds. The form blocks submit unless the array has at least `maxAttempts - 1` entries.
 - Active toggle
 - In edit mode, empty secret field = keep current secret

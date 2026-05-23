@@ -886,12 +886,22 @@ const eventsField = z
   .min(1, 'At least one event type is required')
   .max(WEBHOOK_EVENT_TYPES.length);
 
+// Optional entity-scoping filters. Empty array = no constraint on that
+// dimension. CUID check matches the rest of this file; 50-entry cap
+// bounds payload size and keeps the in-memory dispatcher filter cheap.
+// Semantics: dimension-specific — see lib/orchestration/webhooks/event-entity-keys.ts.
+const entityScopeFields = {
+  agentIds: z.array(z.string().cuid()).max(50).optional(),
+  workflowIds: z.array(z.string().cuid()).max(50).optional(),
+};
+
 const commonFields = {
   events: eventsField,
   description: z.string().max(500).optional(),
   isActive: z.boolean().optional(),
   maxAttempts: retryPolicyFields.maxAttempts.optional(),
   retryBackoffMs: retryPolicyFields.retryBackoffMs.optional(),
+  ...entityScopeFields,
 };
 
 const webhookChannelFields = {
@@ -948,6 +958,7 @@ const updateCommonFields = {
   isActive: z.boolean().optional(),
   maxAttempts: retryPolicyFields.maxAttempts.optional(),
   retryBackoffMs: retryPolicyFields.retryBackoffMs.optional(),
+  ...entityScopeFields,
 };
 
 const updateWebhookChannelFields = {

@@ -40,6 +40,8 @@ export const GET = withAdminAuth(async (request, session) => {
         url: true,
         emailAddress: true,
         events: true,
+        agentIds: true,
+        workflowIds: true,
         isActive: true,
         description: true,
         createdAt: true,
@@ -72,6 +74,8 @@ export const POST = withAdminAuth(async (request, session) => {
     isActive: body.isActive ?? true,
     maxAttempts: body.maxAttempts,
     retryBackoffMs: body.retryBackoffMs,
+    agentIds: body.agentIds ?? [],
+    workflowIds: body.workflowIds ?? [],
     createdBy: session.user.id,
   };
   if (body.channel === 'webhook') {
@@ -89,6 +93,8 @@ export const POST = withAdminAuth(async (request, session) => {
       url: true,
       emailAddress: true,
       events: true,
+      agentIds: true,
+      workflowIds: true,
       isActive: true,
       description: true,
       maxAttempts: true,

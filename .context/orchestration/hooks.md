@@ -355,6 +355,35 @@ template that covers any update event:
   event from a flapping provider until the breaker actually cycles.
   Payload: `{ providerSlug, failures, threshold, windowMs, cooldownMs, openedAt }`.
 
+## Entity-Scoped Subscriptions
+
+`AiWebhookSubscription` rows carry two optional filter arrays —
+`agentIds` and `workflowIds` — that let admins narrow a subscription
+to specific entities. Empty array means "no constraint on that
+dimension" (backward compatible).
+
+**Rules** (centralised in
+`lib/orchestration/webhooks/event-entity-keys.ts`):
+
+- **Dimension-specific.** Each filter only constrains events that
+  carry an ID in its dimension. A sub with `agentIds=['x']` still
+  receives every `workflow_failed` event — the agent filter doesn't
+  apply to workflow-typed events. Use the workflow filter to scope
+  those.
+- **Unscopable events** (like `circuit_breaker_opened`) fire for
+  every matching sub regardless of filters — there's no entity
+  dimension to filter on.
+- **Fail-closed.** If a mapped event's payload is missing the
+  expected ID (an enrichment bug at the dispatch site), a scoped
+  sub with a non-empty filter on that dimension does NOT match.
+  Prevents leaks; the event still reaches unscoped subs.
+
+The `EVENT_ENTITY_KEYS` map is the single source of truth for
+which payload field carries each entity ID. Adding a new wired
+event type requires adding a row there (or an explicit `{}` to
+declare "no scopable entity"); the `EVENT_ENTITY_KEYS map coverage`
+test fails otherwise.
+
 ## Related Docs
 
 - [Webhook Management UI](../admin/orchestration-webhooks.md) — the separate HMAC-signed outbound webhook subsystem

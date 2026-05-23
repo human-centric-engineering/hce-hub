@@ -66,6 +66,8 @@ function makeSub(overrides: Record<string, unknown> = {}) {
     secret: 'test-secret-key-1234567890',
     emailAddress: null,
     events: ['budget_exceeded', 'workflow_failed'],
+    agentIds: [] as string[],
+    workflowIds: [] as string[],
     isActive: true,
     description: null,
     maxAttempts: 3,
@@ -963,5 +965,118 @@ describe('webhook-channel delivery edge cases', () => {
         .mocked(prisma.aiWebhookDelivery.update)
         .mock.calls.every((c) => c[0]?.data?.status !== 'delivered')
     ).toBe(true);
+  });
+});
+
+// ─── Entity-scoped matching ──────────────────────────────────────────────────
+//
+// Verifies the dimension-specific filter rule introduced alongside the
+// `agentIds` / `workflowIds` columns. See
+// lib/orchestration/webhooks/event-entity-keys.ts for the contract.
+describe('dispatchWebhookEvent: entity-scoped matching', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetch.mockResolvedValue({ ok: true, status: 200 });
+    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery() as never);
+    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery() as never);
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery() as never);
+  });
+
+  it('delivers to a sub with empty filters (backward compat)', async () => {
+    vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([makeSub()] as never);
+
+    await dispatchWebhookEvent('budget_exceeded', { agentId: 'agent-X' });
+
+    expect(prisma.aiWebhookDelivery.create).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('delivers when payload agentId matches the agentIds filter', async () => {
+    vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
+      makeSub({ agentIds: ['agent-X', 'agent-Y'] }),
+    ] as never);
+
+    await dispatchWebhookEvent('budget_exceeded', { agentId: 'agent-X' });
+
+    expect(prisma.aiWebhookDelivery.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips a sub when payload agentId is NOT in the agentIds filter', async () => {
+    vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
+      makeSub({ agentIds: ['agent-X'] }),
+    ] as never);
+
+    await dispatchWebhookEvent('budget_exceeded', { agentId: 'agent-Z' });
+
+    expect(prisma.aiWebhookDelivery.create).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('delivers a workflow-typed event regardless of an agent-only filter (dimension-specific)', async () => {
+    // The sub cares about agents, but workflow_failed is a workflow event.
+    // Agent filter doesn't apply → event still fires.
+    vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
+      makeSub({ agentIds: ['agent-X'], events: ['workflow_failed'] }),
+    ] as never);
+
+    await dispatchWebhookEvent('workflow_failed', { workflowId: 'wf-1', error: 'boom' });
+
+    expect(prisma.aiWebhookDelivery.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('delivers an agent-typed event regardless of a workflow-only filter', async () => {
+    vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
+      makeSub({ workflowIds: ['wf-1'], events: ['budget_exceeded'] }),
+    ] as never);
+
+    await dispatchWebhookEvent('budget_exceeded', { agentId: 'agent-X' });
+
+    expect(prisma.aiWebhookDelivery.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('delivers when both dimensions match', async () => {
+    vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
+      makeSub({
+        agentIds: ['agent-X'],
+        workflowIds: ['wf-1'],
+        events: ['budget_exceeded', 'workflow_failed'],
+      }),
+    ] as never);
+
+    await dispatchWebhookEvent('workflow_failed', { workflowId: 'wf-1', error: 'boom' });
+    await dispatchWebhookEvent('budget_exceeded', { agentId: 'agent-X' });
+
+    expect(prisma.aiWebhookDelivery.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails closed: scoped sub does NOT match when payload is missing the expected ID', async () => {
+    // Defensive: if an upstream dispatch site forgets to include agentId in
+    // a `budget_exceeded` payload, a scoped sub should NOT leak — better
+    // to drop the event than send it to the wrong subscriber.
+    vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
+      makeSub({ agentIds: ['agent-X'] }),
+    ] as never);
+
+    await dispatchWebhookEvent('budget_exceeded', {
+      /* missing agentId */
+    });
+
+    expect(prisma.aiWebhookDelivery.create).not.toHaveBeenCalled();
+  });
+
+  it('routes only to the matching sub when one sub is scoped and another is global', async () => {
+    vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
+      makeSub({ id: 'sub-scoped', agentIds: ['agent-X'] }),
+      makeSub({ id: 'sub-global' }),
+    ] as never);
+
+    await dispatchWebhookEvent('budget_exceeded', { agentId: 'agent-Y' });
+
+    // Only the global sub gets a delivery; the scoped one is filtered out.
+    expect(prisma.aiWebhookDelivery.create).toHaveBeenCalledTimes(1);
+    const createdSubIds = vi
+      .mocked(prisma.aiWebhookDelivery.create)
+      .mock.calls.map((c) => (c[0]?.data as Record<string, unknown>)?.subscriptionId);
+    expect(createdSubIds).toEqual(['sub-global']);
   });
 });

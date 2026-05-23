@@ -10,7 +10,7 @@
  * Follows the agent-form pattern: react-hook-form + zodResolver.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
@@ -33,6 +33,7 @@ import { Button } from '@/components/ui/button';
 import { FieldHelp } from '@/components/ui/field-help';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { MultiSelect, type MultiSelectOption } from '@/components/ui/multi-select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { apiClient, APIClientError } from '@/lib/api/client';
@@ -50,6 +51,8 @@ import {
 const commonFields = {
   channel: z.enum(['webhook', 'email']),
   events: z.array(z.string()).min(1, 'Select at least one event'),
+  agentIds: z.array(z.string()).max(50, 'At most 50 agents per subscription'),
+  workflowIds: z.array(z.string()).max(50, 'At most 50 workflows per subscription'),
   description: z.string().max(500).optional(),
   isActive: z.boolean(),
   maxAttempts: z
@@ -164,6 +167,8 @@ export interface WebhookFormProps {
     url: string | null;
     emailAddress: string | null;
     events: string[];
+    agentIds: string[];
+    workflowIds: string[];
     isActive: boolean;
     description: string | null;
     maxAttempts: number;
@@ -217,6 +222,8 @@ export function WebhookForm({ mode, webhook }: WebhookFormProps) {
       secret: '',
       emailAddress: webhook?.emailAddress ?? '',
       events: webhook?.events ?? [],
+      agentIds: webhook?.agentIds ?? [],
+      workflowIds: webhook?.workflowIds ?? [],
       description: webhook?.description ?? '',
       isActive: webhook?.isActive ?? true,
       maxAttempts: webhook?.maxAttempts ?? 3,
@@ -228,7 +235,101 @@ export function WebhookForm({ mode, webhook }: WebhookFormProps) {
   const currentEvents = watch('events');
   const currentIsActive = watch('isActive');
   const currentSecret = watch('secret');
+  const currentAgentIds = watch('agentIds');
+  const currentWorkflowIds = watch('workflowIds');
   const hasSecretValue = Boolean(currentSecret && currentSecret.length > 0);
+
+  // Pre-fetch labels for any pre-selected agents/workflows so chips render
+  // human names instead of raw CUIDs. The async loaders below only know
+  // what the user types — without this lookup, edit-mode chips would show
+  // bare IDs until the user typed something. See knowledge-access-section.tsx.
+  const [selectedAgentLabels, setSelectedAgentLabels] = useState<Record<string, string>>({});
+  const [selectedWorkflowLabels, setSelectedWorkflowLabels] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (currentAgentIds.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const agents = await apiClient.get<Array<{ id: string; name: string; slug: string }>>(
+          `${API.ADMIN.ORCHESTRATION.AGENTS}?limit=100`
+        );
+        if (cancelled) return;
+        const labels: Record<string, string> = {};
+        for (const a of agents ?? []) {
+          if (currentAgentIds.includes(a.id)) labels[a.id] = a.name;
+        }
+        setSelectedAgentLabels(labels);
+      } catch {
+        // Non-fatal — chips fall back to IDs until the user searches.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAgentIds]);
+
+  useEffect(() => {
+    if (currentWorkflowIds.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const workflows = await apiClient.get<Array<{ id: string; name: string; slug: string }>>(
+          `${API.ADMIN.ORCHESTRATION.WORKFLOWS}?limit=100`
+        );
+        if (cancelled) return;
+        const labels: Record<string, string> = {};
+        for (const w of workflows ?? []) {
+          if (currentWorkflowIds.includes(w.id)) labels[w.id] = w.name;
+        }
+        setSelectedWorkflowLabels(labels);
+      } catch {
+        // Non-fatal.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWorkflowIds]);
+
+  async function loadAgentOptions(query: string): Promise<MultiSelectOption[]> {
+    const url = new URL(API.ADMIN.ORCHESTRATION.AGENTS, window.location.origin);
+    url.searchParams.set('limit', '50');
+    if (query.trim()) url.searchParams.set('q', query.trim());
+    try {
+      const agents = await apiClient.get<Array<{ id: string; name: string; slug: string }>>(
+        `${url.pathname}${url.search}`
+      );
+      return (agents ?? []).map((a) => ({
+        value: a.id,
+        label: a.name,
+        description: a.slug,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  async function loadWorkflowOptions(query: string): Promise<MultiSelectOption[]> {
+    const url = new URL(API.ADMIN.ORCHESTRATION.WORKFLOWS, window.location.origin);
+    url.searchParams.set('limit', '50');
+    // Hide templates — they aren't instantiated runtime entities, so they
+    // never appear in event payloads and scoping a sub to one is a no-op.
+    url.searchParams.set('isTemplate', 'false');
+    if (query.trim()) url.searchParams.set('q', query.trim());
+    try {
+      const workflows = await apiClient.get<Array<{ id: string; name: string; slug: string }>>(
+        `${url.pathname}${url.search}`
+      );
+      return (workflows ?? []).map((w) => ({
+        value: w.id,
+        label: w.name,
+        description: w.slug,
+      }));
+    } catch {
+      return [];
+    }
+  }
 
   const copySecret = async () => {
     if (!currentSecret) return;
@@ -272,6 +373,8 @@ export function WebhookForm({ mode, webhook }: WebhookFormProps) {
       const payload: Record<string, unknown> = {
         channel: data.channel,
         events: data.events,
+        agentIds: data.agentIds,
+        workflowIds: data.workflowIds,
         description: data.description,
         isActive: data.isActive,
         maxAttempts: data.maxAttempts,
@@ -582,6 +685,63 @@ export function WebhookForm({ mode, webhook }: WebhookFormProps) {
           })}
         </div>
         {errors.events && <p className="text-destructive text-xs">{errors.events.message}</p>}
+      </div>
+
+      {/* Entity scope */}
+      <div className="grid gap-4 rounded-lg border p-4">
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">Scope</p>
+          <p className="text-muted-foreground text-xs">
+            Optional. Limit this subscription to specific agents or workflows. Each filter applies
+            only to events about that kind of entity — for example, an agent filter does not affect
+            workflow_failed events.
+          </p>
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="webhook-agent-scope">
+            Limit to agents{' '}
+            <FieldHelp title="Limit to specific agents">
+              Only fire when the event is about one of the agents you select here. Leave empty to
+              receive events for all agents. Events that aren&apos;t about an agent (like
+              workflow_failed) ignore this filter — set the workflow filter below for those.
+            </FieldHelp>
+          </Label>
+          <MultiSelect
+            id="webhook-agent-scope"
+            value={currentAgentIds}
+            onChange={(next) => setValue('agentIds', next, { shouldValidate: true })}
+            loadOptions={loadAgentOptions}
+            selectedLabels={selectedAgentLabels}
+            placeholder="All agents"
+            emptyText="No matching agents."
+          />
+          {errors.agentIds && <p className="text-destructive text-xs">{errors.agentIds.message}</p>}
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="webhook-workflow-scope">
+            Limit to workflows{' '}
+            <FieldHelp title="Limit to specific workflows">
+              Only fire when the event is about one of the workflows you select here. Leave empty to
+              receive events for all workflows. Events that aren&apos;t about a workflow (like
+              budget_exceeded for a chat agent) ignore this filter — set the agent filter above for
+              those.
+            </FieldHelp>
+          </Label>
+          <MultiSelect
+            id="webhook-workflow-scope"
+            value={currentWorkflowIds}
+            onChange={(next) => setValue('workflowIds', next, { shouldValidate: true })}
+            loadOptions={loadWorkflowOptions}
+            selectedLabels={selectedWorkflowLabels}
+            placeholder="All workflows"
+            emptyText="No matching workflows."
+          />
+          {errors.workflowIds && (
+            <p className="text-destructive text-xs">{errors.workflowIds.message}</p>
+          )}
+        </div>
       </div>
 
       {/* Retry policy */}

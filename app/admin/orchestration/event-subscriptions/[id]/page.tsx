@@ -20,6 +20,8 @@ interface WebhookDetail {
   url: string | null;
   emailAddress: string | null;
   events: string[];
+  agentIds: string[];
+  workflowIds: string[];
   isActive: boolean;
   description: string | null;
   maxAttempts: number;

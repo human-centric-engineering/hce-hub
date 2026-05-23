@@ -27,6 +27,8 @@ const SAFE_SELECT = {
   url: true,
   emailAddress: true,
   events: true,
+  agentIds: true,
+  workflowIds: true,
   isActive: true,
   description: true,
   maxAttempts: true,

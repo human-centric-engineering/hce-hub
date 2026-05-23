@@ -300,6 +300,20 @@ describe('Event factory helpers', () => {
       });
     });
 
+    it('includes workflowId in the webhook payload when supplied (for entity-scoped subs)', () => {
+      // workflow_budget_exceeded is workflow-typed; scoped subs filter on
+      // `workflowId` (see lib/orchestration/webhooks/event-entity-keys.ts),
+      // so the engine call sites must enrich the payload with it.
+      workflowBudgetExceeded(1.5, 1.0, 'step-llm', 'exec-123', 'wf-1');
+      expect(dispatchWebhookEvent).toHaveBeenCalledWith('workflow_budget_exceeded', {
+        usedUsd: 1.5,
+        limitUsd: 1.0,
+        failedStepId: 'step-llm',
+        executionId: 'exec-123',
+        workflowId: 'wf-1',
+      });
+    });
+
     it('does not throw when the webhook dispatch rejects — logs a warning instead', async () => {
       vi.mocked(dispatchWebhookEvent).mockRejectedValueOnce(new Error('Webhook offline'));
 

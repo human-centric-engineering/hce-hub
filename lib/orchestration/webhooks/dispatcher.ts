@@ -22,6 +22,7 @@ import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { getResendClient, getDefaultSender, isEmailEnabled } from '@/lib/email/client';
 import EventNotification from '@/emails/event-notification';
+import { matchesEntityScope } from '@/lib/orchestration/webhooks/event-entity-keys';
 
 const DISPATCH_TIMEOUT_MS = 5000;
 
@@ -120,6 +121,14 @@ export async function dispatchWebhookEvent(
 
     if (subscriptions.length === 0) return;
 
+    // Dimension-specific entity scoping: filter out subscriptions whose
+    // agent/workflow filters exclude this event. Done in JS (not SQL)
+    // because the admin-scoped subs list is small and the rules are
+    // dimension-specific — see event-entity-keys.ts for the contract.
+    const matched = subscriptions.filter((sub) => matchesEntityScope(eventType, payload, sub));
+
+    if (matched.length === 0) return;
+
     const body = JSON.stringify({
       event: eventType,
       timestamp: new Date().toISOString(),
@@ -127,7 +136,7 @@ export async function dispatchWebhookEvent(
     });
 
     await Promise.allSettled(
-      subscriptions.map(async (sub) => {
+      matched.map(async (sub) => {
         // Create delivery record
         const delivery = await prisma.aiWebhookDelivery.create({
           data: {

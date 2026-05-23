@@ -170,6 +170,8 @@ describe('WebhookForm', () => {
       description: null,
       channel: 'webhook' as const,
       emailAddress: null,
+      agentIds: [],
+      workflowIds: [],
       maxAttempts: 5,
       retryBackoffMs: [15_000, 60_000, 120_000, 600_000],
     };
@@ -315,6 +317,8 @@ describe('WebhookForm', () => {
       description: 'note',
       channel: 'webhook' as const,
       emailAddress: null,
+      agentIds: [],
+      workflowIds: [],
       maxAttempts: 3,
       retryBackoffMs: [10000, 60000],
     };
@@ -359,6 +363,8 @@ describe('WebhookForm', () => {
       description: 'note',
       channel: 'webhook' as const,
       emailAddress: null,
+      agentIds: [],
+      workflowIds: [],
       maxAttempts: 3,
       retryBackoffMs: [10000, 60000],
     };
@@ -398,6 +404,8 @@ describe('WebhookForm', () => {
       description: null,
       channel: 'webhook' as const,
       emailAddress: null,
+      agentIds: [],
+      workflowIds: [],
       maxAttempts: 3,
       retryBackoffMs: [10000, 60000],
     };
@@ -439,6 +447,8 @@ describe('WebhookForm', () => {
       description: null,
       channel: 'webhook' as const,
       emailAddress: null,
+      agentIds: [],
+      workflowIds: [],
       maxAttempts: 3,
       retryBackoffMs: [10000, 60000],
     };
@@ -536,6 +546,8 @@ describe('WebhookForm', () => {
       description: null,
       channel: 'webhook' as const,
       emailAddress: null,
+      agentIds: [],
+      workflowIds: [],
       maxAttempts: 3,
       retryBackoffMs: [10000, 60000],
     };
@@ -764,5 +776,145 @@ describe('WebhookForm', () => {
     await waitFor(() => {
       expect(screen.getByText(/could not copy to clipboard/i)).toBeInTheDocument();
     });
+  });
+
+  // ── Entity-scope MultiSelects ──────────────────────────────────────────────
+  //
+  // The Scope block adds two async-search MultiSelects (agents + workflows)
+  // plus a prefetch effect that resolves stored IDs back to chip labels.
+  // These tests cover the loaders, the URL filters they apply, and the
+  // prefetch behaviour for edit-mode rows.
+
+  it('renders the Scope section with agent + workflow filter labels', () => {
+    render(<WebhookForm mode="create" />);
+
+    expect(screen.getByText('Scope')).toBeInTheDocument();
+    expect(screen.getByText(/limit to agents/i)).toBeInTheDocument();
+    expect(screen.getByText(/limit to workflows/i)).toBeInTheDocument();
+  });
+
+  it('pre-fetches agent + workflow labels for stored IDs so chips render names not CUIDs', async () => {
+    // Edit mode with one stored agentId and one stored workflowId. The
+    // prefetch effect should call the admin list endpoints (limit=100, no
+    // `q`), find the matching rows, and pass the names through as chip
+    // labels in the MultiSelect.
+    const { apiClient } = await import('@/lib/api/client');
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url.includes('/agents')) {
+        return [
+          { id: 'agent-X', name: 'Support Agent', slug: 'support' },
+          { id: 'agent-Y', name: 'Other Agent', slug: 'other' },
+        ];
+      }
+      if (url.includes('/workflows')) {
+        return [{ id: 'wf-1', name: 'Refund Workflow', slug: 'refund' }];
+      }
+      return [];
+    });
+
+    const webhook = {
+      id: 'wh-scoped',
+      url: 'https://x.com',
+      events: ['budget_exceeded'],
+      channel: 'webhook' as const,
+      emailAddress: null,
+      agentIds: ['agent-X'],
+      workflowIds: ['wf-1'],
+      isActive: true,
+      description: null,
+      maxAttempts: 3,
+      retryBackoffMs: [10000, 60000],
+    };
+
+    render(<WebhookForm mode="edit" webhook={webhook} />);
+
+    // Chip labels resolve via the prefetch — assert both names appear.
+    await waitFor(() => {
+      expect(screen.getByText('Support Agent')).toBeInTheDocument();
+      expect(screen.getByText('Refund Workflow')).toBeInTheDocument();
+    });
+
+    // The prefetch must NOT call the loader with a `q` query — it's a
+    // bare list call so existing IDs can be matched.
+    const calls = vi.mocked(apiClient.get).mock.calls.map((c) => c[0]);
+    expect(calls.some((u) => u.includes('/agents?limit=100'))).toBe(true);
+    expect(calls.some((u) => u.includes('/workflows?limit=100'))).toBe(true);
+    // None of the prefetch calls carry a search query.
+    expect(calls.some((u) => u.includes('/agents') && u.includes('q='))).toBe(false);
+  });
+
+  it('does NOT prefetch labels when the form starts with empty scope arrays', async () => {
+    const { apiClient } = await import('@/lib/api/client');
+    vi.mocked(apiClient.get).mockResolvedValue([]);
+
+    render(<WebhookForm mode="create" />);
+
+    // Brief settle — the effect runs synchronously after mount.
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Empty scope = no fetch. Saves a request on every create-form load.
+    expect(apiClient.get).not.toHaveBeenCalled();
+  });
+
+  it('the workflow loader filters out templates via isTemplate=false', async () => {
+    // The Scope picker should only surface instantiated runtime workflows
+    // — templates aren't entities the engine fires events for, so scoping
+    // a sub to one is a no-op. The loader applies the filter server-side
+    // via `?isTemplate=false`. This test opens the workflow MultiSelect,
+    // waits past the 200ms debounce, and inspects the URL.
+    const user = userEvent.setup();
+    const { apiClient } = await import('@/lib/api/client');
+    vi.mocked(apiClient.get).mockResolvedValue([]);
+
+    render(<WebhookForm mode="create" />);
+
+    // Two MultiSelect triggers exist (agents + workflows). The second one
+    // is the workflow picker — they appear in document order.
+    const triggers = screen.getAllByRole('combobox');
+    expect(triggers.length).toBeGreaterThanOrEqual(2);
+    await user.click(triggers[1]);
+
+    await waitFor(
+      () => {
+        const calls = vi.mocked(apiClient.get).mock.calls.map((c) => c[0]);
+        const workflowCall = calls.find((u) => u.includes('/workflows'));
+        expect(workflowCall, 'workflow loader URL').toBeDefined();
+        expect(workflowCall).toContain('isTemplate=false');
+      },
+      { timeout: 1000 }
+    );
+  });
+
+  it('omits the prefetch fetch when only one dimension is populated', async () => {
+    // Sanity-check the dimension-specific prefetch: a sub with agentIds
+    // but no workflowIds should fetch agents only.
+    const { apiClient } = await import('@/lib/api/client');
+    vi.mocked(apiClient.get).mockImplementation(async () => [
+      { id: 'agent-X', name: 'Support', slug: 'support' },
+    ]);
+
+    const webhook = {
+      id: 'wh-agent-only',
+      url: 'https://x.com',
+      events: ['budget_exceeded'],
+      channel: 'webhook' as const,
+      emailAddress: null,
+      agentIds: ['agent-X'],
+      workflowIds: [],
+      isActive: true,
+      description: null,
+      maxAttempts: 3,
+      retryBackoffMs: [10000, 60000],
+    };
+
+    render(<WebhookForm mode="edit" webhook={webhook} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Support')).toBeInTheDocument();
+    });
+
+    const calls = vi.mocked(apiClient.get).mock.calls.map((c) => c[0]);
+    expect(calls.some((u) => u.includes('/agents'))).toBe(true);
+    expect(calls.every((u) => !u.includes('/workflows'))).toBe(true);
   });
 });

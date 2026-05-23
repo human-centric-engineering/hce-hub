@@ -96,13 +96,15 @@ export function workflowBudgetExceeded(
   usedUsd: number,
   limitUsd: number,
   failedStepId: string,
-  executionId?: string
+  executionId?: string,
+  workflowId?: string
 ): ExecutionEvent {
   dispatchWebhookEvent('workflow_budget_exceeded', {
     usedUsd,
     limitUsd,
     failedStepId,
     ...(executionId ? { executionId } : {}),
+    ...(workflowId ? { workflowId } : {}),
   }).catch((err) => {
     logger.warn('Webhook dispatch failed for workflow_budget_exceeded', {
       failedStepId,

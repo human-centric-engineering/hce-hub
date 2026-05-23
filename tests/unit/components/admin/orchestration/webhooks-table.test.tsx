@@ -67,6 +67,8 @@ const MOCK_WEBHOOKS: WebhookListItem[] = [
     id: 'wh-1',
     url: 'https://example.com/hooks/sunrise',
     events: ['budget_exceeded', 'workflow_failed'],
+    agentIds: [],
+    workflowIds: [],
     isActive: true,
     description: 'Slack alerts',
     createdAt: '2026-01-15T00:00:00Z',
@@ -77,6 +79,8 @@ const MOCK_WEBHOOKS: WebhookListItem[] = [
     id: 'wh-2',
     url: 'https://other.com/webhook',
     events: ['message_created'],
+    agentIds: [],
+    workflowIds: [],
     isActive: false,
     description: null,
     createdAt: '2026-02-01T00:00:00Z',
@@ -217,6 +221,8 @@ describe('WebhooksTable', () => {
         'message_created',
         'execution_failed',
       ],
+      agentIds: [],
+      workflowIds: [],
       isActive: true,
       description: null,
       createdAt: '2026-01-01T00:00:00Z',
@@ -251,6 +257,8 @@ describe('WebhooksTable', () => {
       id: 'wh-long',
       url: longUrl,
       events: ['budget_exceeded'],
+      agentIds: [],
+      workflowIds: [],
       isActive: true,
       description: null,
       createdAt: '2026-01-01T00:00:00Z',
@@ -485,5 +493,77 @@ describe('WebhooksTable', () => {
     await waitFor(() => {
       expect(screen.getByText(/could not update webhook: fail/i)).toBeInTheDocument();
     });
+  });
+
+  // ── Entity-scope "Scoped" badge ─────────────────────────────────────────────
+
+  it('renders the Scoped badge when a row has agentIds set', () => {
+    const scopedByAgent: WebhookListItem = {
+      id: 'wh-scoped-agent',
+      url: 'https://scoped.com/hook',
+      events: ['budget_exceeded'],
+      agentIds: ['agent-X'],
+      workflowIds: [],
+      isActive: true,
+      description: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      _count: { deliveries: 0 },
+    };
+
+    render(
+      <WebhooksTable
+        initialWebhooks={[scopedByAgent]}
+        initialMeta={{ ...META, total: 1, totalPages: 1 }}
+      />
+    );
+
+    // Badge label
+    expect(screen.getByText('Scoped')).toBeInTheDocument();
+    // Tooltip carries the agent/workflow counts so admins can see the
+    // shape without opening the edit page.
+    const badge = screen.getByText('Scoped');
+    expect(badge).toHaveAttribute('title', 'Scoped to 1 agent(s), 0 workflow(s)');
+  });
+
+  it('renders the Scoped badge when a row has workflowIds set', () => {
+    const scopedByWorkflow: WebhookListItem = {
+      id: 'wh-scoped-wf',
+      url: 'https://scoped.com/hook',
+      events: ['workflow_failed'],
+      agentIds: [],
+      workflowIds: ['wf-1', 'wf-2'],
+      isActive: true,
+      description: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      _count: { deliveries: 0 },
+    };
+
+    render(
+      <WebhooksTable
+        initialWebhooks={[scopedByWorkflow]}
+        initialMeta={{ ...META, total: 1, totalPages: 1 }}
+      />
+    );
+
+    expect(screen.getByText('Scoped')).toHaveAttribute(
+      'title',
+      'Scoped to 0 agent(s), 2 workflow(s)'
+    );
+  });
+
+  it('does NOT render the Scoped badge when both filter arrays are empty', () => {
+    // Backward-compat row: a sub created before entity scoping (or one that
+    // intentionally targets every agent / workflow). The badge would be
+    // misleading here — the sub is global by design.
+    render(
+      <WebhooksTable
+        initialWebhooks={MOCK_WEBHOOKS}
+        initialMeta={{ ...META, total: 2, totalPages: 1 }}
+      />
+    );
+
+    expect(screen.queryByText('Scoped')).not.toBeInTheDocument();
   });
 });

@@ -63,6 +63,8 @@ export interface WebhookListItem {
   id: string;
   url: string;
   events: string[];
+  agentIds: string[];
+  workflowIds: string[];
   isActive: boolean;
   description: string | null;
   createdAt: string;
@@ -224,6 +226,15 @@ export function WebhooksTable({ initialWebhooks, initialMeta }: WebhooksTablePro
                       {wh.events.length > 3 && (
                         <Badge variant="outline" className="text-[10px]">
                           +{wh.events.length - 3}
+                        </Badge>
+                      )}
+                      {(wh.agentIds?.length ?? 0) + (wh.workflowIds?.length ?? 0) > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px]"
+                          title={`Scoped to ${wh.agentIds?.length ?? 0} agent(s), ${wh.workflowIds?.length ?? 0} workflow(s)`}
+                        >
+                          Scoped
                         </Badge>
                       )}
                     </div>

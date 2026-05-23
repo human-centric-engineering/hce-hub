@@ -1160,6 +1160,13 @@ model AiWebhookSubscription {
   secret          String? // HMAC-SHA256 signing key — required when channel = "webhook"
   emailAddress    String? // destination email — required when channel = "email"
   events          String[] // e.g. ["budget_exceeded","workflow_failed"]
+  // Optional entity scoping. Empty array means "no constraint on this dimension".
+  // The dispatcher applies dimension-specific filtering: `agentIds` only constrains
+  // events whose payload carries an agent ID, `workflowIds` only constrains events
+  // whose payload carries a workflow ID. A sub with `agentIds=['x']` still receives
+  // workflow-typed events unconstrained. See lib/orchestration/webhooks/event-entity-keys.ts.
+  agentIds        String[] @default([])
+  workflowIds     String[] @default([])
   isActive        Boolean  @default(true)
   description     String?
   // Total delivery attempts before the delivery is marked `exhausted` (1–10).
