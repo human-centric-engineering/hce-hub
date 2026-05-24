@@ -246,6 +246,44 @@ describe('Agent Comparison', () => {
     expect(agentB.evaluations.total).toBe(6);
     expect(agentB.evaluations.completed).toBe(5);
   });
+
+  it('coerces null cost-aggregate sums to 0 when an agent has no cost logs', async () => {
+    // Prisma returns { _sum: { totalCostUsd: null, ... } } for empty aggregates.
+    // getAgentStats must apply `?? 0` so the response always carries numbers, not nulls.
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+
+    vi.mocked(prisma.aiAgent.findUnique)
+      .mockResolvedValueOnce(mockAgent(AGENT_A, 'Agent Alpha') as never)
+      .mockResolvedValueOnce(mockAgent(AGENT_B, 'Agent Beta') as never);
+
+    // Both agents have no cost logs — Prisma returns null sums, _count 0
+    const nullCostAgg = {
+      _sum: { totalCostUsd: null, inputTokens: null, outputTokens: null },
+      _count: 0,
+    };
+    vi.mocked(prisma.aiCostLog.aggregate)
+      .mockResolvedValueOnce(nullCostAgg as never)
+      .mockResolvedValueOnce(nullCostAgg as never);
+
+    vi.mocked(prisma.aiConversation.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.aiAgentCapability.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.aiEvaluationSession.count).mockResolvedValue(0 as never);
+
+    const res = await GET(makeRequest(`${AGENT_A},${AGENT_B}`));
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as { data: ComparisonResponse };
+    const [agentA, agentB] = body.data.agents;
+
+    // Strict equality: the ?? 0 fallback must replace null with the number 0.
+    // .toBeFalsy() or .toBeLessThanOrEqual(0) would also pass for null — these will not.
+    expect(agentA.totalCostUsd).toBe(0);
+    expect(agentA.totalInputTokens).toBe(0);
+    expect(agentA.totalOutputTokens).toBe(0);
+    expect(agentB.totalCostUsd).toBe(0);
+    expect(agentB.totalInputTokens).toBe(0);
+    expect(agentB.totalOutputTokens).toBe(0);
+  });
 });
 
 // ─── Type helpers ────────────────────────────────────────────────────────────

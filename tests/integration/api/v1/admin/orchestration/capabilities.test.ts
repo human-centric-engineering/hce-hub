@@ -215,6 +215,21 @@ describe('GET /api/v1/admin/orchestration/capabilities', () => {
       );
     });
 
+    it('passes executionType filter to Prisma (line 41)', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(prisma.aiCapability.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.aiCapability.count).mockResolvedValue(0);
+
+      await listGet(makeListRequest({ executionType: 'webhook' }));
+
+      expect(vi.mocked(prisma.aiCapability.findMany)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ executionType: 'webhook' }),
+          include: expect.objectContaining({ agents: expect.anything() }),
+        })
+      );
+    });
+
     it('passes a 3-field OR clause to Prisma when q is provided (line 43)', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiCapability.findMany).mockResolvedValue([]);

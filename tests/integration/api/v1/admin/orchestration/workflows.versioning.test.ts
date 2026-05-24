@@ -77,7 +77,7 @@ vi.mock('@/lib/orchestration/workflows/semantic-validator', () => ({
 
 import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db/client';
-import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
+import { logAdminAction, computeChanges } from '@/lib/orchestration/audit/admin-audit-logger';
 import { semanticValidateWorkflow } from '@/lib/orchestration/workflows/semantic-validator';
 
 import {
@@ -272,6 +272,65 @@ describe('PATCH /workflows/:id with draftDefinition', () => {
       makeParams()
     );
     expect(res.status).toBe(401);
+  });
+
+  it('falls back to current as baseline when the post-saveDraft re-read returns null', async () => {
+    // Sequence of prisma.aiWorkflow.findUnique calls inside PATCH + saveDraft:
+    //   Call 1 (route line 56):           load `current`            → returns workflow
+    //   Call 2 (saveDraft → loadWorkflow): internal existence check → returns workflow
+    //   Call 3 (route line 92):            post-draft re-read       → returns null (concurrent delete / transient miss)
+    // The `?? current` fallback must prevent a crash and the audit must still fire
+    // against the ORIGINAL `current` workflow, not against null.
+    const current = makeWorkflow();
+    vi.mocked(prisma.aiWorkflow.findUnique)
+      .mockResolvedValueOnce(current as never) // call 1: route — load current
+      .mockResolvedValueOnce(current as never) // call 2: saveDraft → loadWorkflow
+      .mockResolvedValueOnce(null); // call 3: route — re-read baseline → null triggers ?? current
+    vi.mocked(prisma.aiWorkflow.update).mockResolvedValue(
+      makeWorkflow({ name: 'Renamed' }) as never
+    );
+
+    const res = await WORKFLOW_PATCH(
+      makeRequest('PATCH', `/api/v1/admin/orchestration/workflows/${WORKFLOW_ID}`, {
+        draftDefinition: ALT_DEF,
+        name: 'Renamed',
+      }),
+      makeParams()
+    );
+
+    expect(res.status).toBe(200);
+    expect(logAdminAction).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'workflow.update' })
+    );
+    // Load-bearing assertion: computeChanges must be called with the ORIGINAL
+    // `current` workflow as its first arg — proves `?? current` substituted for
+    // the null re-read. Without this, the test passes even when `?? current` is
+    // removed (the computeChanges mock accepts null without throwing).
+    expect(computeChanges).toHaveBeenCalledWith(
+      expect.objectContaining({ id: current.id, name: current.name }),
+      expect.any(Object)
+    );
+  });
+
+  it('writes maxCostPerExecutionUsd to the DB update when supplied', async () => {
+    vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue(makeWorkflow() as never);
+    vi.mocked(prisma.aiWorkflow.update).mockResolvedValue(
+      makeWorkflow({ maxCostPerExecutionUsd: 1.5 }) as never
+    );
+
+    const res = await WORKFLOW_PATCH(
+      makeRequest('PATCH', `/api/v1/admin/orchestration/workflows/${WORKFLOW_ID}`, {
+        maxCostPerExecutionUsd: 1.5,
+      }),
+      makeParams()
+    );
+
+    expect(res.status).toBe(200);
+    // Anti-green-bar: assert the exact value the route computed — a regression
+    // that wrote 0 or omitted the field entirely would still return 200 but fail here.
+    expect(prisma.aiWorkflow.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ maxCostPerExecutionUsd: 1.5 }) })
+    );
   });
 });
 
@@ -591,6 +650,21 @@ describe('GET /workflows/:id/versions', () => {
     );
     expect(res.status).toBe(404);
   });
+
+  it('400s and short-circuits before DB when workflow id is not a valid CUID', async () => {
+    const res = await LIST_VERSIONS(
+      makeRequest('GET', `/api/v1/admin/orchestration/workflows/not-a-cuid/versions`),
+      { params: Promise.resolve({ id: 'not-a-cuid' }) }
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: { code: string } };
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    // Anti-green-bar: validation must short-circuit before any DB read.
+    // A regression that queried first and then validated would still return 400
+    // but for the wrong reason — this assertion catches it.
+    expect(prisma.aiWorkflow.findUnique).not.toHaveBeenCalled();
+  });
 });
 
 // ─── GET /versions/:version ────────────────────────────────────────────────
@@ -624,6 +698,21 @@ describe('GET /workflows/:id/versions/:version', () => {
       { params: Promise.resolve({ id: WORKFLOW_ID, version: 'abc' }) }
     );
     expect(res.status).toBe(400);
+  });
+
+  it('400s and short-circuits before DB when workflow id is not a valid CUID', async () => {
+    const res = await GET_VERSION(
+      makeRequest('GET', `/api/v1/admin/orchestration/workflows/not-a-cuid/versions/1`),
+      { params: Promise.resolve({ id: 'not-a-cuid', version: '1' }) }
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: boolean; error: { code: string } };
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    // Anti-green-bar: id validation must short-circuit before the DB query.
+    // A regression that called findUnique first would still return 400 only
+    // if findUnique happened to throw — this assertion catches the ordering bug.
+    expect(prisma.aiWorkflowVersion.findUnique).not.toHaveBeenCalled();
   });
 });
 
