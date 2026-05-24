@@ -10,7 +10,12 @@
 
 import { randomUUID } from 'node:crypto';
 import { logger } from '@/lib/logging';
-import type { McpSession, JsonRpcNotification } from '@/types/mcp';
+import {
+  MCP_LATEST_PROTOCOL_VERSION,
+  type McpProtocolVersion,
+  type McpSession,
+  type JsonRpcNotification,
+} from '@/types/mcp';
 
 /** Callback registered by an SSE stream to receive server-to-client notifications */
 export type NotificationSink = (notification: JsonRpcNotification) => void;
@@ -34,6 +39,10 @@ export class McpSessionManager {
   /**
    * Create a new session for the given API key.
    * Returns null if the key has reached its session limit.
+   *
+   * The session starts at the server's latest supported protocol version.
+   * `initialize` replaces this with the negotiated version once the client
+   * declares which spec revision it speaks.
    */
   createSession(apiKeyId: string, maxSessionsPerKey: number): McpSession | null {
     const activeCount = this.getActiveSessionCount(apiKeyId);
@@ -51,12 +60,25 @@ export class McpSessionManager {
       id: randomUUID(),
       apiKeyId,
       initialized: false,
+      protocolVersion: MCP_LATEST_PROTOCOL_VERSION,
       createdAt: now,
       lastActivityAt: now,
     };
 
     this.sessions.set(session.id, session);
     return session;
+  }
+
+  /**
+   * Record the protocol version negotiated during `initialize`. Called from
+   * the protocol handler once it has run `negotiateMcpProtocolVersion`.
+   */
+  setProtocolVersion(sessionId: string, version: McpProtocolVersion): void {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.protocolVersion = version;
+      session.lastActivityAt = Date.now();
+    }
   }
 
   getSession(sessionId: string): McpSession | null {

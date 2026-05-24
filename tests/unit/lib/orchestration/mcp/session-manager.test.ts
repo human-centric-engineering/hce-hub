@@ -33,6 +33,7 @@ describe('McpSessionManager', () => {
       expect(session?.id).toBeTypeOf('string');
       expect(session?.apiKeyId).toBe(KEY_ID);
       expect(session?.initialized).toBe(false);
+      expect(session?.protocolVersion).toBe('2025-06-18');
       expect(session?.createdAt).toBeTypeOf('number');
       expect(session?.lastActivityAt).toBeTypeOf('number');
     });
@@ -119,6 +120,26 @@ describe('McpSessionManager', () => {
       const session = manager.createSession(KEY_ID, 5);
       const before = session!.lastActivityAt;
       manager.markInitialized(session!.id);
+      const raw = manager.getSession(session!.id);
+      expect(raw!.lastActivityAt).toBeGreaterThanOrEqual(before);
+    });
+  });
+
+  describe('setProtocolVersion', () => {
+    it('replaces the default with the negotiated version', () => {
+      const session = manager.createSession(KEY_ID, 5);
+      manager.setProtocolVersion(session!.id, '2024-11-05');
+      expect(manager.getSession(session!.id)?.protocolVersion).toBe('2024-11-05');
+    });
+
+    it('is a no-op for an unknown session id', () => {
+      expect(() => manager.setProtocolVersion('nonexistent', '2024-11-05')).not.toThrow();
+    });
+
+    it('touches lastActivityAt on update', () => {
+      const session = manager.createSession(KEY_ID, 5);
+      const before = session!.lastActivityAt;
+      manager.setProtocolVersion(session!.id, '2024-11-05');
       const raw = manager.getSession(session!.id);
       expect(raw!.lastActivityAt).toBeGreaterThanOrEqual(before);
     });

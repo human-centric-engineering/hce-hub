@@ -57,6 +57,8 @@ export const JsonRpcErrorCode = {
   SESSION_NOT_FOUND: -32002,
   /** Application-level: MCP server is disabled */
   SERVER_DISABLED: -32003,
+  /** Application-level: per-key or global rate limit exceeded — client should back off and retry */
+  RATE_LIMITED: -32004,
 } as const;
 export type JsonRpcErrorCode = (typeof JsonRpcErrorCode)[keyof typeof JsonRpcErrorCode];
 
@@ -64,17 +66,55 @@ export type JsonRpcErrorCode = (typeof JsonRpcErrorCode)[keyof typeof JsonRpcErr
 // MCP Protocol
 // ============================================================================
 
-export const MCP_PROTOCOL_VERSION = '2024-11-05';
+/**
+ * Supported MCP protocol versions, newest first. The server negotiates the
+ * highest version it shares with the client during `initialize`. New entries
+ * go at the front; deprecated entries fall off the back when no client we
+ * care about uses them.
+ */
+export const MCP_PROTOCOL_VERSIONS = ['2025-06-18', '2024-11-05'] as const;
+export type McpProtocolVersion = (typeof MCP_PROTOCOL_VERSIONS)[number];
+
+export const MCP_LATEST_PROTOCOL_VERSION: McpProtocolVersion = MCP_PROTOCOL_VERSIONS[0];
+export const MCP_MIN_PROTOCOL_VERSION: McpProtocolVersion =
+  MCP_PROTOCOL_VERSIONS[MCP_PROTOCOL_VERSIONS.length - 1];
+
+/**
+ * Default version returned when a client either omits `protocolVersion` from
+ * `initialize` or sends a version we do not recognise. We pick the OLDEST
+ * supported version when the client omits (most conservative — they likely
+ * predate version negotiation) and the LATEST when they send a forward-dated
+ * unknown (they're newer than us, downgrade them gracefully).
+ */
+export const MCP_DEFAULT_PROTOCOL_VERSION_FOR_MISSING: McpProtocolVersion =
+  MCP_MIN_PROTOCOL_VERSION;
+
+/** Alias retained for back-compat with existing imports — points to the oldest supported version. */
+export const MCP_PROTOCOL_VERSION = MCP_MIN_PROTOCOL_VERSION;
 
 export interface McpServerInfo {
   name: string;
   version: string;
 }
 
+/**
+ * Capabilities advertised by the server during `initialize`. Only fields for
+ * features the server actually implements should be set — advertising a
+ * feature without a handler is a spec violation that breaks compliant clients.
+ *
+ * Per MCP spec: `listChanged: true` means the server will push
+ * `notifications/{tools,resources,prompts}/list_changed` when its catalogue
+ * changes. `subscribe: true` (resources only) means the server accepts
+ * `resources/subscribe` / `resources/unsubscribe` requests.
+ */
 export interface McpCapabilities {
-  tools?: Record<string, never>;
-  resources?: Record<string, never>;
-  prompts?: Record<string, never>;
+  tools?: { listChanged?: boolean };
+  resources?: { listChanged?: boolean; subscribe?: boolean };
+  prompts?: { listChanged?: boolean };
+  /** Empty object signals support for `logging/setLevel` + `notifications/message`. */
+  logging?: Record<string, never>;
+  /** Empty object signals support for `completion/complete`. */
+  completions?: Record<string, never>;
 }
 
 export interface McpInitializeResult {
@@ -172,8 +212,48 @@ export interface McpSession {
   id: string;
   apiKeyId: string;
   initialized: boolean;
+  /**
+   * Protocol version negotiated during `initialize`. Set to the latest
+   * supported version at session creation and replaced with the negotiated
+   * value once the client sends `initialize`. Per-call handlers may branch
+   * on this to gate features that exist only in newer spec revisions.
+   */
+  protocolVersion: McpProtocolVersion;
   createdAt: number;
   lastActivityAt: number;
+}
+
+/**
+ * Negotiate the protocol version to use for a session.
+ *
+ * Rules:
+ *  - Client omits `protocolVersion` entirely → use the most conservative
+ *    supported version (oldest). Likely a pre-negotiation client.
+ *  - Client requests a version we support → use it exactly.
+ *  - Client requests an unknown future version → downgrade to our latest.
+ *  - Client requests an unknown older version → no match; return null so the
+ *    caller can surface INVALID_PARAMS rather than silently misbehaving.
+ *
+ * Returns `null` only for the unknown-older case, which is exceptional.
+ */
+export function negotiateMcpProtocolVersion(
+  requested: unknown
+): { version: McpProtocolVersion; wasDowngraded: boolean } | null {
+  if (requested === undefined || requested === null) {
+    return { version: MCP_DEFAULT_PROTOCOL_VERSION_FOR_MISSING, wasDowngraded: false };
+  }
+  if (typeof requested !== 'string') {
+    return null;
+  }
+  if ((MCP_PROTOCOL_VERSIONS as readonly string[]).includes(requested)) {
+    return { version: requested as McpProtocolVersion, wasDowngraded: false };
+  }
+  // Date-shaped strings newer than our latest → downgrade to latest.
+  // Lexicographic compare works because the format is yyyy-mm-dd.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(requested) && requested > MCP_LATEST_PROTOCOL_VERSION) {
+    return { version: MCP_LATEST_PROTOCOL_VERSION, wasDowngraded: true };
+  }
+  return null;
 }
 
 // ============================================================================

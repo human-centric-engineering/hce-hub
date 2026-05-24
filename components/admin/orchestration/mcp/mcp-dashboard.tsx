@@ -17,6 +17,7 @@ import { FieldHelp } from '@/components/ui/field-help';
 import { apiClient } from '@/lib/api/client';
 import { API } from '@/lib/api/endpoints';
 import { mcpSettingsResponseSchema, type McpSettingsResponse } from '@/lib/validations/mcp';
+import { MCP_LATEST_PROTOCOL_VERSION, MCP_MIN_PROTOCOL_VERSION } from '@/types/mcp';
 
 interface McpDashboardProps {
   initialSettings: McpSettingsResponse | null;
@@ -124,7 +125,14 @@ export function McpDashboard({ initialSettings, stats }: McpDashboardProps) {
           </CardDescription>
           <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 pt-1 text-xs">
             <span>
-              Protocol: <strong className="text-foreground">MCP 2024-11-05</strong>
+              Protocol:{' '}
+              <strong className="text-foreground">MCP {MCP_LATEST_PROTOCOL_VERSION}</strong>
+              {MCP_LATEST_PROTOCOL_VERSION !== MCP_MIN_PROTOCOL_VERSION && (
+                <span className="text-muted-foreground">
+                  {' '}
+                  (back-compat to {MCP_MIN_PROTOCOL_VERSION})
+                </span>
+              )}
             </span>
             <span>
               Transport: <strong className="text-foreground">Streamable HTTP</strong>

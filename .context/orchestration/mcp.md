@@ -112,15 +112,46 @@ When a URI does not match any registered resource exactly, `readMcpResource` fal
 
 ## MCP Protocol Compliance
 
-- Transport: Streamable HTTP (2024-11-05 spec)
+- Transport: Streamable HTTP
+- Protocol versions: `2025-06-18` (latest) and `2024-11-05` (back-compat). Negotiated per session during `initialize`.
 - Messages: JSON-RPC 2.0 (single and batch requests)
-- Capabilities: `tools`, `resources`, `prompts`
+- Capabilities advertised: `tools.listChanged`, `resources.listChanged`. `prompts.listChanged`, `resources.subscribe`, `logging`, and `completions` land in subsequent phases — the server never advertises a capability it cannot serve.
 - Resource templates: `resources/templates/list` advertises parameterized URI patterns
 - Pagination: `tools/list` and `resources/list` support cursor-based pagination (50 items/page)
 - Batch requests: JSON-RPC 2.0 array batches (max 20 requests per batch)
 - SSE notifications: `notifications/tools/list_changed` and `notifications/resources/list_changed` pushed to connected clients when admin toggles tools/resources
 - Client notifications accepted: `notifications/initialized`, `notifications/roots/list_changed`, `notifications/cancelled`
-- Error codes: Standard JSON-RPC (-32700, -32600, -32601, -32602, -32603)
+
+### Version negotiation
+
+`initialize` reads the client's requested `protocolVersion` and chooses the response per these rules:
+
+| Client sends                                        | Server responds with            | Why                                                    |
+| --------------------------------------------------- | ------------------------------- | ------------------------------------------------------ |
+| A supported version (`2025-06-18` or `2024-11-05`)  | The same version                | Honour explicit choice                                 |
+| No `protocolVersion` field                          | Oldest supported (`2024-11-05`) | Conservative default — likely a pre-negotiation client |
+| A forward-dated unknown version (e.g. `2099-01-01`) | Latest supported (`2025-06-18`) | Graceful downgrade for newer clients                   |
+| Any other unknown / malformed value                 | `INVALID_PARAMS` error          | Surface mismatch rather than silently misbehave        |
+
+The negotiated version is stored on the session (`McpSession.protocolVersion`) and is available to per-call handlers for branching on features that exist only in newer revisions. The legacy `MCP_PROTOCOL_VERSION` export still resolves to the oldest supported version so downstream imports keep working.
+
+### Authentication challenge (WWW-Authenticate)
+
+401 responses include `WWW-Authenticate: Bearer realm="sunrise-mcp", error="invalid_token"` (RFC 6750 / RFC 9728). 2025-spec MCP clients use this to detect that the server is bearer-only and skip the OAuth discovery dance. OAuth 2.1 + DCR is captured as a separate roadmap item (see "Authentication" section below — to be added in Phase 7).
+
+### Error codes
+
+| Code   | Name              | Meaning                                                                                                  |
+| ------ | ----------------- | -------------------------------------------------------------------------------------------------------- |
+| -32700 | PARSE_ERROR       | Body is not valid JSON, or body exceeds the 1 MB size cap                                                |
+| -32600 | INVALID_REQUEST   | JSON-RPC envelope is malformed, batch is empty / too large, or `initialize` is mixed with other requests |
+| -32601 | METHOD_NOT_FOUND  | Unknown method                                                                                           |
+| -32602 | INVALID_PARAMS    | Method-specific param validation failed                                                                  |
+| -32603 | INTERNAL_ERROR    | Unhandled server error (no internals leaked)                                                             |
+| -32001 | UNAUTHORIZED      | Missing / invalid bearer token (paired with HTTP 401 + `WWW-Authenticate`)                               |
+| -32002 | SESSION_NOT_FOUND | Unknown / expired `Mcp-Session-Id`, or session belongs to a different key                                |
+| -32003 | SERVER_DISABLED   | Master `isEnabled` toggle is off                                                                         |
+| -32004 | RATE_LIMITED      | Per-key or global rate limit exceeded — client should back off and retry                                 |
 
 ## Client Configuration
 

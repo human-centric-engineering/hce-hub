@@ -46,6 +46,8 @@ import {
 import { listMcpPrompts, getMcpPrompt } from '@/lib/orchestration/mcp/prompt-registry';
 import {
   JsonRpcErrorCode,
+  MCP_LATEST_PROTOCOL_VERSION,
+  MCP_MIN_PROTOCOL_VERSION,
   MCP_PROTOCOL_VERSION,
   McpScope,
   type JsonRpcRequest,
@@ -73,6 +75,7 @@ function makeSession(overrides: Partial<McpSession> = {}): McpSession {
     id: 'session-1',
     apiKeyId: 'key-1',
     initialized: true,
+    protocolVersion: MCP_LATEST_PROTOCOL_VERSION,
     createdAt: Date.now(),
     lastActivityAt: Date.now(),
     ...overrides,
@@ -161,7 +164,7 @@ describe('handleMcpRequest', () => {
   });
 
   describe('rate limiting', () => {
-    it('returns rate_limited error when rate limit is exceeded', async () => {
+    it('returns RATE_LIMITED (-32004) error when rate limit is exceeded', async () => {
       const blockedLimiter = makeRateLimiter(false);
       const req = makeRequest({ method: 'ping' });
       const result = await handleMcpRequest(req, {
@@ -171,6 +174,8 @@ describe('handleMcpRequest', () => {
         rateLimiter: blockedLimiter,
       });
       expect(result?.error).toBeDefined();
+      expect(result?.error?.code).toBe(JsonRpcErrorCode.RATE_LIMITED);
+      expect(result?.error?.code).toBe(-32004);
       expect(result?.error?.message).toBe('Rate limit exceeded');
     });
 
@@ -208,13 +213,77 @@ describe('handleMcpRequest', () => {
 
   describe('initialize', () => {
     it('returns server info and capabilities', async () => {
-      const req = makeRequest({ method: 'initialize' });
+      const req = makeRequest({
+        method: 'initialize',
+        params: { protocolVersion: MCP_LATEST_PROTOCOL_VERSION },
+      });
       const result = await handleMcpRequest(req, { auth, session, serverState, rateLimiter });
       const data = result?.result as Record<string, unknown>;
-      expect(data.protocolVersion).toBe(MCP_PROTOCOL_VERSION);
+      expect(data.protocolVersion).toBe(MCP_LATEST_PROTOCOL_VERSION);
       expect((data.serverInfo as Record<string, string>).name).toBe('Test MCP Server');
       expect((data.serverInfo as Record<string, string>).version).toBe('1.0.0');
-      expect(data.capabilities).toEqual({ tools: {}, resources: {}, prompts: {} });
+      // Only advertise features the server actually implements. tools and
+      // resources broadcast list_changed; prompts/subscriptions/logging land
+      // in later phases.
+      expect(data.capabilities).toEqual({
+        tools: { listChanged: true },
+        resources: { listChanged: true },
+        prompts: {},
+      });
+    });
+
+    describe('version negotiation', () => {
+      it('honours an explicitly-requested supported version', async () => {
+        const req = makeRequest({
+          method: 'initialize',
+          params: { protocolVersion: '2024-11-05' },
+        });
+        const result = await handleMcpRequest(req, { auth, session, serverState, rateLimiter });
+        expect((result?.result as { protocolVersion: string }).protocolVersion).toBe('2024-11-05');
+      });
+
+      it('defaults to the oldest supported version when client omits protocolVersion', async () => {
+        const req = makeRequest({ method: 'initialize' });
+        const result = await handleMcpRequest(req, { auth, session, serverState, rateLimiter });
+        expect((result?.result as { protocolVersion: string }).protocolVersion).toBe(
+          MCP_MIN_PROTOCOL_VERSION
+        );
+      });
+
+      it('downgrades a forward-dated unknown version to the latest supported', async () => {
+        const req = makeRequest({
+          method: 'initialize',
+          params: { protocolVersion: '2099-01-01' },
+        });
+        const result = await handleMcpRequest(req, { auth, session, serverState, rateLimiter });
+        expect((result?.result as { protocolVersion: string }).protocolVersion).toBe(
+          MCP_LATEST_PROTOCOL_VERSION
+        );
+      });
+
+      it('rejects an unknown older version with INVALID_PARAMS', async () => {
+        const req = makeRequest({
+          method: 'initialize',
+          params: { protocolVersion: '2020-01-01' },
+        });
+        const result = await handleMcpRequest(req, { auth, session, serverState, rateLimiter });
+        expect(result?.error?.code).toBe(JsonRpcErrorCode.INVALID_PARAMS);
+      });
+
+      it('rejects a non-string protocolVersion with INVALID_PARAMS', async () => {
+        const req = makeRequest({
+          method: 'initialize',
+          params: { protocolVersion: 12345 },
+        });
+        const result = await handleMcpRequest(req, { auth, session, serverState, rateLimiter });
+        expect(result?.error?.code).toBe(JsonRpcErrorCode.INVALID_PARAMS);
+      });
+
+      it('keeps the MCP_PROTOCOL_VERSION alias pointing at the oldest supported version', () => {
+        // Existing imports of MCP_PROTOCOL_VERSION in downstream code must
+        // not break when we add a new spec revision.
+        expect(MCP_PROTOCOL_VERSION).toBe(MCP_MIN_PROTOCOL_VERSION);
+      });
     });
   });
 

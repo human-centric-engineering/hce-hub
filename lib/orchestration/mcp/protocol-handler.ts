@@ -11,8 +11,8 @@
 import { logger } from '@/lib/logging';
 import {
   JsonRpcErrorCode,
-  MCP_PROTOCOL_VERSION,
   McpScope,
+  negotiateMcpProtocolVersion,
   type JsonRpcRequest,
   type JsonRpcResponse,
   type McpAuthContext,
@@ -77,7 +77,7 @@ export async function handleMcpRequest(
       clientIp: auth.clientIp,
       userAgent: auth.userAgent,
     });
-    return jsonRpcError(request.id!, JsonRpcErrorCode.INTERNAL_ERROR, 'Rate limit exceeded');
+    return jsonRpcError(request.id!, JsonRpcErrorCode.RATE_LIMITED, 'Rate limit exceeded');
   }
 
   try {
@@ -127,7 +127,7 @@ async function dispatchMethod(request: JsonRpcRequest, context: HandlerContext):
 
   switch (request.method) {
     case 'initialize':
-      return handleInitialize(context);
+      return handleInitialize(request.params, context);
 
     case 'ping':
       return {};
@@ -179,17 +179,41 @@ async function dispatchMethod(request: JsonRpcRequest, context: HandlerContext):
 // Method Handlers
 // ============================================================================
 
-function handleInitialize(context: HandlerContext): McpInitializeResult {
+function handleInitialize(
+  params: Record<string, unknown> | undefined,
+  context: HandlerContext
+): McpInitializeResult {
   const { serverState } = context;
 
+  const negotiation = negotiateMcpProtocolVersion(params?.protocolVersion);
+  if (!negotiation) {
+    throw new McpProtocolError(
+      JsonRpcErrorCode.INVALID_PARAMS,
+      'Unsupported protocolVersion. The server supports 2025-06-18 and 2024-11-05.'
+    );
+  }
+
+  if (negotiation.wasDowngraded) {
+    logger.info('MCP initialize: downgraded client to latest supported version', {
+      requested: params?.protocolVersion,
+      negotiated: negotiation.version,
+    });
+  }
+
+  // Advertise only features that have working handlers in this build.
+  // tools and resources broadcast list_changed when the admin mutates their
+  // catalogue (see broadcastMcpToolsChanged / broadcastMcpResourcesChanged).
+  // prompts.listChanged, resources.subscribe, logging, and completions land
+  // in later phases — leave them unset until then so compliant clients don't
+  // call methods that aren't implemented.
   const capabilities: McpCapabilities = {
-    tools: {},
-    resources: {},
+    tools: { listChanged: true },
+    resources: { listChanged: true },
     prompts: {},
   };
 
   return {
-    protocolVersion: MCP_PROTOCOL_VERSION,
+    protocolVersion: negotiation.version,
     capabilities,
     serverInfo: {
       name: serverState.serverName,
