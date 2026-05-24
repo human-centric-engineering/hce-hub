@@ -81,15 +81,24 @@ export default async function McpPromptsPage() {
             <p className="text-foreground mt-2 font-medium">Template syntax</p>
             <p>
               Use <code className="text-xs">{'{{argument_name}}'}</code> to insert values declared
-              in the arguments list. Only declared argument names are interpolated — stray
-              placeholders like <code>{'{{database_url}}'}</code> render literally, not evaluated.
+              in the arguments list. Sunrise interpolates <em>only</em> declared argument names —
+              stray placeholders like <code>{'{{database_url}}'}</code> render literally. The MCP
+              spec does not mandate this; other servers may behave differently, so always declare
+              every variable you reference.
             </p>
-            <p className="text-foreground mt-2 font-medium">Backward compatibility</p>
+            <p className="text-foreground mt-2 font-medium">Evolving a prompt</p>
             <p>
-              The prompt <strong className="text-foreground">name is immutable</strong> after
-              creation because changing it silently breaks every client that has bookmarked it.
-              Removing a required argument is safe; adding one breaks existing invocations until
-              clients update.
+              Treat the prompt{' '}
+              <strong className="text-foreground">
+                name and argument schema as an API contract
+              </strong>
+              . Renaming the prompt, renaming an argument, or adding a required argument all break
+              existing clients. To evolve behaviour, ship a new versioned name (e.g.{' '}
+              <code className="text-xs">analyse-pattern-v2</code>) alongside the old one rather than
+              mutating in place. Sunrise enforces this — the admin UI cannot rename a prompt, only
+              delete + recreate. Removing an argument is <em>potentially</em> breaking: clients
+              tolerate the missing field, but any template still referencing the removed placeholder
+              will leak the raw <code>{'{{name}}'}</code> to users until you update the template.
             </p>
           </McpInfoModal>
         </h1>

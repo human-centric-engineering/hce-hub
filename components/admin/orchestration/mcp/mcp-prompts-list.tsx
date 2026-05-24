@@ -278,8 +278,9 @@ export function McpPromptsList({ initialPrompts }: McpPromptsListProps) {
           <div className="bg-muted/50 rounded-md p-2 text-xs">
             <p className="text-muted-foreground">
               <strong className="text-foreground">name</strong> (<code>{editingPrompt?.name}</code>)
-              cannot be changed — renaming silently breaks every client that has bookmarked the
-              prompt. To rename, remove and recreate.
+              cannot be changed — treat it as an API contract. To evolve behaviour, ship a new
+              versioned name (e.g. <code>{editingPrompt?.name}-v2</code>) alongside this one and
+              retire the old one when no clients reference it.
             </p>
           </div>
           <PromptFormFields
@@ -519,8 +520,10 @@ function PromptFormFields({ form, onChange, includeName, isNameImmutable }: Prom
             Name
             <FieldHelp title="Prompt Name">
               The slash-command identifier. Lowercase letters, digits, underscores, and hyphens
-              only. Cannot start with a digit. <strong>Immutable after creation</strong> — renames
-              break every client that has bookmarked the prompt.
+              only. Cannot start with a digit.{' '}
+              <strong>Treat as an API contract — immutable after creation.</strong> To evolve
+              behaviour, ship a versioned new name (e.g. <code>analyse-pattern-v2</code>) and retire
+              the old one when no clients reference it.
             </FieldHelp>
           </Label>
           <Input

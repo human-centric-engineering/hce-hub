@@ -295,32 +295,59 @@ Prompts are admin-editable slash-command templates surfaced by MCP clients to en
 
 For freshly installed deployments that haven't run seed `015-mcp-prompts` yet, the registry falls back to two hardcoded legacy prompts (`analyze-pattern`, `search-knowledge`) so clients see something useful immediately. DB rows always take precedence over the fallback.
 
-### Template syntax
+### Template syntax (server-side enforcement)
 
-Templates use `{{argument_name}}` substitution. The substitution engine is intentionally tiny:
+Templates use `{{argument_name}}` substitution. The MCP protocol does not specify a templating engine — every server picks its own. Sunrise's engine is intentionally minimal and the rules below are **server-side guarantees**, not protocol-level ones (a different MCP server may behave differently):
 
-- **Only argument names declared in `argumentsSpec` are interpolated.** Stray placeholders like `{{database_url}}` render literally — this is the security boundary that prevents an admin from accidentally (or maliciously) leaking server state.
+- **Only argument names declared in `argumentsSpec` are interpolated.** Stray placeholders like `{{database_url}}` render literally. This is the security boundary that prevents an admin from accidentally (or maliciously) leaking server state. Other MCP server implementations may evaluate undeclared placeholders differently — write templates as if only declared names are safe.
 - Whitespace inside placeholders is tolerated (`{{ name }}` works).
 - Undefined optional args render as empty strings.
 - Required args missing from `prompts/get` arguments cause `INVALID_PARAMS` (`Missing required argument(s): ...`).
+- **Unknown args** passed by the client are silently ignored at render time (lenient toward clients that pass legacy fields). They are not rejected, but they are also not interpolated unless declared.
 - Rendered output is capped at **64 KB** — anything bigger causes `INVALID_PARAMS`.
 
 No helpers, no partials, no conditionals, no lambdas. If the prompt-set needs templating power, add it explicitly with a security review — don't reach for Handlebars.
 
-### Limits and immutability
+### Limits
 
 - Max **200 enabled prompts** per server. Create / re-enable beyond the cap returns HTTP 409 with `code: PROMPT_CAP_EXCEEDED`. Cap exists so MCP clients showing a slash-command menu don't drown in options.
 - Template max **10,000 characters** at the source; rendered max **64 KB**.
 - Max **20 arguments per prompt**.
-- **`name` is immutable post-create** because changing it silently breaks every client that has bookmarked the prompt. Renames require delete + recreate.
 
-### Backward compatibility
+### Treating prompt identity as a stable API contract
 
-When the `argumentsSpec` of a deployed prompt changes:
+MCP itself does not formally require prompt names to be immutable, but clients cache prompt identifiers, users build workflows around them, and end-users bookmark slash commands. In practice **prompt names and argument schemas are an API contract**. Sunrise enforces this at the schema layer — `name` is not in `updatePromptSchema`, so the admin UI cannot rename a prompt in place. To evolve a prompt's behaviour, **add a new versioned name** rather than mutating the existing one:
 
-- **Removing** any argument (required or optional) is safe — existing clients pass extra args, which the engine ignores.
-- **Adding an optional argument** is safe — existing clients omit it, the engine renders it empty.
-- **Adding a required argument** is breaking — existing clients get `INVALID_PARAMS` until they update. Add as optional first, then promote to required after clients catch up.
+```
+analyse-pattern-v1   (the original)
+analyse-pattern-v2   (next iteration — added required `language` arg)
+```
+
+Existing clients keep working against `-v1`; new clients adopt `-v2` on their own schedule. When `-v1` is no longer in active use, delete it.
+
+### Backward compatibility matrix
+
+What's safe to change on a deployed prompt and what isn't:
+
+| Change                                    | Compatibility            | Notes                                                                                                                                                                                                                                                                                |
+| ----------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Add an optional argument                  | Usually safe             | Existing clients omit it; engine renders empty                                                                                                                                                                                                                                       |
+| Add a required argument                   | **Breaking**             | Existing invocations get `INVALID_PARAMS`. Add as optional first, then promote later.                                                                                                                                                                                                |
+| Remove an argument                        | **Potentially breaking** | Sunrise tolerates clients still passing the removed name (renders nothing), but: any template still referencing `{{removed}}` will render that placeholder literally — visible to users. Other MCP servers may reject unknown args outright. Update the template at the same commit. |
+| Rename an argument                        | **Breaking**             | A rename is "remove + add" from every client's perspective. Equivalent to a new required arg.                                                                                                                                                                                        |
+| Rename the prompt                         | **Breaking**             | Every client / bookmark / saved workflow breaks. Use a versioned new name instead.                                                                                                                                                                                                   |
+| Change semantics of the template silently | **Breaking in practice** | Wire format is identical but the meaning changes — users see surprising behaviour. Version the prompt rather than rewriting in place.                                                                                                                                                |
+| Change `description`                      | Safe                     | Display-only.                                                                                                                                                                                                                                                                        |
+| Toggle `isEnabled`                        | Safe at protocol level   | `notifications/prompts/list_changed` fires; well-behaved clients re-list.                                                                                                                                                                                                            |
+
+### Prompts vs Tools — common misuse
+
+A common temptation is to use prompts as "lightweight tools" — admin types a template that asks the model to do something. This breaks the primitive separation:
+
+- **Prompt**: a user-facing UX surface. The end user has to deliberately select it.
+- **Tool**: a machine-callable function. The model decides when to invoke.
+
+Heuristic: if the server is expected to execute logic, call APIs, mutate state, or compute results autonomously, it belongs in a **tool**, not a prompt. Prompts are templates the user runs; tools are functions the model runs.
 
 ## Session Management
 
