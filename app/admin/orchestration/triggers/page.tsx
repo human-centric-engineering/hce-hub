@@ -10,6 +10,7 @@ import { FieldHelp } from '@/components/ui/field-help';
 import { API } from '@/lib/api/endpoints';
 import { parseApiResponse, serverFetch } from '@/lib/api/server-fetch';
 import { logger } from '@/lib/logging';
+import { parseEnabledChannelsFromMeta } from '@/lib/orchestration/admin/trigger-meta';
 
 export const metadata: Metadata = {
   title: 'Inbound Triggers · AI Orchestration',
@@ -26,11 +27,7 @@ async function getTriggers(): Promise<{
     if (!res.ok) return { triggers: [], enabledChannels: [] };
     const body = await parseApiResponse<TriggerListItem[]>(res);
     if (!body.success) return { triggers: [], enabledChannels: [] };
-    const enabledChannels =
-      body.meta && typeof body.meta === 'object' && 'enabledChannels' in body.meta
-        ? ((body.meta as { enabledChannels: string[] }).enabledChannels ?? [])
-        : [];
-    return { triggers: body.data, enabledChannels };
+    return { triggers: body.data, enabledChannels: parseEnabledChannelsFromMeta(body.meta) };
   } catch (err) {
     logger.error('triggers list page: initial fetch failed', err);
     return { triggers: [], enabledChannels: [] };
