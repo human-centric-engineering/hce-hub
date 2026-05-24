@@ -10,46 +10,11 @@ import {
 import { API } from '@/lib/api/endpoints';
 import { getBaseUrl, parseApiResponse, serverFetch } from '@/lib/api/server-fetch';
 import { logger } from '@/lib/logging';
+import { INBOUND_TRIGGER_STARTER_HREF } from '@/lib/orchestration/admin/inbound-trigger-starter';
 
 export const metadata: Metadata = {
   title: 'New Inbound Trigger · AI Orchestration',
 };
-
-/**
- * Starter workflow definition seeded when the operator clicks "Create a
- * workflow" from the no-workflows-yet state on the trigger creation
- * page. Single `llm_call` step that reads the normalised inbound
- * trigger fields (`trigger.text`, `trigger.from`, `trigger.channel`) so
- * the operator lands in the workflow builder with a runnable shape
- * instead of an empty canvas.
- *
- * Encoded into a `?definition=` query param the workflow new page
- * already accepts (the advisor chatbot uses the same hand-off path).
- */
-const INBOUND_TRIGGER_STARTER_DEFINITION = {
-  entryStepId: 'respond_to_inbound',
-  errorStrategy: 'fail' as const,
-  steps: [
-    {
-      id: 'respond_to_inbound',
-      name: 'Respond to inbound message',
-      description:
-        'Reads the normalised inbound trigger payload (text + sender) and asks the LLM to draft a reply. The trigger.* fields available depend on the channel: Twilio/WhatsApp populate trigger.text + trigger.from + trigger.subChannel; Slack populates trigger.text + trigger.user; Postmark populates trigger.textBody + trigger.from.email. To actually send the reply back on the same channel, add a tool_call step using the `send_message_to_channel` capability with `conversationId: {{trigger.conversationId}}` and `message: {{steps.respond_to_inbound.output}}` after binding the capability to an agent.',
-      type: 'llm_call',
-      config: {
-        prompt:
-          'A user sent us this inbound message:\n\n{{trigger.text}}\n\nFrom: {{trigger.from}}\nChannel: {{trigger.channel}}\n\nWrite a concise, helpful reply suitable for the channel (SMS: under 1600 chars; WhatsApp: under 4096; Slack: markdown OK).',
-        temperature: 0.4,
-      },
-      nextSteps: [],
-    },
-  ],
-};
-
-const STARTER_DEFINITION_PARAM = encodeURIComponent(
-  JSON.stringify(INBOUND_TRIGGER_STARTER_DEFINITION)
-);
-const NEW_WORKFLOW_HREF_WITH_STARTER = `/admin/orchestration/workflows/new?definition=${STARTER_DEFINITION_PARAM}`;
 
 async function getWorkflows(): Promise<WorkflowOption[]> {
   try {
@@ -151,7 +116,7 @@ export default async function NewTriggerPage() {
 
           <div className="flex flex-wrap gap-2">
             <Button asChild>
-              <Link href={NEW_WORKFLOW_HREF_WITH_STARTER}>
+              <Link href={INBOUND_TRIGGER_STARTER_HREF}>
                 Create a workflow (pre-filled for inbound)
               </Link>
             </Button>
