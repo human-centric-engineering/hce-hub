@@ -49,6 +49,10 @@ import {
 } from '@/lib/orchestration/evaluations/parse-structured';
 import { scoreResponse } from '@/lib/orchestration/evaluations/score-response';
 import {
+  type Annotation,
+  deserializeAnnotations,
+} from '@/lib/orchestration/evaluations/annotation-serializer';
+import {
   EVALUATION_DEFAULT_MODEL as DEFAULT_MODEL,
   EVALUATION_DEFAULT_PROVIDER as DEFAULT_PROVIDER,
   JUDGE_MODEL,
@@ -136,10 +140,22 @@ export async function completeEvaluationSession(
 
   const provider = await getProvider(providerSlug);
 
+  // Annotations the reviewer captured in the runner UI are persisted on
+  // `session.metadata` as flat keys (see annotation-serializer.ts). Feed
+  // them into the summariser so the AI's "what happened in this session"
+  // explanation is informed by the human's per-turn judgement, not just
+  // the raw transcript.
+  const metadataObject =
+    session.metadata && typeof session.metadata === 'object' && !Array.isArray(session.metadata)
+      ? (session.metadata as Record<string, unknown>)
+      : null;
+  const annotations = deserializeAnnotations(metadataObject);
+
   const messages = buildAnalysisMessages({
     sessionTitle: session.title,
     sessionDescription: session.description,
     logs,
+    annotations,
   });
 
   let analysis: AnalysisResult;
@@ -314,26 +330,51 @@ interface BuildMessagesOptions {
     content: string | null;
     capabilitySlug: string | null;
   }>;
+  annotations: Map<number, Annotation>;
 }
 
 function buildAnalysisMessages(opts: BuildMessagesOptions): LlmMessage[] {
-  const transcript = opts.logs
-    .map((log) => {
-      const prefix = `#${log.sequenceNumber} [${log.eventType}]`;
-      const body =
-        log.eventType === 'capability_call' || log.eventType === 'capability_result'
-          ? `${log.capabilitySlug ?? 'unknown'}: ${truncate(log.content ?? '', 500)}`
-          : truncate(log.content ?? '', 500);
-      return `${prefix} ${body}`;
-    })
-    .join('\n');
+  // The runner stores annotations against the index of the assistant turn
+  // in its visible chat list (user_input + ai_response with non-empty
+  // content; capability events excluded). Mirror that filter exactly so
+  // annotation indices line up with the right ai_response.
+  let chatTurnIdx = 0;
+  let hasAnnotations = false;
+  const transcriptLines: string[] = [];
+  for (const log of opts.logs) {
+    const prefix = `#${log.sequenceNumber} [${log.eventType}]`;
+    const body =
+      log.eventType === 'capability_call' || log.eventType === 'capability_result'
+        ? `${log.capabilitySlug ?? 'unknown'}: ${truncate(log.content ?? '', 500)}`
+        : truncate(log.content ?? '', 500);
+    transcriptLines.push(`${prefix} ${body}`);
+
+    const isChatTurn =
+      (log.eventType === 'user_input' || log.eventType === 'ai_response') && !!log.content;
+    if (isChatTurn) {
+      if (log.eventType === 'ai_response') {
+        const ann = opts.annotations.get(chatTurnIdx);
+        if (ann && isAnnotationActive(ann)) {
+          transcriptLines.push(`   ↳ reviewer: ${formatAnnotationForPrompt(ann)}`);
+          hasAnnotations = true;
+        }
+      }
+      chatTurnIdx++;
+    }
+  }
+  const transcript = transcriptLines.join('\n');
 
   const systemContent = [
     'You are an evaluation analyst reviewing a transcript between a user and an AI agent.',
+    hasAnnotations
+      ? "A human reviewer has annotated some assistant responses with `↳ reviewer:` lines (category, 1-5 rating, optional notes); treat these as the reviewer's judgement and weight them heavily in your summary and suggestions."
+      : null,
     'Analyse the transcript and produce a concise performance summary plus actionable improvement suggestions.',
     'Respond ONLY with a JSON object of the form {"summary": "...", "improvementSuggestions": ["...", "..."]}.',
     'Do not wrap the JSON in code fences. Do not include any prose outside the JSON.',
-  ].join(' ');
+  ]
+    .filter((line): line is string => line !== null)
+    .join(' ');
 
   const userContent = [
     `Evaluation title: ${opts.sessionTitle}`,
@@ -349,6 +390,18 @@ function buildAnalysisMessages(opts: BuildMessagesOptions): LlmMessage[] {
     { role: 'system', content: systemContent },
     { role: 'user', content: userContent },
   ];
+}
+
+function isAnnotationActive(ann: Annotation): boolean {
+  return ann.category !== null || ann.rating !== 3 || ann.notes.length > 0;
+}
+
+function formatAnnotationForPrompt(ann: Annotation): string {
+  const parts: string[] = [];
+  if (ann.category) parts.push(`category=${ann.category}`);
+  if (ann.rating !== 3) parts.push(`rating=${ann.rating}/5`);
+  if (ann.notes) parts.push(`notes="${truncate(ann.notes, 280)}"`);
+  return parts.join(', ');
 }
 
 function truncate(input: string, max: number): string {

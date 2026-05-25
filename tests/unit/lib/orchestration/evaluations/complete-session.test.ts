@@ -698,6 +698,187 @@ describe('buildAnalysisMessages contract', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Reviewer annotations → analysis prompt (Phase 0)
+// ---------------------------------------------------------------------------
+//
+// The runner UI lets a reviewer annotate each AI response with a category,
+// a 1-5 rating, and free-text notes; these are serialized into
+// session.metadata (see annotation-serializer.ts). The summariser must now
+// surface those annotations to the LLM so the AI's analysis reflects human
+// judgement, not just the raw transcript.
+
+describe('buildAnalysisMessages — reviewer annotations', () => {
+  it('injects an annotation line under the matching ai_response and updates the system prompt', async () => {
+    // Annotation indices match the runner's filtered chat list (user + AI
+    // turns, capability events skipped). With logs [user_input, ai_response]
+    // the assistant turn sits at index 1 in the runner — so ann_0_idx=1.
+    findFirst.mockResolvedValueOnce(
+      makeSession({
+        metadata: {
+          ann_count: 1,
+          ann_0_idx: 1,
+          ann_0_cat: 'issue',
+          ann_0_rat: 2,
+          ann_0_notes: 'missed the refund window',
+        },
+      })
+    );
+    findLogs.mockResolvedValueOnce([
+      makeLog(1, { eventType: 'user_input', content: 'Can I get a refund?' }),
+      makeLog(2, { eventType: 'ai_response', content: 'Refunds are available.' }),
+    ]);
+    const chat = vi.fn().mockResolvedValueOnce(VALID_RESPONSE);
+    mockedGetProvider.mockResolvedValueOnce(makeProvider(chat));
+    update.mockResolvedValueOnce({ id: 'sess-1' });
+
+    await completeEvaluationSession({ sessionId: 'sess-1', userId: 'user-1' });
+
+    const userMsg = chat.mock.calls[0][0].find((m: { role: string }) => m.role === 'user') as {
+      content: string;
+    };
+    const systemMsg = chat.mock.calls[0][0].find((m: { role: string }) => m.role === 'system') as {
+      content: string;
+    };
+    expect(userMsg.content).toContain('↳ reviewer:');
+    expect(userMsg.content).toContain('category=issue');
+    expect(userMsg.content).toContain('rating=2/5');
+    expect(userMsg.content).toContain('notes="missed the refund window"');
+    expect(systemMsg.content).toContain('reviewer');
+  });
+
+  it('skips default annotations (rating=3, no category, no notes) so the prompt stays clean', async () => {
+    findFirst.mockResolvedValueOnce(
+      makeSession({
+        metadata: {
+          ann_count: 1,
+          ann_0_idx: 1,
+          ann_0_cat: null,
+          ann_0_rat: 3,
+          ann_0_notes: null,
+        },
+      })
+    );
+    findLogs.mockResolvedValueOnce([
+      makeLog(1, { eventType: 'user_input', content: 'Hi' }),
+      makeLog(2, { eventType: 'ai_response', content: 'Hello' }),
+    ]);
+    const chat = vi.fn().mockResolvedValueOnce(VALID_RESPONSE);
+    mockedGetProvider.mockResolvedValueOnce(makeProvider(chat));
+    update.mockResolvedValueOnce({ id: 'sess-1' });
+
+    await completeEvaluationSession({ sessionId: 'sess-1', userId: 'user-1' });
+
+    const userMsg = chat.mock.calls[0][0].find((m: { role: string }) => m.role === 'user') as {
+      content: string;
+    };
+    const systemMsg = chat.mock.calls[0][0].find((m: { role: string }) => m.role === 'system') as {
+      content: string;
+    };
+    expect(userMsg.content).not.toContain('↳ reviewer:');
+    expect(systemMsg.content).not.toContain('reviewer');
+  });
+
+  it('treats null session metadata as no annotations (back-compat)', async () => {
+    findFirst.mockResolvedValueOnce(makeSession({ metadata: null }));
+    findLogs.mockResolvedValueOnce([
+      makeLog(1, { eventType: 'user_input', content: 'Hi' }),
+      makeLog(2, { eventType: 'ai_response', content: 'Hello' }),
+    ]);
+    const chat = vi.fn().mockResolvedValueOnce(VALID_RESPONSE);
+    mockedGetProvider.mockResolvedValueOnce(makeProvider(chat));
+    update.mockResolvedValueOnce({ id: 'sess-1' });
+
+    await completeEvaluationSession({ sessionId: 'sess-1', userId: 'user-1' });
+
+    const userMsg = chat.mock.calls[0][0].find((m: { role: string }) => m.role === 'user') as {
+      content: string;
+    };
+    expect(userMsg.content).not.toContain('↳ reviewer:');
+  });
+
+  it('counts only chat turns when matching annotation indices (capability events excluded)', async () => {
+    // The runner skips capability_* events when building its messages array,
+    // so an annotation against the *second* AI turn must still find its
+    // ai_response even with a capability_call sitting between them.
+    // logs:  user_input → ai_response → capability_call → user_input → ai_response
+    // chat:  user(0) → assistant(1) →                      user(2) → assistant(3)
+    findFirst.mockResolvedValueOnce(
+      makeSession({
+        metadata: {
+          ann_count: 1,
+          ann_0_idx: 3,
+          ann_0_cat: 'expected',
+          ann_0_rat: 5,
+          ann_0_notes: null,
+        },
+      })
+    );
+    findLogs.mockResolvedValueOnce([
+      makeLog(1, { eventType: 'user_input', content: 'First question' }),
+      makeLog(2, { eventType: 'ai_response', content: 'First answer' }),
+      makeLog(3, {
+        eventType: 'capability_call',
+        content: 'search',
+        capabilitySlug: 'web-search',
+      }),
+      makeLog(4, { eventType: 'user_input', content: 'Second question' }),
+      makeLog(5, { eventType: 'ai_response', content: 'Second answer' }),
+    ]);
+    const chat = vi.fn().mockResolvedValueOnce(VALID_RESPONSE);
+    mockedGetProvider.mockResolvedValueOnce(makeProvider(chat));
+    update.mockResolvedValueOnce({ id: 'sess-1' });
+
+    await completeEvaluationSession({ sessionId: 'sess-1', userId: 'user-1' });
+
+    const userMsg = chat.mock.calls[0][0].find((m: { role: string }) => m.role === 'user') as {
+      content: string;
+    };
+    // The annotation should sit under the *second* ai_response (#5), not the first.
+    const lines = userMsg.content.split('\n');
+    const secondAiLineIdx = lines.findIndex((l) => l.startsWith('#5 [ai_response]'));
+    expect(secondAiLineIdx).toBeGreaterThan(-1);
+    expect(lines[secondAiLineIdx + 1]).toContain('↳ reviewer:');
+    expect(lines[secondAiLineIdx + 1]).toContain('category=expected');
+    expect(lines[secondAiLineIdx + 1]).toContain('rating=5/5');
+    // And the first ai_response line must NOT be followed by a reviewer line.
+    const firstAiLineIdx = lines.findIndex((l) => l.startsWith('#2 [ai_response]'));
+    expect(lines[firstAiLineIdx + 1]).not.toContain('↳ reviewer:');
+  });
+
+  it('truncates long notes to keep the prompt compact', async () => {
+    const longNotes = 'x'.repeat(500);
+    findFirst.mockResolvedValueOnce(
+      makeSession({
+        metadata: {
+          ann_count: 1,
+          ann_0_idx: 1,
+          ann_0_cat: 'observation',
+          ann_0_rat: 4,
+          ann_0_notes: longNotes,
+        },
+      })
+    );
+    findLogs.mockResolvedValueOnce([
+      makeLog(1, { eventType: 'user_input', content: 'Hi' }),
+      makeLog(2, { eventType: 'ai_response', content: 'Hello' }),
+    ]);
+    const chat = vi.fn().mockResolvedValueOnce(VALID_RESPONSE);
+    mockedGetProvider.mockResolvedValueOnce(makeProvider(chat));
+    update.mockResolvedValueOnce({ id: 'sess-1' });
+
+    await completeEvaluationSession({ sessionId: 'sess-1', userId: 'user-1' });
+
+    const userMsg = chat.mock.calls[0][0].find((m: { role: string }) => m.role === 'user') as {
+      content: string;
+    };
+    // Truncated to 280 chars + ellipsis.
+    expect(userMsg.content).toContain('notes="');
+    expect(userMsg.content).toMatch(/notes="x{280}…"/);
+    expect(userMsg.content).not.toContain('x'.repeat(500));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Per-turn metric scoring — skip and null-score branches
 // ---------------------------------------------------------------------------
 
