@@ -381,9 +381,9 @@ describe('GET /api/v1/users/[id]', () => {
       expect(data.data.timezone).toBe('America/Los_Angeles');
       expect(data.data.location).toBe('San Francisco, CA');
 
-      // Assert - Timestamp fields
-      expect(data.data.createdAt).toBeDefined();
-      expect(data.data.updatedAt).toBeDefined();
+      // Assert - Timestamp fields serialised to ISO strings by the route
+      expect(data.data.createdAt).toBe(mockUser.createdAt.toISOString());
+      expect(data.data.updatedAt).toBe(mockUser.updatedAt.toISOString());
     });
 
     it('should return user with null extended profile fields when not set', async () => {
@@ -1729,6 +1729,35 @@ describe('DELETE /api/v1/users/[id]', () => {
       actorUserId: adminId,
       reason: 'admin_action',
     });
+
+    // Ported from route.delete.test.ts: the structured audit log names who deleted whom.
+    expect(mockLogger.info).toHaveBeenCalledWith('User deleted by admin', {
+      deletedUserId: targetUserId,
+      adminId,
+    });
+  });
+
+  it('returns 500 INTERNAL_ERROR when eraseUser rejects — the error propagates through the guard wrapper and the delete is not silently swallowed', async () => {
+    // Arrange — admin deletes a valid USER target, but the erasure service fails
+    const adminUser = mockAdminUser();
+    vi.mocked(auth.api.getSession).mockResolvedValue(adminUser);
+    const targetUserId = 'cmjbv4i3x00033wsloputgwae';
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: targetUserId,
+      name: 'Doomed User',
+      email: 'doomed@example.com',
+      role: 'USER',
+    } as never);
+    vi.mocked(eraseUser).mockRejectedValue(new Error('erase failed'));
+
+    // Act
+    const response = await DELETE({} as NextRequest, { params: createMockParams(targetUserId) });
+    const data = await parseResponse<ErrorResponse>(response);
+
+    // Assert — full error envelope at 500
+    expect(response.status).toBe(500);
+    expect(data.success).toBe(false);
+    expect(data.error.code).toBe('INTERNAL_ERROR');
   });
 
   it('should hit CANNOT_DELETE_SELF before the role check when the caller is both self and an ADMIN account', async () => {

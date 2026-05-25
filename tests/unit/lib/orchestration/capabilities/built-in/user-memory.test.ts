@@ -304,6 +304,26 @@ describe('User-memory redactProvenance', () => {
     expect(safeArgs.value).toMatch(/^<redacted: memory-value, \d+ chars>$/);
   });
 
+  it('Read: returns raw result as resultPreview and passes args through when result.success is false', () => {
+    // Arrange: a failure result — e.g. the no_user_context guard fired
+    const failureResult = {
+      success: false as const,
+      error: {
+        code: 'no_user_context',
+        message: 'User memory is unavailable for system-initiated runs (no user context).',
+      },
+    };
+
+    // Act
+    const cap = new ReadUserMemoryCapability();
+    const redacted = cap.redactProvenance({}, failureResult);
+
+    // Assert: the else branch serialises the raw result unchanged (no PII to strip)
+    expect(redacted.resultPreview).toBe(JSON.stringify(failureResult));
+    // Assert: args are passed through as-is
+    expect(redacted.args).toEqual({});
+  });
+
   it('Write: result envelope (key + action) passes through (no PII)', () => {
     const cap = new WriteUserMemoryCapability();
     const redacted = cap.redactProvenance(

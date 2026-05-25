@@ -106,8 +106,10 @@ function sha256Hex(input: string): string {
 describe('eraseUser', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Restore defaults that clearAllMocks resets (mock implementations, not
-    // just call history).
+    // Re-apply default implementations after clearAllMocks() wiped call
+    // history. Note: it is vi.restoreAllMocks() in afterEach that resets
+    // spy implementations back to their originals; clearAllMocks() only
+    // clears call history and return-value queues.
     mockIsStorageEnabled.mockReturnValue(false);
     mockDeleteByPrefix.mockResolvedValue({ deleted: 1 });
     mockUpdateMany.mockResolvedValue({ count: 1 });
@@ -277,6 +279,44 @@ describe('eraseUser', () => {
     // Assert — explicit non-call assertion arranged cleanly (no mid-test
     // clearAllMocks, per brittle-patterns rule 4)
     expect(mockDeleteByPrefix).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Case 7b: Storage ordering — avatar cleanup runs BEFORE the DB delete.
+  // Ported from route.delete.test.ts; locks the intentional structure that
+  // avatar cleanup is best-effort and outside/ahead of the $transaction.
+  // -------------------------------------------------------------------------
+
+  it('storage ordering — deleteByPrefix is invoked before the user delete', async () => {
+    // Arrange
+    mockIsStorageEnabled.mockReturnValue(true);
+
+    // Act
+    await eraseUser(BASE_PARAMS);
+
+    // Assert — both ran, and the avatar cleanup's invocation precedes the delete's
+    expect(mockDeleteByPrefix).toHaveBeenCalledTimes(1);
+    expect(mockUserDelete).toHaveBeenCalledTimes(1);
+    expect(mockDeleteByPrefix.mock.invocationCallOrder[0]).toBeLessThan(
+      mockUserDelete.mock.invocationCallOrder[0]
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // Case 7c: Storage error is fatal — a deleteByPrefix rejection propagates
+  // and the user is NOT deleted (avatar cleanup precedes the transaction, so
+  // its failure aborts erasure rather than orphaning the user). Ported from
+  // route.delete.test.ts's "avatar cleanup errors" case.
+  // -------------------------------------------------------------------------
+
+  it('storage error is fatal — deleteByPrefix rejection propagates and user.delete is never reached', async () => {
+    // Arrange
+    mockIsStorageEnabled.mockReturnValue(true);
+    mockDeleteByPrefix.mockRejectedValue(new Error('storage down'));
+
+    // Act + Assert — eraseUser rejects, and the delete never runs
+    await expect(eraseUser(BASE_PARAMS)).rejects.toThrow('storage down');
+    expect(mockUserDelete).not.toHaveBeenCalled();
   });
 
   // -------------------------------------------------------------------------
