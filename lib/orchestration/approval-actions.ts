@@ -7,6 +7,7 @@
  */
 
 import { prisma } from '@/lib/db/client';
+import { Prisma } from '@prisma/client';
 import { logger } from '@/lib/logging';
 import { executionTraceSchema } from '@/lib/validations/orchestration';
 import { WorkflowStatus } from '@/types/orchestration';
@@ -102,7 +103,7 @@ export async function executeApproval(
     where: { id: executionId, status: WorkflowStatus.PAUSED_FOR_APPROVAL },
     data: {
       status: WorkflowStatus.PENDING,
-      executionTrace: trace as unknown as object,
+      executionTrace: trace as unknown as Prisma.InputJsonValue,
     },
   });
 
@@ -185,7 +186,7 @@ export async function executeRejection(
         status: WorkflowStatus.CANCELLED,
         completedAt: new Date(),
         errorMessage: `Rejected: ${opts.reason}`,
-        executionTrace: trace as unknown as object,
+        executionTrace: trace as unknown as Prisma.InputJsonValue,
       },
     });
     if (updated.count > 0) {

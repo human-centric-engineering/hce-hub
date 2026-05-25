@@ -244,7 +244,7 @@ export function AgentForm({
       enableVoiceInput: agent?.enableVoiceInput ?? false,
       enableImageInput: agent?.enableImageInput ?? false,
       enableDocumentInput: agent?.enableDocumentInput ?? false,
-      fallbackProviders: (agent?.fallbackProviders as string[]) ?? [],
+      fallbackProviders: agent?.fallbackProviders ?? [],
       knowledgeAccessMode:
         (agent?.knowledgeAccessMode as 'full' | 'restricted' | undefined) ?? 'full',
       knowledgeTagIds: agent?.grantedTagIds ?? [],

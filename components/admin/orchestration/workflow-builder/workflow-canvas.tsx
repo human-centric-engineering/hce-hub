@@ -20,10 +20,7 @@ import {
   MiniMap,
   ReactFlow,
   useReactFlow,
-  type Connection,
   type Edge,
-  type EdgeChange,
-  type NodeChange,
   type OnConnect,
   type OnEdgesChange,
   type OnNodesChange,
@@ -104,9 +101,9 @@ export function WorkflowCanvas({
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        onNodesChange={onNodesChange as (changes: NodeChange<PatternNode>[]) => void}
-        onEdgesChange={onEdgesChange as (changes: EdgeChange[]) => void}
-        onConnect={onConnect as (connection: Connection) => void}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
         onNodeClick={(_, node) => onNodeClick(node.id)}
         onPaneClick={() => onNodeClick(null)}
         colorMode={isDark ? 'dark' : 'light'}

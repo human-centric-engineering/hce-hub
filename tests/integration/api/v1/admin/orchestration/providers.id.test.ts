@@ -146,7 +146,7 @@ describe('GET /api/v1/admin/orchestration/providers/:id', () => {
     it('returns provider with apiKeyPresent field', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(isApiKeyEnvVarSet).mockReturnValue(true);
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
 
       const response = await GET(makeRequest(), makeParams(PROVIDER_ID));
 
@@ -215,9 +215,9 @@ describe('PATCH /api/v1/admin/orchestration/providers/:id', () => {
     it('updates provider and returns 200 with apiKeyPresent field', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(isApiKeyEnvVarSet).mockReturnValue(true);
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(prisma.aiProviderConfig.update).mockResolvedValue(
-        makeProvider({ name: 'Updated' }) as never
+        makeProvider({ name: 'Updated' })
       );
 
       const response = await PATCH(
@@ -237,8 +237,8 @@ describe('PATCH /api/v1/admin/orchestration/providers/:id', () => {
     it('updates all optional fields in a single payload', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(isApiKeyEnvVarSet).mockReturnValue(true);
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
-      vi.mocked(prisma.aiProviderConfig.update).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
+      vi.mocked(prisma.aiProviderConfig.update).mockResolvedValue(makeProvider());
 
       const fullPayload = {
         name: 'New Name',
@@ -268,9 +268,9 @@ describe('PATCH /api/v1/admin/orchestration/providers/:id', () => {
 
     it('clears provider cache after update', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(prisma.aiProviderConfig.update).mockResolvedValue(
-        makeProvider({ name: 'Updated' }) as never
+        makeProvider({ name: 'Updated' })
       );
 
       await PATCH(makeRequest('PATCH', { name: 'Updated' }), makeParams(PROVIDER_ID));
@@ -290,8 +290,8 @@ describe('PATCH /api/v1/admin/orchestration/providers/:id', () => {
       vi.mocked(isApiKeyEnvVarSet).mockReturnValue(true);
       const current = makeProvider({ apiKeyEnvVar: 'OLD_KEY' });
       const updated = makeProvider({ apiKeyEnvVar: secretEnvVar });
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(current as never);
-      vi.mocked(prisma.aiProviderConfig.update).mockResolvedValue(updated as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(current);
+      vi.mocked(prisma.aiProviderConfig.update).mockResolvedValue(updated);
 
       // Act: PATCH with the env var name pointing at the secret
       const response = await PATCH(
@@ -341,7 +341,7 @@ describe('PATCH /api/v1/admin/orchestration/providers/:id', () => {
       'file:///etc/passwd',
     ])('returns 400 when PATCH tries to set SSRF-unsafe baseUrl %s', async (baseUrl) => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
 
       const response = await PATCH(
         makeRequest('PATCH', { baseUrl, isLocal: false }),
@@ -353,7 +353,7 @@ describe('PATCH /api/v1/admin/orchestration/providers/:id', () => {
 
     it('returns 400 for P2002 slug/name conflict on PATCH', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
         code: 'P2002',
         clientVersion: '7.0.0',
@@ -396,9 +396,9 @@ describe('DELETE /api/v1/admin/orchestration/providers/:id', () => {
   describe('Successful soft delete', () => {
     it('sets isActive to false and returns success', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(prisma.aiProviderConfig.update).mockResolvedValue(
-        makeProvider({ isActive: false }) as never
+        makeProvider({ isActive: false })
       );
 
       const response = await DELETE(makeRequest('DELETE'), makeParams(PROVIDER_ID));
@@ -418,9 +418,9 @@ describe('DELETE /api/v1/admin/orchestration/providers/:id', () => {
 
     it('clears provider cache after soft delete', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(prisma.aiProviderConfig.update).mockResolvedValue(
-        makeProvider({ isActive: false }) as never
+        makeProvider({ isActive: false })
       );
 
       await DELETE(makeRequest('DELETE'), makeParams(PROVIDER_ID));
@@ -459,8 +459,8 @@ describe('DELETE /api/v1/admin/orchestration/providers/:id?permanent=true', () =
   });
 
   it('hard-deletes when no agents or cost logs reference the slug', async () => {
-    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
-    vi.mocked(prisma.aiProviderConfig.delete).mockResolvedValue(makeProvider() as never);
+    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
+    vi.mocked(prisma.aiProviderConfig.delete).mockResolvedValue(makeProvider());
 
     const response = await DELETE(
       makeRequest('DELETE', undefined, { permanent: 'true' }),
@@ -489,7 +489,7 @@ describe('DELETE /api/v1/admin/orchestration/providers/:id?permanent=true', () =
   });
 
   it('returns 409 when agents reference the slug as primary provider', async () => {
-    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
     vi.mocked(prisma.aiAgent.count)
       .mockResolvedValueOnce(3) // primary provider count
       .mockResolvedValueOnce(0); // fallback count
@@ -514,7 +514,7 @@ describe('DELETE /api/v1/admin/orchestration/providers/:id?permanent=true', () =
   });
 
   it('returns 409 when agents reference the slug as a fallback', async () => {
-    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
     vi.mocked(prisma.aiAgent.count)
       .mockResolvedValueOnce(0) // primary
       .mockResolvedValueOnce(2); // fallback
@@ -535,7 +535,7 @@ describe('DELETE /api/v1/admin/orchestration/providers/:id?permanent=true', () =
   });
 
   it('returns 409 when cost log rows reference the slug', async () => {
-    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
     vi.mocked(prisma.aiCostLog.count).mockResolvedValue(42);
 
     const response = await DELETE(
@@ -567,8 +567,8 @@ describe('DELETE /api/v1/admin/orchestration/providers/:id?permanent=true', () =
   });
 
   it('clears the provider cache after a successful permanent delete', async () => {
-    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
-    vi.mocked(prisma.aiProviderConfig.delete).mockResolvedValue(makeProvider() as never);
+    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
+    vi.mocked(prisma.aiProviderConfig.delete).mockResolvedValue(makeProvider());
 
     await DELETE(makeRequest('DELETE', undefined, { permanent: 'true' }), makeParams(PROVIDER_ID));
 
@@ -576,10 +576,8 @@ describe('DELETE /api/v1/admin/orchestration/providers/:id?permanent=true', () =
   });
 
   it('soft-deletes (not hard) when permanent param is missing or false', async () => {
-    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
-    vi.mocked(prisma.aiProviderConfig.update).mockResolvedValue(
-      makeProvider({ isActive: false }) as never
-    );
+    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
+    vi.mocked(prisma.aiProviderConfig.update).mockResolvedValue(makeProvider({ isActive: false }));
 
     // Without ?permanent=true → soft-delete branch, no reference checks.
     const response = await DELETE(makeRequest('DELETE'), makeParams(PROVIDER_ID));

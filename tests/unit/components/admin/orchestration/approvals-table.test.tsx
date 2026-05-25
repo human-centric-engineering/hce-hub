@@ -112,7 +112,7 @@ describe('ApprovalsTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch = vi.fn<typeof fetch>();
-    global.fetch = mockFetch as typeof fetch;
+    global.fetch = mockFetch;
     // Default: list refetch returns the same data
     mockFetch.mockResolvedValue(
       createMockFetchResponse({ success: true, data: TWO_APPROVALS, meta: MOCK_META })

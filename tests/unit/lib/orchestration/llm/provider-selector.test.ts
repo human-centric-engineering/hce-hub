@@ -542,7 +542,7 @@ describe('recommendModels', () => {
       const unknownDepthModel = makeModel({
         slug: 'unknown-depth',
         tierRole: 'thinking',
-        reasoningDepth: 'unknown_value' as never,
+        reasoningDepth: 'unknown_value',
       });
       mockModels([unknownDepthModel]);
 
@@ -563,7 +563,7 @@ describe('recommendModels', () => {
       // Cast unknownTierModel to a non-primary tier to trigger non-match branch
       const foreignTier = makeModel({
         slug: 'foreign',
-        tierRole: 'worker' as never,
+        tierRole: 'worker',
         reasoningDepth: 'high',
       });
       mockModels([thinkingModel, foreignTier]);

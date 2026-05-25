@@ -46,7 +46,6 @@ import {
   multipartShapeSchema,
   MultipartError,
   type HttpAuthConfig,
-  type HttpMethod,
   type ResponseTransform,
 } from '@/lib/orchestration/http';
 
@@ -431,7 +430,7 @@ export class CallExternalApiCapability extends BaseCapability<Args, Data> {
     try {
       const response = await executeHttpRequest({
         url,
-        method: args.method as HttpMethod,
+        method: args.method,
         headers,
         body,
         auth,

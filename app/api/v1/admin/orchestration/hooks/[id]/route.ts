@@ -83,7 +83,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
   const data: Record<string, unknown> = {};
   if (validated.name !== undefined) data.name = validated.name;
   if (validated.eventType !== undefined) data.eventType = validated.eventType;
-  if (validated.action !== undefined) data.action = validated.action as Record<string, unknown>;
+  if (validated.action !== undefined) data.action = validated.action;
   if (validated.filter !== undefined) data.filter = validated.filter;
   if (validated.isEnabled !== undefined) data.isEnabled = validated.isEnabled;
 
@@ -98,10 +98,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
     entityType: 'hook',
     entityId: id,
     entityName: updated.name,
-    changes: computeChanges(
-      existing as unknown as Record<string, unknown>,
-      updated as unknown as Record<string, unknown>
-    ),
+    changes: computeChanges(existing, updated),
     clientIp: getClientIP(request),
   });
 

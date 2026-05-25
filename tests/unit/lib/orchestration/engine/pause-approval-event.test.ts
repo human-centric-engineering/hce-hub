@@ -127,7 +127,7 @@ describe('pauseForApproval event emission', () => {
     } as never);
 
     // Engine helpers use updateMany. Default count=1 — lease-loss path stays inactive.
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
 
     // Lease module — fresh stop function per test so heartbeat timer leaks don't
     // accumulate across tests. claimLease is only used on resume; not exercised here.

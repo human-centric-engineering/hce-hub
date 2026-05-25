@@ -147,7 +147,7 @@ describe('WorkflowDefinitionHistoryPanel', () => {
   });
 
   it('fires GET /versions on first expand', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse() as never);
+    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse());
     const user = userEvent.setup();
     render(<WorkflowDefinitionHistoryPanel workflowId={WORKFLOW_ID} />);
 
@@ -159,7 +159,7 @@ describe('WorkflowDefinitionHistoryPanel', () => {
   });
 
   it('does not re-fetch on second expand — uses cached data', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse() as never);
+    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse());
     const user = userEvent.setup();
     render(<WorkflowDefinitionHistoryPanel workflowId={WORKFLOW_ID} />);
 
@@ -173,7 +173,7 @@ describe('WorkflowDefinitionHistoryPanel', () => {
   });
 
   it('shows the empty state when only the currently-published version exists', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue(makeEmptyListResponse() as never);
+    vi.mocked(apiClient.get).mockResolvedValue(makeEmptyListResponse());
     const user = userEvent.setup();
     render(<WorkflowDefinitionHistoryPanel workflowId={WORKFLOW_ID} />);
 
@@ -184,7 +184,7 @@ describe('WorkflowDefinitionHistoryPanel', () => {
   });
 
   it('renders historical versions newest-first with version label and createdBy', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse() as never);
+    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse());
     const user = userEvent.setup();
     render(<WorkflowDefinitionHistoryPanel workflowId={WORKFLOW_ID} />);
 
@@ -200,7 +200,7 @@ describe('WorkflowDefinitionHistoryPanel', () => {
   });
 
   it('renders the optional changeSummary on a version row when present', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse({ withSummary: true }) as never);
+    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse({ withSummary: true }));
     const user = userEvent.setup();
     render(<WorkflowDefinitionHistoryPanel workflowId={WORKFLOW_ID} />);
 
@@ -212,7 +212,7 @@ describe('WorkflowDefinitionHistoryPanel', () => {
   });
 
   it('opens the diff dialog when Diff is clicked', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse() as never);
+    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse());
     const user = userEvent.setup();
     render(<WorkflowDefinitionHistoryPanel workflowId={WORKFLOW_ID} />);
 
@@ -228,7 +228,7 @@ describe('WorkflowDefinitionHistoryPanel', () => {
   });
 
   it('opens the rollback AlertDialog when Rollback is clicked', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse() as never);
+    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse());
     const user = userEvent.setup();
     render(<WorkflowDefinitionHistoryPanel workflowId={WORKFLOW_ID} />);
 
@@ -244,8 +244,8 @@ describe('WorkflowDefinitionHistoryPanel', () => {
   });
 
   it('POSTs to /rollback with the targetVersionId on confirm and fires onReverted', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse() as never);
-    vi.mocked(apiClient.post).mockResolvedValue({} as never);
+    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse());
+    vi.mocked(apiClient.post).mockResolvedValue({});
     const onReverted = vi.fn();
     const user = userEvent.setup();
     render(<WorkflowDefinitionHistoryPanel workflowId={WORKFLOW_ID} onReverted={onReverted} />);
@@ -298,7 +298,7 @@ describe('WorkflowDefinitionHistoryPanel', () => {
     // semantics across module instances, which can be brittle in test mocks
     // — assert on the fallback "Rollback failed" text since both branches
     // surface a user-visible error in the dialog.
-    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse() as never);
+    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse());
     vi.mocked(apiClient.post).mockRejectedValue(new Error('Network down'));
     const user = userEvent.setup();
     render(<WorkflowDefinitionHistoryPanel workflowId={WORKFLOW_ID} />);
@@ -323,7 +323,7 @@ describe('WorkflowDefinitionHistoryPanel', () => {
   it('uses APIClientError.message when the rollback POST rejects with one', async () => {
     // Variant covering the APIClientError limb specifically, by throwing the
     // exact class the component imports.
-    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse() as never);
+    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse());
     vi.mocked(apiClient.post).mockRejectedValue(
       new APIClientError('Rollback denied by server', 'FORBIDDEN')
     );
@@ -360,7 +360,7 @@ describe('WorkflowDefinitionHistoryPanel', () => {
     // is meaningful — an unmocked .get returning undefined would also satisfy
     // not.toHaveBeenCalled() even if a toggle DID fire (the lazy-fetch path would
     // crash silently). The baseline mock makes the negative assertion honest.
-    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse() as never);
+    vi.mocked(apiClient.get).mockResolvedValue(makeListResponse());
     const user = userEvent.setup();
     render(<WorkflowDefinitionHistoryPanel workflowId={WORKFLOW_ID} />);
 

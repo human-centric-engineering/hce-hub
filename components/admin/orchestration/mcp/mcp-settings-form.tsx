@@ -61,7 +61,7 @@ export function McpSettingsForm({ initialSettings }: McpSettingsFormProps) {
     try {
       await apiClient.patch(API.ADMIN.ORCHESTRATION.MCP_SETTINGS, { body: data });
       setSaved(true);
-      reset(data as unknown as McpSettingsFormInput);
+      reset(data);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
       if (err instanceof APIClientError) {

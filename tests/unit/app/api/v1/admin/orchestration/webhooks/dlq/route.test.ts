@@ -48,9 +48,9 @@ function makeRequest(qs = ''): NextRequest {
 describe('GET /webhooks/dlq', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiWebhookDelivery.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.aiWebhookDelivery.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.aiWebhookDelivery.count).mockResolvedValue(0);
   });
 
   it('returns paginated deliveries scoped to admin and exhausted status', async () => {
@@ -106,7 +106,7 @@ describe('GET /webhooks/dlq', () => {
   });
 
   it('returns 401 for unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
     const res = await GET(makeRequest());
     expect(res.status).toBe(401);
   });

@@ -114,7 +114,7 @@ describe('POST /api/v1/admin/orchestration/agents/:id/versions/:versionId/restor
   it('returns 401 when unauthenticated', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
-    const response = await POST(makeRequest(), routeContext as never);
+    const response = await POST(makeRequest(), routeContext);
 
     expect(response.status).toBe(401);
   });
@@ -122,7 +122,7 @@ describe('POST /api/v1/admin/orchestration/agents/:id/versions/:versionId/restor
   it('returns 403 when non-admin', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER'));
 
-    const response = await POST(makeRequest(), routeContext as never);
+    const response = await POST(makeRequest(), routeContext);
 
     expect(response.status).toBe(403);
   });
@@ -146,7 +146,7 @@ describe('POST /api/v1/admin/orchestration/agents/:id/versions/:versionId/restor
     } as never);
     vi.mocked(prisma.aiAgentVersion.create).mockResolvedValue({} as never);
 
-    const response = await POST(makeRequest(), routeContext as never);
+    const response = await POST(makeRequest(), routeContext);
 
     expect(response.status).toBe(200);
     const body = await parseJson<{
@@ -200,7 +200,7 @@ describe('POST /api/v1/admin/orchestration/agents/:id/versions/:versionId/restor
     } as never);
     vi.mocked(prisma.aiAgentVersion.create).mockResolvedValue({} as never);
 
-    const response = await POST(makeRequest(), routeContext as never);
+    const response = await POST(makeRequest(), routeContext);
 
     expect(response.status).toBe(200);
     expect(prisma.aiAgent.update).toHaveBeenCalledWith({
@@ -240,7 +240,7 @@ describe('POST /api/v1/admin/orchestration/agents/:id/versions/:versionId/restor
     } as never);
     vi.mocked(prisma.aiAgentVersion.create).mockResolvedValue({} as never);
 
-    const response = await POST(makeRequest(), routeContext as never);
+    const response = await POST(makeRequest(), routeContext);
 
     expect(response.status).toBe(200);
     expect(prisma.aiAgent.update).toHaveBeenCalledWith({
@@ -277,7 +277,7 @@ describe('POST /api/v1/admin/orchestration/agents/:id/versions/:versionId/restor
     } as never);
     vi.mocked(prisma.aiAgentVersion.create).mockResolvedValue({} as never);
 
-    const response = await POST(makeRequest(), routeContext as never);
+    const response = await POST(makeRequest(), routeContext);
 
     expect(response.status).toBe(200);
     expect(prisma.aiAgent.update).toHaveBeenCalledWith({
@@ -291,7 +291,7 @@ describe('POST /api/v1/admin/orchestration/agents/:id/versions/:versionId/restor
     vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue({ id: AGENT_ID } as never);
     vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(null);
 
-    const response = await POST(makeRequest(), routeContext as never);
+    const response = await POST(makeRequest(), routeContext);
 
     expect(response.status).toBe(404);
   });

@@ -160,7 +160,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
     it('returns 4xx when request body is missing the model field', async () => {
       // Arrange
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
 
       // Act: body has no model field
       const response = await POST(makePostRequest({}), makeParams(PROVIDER_ID));
@@ -205,7 +205,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
     it('returns 200 with ok: true, latencyMs number, and model on success', async () => {
       // Arrange
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(getProvider).mockResolvedValue(makeMockProvider() as never);
 
       // Act
@@ -229,7 +229,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
     it('calls getProvider with the provider slug', async () => {
       // Arrange
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(getProvider).mockResolvedValue(makeMockProvider() as never);
 
       // Act
@@ -243,7 +243,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
       // Arrange
       const mockChat = vi.fn().mockResolvedValue({ content: 'Hello!' });
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(getProvider).mockResolvedValue({ chat: mockChat } as never);
 
       // Act
@@ -267,7 +267,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
       const mockChat = vi.fn().mockResolvedValue({ content: 'Hello!' });
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(
-        makeProvider({ slug: 'openai' }) as never
+        makeProvider({ slug: 'openai' })
       );
       vi.mocked(getProvider).mockResolvedValue({ chat: mockChat } as never);
 
@@ -289,7 +289,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
       const mockChat = vi.fn().mockResolvedValue({ content: 'Hello!' });
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(
-        makeProvider({ slug: 'openai' }) as never
+        makeProvider({ slug: 'openai' })
       );
       vi.mocked(getProvider).mockResolvedValue({ chat: mockChat } as never);
 
@@ -309,7 +309,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
     it('returns 200 with ok: false and latencyMs: null when provider.chat throws', async () => {
       // Arrange: the provider exists but .chat() fails
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(getProvider).mockResolvedValue(
         makeMockProvider(() => Promise.reject(new Error('Model not found'))) as never
       );
@@ -333,7 +333,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
     it('returns 200 with ok: false when getProvider itself throws', async () => {
       // Arrange: getProvider() fails (e.g. unknown slug)
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(getProvider).mockRejectedValue(new Error('Unknown provider slug: anthropic'));
 
       // Act
@@ -358,7 +358,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
         .fn()
         .mockResolvedValue({ text: '', latencyMs: 0, model: 'whisper-1' });
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(getProvider).mockResolvedValue({ transcribe: mockTranscribe } as never);
 
       const response = await POST(
@@ -393,7 +393,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
       // missing method before invoking it so the operator sees a
       // helpful diagnosis instead of a TypeError.
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(getProvider).mockResolvedValue({ chat: vi.fn() } as never); // no transcribe
 
       const response = await POST(
@@ -417,7 +417,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
       // surface as a graceful ok:false rather than a 500. Mirrors the
       // chat-path failure branch.
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(getProvider).mockResolvedValue({
         transcribe: vi.fn().mockRejectedValue(new Error('401 Unauthorized')),
       } as never);

@@ -40,7 +40,7 @@ describe('AdminSidebar', () => {
     pathnameMock.mockReset();
     pathnameMock.mockReturnValue('/admin/overview');
     mockFetch = vi.fn<typeof fetch>();
-    global.fetch = mockFetch as typeof fetch;
+    global.fetch = mockFetch;
     // Default: counts endpoint returns zeros for every requested status.
     mockFetch.mockResolvedValue(countsResponse(ZERO_COUNTS));
   });

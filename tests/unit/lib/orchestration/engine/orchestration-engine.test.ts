@@ -179,7 +179,7 @@ describe('OrchestrationEngine', () => {
     // Engine helpers (markCurrentStep, checkpoint, pauseForApproval, finalize) use
     // updateMany with a leaseToken guard. Default mock returns count=1 so the
     // lease-loss path doesn't fire in tests that don't explicitly exercise it.
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
 
     // Lease module defaults — happy path.
     // claimLease returns the same token that generateLeaseToken produces so
@@ -888,7 +888,7 @@ describe('OrchestrationEngine', () => {
     vi.mocked(prisma.aiWorkflowExecution.updateMany)
       .mockRejectedValueOnce(new Error('DB down'))
       .mockRejectedValueOnce(new Error('DB down'))
-      .mockResolvedValue({ count: 1 } as never);
+      .mockResolvedValue({ count: 1 });
 
     const events = await collect(new OrchestrationEngine(), makeWorkflow(linearDefinition()));
     const types = events.map((e) => e.type);
@@ -5569,8 +5569,8 @@ describe('OrchestrationEngine', () => {
       // intent.
       vi.mocked(prisma.aiWorkflowRunningStep.upsert).mockResolvedValue({} as never);
       vi.mocked(prisma.aiWorkflowRunningStep.update).mockResolvedValue({} as never);
-      vi.mocked(prisma.aiWorkflowRunningStep.updateMany).mockResolvedValue({ count: 1 } as never);
-      vi.mocked(prisma.aiWorkflowRunningStep.deleteMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiWorkflowRunningStep.updateMany).mockResolvedValue({ count: 1 });
+      vi.mocked(prisma.aiWorkflowRunningStep.deleteMany).mockResolvedValue({ count: 1 });
       vi.mocked(prisma.aiWorkflowRunningStep.findUnique).mockResolvedValue(null);
     });
 

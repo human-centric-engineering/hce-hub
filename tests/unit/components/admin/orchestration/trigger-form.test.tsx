@@ -82,7 +82,7 @@ describe('TriggerForm — create mode', () => {
   });
 
   it('submits the form via apiClient.post with the create-trigger payload', async () => {
-    vi.mocked(apiClient.post).mockResolvedValue(undefined as never);
+    vi.mocked(apiClient.post).mockResolvedValue(undefined);
 
     render(
       <TriggerForm
@@ -291,7 +291,7 @@ describe('TriggerForm — Twilio / WhatsApp reveal conversation-agent picker', (
 
 describe('TriggerForm — edit mode', () => {
   it('submits via apiClient.patch with the editable fields only', async () => {
-    vi.mocked(apiClient.patch).mockResolvedValue(undefined as never);
+    vi.mocked(apiClient.patch).mockResolvedValue(undefined);
 
     render(
       <TriggerForm

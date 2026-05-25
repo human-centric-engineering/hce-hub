@@ -52,7 +52,7 @@ function isSearchData(value: unknown): value is { results: unknown[] } {
     typeof value === 'object' &&
     value !== null &&
     'results' in value &&
-    Array.isArray((value as { results: unknown }).results)
+    Array.isArray(value.results)
   );
 }
 

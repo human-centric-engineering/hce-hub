@@ -90,7 +90,7 @@ describe('components/admin/invitation-table', () => {
 
     // Mock fetch
     mockFetch = vi.fn<typeof fetch>();
-    global.fetch = mockFetch as typeof fetch;
+    global.fetch = mockFetch;
 
     // Mock Date.now for consistent expiration calculations
     // Use shouldAdvanceTime to prevent hanging with React Testing Library

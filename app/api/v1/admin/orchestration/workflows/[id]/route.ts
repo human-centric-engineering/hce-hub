@@ -102,7 +102,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
   if (body.isTemplate !== undefined) data.isTemplate = body.isTemplate;
   if (body.maxCostPerExecutionUsd !== undefined)
     data.maxCostPerExecutionUsd = body.maxCostPerExecutionUsd;
-  if (body.metadata !== undefined) data.metadata = body.metadata as Prisma.InputJsonValue;
+  if (body.metadata !== undefined) data.metadata = body.metadata;
 
   // Skip the workflow.update path entirely when only `draftDefinition` was
   // sent — saveDraft / discardDraft has already emitted its own audit, and
@@ -130,10 +130,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
       entityType: 'workflow',
       entityId: id,
       entityName: workflow.name,
-      changes: computeChanges(
-        baseline as unknown as Record<string, unknown>,
-        workflow as unknown as Record<string, unknown>
-      ),
+      changes: computeChanges(baseline, workflow),
       clientIp: clientIP,
     });
 

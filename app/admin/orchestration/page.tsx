@@ -40,10 +40,7 @@ export const metadata: Metadata = {
 
 function hasNumericTotal(meta: unknown): meta is { total: number } {
   return (
-    typeof meta === 'object' &&
-    meta !== null &&
-    'total' in meta &&
-    typeof (meta as { total: unknown }).total === 'number'
+    typeof meta === 'object' && meta !== null && 'total' in meta && typeof meta.total === 'number'
   );
 }
 

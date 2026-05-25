@@ -589,8 +589,7 @@ export function ApprovalsTable({ initialApprovals, initialMeta }: ApprovalsTable
                                 {/* Input data */}
                                 {detail.execution.inputData != null &&
                                 typeof detail.execution.inputData === 'object' &&
-                                Object.keys(detail.execution.inputData as Record<string, unknown>)
-                                  .length > 0 ? (
+                                Object.keys(detail.execution.inputData).length > 0 ? (
                                   <div>
                                     <p className="text-muted-foreground mb-1 text-xs font-medium">
                                       Input data{' '}

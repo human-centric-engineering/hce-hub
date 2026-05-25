@@ -518,7 +518,7 @@ describe('components/analytics/analytics-scripts', () => {
       // Arrange
       mockUseHasOptionalConsent.mockReturnValue(true);
       // Testing invalid provider (type assertion needed for test)
-      mockDetectProvider.mockReturnValue('unknown-provider' as never);
+      mockDetectProvider.mockReturnValue('unknown-provider');
 
       // Act
       const { container } = render(<AnalyticsScripts />);

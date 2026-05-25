@@ -60,7 +60,7 @@ function makeRequest(body: unknown): NextRequest {
 describe('POST /webhooks/dlq/replay', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(retryDelivery).mockResolvedValue(true);
   });
 
@@ -170,7 +170,7 @@ describe('POST /webhooks/dlq/replay', () => {
   });
 
   it('returns 401 for unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     const res = await POST(makeRequest({ deliveryIds: ['cmjbv4i3x00003wsldelivone'] }));
     expect(res.status).toBe(401);
@@ -179,7 +179,7 @@ describe('POST /webhooks/dlq/replay', () => {
   it('returns the rate-limit response when the limiter rejects the request', async () => {
     const rlResponse = new Response('rate limited', { status: 429 });
     vi.mocked(adminLimiter.check).mockReturnValueOnce({ success: false } as never);
-    vi.mocked(createRateLimitResponse).mockReturnValueOnce(rlResponse as never);
+    vi.mocked(createRateLimitResponse).mockReturnValueOnce(rlResponse);
 
     const res = await POST(makeRequest({ deliveryIds: ['cmjbv4i3x00003wsldelivone'] }));
 

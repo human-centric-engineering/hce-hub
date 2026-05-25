@@ -79,7 +79,7 @@ function makeExecution(overrides: Record<string, unknown> = {}) {
 describe('executeApproval', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
   });
 
   it('transitions execution to PENDING and updates trace', async () => {
@@ -214,7 +214,7 @@ describe('executeApproval', () => {
 
   it('throws CONCURRENT when updateMany returns count 0', async () => {
     vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecution() as never);
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 });
 
     await expect(executeApproval(EXECUTION_ID, { actorLabel: 'test' })).rejects.toThrow(
       expect.objectContaining({ code: 'CONCURRENT' })
@@ -225,7 +225,7 @@ describe('executeApproval', () => {
 describe('executeRejection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
   });
 
   it('transitions execution to CANCELLED and updates trace entry to rejected', async () => {
@@ -311,7 +311,7 @@ describe('executeRejection', () => {
 
   it('throws CONCURRENT when updateMany returns count 0', async () => {
     vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecution() as never);
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 });
 
     await expect(
       executeRejection(EXECUTION_ID, { reason: 'r', actorLabel: 'test' })

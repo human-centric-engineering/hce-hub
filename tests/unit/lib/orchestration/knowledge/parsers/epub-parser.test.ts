@@ -36,11 +36,6 @@ const mocks = vi.hoisted(() => {
       creator: 'Test Author',
       language: 'en',
       publisher: 'Test Publisher',
-    } as {
-      title: string;
-      creator: string;
-      language: string;
-      publisher: string;
     },
     toc: [] as Array<{ id: string; title: string }>,
     flow: [] as Array<{ id: string; title?: string }>,

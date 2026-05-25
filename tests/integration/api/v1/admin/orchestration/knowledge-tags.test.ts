@@ -198,7 +198,7 @@ describe('POST /api/v1/admin/orchestration/knowledge/tags', () => {
 
   it('creates a tag and returns 201 with the new row', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.knowledgeTag.create).mockResolvedValue(makeTag() as never);
+    vi.mocked(prisma.knowledgeTag.create).mockResolvedValue(makeTag());
 
     const response = await POST(makeBodyRequest('POST', { slug: 'support', name: 'Support' }));
 
@@ -250,7 +250,7 @@ describe('GET /api/v1/admin/orchestration/knowledge/tags/:id', () => {
   it('returns the tag with link counts', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.knowledgeTag.findUnique).mockResolvedValue(
-      makeTag({}, { documents: 5, agents: 1 }) as never
+      makeTag({}, { documents: 5, agents: 1 })
     );
 
     const response = await getById(makeByIdRequest('GET'), makeParams(TAG_ID));
@@ -281,8 +281,8 @@ describe('PATCH /api/v1/admin/orchestration/knowledge/tags/:id', () => {
 
   it('updates name and invalidates the resolver cache', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.knowledgeTag.findUnique).mockResolvedValue(makeTag() as never);
-    vi.mocked(prisma.knowledgeTag.update).mockResolvedValue(makeTag({ name: 'Renamed' }) as never);
+    vi.mocked(prisma.knowledgeTag.findUnique).mockResolvedValue(makeTag());
+    vi.mocked(prisma.knowledgeTag.update).mockResolvedValue(makeTag({ name: 'Renamed' }));
 
     const response = await PATCH(makeByIdRequest('PATCH', { name: 'Renamed' }), makeParams(TAG_ID));
 
@@ -292,7 +292,7 @@ describe('PATCH /api/v1/admin/orchestration/knowledge/tags/:id', () => {
 
   it('returns 400 when the body is empty', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.knowledgeTag.findUnique).mockResolvedValue(makeTag() as never);
+    vi.mocked(prisma.knowledgeTag.findUnique).mockResolvedValue(makeTag());
 
     const response = await PATCH(makeByIdRequest('PATCH', {}), makeParams(TAG_ID));
 
@@ -301,7 +301,7 @@ describe('PATCH /api/v1/admin/orchestration/knowledge/tags/:id', () => {
 
   it('returns 409 when slug collides with an existing tag', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.knowledgeTag.findUnique).mockResolvedValue(makeTag() as never);
+    vi.mocked(prisma.knowledgeTag.findUnique).mockResolvedValue(makeTag());
     vi.mocked(prisma.knowledgeTag.update).mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
         code: 'P2002',
@@ -326,9 +326,9 @@ describe('DELETE /api/v1/admin/orchestration/knowledge/tags/:id', () => {
   it('deletes a tag with no links and returns 200', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.knowledgeTag.findUnique).mockResolvedValue(
-      makeTag({}, { documents: 0, agents: 0 }) as never
+      makeTag({}, { documents: 0, agents: 0 })
     );
-    vi.mocked(prisma.knowledgeTag.delete).mockResolvedValue(makeTag() as never);
+    vi.mocked(prisma.knowledgeTag.delete).mockResolvedValue(makeTag());
 
     const response = await DELETE(makeByIdRequest('DELETE'), makeParams(TAG_ID));
 
@@ -347,7 +347,7 @@ describe('DELETE /api/v1/admin/orchestration/knowledge/tags/:id', () => {
           ],
         },
         { documents: 0, agents: 2 }
-      ) as never
+      )
     );
 
     const response = await DELETE(makeByIdRequest('DELETE'), makeParams(TAG_ID));
@@ -370,7 +370,7 @@ describe('DELETE /api/v1/admin/orchestration/knowledge/tags/:id', () => {
       makeTag(
         { agents: [{ agent: { id: 'agent-1', name: 'Support Bot', slug: 'support-bot' } }] },
         { documents: 0, agents: 1 }
-      ) as never
+      )
     );
 
     const response = await DELETE(
@@ -385,7 +385,7 @@ describe('DELETE /api/v1/admin/orchestration/knowledge/tags/:id', () => {
   it('returns 409 when only documents are linked and force is not set', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.knowledgeTag.findUnique).mockResolvedValue(
-      makeTag({}, { documents: 4, agents: 0 }) as never
+      makeTag({}, { documents: 4, agents: 0 })
     );
 
     const response = await DELETE(makeByIdRequest('DELETE'), makeParams(TAG_ID));
@@ -397,9 +397,9 @@ describe('DELETE /api/v1/admin/orchestration/knowledge/tags/:id', () => {
   it('deletes when only documents are linked and ?force=true is set', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.knowledgeTag.findUnique).mockResolvedValue(
-      makeTag({}, { documents: 4, agents: 0 }) as never
+      makeTag({}, { documents: 4, agents: 0 })
     );
-    vi.mocked(prisma.knowledgeTag.delete).mockResolvedValue(makeTag() as never);
+    vi.mocked(prisma.knowledgeTag.delete).mockResolvedValue(makeTag());
 
     const response = await DELETE(
       makeByIdRequest('DELETE', undefined, '?force=true'),

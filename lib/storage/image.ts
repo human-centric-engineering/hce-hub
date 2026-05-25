@@ -259,7 +259,7 @@ export async function processImage(
   const processedBuffer = await image.toBuffer();
   const processedMetadata = await sharp(processedBuffer).metadata();
 
-  const outputMimeType: SupportedImageType = `image/${outputFormat}` as SupportedImageType;
+  const outputMimeType: SupportedImageType = `image/${outputFormat}`;
 
   logger.debug('Image processed', {
     originalType: detectedType,

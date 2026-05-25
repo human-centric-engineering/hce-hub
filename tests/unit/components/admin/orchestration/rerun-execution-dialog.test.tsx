@@ -48,7 +48,7 @@ vi.mock('@/lib/api/client', () => ({
 // Globalised `fetch` mock for the SSE branch — `handleConfirm` uses raw
 // fetch rather than the apiClient so it can stream frame-by-frame.
 const mockFetch = vi.fn();
-globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+globalThis.fetch = mockFetch;
 
 import { RerunExecutionDialog } from '@/components/admin/orchestration/rerun-execution-dialog';
 import { apiClient } from '@/lib/api/client';
@@ -101,12 +101,12 @@ function mockApiCalls(opts: {
   vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
     if (url.includes('/versions')) {
       if (opts.versions instanceof Error) throw opts.versions;
-      return opts.versions as never;
+      return opts.versions;
     }
     if (url.includes('/cost-estimate')) {
-      if (opts.cost === undefined) return COST_ESTIMATE as never;
+      if (opts.cost === undefined) return COST_ESTIMATE;
       if (opts.cost instanceof Error) throw opts.cost;
-      return opts.cost as never;
+      return opts.cost;
     }
     throw new Error(`Unexpected URL in test: ${url}`);
   });

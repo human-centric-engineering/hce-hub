@@ -161,7 +161,7 @@ function makeMockConversation(overrides: Record<string, unknown> = {}) {
 describe('GET /api/v1/chat/conversations/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession());
     vi.mocked(prisma.aiConversation.findFirst).mockResolvedValue(makeMockConversation() as never);
   });
 
@@ -288,7 +288,7 @@ describe('GET /api/v1/chat/conversations/:id', () => {
   describe('Authentication', () => {
     it('should return 401 when there is no active session', async () => {
       // Arrange
-      vi.mocked(auth.api.getSession).mockResolvedValue(null as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(null);
       const request = createMockRequest();
       const context = createRouteContext(VALID_CUID);
 
@@ -311,7 +311,7 @@ describe('GET /api/v1/chat/conversations/:id', () => {
 describe('DELETE /api/v1/chat/conversations/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession());
     vi.mocked(prisma.aiConversation.findFirst).mockResolvedValue(makeMockConversation() as never);
     vi.mocked(prisma.aiConversation.delete).mockResolvedValue({} as never);
   });
@@ -418,7 +418,7 @@ describe('DELETE /api/v1/chat/conversations/:id', () => {
   describe('Authentication', () => {
     it('should return 401 when there is no active session', async () => {
       // Arrange
-      vi.mocked(auth.api.getSession).mockResolvedValue(null as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(null);
       const request = createMockRequest();
       const context = createRouteContext(VALID_CUID);
 

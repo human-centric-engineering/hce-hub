@@ -33,7 +33,7 @@ describe('TestingTabs', () => {
       back: vi.fn(),
       forward: vi.fn(),
       prefetch: vi.fn(),
-    } as unknown as ReturnType<typeof useRouter>);
+    });
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as ReturnType<typeof useSearchParams>
     );

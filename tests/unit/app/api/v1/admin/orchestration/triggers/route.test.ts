@@ -158,7 +158,7 @@ describe('POST /api/v1/admin/orchestration/triggers', () => {
       id: WORKFLOW_ID,
       slug: 'test-workflow',
     } as never);
-    vi.mocked(prisma.aiWorkflowTrigger.create).mockResolvedValue(makeTrigger() as never);
+    vi.mocked(prisma.aiWorkflowTrigger.create).mockResolvedValue(makeTrigger());
 
     const req = makeReq('http://localhost/api/v1/admin/orchestration/triggers', {
       method: 'POST',
@@ -176,7 +176,7 @@ describe('POST /api/v1/admin/orchestration/triggers', () => {
   });
 
   it('rejects when workflow does not exist with a clean ValidationError', async () => {
-    vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue(null);
 
     const req = makeReq('http://localhost/api/v1/admin/orchestration/triggers', {
       method: 'POST',
@@ -216,7 +216,7 @@ describe('POST /api/v1/admin/orchestration/triggers', () => {
       id: WORKFLOW_ID,
       slug: 'test-workflow',
     } as never);
-    vi.mocked(prisma.aiWorkflowTrigger.create).mockRejectedValue({ code: 'P2002' } as never);
+    vi.mocked(prisma.aiWorkflowTrigger.create).mockRejectedValue({ code: 'P2002' });
 
     const req = makeReq('http://localhost/api/v1/admin/orchestration/triggers', {
       method: 'POST',
@@ -242,7 +242,7 @@ describe('POST /api/v1/admin/orchestration/triggers', () => {
       makeTrigger({
         channel: 'twilio',
         metadata: { conversationAgentId: 'agent-1' },
-      }) as never
+      })
     );
 
     const req = makeReq('http://localhost/api/v1/admin/orchestration/triggers', {
@@ -266,7 +266,7 @@ describe('POST /api/v1/admin/orchestration/triggers', () => {
 
 describe('GET /api/v1/admin/orchestration/triggers/:id', () => {
   it('returns the trigger when it exists', async () => {
-    vi.mocked(prisma.aiWorkflowTrigger.findUnique).mockResolvedValue(makeTrigger() as never);
+    vi.mocked(prisma.aiWorkflowTrigger.findUnique).mockResolvedValue(makeTrigger());
 
     const req = makeReq(`http://localhost/api/v1/admin/orchestration/triggers/${TRIGGER_ID}`);
     const res = await GetOne(req, { params: Promise.resolve({ id: TRIGGER_ID }) });
@@ -276,7 +276,7 @@ describe('GET /api/v1/admin/orchestration/triggers/:id', () => {
   });
 
   it('returns 404 when missing', async () => {
-    vi.mocked(prisma.aiWorkflowTrigger.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiWorkflowTrigger.findUnique).mockResolvedValue(null);
 
     const req = makeReq(`http://localhost/api/v1/admin/orchestration/triggers/${TRIGGER_ID}`);
     const res = await GetOne(req, { params: Promise.resolve({ id: TRIGGER_ID }) });
@@ -294,9 +294,9 @@ describe('GET /api/v1/admin/orchestration/triggers/:id', () => {
 
 describe('PATCH /api/v1/admin/orchestration/triggers/:id', () => {
   it('updates name + isEnabled', async () => {
-    vi.mocked(prisma.aiWorkflowTrigger.findUnique).mockResolvedValue(makeTrigger() as never);
+    vi.mocked(prisma.aiWorkflowTrigger.findUnique).mockResolvedValue(makeTrigger());
     vi.mocked(prisma.aiWorkflowTrigger.update).mockResolvedValue(
-      makeTrigger({ name: 'Renamed', isEnabled: false }) as never
+      makeTrigger({ name: 'Renamed', isEnabled: false })
     );
 
     const req = makeReq(`http://localhost/api/v1/admin/orchestration/triggers/${TRIGGER_ID}`, {
@@ -310,7 +310,7 @@ describe('PATCH /api/v1/admin/orchestration/triggers/:id', () => {
 
   it('refuses to clear the signingSecret on an HMAC trigger', async () => {
     vi.mocked(prisma.aiWorkflowTrigger.findUnique).mockResolvedValue(
-      makeTrigger({ channel: 'hmac', signingSecret: 'existing' }) as never
+      makeTrigger({ channel: 'hmac', signingSecret: 'existing' })
     );
 
     const req = makeReq(`http://localhost/api/v1/admin/orchestration/triggers/${TRIGGER_ID}`, {
@@ -324,13 +324,13 @@ describe('PATCH /api/v1/admin/orchestration/triggers/:id', () => {
 
   it('allows rotating the signingSecret on an HMAC trigger', async () => {
     vi.mocked(prisma.aiWorkflowTrigger.findUnique).mockResolvedValue(
-      makeTrigger({ channel: 'hmac', signingSecret: 'existing-secret-value' }) as never
+      makeTrigger({ channel: 'hmac', signingSecret: 'existing-secret-value' })
     );
     vi.mocked(prisma.aiWorkflowTrigger.update).mockResolvedValue(
       makeTrigger({
         channel: 'hmac',
         signingSecret: 'rotated-secret-replacement-value',
-      }) as never
+      })
     );
 
     const req = makeReq(`http://localhost/api/v1/admin/orchestration/triggers/${TRIGGER_ID}`, {
@@ -350,8 +350,8 @@ describe('PATCH /api/v1/admin/orchestration/triggers/:id', () => {
 
 describe('DELETE /api/v1/admin/orchestration/triggers/:id', () => {
   it('deletes the trigger when found', async () => {
-    vi.mocked(prisma.aiWorkflowTrigger.findUnique).mockResolvedValue(makeTrigger() as never);
-    vi.mocked(prisma.aiWorkflowTrigger.delete).mockResolvedValue(makeTrigger() as never);
+    vi.mocked(prisma.aiWorkflowTrigger.findUnique).mockResolvedValue(makeTrigger());
+    vi.mocked(prisma.aiWorkflowTrigger.delete).mockResolvedValue(makeTrigger());
 
     const req = makeReq(`http://localhost/api/v1/admin/orchestration/triggers/${TRIGGER_ID}`, {
       method: 'DELETE',
@@ -362,7 +362,7 @@ describe('DELETE /api/v1/admin/orchestration/triggers/:id', () => {
   });
 
   it('returns 404 when missing', async () => {
-    vi.mocked(prisma.aiWorkflowTrigger.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiWorkflowTrigger.findUnique).mockResolvedValue(null);
 
     const req = makeReq(`http://localhost/api/v1/admin/orchestration/triggers/${TRIGGER_ID}`, {
       method: 'DELETE',

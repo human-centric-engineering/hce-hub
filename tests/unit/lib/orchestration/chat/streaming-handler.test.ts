@@ -2485,7 +2485,7 @@ describe('citation guard', () => {
     const errorEvt = events.find((e: unknown) => (e as Record<string, unknown>).type === 'error');
     expect(errorEvt).toMatchObject({ type: 'error', code: 'citation_required' });
     expect(errorEvt).toMatchObject({
-      message: expect.stringContaining('did not cite') as unknown as string,
+      message: expect.stringContaining('did not cite'),
     });
     // No `done` event when blocked.
     const doneEvt = events.find((e: unknown) => (e as Record<string, unknown>).type === 'done');

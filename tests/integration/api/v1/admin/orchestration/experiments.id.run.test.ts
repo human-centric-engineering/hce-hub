@@ -140,8 +140,8 @@ describe('POST /api/v1/admin/orchestration/experiments/:id/run', () => {
     // Outer findUnique: 404 check (select: { id: true })
     vi.mocked(prisma.aiExperiment.findFirst).mockResolvedValue({ id: EXPERIMENT_ID } as never);
     // Inner tx findUnique: full experiment with variants
-    mockTxFindUnique.mockResolvedValue(makeExperiment() as never);
-    mockTxUpdate.mockResolvedValue(makeExperimentWithAgent({ status: 'running' }) as never);
+    mockTxFindUnique.mockResolvedValue(makeExperiment());
+    mockTxUpdate.mockResolvedValue(makeExperimentWithAgent({ status: 'running' }));
     mockEvalSessionCreate.mockResolvedValue({ id: 'eval-session-1' });
     mockEvalRunCreate.mockResolvedValue({ id: 'eval-run-1' });
     mockVariantUpdate.mockResolvedValue({});
@@ -179,7 +179,7 @@ describe('POST /api/v1/admin/orchestration/experiments/:id/run', () => {
   describe('Validation errors', () => {
     it('returns 400 when experiment is already running', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      mockTxFindUnique.mockResolvedValue(makeExperiment({ status: 'running' }) as never);
+      mockTxFindUnique.mockResolvedValue(makeExperiment({ status: 'running' }));
 
       const response = await POST(makePostRequest(), makeContext());
 
@@ -190,7 +190,7 @@ describe('POST /api/v1/admin/orchestration/experiments/:id/run', () => {
 
     it('returns 400 when experiment is already completed', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      mockTxFindUnique.mockResolvedValue(makeExperiment({ status: 'completed' }) as never);
+      mockTxFindUnique.mockResolvedValue(makeExperiment({ status: 'completed' }));
 
       const response = await POST(makePostRequest(), makeContext());
 
@@ -200,7 +200,7 @@ describe('POST /api/v1/admin/orchestration/experiments/:id/run', () => {
     it('returns 400 when experiment has fewer than 2 variants', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       mockTxFindUnique.mockResolvedValue(
-        makeExperiment({ variants: [{ id: 'v1', label: 'Control' }] }) as never
+        makeExperiment({ variants: [{ id: 'v1', label: 'Control' }] })
       );
 
       const response = await POST(makePostRequest(), makeContext());
@@ -325,7 +325,7 @@ describe('POST /api/v1/admin/orchestration/experiments/:id/run', () => {
 
     it('creates one AiEvaluationRun per variant when datasetId + metricConfigs are set', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      mockTxFindUnique.mockResolvedValue(datasetDrivenExperiment() as never);
+      mockTxFindUnique.mockResolvedValue(datasetDrivenExperiment());
 
       await POST(makePostRequest(), makeContext());
 
@@ -346,7 +346,7 @@ describe('POST /api/v1/admin/orchestration/experiments/:id/run', () => {
 
     it('links the new eval runs to variants via evaluationRunId', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      mockTxFindUnique.mockResolvedValue(datasetDrivenExperiment() as never);
+      mockTxFindUnique.mockResolvedValue(datasetDrivenExperiment());
       mockEvalRunCreate.mockResolvedValue({ id: 'eval-run-123' });
 
       await POST(makePostRequest(), makeContext());
@@ -362,9 +362,7 @@ describe('POST /api/v1/admin/orchestration/experiments/:id/run', () => {
     it('falls back to the legacy session path when datasetId is null', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       // datasetId omitted, dataset relation null
-      mockTxFindUnique.mockResolvedValue(
-        makeExperiment({ datasetId: null, dataset: null }) as never
-      );
+      mockTxFindUnique.mockResolvedValue(makeExperiment({ datasetId: null, dataset: null }));
 
       await POST(makePostRequest(), makeContext());
 
@@ -374,14 +372,14 @@ describe('POST /api/v1/admin/orchestration/experiments/:id/run', () => {
 
     it('records the dataset_driven mode on the admin audit entry', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      mockTxFindUnique.mockResolvedValue(datasetDrivenExperiment() as never);
+      mockTxFindUnique.mockResolvedValue(datasetDrivenExperiment());
       mockTxUpdate.mockResolvedValue({
         ...makeExperimentWithAgent({ status: 'running' }),
         variants: [
           { id: 'v1', evaluationRunId: 'eval-run-123' },
           { id: 'v2', evaluationRunId: 'eval-run-124' },
         ],
-      } as never);
+      });
 
       await POST(makePostRequest(), makeContext());
 
@@ -439,7 +437,7 @@ describe('POST /api/v1/admin/orchestration/experiments/:id/run', () => {
           { id: 'v1', label: 'Control' },
           { id: 'v2', label: 'Variant A' },
         ],
-      } as never);
+      });
 
       const response = await POST(makePostRequest(), makeContext());
 

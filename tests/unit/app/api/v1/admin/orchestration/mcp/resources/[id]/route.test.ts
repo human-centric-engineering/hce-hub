@@ -170,9 +170,9 @@ describe('PATCH /mcp/resources/:id', () => {
 
   it('updates resource name and returns 200', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource() as never);
+    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource());
     vi.mocked(prisma.mcpExposedResource.update).mockResolvedValue(
-      makeResource({ name: 'Updated Name' }) as never
+      makeResource({ name: 'Updated Name' })
     );
 
     const response = await PATCH(
@@ -191,9 +191,9 @@ describe('PATCH /mcp/resources/:id', () => {
 
   it('clears cache and broadcasts list_changed + resource updated after update', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource() as never);
+    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource());
     vi.mocked(prisma.mcpExposedResource.update).mockResolvedValue(
-      makeResource({ uri: 'sunrise://knowledge/search' }) as never
+      makeResource({ uri: 'sunrise://knowledge/search' })
     );
 
     await PATCH(makePatchRequest({ isEnabled: false }), makeParams(RESOURCE_ID));
@@ -210,9 +210,9 @@ describe('PATCH /mcp/resources/:id', () => {
 
   it('toggles isEnabled to false', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource() as never);
+    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource());
     vi.mocked(prisma.mcpExposedResource.update).mockResolvedValue(
-      makeResource({ isEnabled: false }) as never
+      makeResource({ isEnabled: false })
     );
 
     const response = await PATCH(makePatchRequest({ isEnabled: false }), makeParams(RESOURCE_ID));
@@ -230,8 +230,8 @@ describe('PATCH /mcp/resources/:id', () => {
     // into the Prisma.JsonNull sentinel. Prisma 7 requires this sentinel to store
     // a JSON null literal; passing raw JS null stores SQL NULL instead.
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource() as never);
-    vi.mocked(prisma.mcpExposedResource.update).mockResolvedValue(makeResource() as never);
+    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource());
+    vi.mocked(prisma.mcpExposedResource.update).mockResolvedValue(makeResource());
 
     await PATCH(makePatchRequest({ handlerConfig: null }), makeParams(RESOURCE_ID));
 
@@ -245,9 +245,9 @@ describe('PATCH /mcp/resources/:id', () => {
     // Verifies the ternary passes non-null handlerConfig values through as-is.
     const config = { foo: 'bar' };
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource() as never);
+    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource());
     vi.mocked(prisma.mcpExposedResource.update).mockResolvedValue(
-      makeResource({ handlerConfig: config }) as never
+      makeResource({ handlerConfig: config })
     );
 
     await PATCH(makePatchRequest({ handlerConfig: config }), makeParams(RESOURCE_ID));
@@ -262,8 +262,8 @@ describe('PATCH /mcp/resources/:id', () => {
     // key is semantically different from { handlerConfig: undefined } and must not
     // accidentally store null or Prisma.JsonNull in the column.
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource() as never);
-    vi.mocked(prisma.mcpExposedResource.update).mockResolvedValue(makeResource() as never);
+    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource());
+    vi.mocked(prisma.mcpExposedResource.update).mockResolvedValue(makeResource());
 
     await PATCH(makePatchRequest({ name: 'NoConfigChange' }), makeParams(RESOURCE_ID));
 
@@ -311,8 +311,8 @@ describe('DELETE /mcp/resources/:id', () => {
 
   it('deletes resource and returns deleted:true', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource() as never);
-    vi.mocked(prisma.mcpExposedResource.delete).mockResolvedValue(makeResource() as never);
+    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource());
+    vi.mocked(prisma.mcpExposedResource.delete).mockResolvedValue(makeResource());
 
     const response = await DELETE(makeDeleteRequest(), makeParams(RESOURCE_ID));
 
@@ -329,8 +329,8 @@ describe('DELETE /mcp/resources/:id', () => {
 
   it('clears cache and broadcasts change after deletion', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource() as never);
-    vi.mocked(prisma.mcpExposedResource.delete).mockResolvedValue(makeResource() as never);
+    vi.mocked(prisma.mcpExposedResource.findUnique).mockResolvedValue(makeResource());
+    vi.mocked(prisma.mcpExposedResource.delete).mockResolvedValue(makeResource());
 
     await DELETE(makeDeleteRequest(), makeParams(RESOURCE_ID));
 

@@ -577,7 +577,7 @@ describe('UploadToStorageCapability.execute()', () => {
       await cap.execute(BASE_ARGS, BASE_CONTEXT);
 
       expect(mockUpload).toHaveBeenCalledOnce();
-      const [, options] = mockUpload.mock.calls[0] as [Buffer, UploadOptions];
+      const [, options] = mockUpload.mock.calls[0];
       expect(options.key).toMatch(/^agent-uploads\/agent-abc\//);
       expect(options.public).toBe(true);
     });
@@ -609,7 +609,7 @@ describe('UploadToStorageCapability.execute()', () => {
         BASE_CONTEXT
       );
 
-      const [, options] = mockUpload.mock.calls[0] as [Buffer, UploadOptions];
+      const [, options] = mockUpload.mock.calls[0];
       expect(options.metadata?.description).toBe('Q3 financial report');
       expect(options.metadata?.originalFilename).toBe('report.pdf');
     });
@@ -619,7 +619,7 @@ describe('UploadToStorageCapability.execute()', () => {
       const cap = new UploadToStorageCapability();
       await cap.execute(BASE_ARGS, BASE_CONTEXT);
 
-      const [, options] = mockUpload.mock.calls[0] as [Buffer, UploadOptions];
+      const [, options] = mockUpload.mock.calls[0];
       expect(options.metadata).not.toHaveProperty('description');
       expect(options.metadata).not.toHaveProperty('originalFilename');
     });
@@ -629,7 +629,7 @@ describe('UploadToStorageCapability.execute()', () => {
       const cap = new UploadToStorageCapability();
       await cap.execute(BASE_ARGS, BASE_CONTEXT);
 
-      const [, options] = mockUpload.mock.calls[0] as [Buffer, UploadOptions];
+      const [, options] = mockUpload.mock.calls[0];
       expect(options.metadata?.agentId).toBe('agent-abc');
       expect(options.metadata?.userId).toBe('user-1');
       expect(options.metadata?.uploadedAt).toBeDefined();
@@ -640,7 +640,7 @@ describe('UploadToStorageCapability.execute()', () => {
       const cap = new UploadToStorageCapability();
       await cap.execute(BASE_ARGS, { ...BASE_CONTEXT, conversationId: 'conv-42' });
 
-      const [, options] = mockUpload.mock.calls[0] as [Buffer, UploadOptions];
+      const [, options] = mockUpload.mock.calls[0];
       expect(options.metadata?.conversationId).toBe('conv-42');
     });
 
@@ -731,7 +731,7 @@ describe('UploadToStorageCapability.execute()', () => {
       const cap = new UploadToStorageCapability();
       await cap.execute(BASE_ARGS, BASE_CONTEXT);
 
-      const [, options] = mockUpload.mock.calls[0] as [Buffer, UploadOptions];
+      const [, options] = mockUpload.mock.calls[0];
       expect(options.key).toMatch(/^reports\/invoices\//);
     });
 
@@ -740,7 +740,7 @@ describe('UploadToStorageCapability.execute()', () => {
       const cap = new UploadToStorageCapability();
       await cap.execute({ ...BASE_ARGS, filename: 'evil_name_attempt.pdf' }, BASE_CONTEXT);
 
-      const [, options] = mockUpload.mock.calls[0] as [Buffer, UploadOptions];
+      const [, options] = mockUpload.mock.calls[0];
       // Key is: agent-uploads/agent-abc/<uuid>.pdf
       // UUID pattern: 8-4-4-4-12 hex with dashes
       const uuidPattern =
@@ -756,7 +756,7 @@ describe('UploadToStorageCapability.execute()', () => {
         BASE_CONTEXT
       );
 
-      const [, options] = mockUpload.mock.calls[0] as [Buffer, UploadOptions];
+      const [, options] = mockUpload.mock.calls[0];
       expect(options.key).toMatch(/\.csv$/);
     });
 
@@ -765,7 +765,7 @@ describe('UploadToStorageCapability.execute()', () => {
       const cap = new UploadToStorageCapability();
       await cap.execute({ data: VALID_BASE64, contentType: 'image/png' }, BASE_CONTEXT);
 
-      const [, options] = mockUpload.mock.calls[0] as [Buffer, UploadOptions];
+      const [, options] = mockUpload.mock.calls[0];
       expect(options.key).toMatch(/\.png$/);
     });
   });

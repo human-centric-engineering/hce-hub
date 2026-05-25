@@ -134,7 +134,7 @@ beforeEach(() => {
   vi.mocked(prisma.aiWorkflowExecution.update).mockResolvedValue({} as never);
   // Engine writes go through updateMany (lease-guarded). Default count=1 so the lease-loss
   // path stays inactive in OTEL span-tree assertions.
-  vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+  vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
   // Lease helpers — claimLease returns a valid token; startHeartbeat returns a no-op stop fn.
   vi.mocked(claimLease).mockResolvedValue('lease-token-test');
   vi.mocked(startHeartbeat).mockReturnValue(vi.fn());

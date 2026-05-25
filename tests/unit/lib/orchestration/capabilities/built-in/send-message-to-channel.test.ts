@@ -83,7 +83,7 @@ function makeContext(overrides: Partial<CapabilityContext> = {}): CapabilityCont
     userId: 'user-1',
     conversationId: 'conv-1',
     ...overrides,
-  } as CapabilityContext;
+  };
 }
 
 function setConversation(
@@ -202,7 +202,7 @@ describe('SendMessageToChannelCapability — happy path', () => {
 
 describe('SendMessageToChannelCapability — guard rails', () => {
   it('returns conversation_not_found when conversation does not exist', async () => {
-    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null);
     setBinding(defaultCustomConfig());
 
     const result = await makeCapability().execute(defaultArgs(), makeContext());
@@ -226,7 +226,7 @@ describe('SendMessageToChannelCapability — guard rails', () => {
     // must NOT pass that through to an adapter; `narrowConversationChannel`
     // returns null for any non-union string, mapping cleanly to
     // `no_inbound_channel`.
-    setConversation({ channel: 'fax-machine' as never, provider: 'twilio' });
+    setConversation({ channel: 'fax-machine', provider: 'twilio' });
     setBinding(defaultCustomConfig());
 
     const result = await makeCapability().execute(defaultArgs(), makeContext());
@@ -408,7 +408,7 @@ describe('SendMessageToChannelCapability — idempotency', () => {
     setConversation();
     setBinding(defaultCustomConfig());
     vi.mocked(prisma.aiOutboundMessage.count).mockResolvedValue(0);
-    vi.mocked(prisma.aiOutboundMessage.create).mockRejectedValue({ code: 'P2002' } as never);
+    vi.mocked(prisma.aiOutboundMessage.create).mockRejectedValue({ code: 'P2002' });
     vi.mocked(prisma.aiOutboundMessage.findUnique).mockResolvedValue({
       transactionId: 'SMcached',
       status: 'sent',
@@ -428,7 +428,7 @@ describe('SendMessageToChannelCapability — idempotency', () => {
     setConversation();
     setBinding(defaultCustomConfig());
     vi.mocked(prisma.aiOutboundMessage.count).mockResolvedValue(0);
-    vi.mocked(prisma.aiOutboundMessage.create).mockRejectedValue({ code: 'P2002' } as never);
+    vi.mocked(prisma.aiOutboundMessage.create).mockRejectedValue({ code: 'P2002' });
     vi.mocked(prisma.aiOutboundMessage.findUnique).mockResolvedValue({
       transactionId: null,
       status: 'pending',

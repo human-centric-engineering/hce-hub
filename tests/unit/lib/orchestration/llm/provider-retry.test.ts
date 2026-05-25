@@ -180,7 +180,7 @@ describe('fetchWithTimeout', () => {
     // Act + Assert: fetchWithTimeout should throw without ever calling fetch
     const fetchSpy = vi.fn();
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    globalThis.fetch = fetchSpy;
 
     try {
       await expect(

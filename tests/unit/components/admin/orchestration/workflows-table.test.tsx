@@ -115,7 +115,7 @@ describe('WorkflowsTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch = vi.fn<typeof fetch>();
-    global.fetch = mockFetch as typeof fetch;
+    global.fetch = mockFetch;
     mockFetch.mockResolvedValue(makeWorkflowsListResponse());
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
@@ -203,9 +203,7 @@ describe('WorkflowsTable', () => {
       });
 
       await waitFor(() => {
-        const fetchUrls = mockFetch.mock.calls.map((call) =>
-          toUrlString(call[0] as RequestInfo | URL)
-        );
+        const fetchUrls = mockFetch.mock.calls.map((call) => toUrlString(call[0]));
         expect(fetchUrls.some((u) => u.includes('q=al'))).toBe(true); // test-review:accept tobe_true — structural boolean/predicate assertion;
       });
     });
@@ -326,7 +324,7 @@ describe('WorkflowsTable', () => {
         back: vi.fn(),
         forward: vi.fn(),
         prefetch: vi.fn(),
-      } as ReturnType<typeof useRouter>);
+      });
 
       vi.mocked(apiClient.get).mockResolvedValue({
         // GET /workflows/:id now returns the published version on a relation;
@@ -422,9 +420,7 @@ describe('WorkflowsTable', () => {
 
       // Assert: two list fetches were fired after the initial render
       await waitFor(() => {
-        const fetchUrls = mockFetch.mock.calls.map((call) =>
-          toUrlString(call[0] as RequestInfo | URL)
-        );
+        const fetchUrls = mockFetch.mock.calls.map((call) => toUrlString(call[0]));
         // Both fetches went out — second click triggered a refetch
         expect(fetchUrls.length).toBeGreaterThanOrEqual(2);
       });
@@ -647,9 +643,7 @@ describe('WorkflowsTable', () => {
       await user.click(nextBtn);
 
       await waitFor(() => {
-        const fetchUrls = mockFetch.mock.calls.map((call) =>
-          toUrlString(call[0] as RequestInfo | URL)
-        );
+        const fetchUrls = mockFetch.mock.calls.map((call) => toUrlString(call[0]));
         expect(fetchUrls.some((u) => u.includes('page=2'))).toBe(true); // test-review:accept tobe_true — structural boolean/predicate assertion;
       });
     });

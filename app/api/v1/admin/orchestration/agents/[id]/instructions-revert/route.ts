@@ -20,7 +20,6 @@
  * Authentication: Admin role required.
  */
 
-import { Prisma } from '@prisma/client';
 import { withAdminAuth } from '@/lib/auth/guards';
 import { prisma } from '@/lib/db/client';
 import { successResponse } from '@/lib/api/responses';
@@ -108,7 +107,7 @@ export const POST = withAdminAuth<{ id: string }>(async (request, session, { par
     where: { id },
     data: {
       systemInstructions: target.instructions,
-      systemInstructionsHistory: nextHistory as unknown as Prisma.InputJsonValue,
+      systemInstructionsHistory: nextHistory,
     },
   });
 

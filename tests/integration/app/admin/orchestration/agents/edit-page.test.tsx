@@ -247,7 +247,7 @@ describe('EditAgentPage (server component)', () => {
     it('renders with null providers when provider fetch rejects', async () => {
       const { serverFetch, parseApiResponse } = await import('@/lib/api/server-fetch');
       // URL-aware mock: the provider fetch throws, everything else succeeds.
-      vi.mocked(serverFetch).mockImplementation(((url: string | URL) => {
+      vi.mocked(serverFetch).mockImplementation((url: string | URL) => {
         const urlStr = typeof url === 'string' ? url : url.toString();
         if (urlStr.includes('/providers') && !urlStr.includes('provider-models')) {
           return Promise.reject(new Error('Network error'));
@@ -260,7 +260,7 @@ describe('EditAgentPage (server component)', () => {
         if (urlStr.includes('/agents/agent-edit-id')) return Promise.resolve(body(MOCK_AGENT));
         if (urlStr.includes('/provider-models')) return Promise.resolve(body(MOCK_MODELS));
         return Promise.resolve(body([]));
-      }) as never);
+      });
       vi.mocked(parseApiResponse).mockImplementation(((res: Response) => res.json()) as never);
 
       const { default: EditAgentPage } = await import('@/app/admin/orchestration/agents/[id]/page');
@@ -276,7 +276,7 @@ describe('EditAgentPage (server component)', () => {
       const { serverFetch, parseApiResponse } = await import('@/lib/api/server-fetch');
       // /providers and /provider-models share a prefix, so use explicit URL
       // matching instead of substring-based setupServerFetch.
-      vi.mocked(serverFetch).mockImplementation(((url: string | URL) => {
+      vi.mocked(serverFetch).mockImplementation((url: string | URL) => {
         const urlStr = typeof url === 'string' ? url : url.toString();
         const body = (data: unknown): Response =>
           new Response(JSON.stringify({ success: true, data }), {
@@ -289,7 +289,7 @@ describe('EditAgentPage (server component)', () => {
           return Promise.resolve({ ok: false } as Response);
         }
         return Promise.resolve(body([]));
-      }) as never);
+      });
       vi.mocked(parseApiResponse).mockImplementation(((res: Response) => {
         if (!res.ok)
           return Promise.resolve({ success: false, error: { message: 'not ok', code: 'NOT_OK' } });

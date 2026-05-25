@@ -191,7 +191,7 @@ describe('ExecutionPanel', () => {
         super.abort();
       }
     }
-    globalThis.AbortController = SpyController as unknown as typeof AbortController;
+    globalThis.AbortController = SpyController;
 
     try {
       const { unmount } = renderPanel();

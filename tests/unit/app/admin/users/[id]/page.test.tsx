@@ -75,7 +75,7 @@ describe('AdminUserProfilePage', () => {
     vi.mocked(getServerSession).mockResolvedValue(
       createMockSession({
         user: { id: 'admin-id', email: 'admin@example.com', role: 'ADMIN' },
-      }) as any
+      })
     );
 
     // Default: Cookies setup
@@ -146,7 +146,7 @@ describe('AdminUserProfilePage', () => {
           updatedAt: user.updatedAt.toISOString(),
         },
       }),
-    } as Response);
+    });
   }
 
   /**
@@ -160,7 +160,7 @@ describe('AdminUserProfilePage', () => {
         success: false,
         error: { message: 'User not found' },
       }),
-    } as Response);
+    });
   }
 
   /**
@@ -240,7 +240,7 @@ describe('AdminUserProfilePage', () => {
           success: false,
           error: { message: 'User not found' },
         }),
-      } as Response);
+      });
       const params = Promise.resolve({ id: 'user-123' });
 
       // Act & Assert

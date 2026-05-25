@@ -372,7 +372,7 @@ describe('AgentForm — Instructions tab', () => {
       render(
         <AgentForm
           mode="edit"
-          agent={makeAgent({ profileId: 'prof-support' } as Partial<AiAgent>)}
+          agent={makeAgent({ profileId: 'prof-support' })}
           providers={MOCK_PROVIDERS}
           models={MOCK_MODELS}
           profiles={[MOCK_PROFILE]}
@@ -397,7 +397,7 @@ describe('AgentForm — Instructions tab', () => {
       render(
         <AgentForm
           mode="edit"
-          agent={makeAgent({ persona: 'Agent persona.' } as Partial<AiAgent>)}
+          agent={makeAgent({ persona: 'Agent persona.' })}
           providers={MOCK_PROVIDERS}
           models={MOCK_MODELS}
         />
@@ -419,7 +419,7 @@ describe('AgentForm — Instructions tab', () => {
             persona: 'Also: based in London.',
             guardrails: 'Also: never quote internal pricing.',
             brandVoiceInstructions: 'Greet returning users by name.',
-          } as Partial<AiAgent>)}
+          })}
           providers={MOCK_PROVIDERS}
           models={MOCK_MODELS}
           profiles={[MOCK_PROFILE]}
@@ -440,7 +440,7 @@ describe('AgentForm — Instructions tab', () => {
         profileId: 'prof-support',
         persona: 'Also based in London.',
         personaMode: 'override',
-      } as Partial<AiAgent>);
+      });
       vi.mocked(apiClient.patch).mockResolvedValue({ ...agent });
 
       render(
@@ -482,7 +482,7 @@ describe('AgentForm — Instructions tab', () => {
             guardrails: 'Also never quote internal pricing.',
             guardrailsMode: 'append',
             brandVoiceInstructions: null,
-          } as Partial<AiAgent>)}
+          })}
           providers={MOCK_PROVIDERS}
           models={MOCK_MODELS}
           profiles={[MOCK_PROFILE]}

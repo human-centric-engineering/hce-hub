@@ -259,7 +259,7 @@ function seedPastRuns(runs: PastRun[]): void {
       inputData: {
         modelIds: Array.from({ length: r.itemCount }, (_, i) => `m${i}`),
         __runSupervisor: r.supervisor,
-      } as unknown,
+      },
     })) as never
   );
   vi.mocked(prisma.aiCostLog.findMany).mockResolvedValue(

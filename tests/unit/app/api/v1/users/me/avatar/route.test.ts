@@ -136,7 +136,7 @@ describe('app/api/v1/users/me/avatar/route', () => {
       const { auth } = await import('@/lib/auth/config');
 
       vi.mocked(isStorageEnabled).mockReturnValue(true);
-      vi.mocked(auth.api.getSession).mockResolvedValue(null as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(null);
 
       const { POST } = await import('@/app/api/v1/users/me/avatar/route');
       const request = createUploadRequest(createMockFile());
@@ -512,7 +512,7 @@ describe('app/api/v1/users/me/avatar/route', () => {
     it('should return 401 when not authenticated', async () => {
       const { auth } = await import('@/lib/auth/config');
 
-      vi.mocked(auth.api.getSession).mockResolvedValue(null as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(null);
 
       const { DELETE } = await import('@/app/api/v1/users/me/avatar/route');
       const request = createDeleteRequest();

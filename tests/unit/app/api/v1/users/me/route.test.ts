@@ -461,7 +461,7 @@ describe('GET /api/v1/users/me', () => {
       createdAt: new Date('2025-01-01'),
       updatedAt: new Date('2025-01-01'),
     };
-    vi.mocked(prisma.user.findUnique).mockResolvedValue(dbUser as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(dbUser);
 
     const request = createMockRequest({
       url: 'http://localhost:3000/api/v1/users/me',
@@ -514,7 +514,7 @@ describe('PATCH /api/v1/users/me', () => {
     };
     // findUnique returns null for email uniqueness check (no collision)
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
-    vi.mocked(prisma.user.update).mockResolvedValue(updatedUser as never);
+    vi.mocked(prisma.user.update).mockResolvedValue(updatedUser);
 
     const request = createMockRequest({
       method: 'PATCH',

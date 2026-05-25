@@ -597,7 +597,7 @@ describe('callMcpTool: rich content blocks', () => {
     vi.mocked(capabilityDispatcher.dispatch).mockResolvedValue({
       success: true,
       data,
-    } as never);
+    });
   }
 
   it('passes through a multi-text payload', async () => {

@@ -66,7 +66,7 @@ function callGET(id: string) {
 describe('GET /knowledge/documents/:id/chunks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
   });
 
   it('returns chunks for a valid document', async () => {
@@ -127,13 +127,13 @@ describe('GET /knowledge/documents/:id/chunks', () => {
   });
 
   it('returns 401 for unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
     const response = await callGET(VALID_CUID);
     expect(response.status).toBe(401);
   });
 
   it('returns 403 for non-admin users', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
     const response = await callGET(VALID_CUID);
     expect(response.status).toBe(403);
   });

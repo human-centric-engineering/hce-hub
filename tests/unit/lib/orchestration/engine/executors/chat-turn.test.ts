@@ -261,7 +261,7 @@ describe('chat_turn — error paths', () => {
   });
 
   it('throws conversation_not_found when the conversation row is missing', async () => {
-    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null);
     vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(mockAgent as never);
 
     await expect(executeChatTurn(makeStep(), makeCtx())).rejects.toMatchObject({
@@ -274,7 +274,7 @@ describe('chat_turn — error paths', () => {
       id: 'conv_1',
       agentId: 'agent_1',
     } as never);
-    vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(null);
 
     await expect(executeChatTurn(makeStep(), makeCtx())).rejects.toMatchObject({
       code: 'agent_not_found',
@@ -314,7 +314,7 @@ describe('chat_turn — persistence resilience', () => {
     } as never);
     vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(mockAgent as never);
     vi.mocked(prisma.aiMessage.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.$transaction).mockRejectedValue(new Error('DB down') as never);
+    vi.mocked(prisma.$transaction).mockRejectedValue(new Error('DB down'));
 
     const result = await executeChatTurn(makeStep(), makeCtx());
     expect(result.output).toBe('Hi! How can I help?');
@@ -513,7 +513,7 @@ describe('chat_turn — resilience to unusual upstream shapes', () => {
     // Loose cast at the boundary so the vi.fn signature satisfies
     // Prisma's strict overload set without dragging the type plumbing
     // into the test. The fn body runs typed.
-    vi.mocked(prisma.$transaction).mockImplementationOnce(((fn: unknown) =>
+    vi.mocked(prisma.$transaction).mockImplementationOnce((fn: unknown) =>
       (fn as (tx: unknown) => Promise<unknown>)({
         aiMessage: {
           create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
@@ -521,7 +521,8 @@ describe('chat_turn — resilience to unusual upstream shapes', () => {
             return { id: 'm' };
           }),
         },
-      })) as never);
+      })
+    );
 
     await executeChatTurn(makeStep(), makeCtx());
 
@@ -542,7 +543,7 @@ describe('chat_turn — resilience to unusual upstream shapes', () => {
     vi.mocked(prisma.aiMessage.findMany).mockResolvedValue([] as never);
 
     const writes: Array<{ data: Record<string, unknown> }> = [];
-    vi.mocked(prisma.$transaction).mockImplementationOnce(((fn: unknown) =>
+    vi.mocked(prisma.$transaction).mockImplementationOnce((fn: unknown) =>
       (fn as (tx: unknown) => Promise<unknown>)({
         aiMessage: {
           create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
@@ -550,7 +551,8 @@ describe('chat_turn — resilience to unusual upstream shapes', () => {
             return { id: 'm' };
           }),
         },
-      })) as never);
+      })
+    );
 
     await executeChatTurn(makeStep(), makeCtx());
 

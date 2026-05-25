@@ -924,7 +924,7 @@ describe('ProviderModelsMatrix', () => {
 
     it('row delete is enabled and calls DELETE on confirmation when no agents bound', async () => {
       const { apiClient } = await import('@/lib/api/client');
-      vi.mocked(apiClient.delete).mockResolvedValue({ id: 'model-1', deleted: true } as never);
+      vi.mocked(apiClient.delete).mockResolvedValue({ id: 'model-1', deleted: true });
 
       const user = userEvent.setup();
       render(<ProviderModelsMatrix initialModels={[makeModel({ name: 'GPT-5', agents: [] })]} />);

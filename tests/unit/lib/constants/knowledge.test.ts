@@ -19,7 +19,6 @@ import {
   KNOWLEDGE_TAB_VALUES,
   DEFAULT_KNOWLEDGE_TAB,
   KNOWLEDGE_TAB_TITLES,
-  type KnowledgeTab,
 } from '@/lib/constants/knowledge';
 
 describe('KNOWLEDGE_TABS', () => {
@@ -80,7 +79,7 @@ describe('DEFAULT_KNOWLEDGE_TAB', () => {
 describe('KNOWLEDGE_TAB_TITLES', () => {
   it('has a title for every tab value', () => {
     for (const tab of KNOWLEDGE_TAB_VALUES) {
-      expect(KNOWLEDGE_TAB_TITLES[tab as KnowledgeTab]).toBeDefined();
+      expect(KNOWLEDGE_TAB_TITLES[tab]).toBeDefined();
     }
   });
 
@@ -102,13 +101,13 @@ describe('KNOWLEDGE_TAB_TITLES', () => {
 
   it('all titles contain "Knowledge Base"', () => {
     for (const tab of KNOWLEDGE_TAB_VALUES) {
-      expect(KNOWLEDGE_TAB_TITLES[tab as KnowledgeTab]).toContain('Knowledge Base');
+      expect(KNOWLEDGE_TAB_TITLES[tab]).toContain('Knowledge Base');
     }
   });
 
   it('all titles are non-empty strings', () => {
     for (const tab of KNOWLEDGE_TAB_VALUES) {
-      const title = KNOWLEDGE_TAB_TITLES[tab as KnowledgeTab];
+      const title = KNOWLEDGE_TAB_TITLES[tab];
       expect(typeof title).toBe('string');
       expect(title.length).toBeGreaterThan(0);
     }

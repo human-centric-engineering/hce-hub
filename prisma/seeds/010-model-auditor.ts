@@ -1,4 +1,5 @@
 import { PROVIDER_MODEL_AUDIT_TEMPLATE } from '@/prisma/seeds/data/templates/provider-model-audit';
+import { Prisma } from '@prisma/client';
 import { createInitialVersion } from '@/lib/orchestration/workflows/version-service';
 import type { SeedUnit } from '@/prisma/runner';
 import { MODEL_CAPABILITIES } from '@/types/orchestration';
@@ -357,7 +358,7 @@ const unit: SeedUnit = {
         slug: def.slug,
         description: def.description,
         category: def.category,
-        functionDefinition: def.functionDefinition as unknown as object,
+        functionDefinition: def.functionDefinition,
         executionType: def.executionType,
         executionHandler: def.executionHandler,
         isActive: true,
@@ -375,7 +376,7 @@ const unit: SeedUnit = {
         slug: addDef.slug,
         description: addDef.description,
         category: addDef.category,
-        functionDefinition: addDef.functionDefinition as unknown as object,
+        functionDefinition: addDef.functionDefinition,
         executionType: addDef.executionType,
         executionHandler: addDef.executionHandler,
         isActive: true,
@@ -393,7 +394,7 @@ const unit: SeedUnit = {
         slug: deactDef.slug,
         description: deactDef.description,
         category: deactDef.category,
-        functionDefinition: deactDef.functionDefinition as unknown as object,
+        functionDefinition: deactDef.functionDefinition,
         executionType: deactDef.executionType,
         executionHandler: deactDef.executionHandler,
         isActive: true,
@@ -527,7 +528,7 @@ const unit: SeedUnit = {
           data: {
             workflowId: existing.id,
             version: (lastVersion?.version ?? 0) + 1,
-            snapshot: tpl.workflowDefinition as unknown as object,
+            snapshot: tpl.workflowDefinition as unknown as Prisma.InputJsonValue,
             changeSummary: 'Seeded by 010-model-auditor',
             createdBy,
           },

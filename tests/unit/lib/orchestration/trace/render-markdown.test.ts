@@ -45,7 +45,7 @@ function makeTrace(): ExecutionTraceEntry[] {
       costUsd: 0.001,
       startedAt: '2026-05-17T10:00:00.000Z',
       completedAt: '2026-05-17T10:00:01.500Z',
-    } as ExecutionTraceEntry,
+    },
     {
       stepId: 's2',
       stepType: 'evaluate',
@@ -57,7 +57,7 @@ function makeTrace(): ExecutionTraceEntry[] {
       costUsd: 0.0224,
       startedAt: '2026-05-17T10:00:01.500Z',
       completedAt: '2026-05-17T10:00:05.000Z',
-    } as ExecutionTraceEntry,
+    },
   ];
 }
 
@@ -142,7 +142,7 @@ describe('renderExecutionMarkdown', () => {
           { attempt: 1, maxRetries: 2, reason: 'timeout', targetStepId: 's1' },
           { attempt: 2, maxRetries: 2, reason: 'timeout', targetStepId: 's1', exhausted: true },
         ],
-      } as ExecutionTraceEntry,
+      },
     ];
     const md = renderExecutionMarkdown(makeExecution(), traceWithRetries);
     expect(md).toContain('**Retries:**');
@@ -190,7 +190,7 @@ describe('renderExecutionMarkdown', () => {
         tokensUsed: 0,
         costUsd: 0,
         startedAt: '2026-05-17T10:00:00.000Z',
-      } as ExecutionTraceEntry,
+      },
     ];
     const md = renderExecutionMarkdown(makeExecution(), t);
     expect(md).toContain('truncated');
@@ -210,7 +210,7 @@ describe('renderExecutionMarkdown', () => {
         tokensUsed: 0,
         costUsd: 0,
         startedAt: '2026-05-17T10:00:00.000Z',
-      } as ExecutionTraceEntry,
+      },
     ];
     const md = renderExecutionMarkdown(makeExecution(), t, { includeStepOutputs: 'all' });
     expect(md).not.toContain('truncated');
@@ -260,7 +260,7 @@ describe('renderExecutionMarkdown', () => {
         tokensUsed: 0,
         costUsd: 0,
         startedAt: '2026-05-17T10:00:00.000Z',
-      } as ExecutionTraceEntry,
+      },
       {
         stepId: 'slow',
         stepType: 'llm_call',
@@ -271,7 +271,7 @@ describe('renderExecutionMarkdown', () => {
         tokensUsed: 0,
         costUsd: 0,
         startedAt: '2026-05-17T10:00:00.000Z',
-      } as ExecutionTraceEntry,
+      },
     ];
     const md = renderExecutionMarkdown(makeExecution(), traceWithDurations);
     expect(md).toContain('Duration 250ms');
@@ -310,7 +310,7 @@ describe('renderExecutionMarkdown', () => {
         model: 'claude-sonnet-4-6',
         provider: 'anthropic',
         startedAt: '2026-05-17T10:00:00.000Z',
-      } as ExecutionTraceEntry,
+      },
     ];
     const md = renderExecutionMarkdown(makeExecution(), t);
     expect(md).toContain('Model `claude-sonnet-4-6`');

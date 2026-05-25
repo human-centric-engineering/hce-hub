@@ -64,7 +64,7 @@ function callGetPattern(num: string) {
 describe('GET /api/v1/admin/orchestration/knowledge/patterns', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
   });
 
   it('returns pattern summaries', async () => {
@@ -96,7 +96,7 @@ describe('GET /api/v1/admin/orchestration/knowledge/patterns', () => {
   });
 
   it('rejects unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     const res = await ListPatterns(makeListRequest());
     expect(res.status).toBe(401);
@@ -108,7 +108,7 @@ describe('GET /api/v1/admin/orchestration/knowledge/patterns', () => {
 describe('GET /api/v1/admin/orchestration/knowledge/patterns/:number', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
   });
 
   it('returns pattern detail for a valid number', async () => {
@@ -170,7 +170,7 @@ describe('GET /api/v1/admin/orchestration/knowledge/patterns/:number', () => {
   });
 
   it('rejects unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     const res = await callGetPattern('1');
 

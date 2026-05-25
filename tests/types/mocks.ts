@@ -10,7 +10,6 @@
  */
 
 import { vi, type Mock } from 'vitest';
-import type { PrismaClient } from '@prisma/client';
 import type { Logger } from '@/lib/logging';
 
 /**
@@ -172,7 +171,7 @@ export function createMockPrisma(): MockPrismaClient {
           delete: vi.fn(),
           count: vi.fn(),
         },
-      } as unknown as PrismaClient)
+      })
     ),
     user: {
       findUnique: vi.fn().mockResolvedValue(null),

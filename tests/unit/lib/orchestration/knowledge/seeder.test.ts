@@ -174,13 +174,13 @@ describe('seedChunks', () => {
     // so the relationship is explicit in the admin UI. Idempotent — the
     // upsert is keyed on (agentId, tagId).
     const chunks = [makeSeedChunk({ id: 'c1', content: 'Content A' })];
-    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null as never);
-    vi.mocked(readFile).mockResolvedValue(JSON.stringify(chunks) as never);
+    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify(chunks));
     vi.mocked(prisma.user.findFirst)
       .mockResolvedValueOnce({ id: 'admin-001' } as never)
       .mockResolvedValueOnce({ id: 'user-001' } as never);
     vi.mocked(prisma.aiKnowledgeDocument.create).mockResolvedValue(makeDocument() as never);
-    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1 as never);
+    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1);
     vi.mocked(prisma.aiAgent.findMany).mockResolvedValue([
       { id: 'agent-pa', slug: 'pattern-advisor' },
       { id: 'agent-qm', slug: 'quiz-master' },
@@ -207,13 +207,13 @@ describe('seedChunks', () => {
 
   it('skips the system-agent grant loop when no system agents are seeded yet', async () => {
     const chunks = [makeSeedChunk({ id: 'c1', content: 'Content A' })];
-    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null as never);
-    vi.mocked(readFile).mockResolvedValue(JSON.stringify(chunks) as never);
+    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify(chunks));
     vi.mocked(prisma.user.findFirst)
       .mockResolvedValueOnce({ id: 'admin-001' } as never)
       .mockResolvedValueOnce({ id: 'user-001' } as never);
     vi.mocked(prisma.aiKnowledgeDocument.create).mockResolvedValue(makeDocument() as never);
-    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1 as never);
+    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1);
     // beforeEach already mocks aiAgent.findMany → [], so no grants should fire.
 
     await seedChunks(CHUNKS_PATH);
@@ -250,12 +250,12 @@ describe('seedChunks', () => {
     const chunks = [makeSeedChunk()];
 
     vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(failedDoc as never);
-    vi.mocked(prisma.aiKnowledgeChunk.deleteMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.aiKnowledgeChunk.deleteMany).mockResolvedValue({ count: 0 });
     vi.mocked(prisma.aiKnowledgeDocument.delete).mockResolvedValue(failedDoc as never);
-    vi.mocked(readFile).mockResolvedValue(JSON.stringify(chunks) as never);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify(chunks));
     vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: 'user-001' } as never);
     vi.mocked(prisma.aiKnowledgeDocument.create).mockResolvedValue(makeDocument() as never);
-    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1 as never);
+    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1);
 
     await seedChunks(CHUNKS_PATH);
 
@@ -271,13 +271,13 @@ describe('seedChunks', () => {
   it('seeds successfully without calling embedBatch', async () => {
     const chunks = [makeSeedChunk({ id: 'c1', content: 'Content A' })];
 
-    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null as never);
-    vi.mocked(readFile).mockResolvedValue(JSON.stringify(chunks) as never);
+    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify(chunks));
     vi.mocked(prisma.user.findFirst)
       .mockResolvedValueOnce({ id: 'admin-001' } as never)
       .mockResolvedValueOnce({ id: 'user-001' } as never);
     vi.mocked(prisma.aiKnowledgeDocument.create).mockResolvedValue(makeDocument() as never);
-    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1 as never);
+    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1);
 
     await seedChunks(CHUNKS_PATH);
 
@@ -296,15 +296,15 @@ describe('seedChunks', () => {
   it('falls back to any user when no ADMIN user exists', async () => {
     const chunks = [makeSeedChunk()];
 
-    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null as never);
-    vi.mocked(readFile).mockResolvedValue(JSON.stringify(chunks) as never);
+    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify(chunks));
     vi.mocked(prisma.user.findFirst)
-      .mockResolvedValueOnce(null as never)
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ id: 'regular-user' } as never);
     vi.mocked(prisma.aiKnowledgeDocument.create).mockResolvedValue(
       makeDocument({ uploadedBy: 'regular-user' }) as never
     );
-    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1 as never);
+    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1);
 
     await seedChunks(CHUNKS_PATH);
 
@@ -316,11 +316,9 @@ describe('seedChunks', () => {
   });
 
   it('throws with a descriptive message when no users exist at all', async () => {
-    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null as never);
-    vi.mocked(readFile).mockResolvedValue(JSON.stringify([makeSeedChunk()]) as never);
-    vi.mocked(prisma.user.findFirst)
-      .mockResolvedValueOnce(null as never)
-      .mockResolvedValueOnce(null as never);
+    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify([makeSeedChunk()]));
+    vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(null).mockResolvedValueOnce(null);
 
     await expect(seedChunks(CHUNKS_PATH)).rejects.toThrow(/No users/);
 
@@ -334,11 +332,11 @@ describe('seedChunks', () => {
     ];
     const expectedHash = createHash('sha256').update('AlphaBeta').digest('hex');
 
-    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null as never);
-    vi.mocked(readFile).mockResolvedValue(JSON.stringify(chunks) as never);
+    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify(chunks));
     vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: 'user-001' } as never);
     vi.mocked(prisma.aiKnowledgeDocument.create).mockResolvedValue(makeDocument() as never);
-    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1 as never);
+    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1);
 
     await seedChunks(CHUNKS_PATH);
 
@@ -353,11 +351,11 @@ describe('seedChunks', () => {
     const chunk = makeSeedChunk();
     const doc = makeDocument();
 
-    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null as never);
-    vi.mocked(readFile).mockResolvedValue(JSON.stringify([chunk]) as never);
+    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify([chunk]));
     vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: 'user-001' } as never);
     vi.mocked(prisma.aiKnowledgeDocument.create).mockResolvedValue(doc as never);
-    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1 as never);
+    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1);
 
     await seedChunks(CHUNKS_PATH);
 
@@ -384,26 +382,26 @@ describe('seedChunks', () => {
   });
 
   it('propagates file read errors', async () => {
-    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null);
     vi.mocked(readFile).mockRejectedValue(new Error('ENOENT: no such file'));
 
     await expect(seedChunks('/bad/path/chunks.json')).rejects.toThrow('ENOENT: no such file');
   });
 
   it('propagates JSON parse errors from malformed file content', async () => {
-    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null as never);
-    vi.mocked(readFile).mockResolvedValue('{ this is not valid json' as never);
+    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null);
+    vi.mocked(readFile).mockResolvedValue('{ this is not valid json');
 
     await expect(seedChunks(CHUNKS_PATH)).rejects.toThrow();
   });
 
   it('throws a descriptive error when chunks.json has a valid-JSON but invalid shape', async () => {
-    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null);
     // Valid JSON, but `content` field is missing — fails the Zod schema
     const badChunks = [
       { id: 'bad-chunk', chunk_id: 1, metadata: { type: 'overview' }, estimated_tokens: 50 },
     ];
-    vi.mocked(readFile).mockResolvedValue(JSON.stringify(badChunks) as never);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify(badChunks));
 
     await expect(seedChunks(CHUNKS_PATH)).rejects.toThrow(/Invalid chunks\.json/);
     await expect(seedChunks(CHUNKS_PATH)).rejects.toThrow(CHUNKS_PATH);
@@ -419,11 +417,11 @@ describe('seedChunks', () => {
     };
     const doc = makeDocument();
 
-    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null as never);
-    vi.mocked(readFile).mockResolvedValue(JSON.stringify([minimalChunk]) as never);
+    vi.mocked(prisma.aiKnowledgeDocument.findFirst).mockResolvedValue(null);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify([minimalChunk]));
     vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: 'user-001' } as never);
     vi.mocked(prisma.aiKnowledgeDocument.create).mockResolvedValue(doc as never);
-    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1 as never);
+    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1);
 
     await seedChunks(CHUNKS_PATH);
 
@@ -441,7 +439,7 @@ describe('embedChunks', () => {
   beforeEach(() => vi.resetAllMocks());
 
   it('returns immediately when all chunks are already embedded', async () => {
-    vi.mocked(prisma.aiKnowledgeChunk.count).mockResolvedValue(10 as never);
+    vi.mocked(prisma.aiKnowledgeChunk.count).mockResolvedValue(10);
     vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([] as never);
 
     const result = await embedChunks();
@@ -456,15 +454,15 @@ describe('embedChunks', () => {
       { id: 'c2', content: 'Chunk 2' },
     ];
 
-    vi.mocked(prisma.aiKnowledgeChunk.count).mockResolvedValue(5 as never);
-    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue(pending as never);
+    vi.mocked(prisma.aiKnowledgeChunk.count).mockResolvedValue(5);
+    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue(pending);
     vi.mocked(embedBatch).mockResolvedValue(
       mockEmbedResult([
         [0.1, 0.2],
         [0.3, 0.4],
       ])
     );
-    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1 as never);
+    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1);
 
     const result = await embedChunks();
 
@@ -484,7 +482,7 @@ describe('embedChunks', () => {
   });
 
   it('propagates embedding errors', async () => {
-    vi.mocked(prisma.aiKnowledgeChunk.count).mockResolvedValue(3 as never);
+    vi.mocked(prisma.aiKnowledgeChunk.count).mockResolvedValue(3);
     vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([{ id: 'c1', content: 'text' }] as never);
     vi.mocked(embedBatch).mockRejectedValue(new Error('Provider unavailable'));
 

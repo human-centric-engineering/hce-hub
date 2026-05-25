@@ -9,7 +9,6 @@
  */
 
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
 import { withAdminAuth } from '@/lib/auth/guards';
 import { prisma } from '@/lib/db/client';
 import { successResponse } from '@/lib/api/responses';
@@ -85,7 +84,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
 
   const data: Record<string, unknown> = {};
   if (input.name !== undefined) data.name = input.name;
-  if (input.metadata !== undefined) data.metadata = input.metadata as Prisma.InputJsonValue;
+  if (input.metadata !== undefined) data.metadata = input.metadata;
   if (input.signingSecret !== undefined) data.signingSecret = input.signingSecret;
   if (input.isEnabled !== undefined) data.isEnabled = input.isEnabled;
 

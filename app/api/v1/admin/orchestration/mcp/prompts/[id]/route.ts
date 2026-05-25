@@ -15,7 +15,6 @@ import { successResponse, errorResponse } from '@/lib/api/responses';
 import { NotFoundError } from '@/lib/api/errors';
 import { validateRequestBody } from '@/lib/api/validation';
 import { getRouteLogger } from '@/lib/api/context';
-import { Prisma } from '@prisma/client';
 import {
   broadcastMcpPromptsChanged,
   clearMcpPromptCache,
@@ -48,7 +47,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
   const { argumentsSpec, ...rest } = body;
   const data: Record<string, unknown> = { ...rest };
   if (argumentsSpec !== undefined) {
-    data.argumentsSpec = argumentsSpec as unknown as Prisma.InputJsonValue;
+    data.argumentsSpec = argumentsSpec;
   }
 
   const updated = await prisma.mcpExposedPrompt.update({

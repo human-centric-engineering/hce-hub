@@ -160,7 +160,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should return paginated list of invitations (admin user)', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock invitations data
       const mockInvitations = [
@@ -199,7 +199,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should use default pagination parameters', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
       vi.mocked(getAllPendingInvitations).mockResolvedValue({
         invitations: [],
         total: 0,
@@ -222,7 +222,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should accept custom pagination parameters', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
       vi.mocked(getAllPendingInvitations).mockResolvedValue({
         invitations: [],
         total: 0,
@@ -245,7 +245,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should accept search parameter', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       const mockInvitations = [createMockInvitation('alice@example.com', 'Alice Johnson', 'USER')];
 
@@ -273,7 +273,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should accept sort parameters', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
       vi.mocked(getAllPendingInvitations).mockResolvedValue({
         invitations: [],
         total: 0,
@@ -296,7 +296,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should handle empty invitations list', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
       vi.mocked(getAllPendingInvitations).mockResolvedValue({
         invitations: [],
         total: 0,
@@ -317,7 +317,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should handle invitations with null invitedByName', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       const mockInvitations = [
         createMockInvitation('alice@example.com', 'Alice Johnson', 'USER', null), // Deleted inviter
@@ -342,7 +342,7 @@ describe('GET /api/v1/admin/invitations', () => {
   describe('authorization', () => {
     it('should return 401 when not authenticated', async () => {
       // Arrange
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
       // Act
       const request = createMockRequest();
@@ -359,7 +359,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should return 403 when user is not admin', async () => {
       // Arrange
       const userSession = mockAuthenticatedUser('USER');
-      vi.mocked(auth.api.getSession).mockResolvedValue(userSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(userSession);
 
       // Act
       const request = createMockRequest();
@@ -379,7 +379,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should reject invalid page parameter', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Act
       const request = createMockRequest({ page: '0' }); // Page must be >= 1
@@ -395,7 +395,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should reject invalid limit parameter', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Act
       const request = createMockRequest({ limit: '101' }); // Max limit is 100
@@ -411,7 +411,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should reject invalid sortBy parameter', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Act
       const request = createMockRequest({ sortBy: 'invalid' });
@@ -427,7 +427,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should reject invalid sortOrder parameter', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Act
       const request = createMockRequest({ sortOrder: 'invalid' });
@@ -443,7 +443,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should reject too long search query', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Act: Search query > 200 characters
       const longSearch = 'a'.repeat(201);
@@ -462,7 +462,7 @@ describe('GET /api/v1/admin/invitations', () => {
     it('should handle database errors gracefully', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
       vi.mocked(getAllPendingInvitations).mockRejectedValue(
         new Error('Failed to fetch pending invitations')
       );
@@ -501,7 +501,7 @@ describe('DELETE /api/v1/admin/invitations/:email', () => {
     it('should delete invitation by email (admin user)', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock existing invitation
       vi.mocked(getValidInvitation).mockResolvedValue({
@@ -550,7 +550,7 @@ describe('DELETE /api/v1/admin/invitations/:email', () => {
     it('should decode URL-encoded email', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       vi.mocked(getValidInvitation).mockResolvedValue({
         email: 'user+test@example.com',
@@ -583,7 +583,7 @@ describe('DELETE /api/v1/admin/invitations/:email', () => {
   describe('authorization', () => {
     it('should return 401 when not authenticated', async () => {
       // Arrange
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
       // Act
       const request = createMockRequest();
@@ -602,7 +602,7 @@ describe('DELETE /api/v1/admin/invitations/:email', () => {
     it('should return 403 when user is not admin', async () => {
       // Arrange
       const userSession = mockAuthenticatedUser('USER');
-      vi.mocked(auth.api.getSession).mockResolvedValue(userSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(userSession);
 
       // Act
       const request = createMockRequest();
@@ -624,7 +624,7 @@ describe('DELETE /api/v1/admin/invitations/:email', () => {
     it('should return 404 when invitation not found', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock invitation not found
       vi.mocked(getValidInvitation).mockResolvedValue(null);
@@ -648,7 +648,7 @@ describe('DELETE /api/v1/admin/invitations/:email', () => {
     it('should return 404 when invitation has expired', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock expired invitation (getValidInvitation returns null for expired)
       vi.mocked(getValidInvitation).mockResolvedValue(null);
@@ -668,7 +668,7 @@ describe('DELETE /api/v1/admin/invitations/:email', () => {
     it('should handle deletion errors gracefully', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       vi.mocked(getValidInvitation).mockResolvedValue({
         email: 'alice@example.com',
@@ -704,7 +704,7 @@ describe('DELETE /api/v1/admin/invitations/:email', () => {
     it('should handle special characters in email', async () => {
       // Arrange
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       const specialEmail = 'user.name+tag@sub-domain.co.uk';
       vi.mocked(getValidInvitation).mockResolvedValue({

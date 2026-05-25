@@ -97,10 +97,7 @@ export const GET = withAdminAuth<{ id: string }>(async (request, _session, { par
     supervisor: searchParams.get('supervisor') ?? undefined,
   });
   if (!queryParsed.success) {
-    throw new ValidationError(
-      'Invalid query parameters',
-      queryParsed.error.flatten().fieldErrors as Record<string, string[]>
-    );
+    throw new ValidationError('Invalid query parameters', queryParsed.error.flatten().fieldErrors);
   }
 
   const workflow = await prisma.aiWorkflow.findUnique({
@@ -154,10 +151,7 @@ export const POST = withAdminAuth<{ id: string }>(async (request, _session, { pa
   }
   const bodyParsed = postBodySchema.safeParse(body);
   if (!bodyParsed.success) {
-    throw new ValidationError(
-      'Invalid request body',
-      bodyParsed.error.flatten().fieldErrors as Record<string, string[]>
-    );
+    throw new ValidationError('Invalid request body', bodyParsed.error.flatten().fieldErrors);
   }
 
   const workflow = await prisma.aiWorkflow.findUnique({

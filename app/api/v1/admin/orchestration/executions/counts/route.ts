@@ -22,7 +22,6 @@ import { successResponse } from '@/lib/api/responses';
 import { validateQueryParams } from '@/lib/api/validation';
 import { getRouteLogger } from '@/lib/api/context';
 import { executionCountsQuerySchema } from '@/lib/validations/orchestration';
-import type { WorkflowStatus } from '@/types/orchestration';
 
 export const GET = withAdminAuth(async (request, session) => {
   const log = await getRouteLogger(request);
@@ -44,5 +43,5 @@ export const GET = withAdminAuth(async (request, session) => {
     total: Object.values(counts).reduce((acc, n) => acc + n, 0),
   });
 
-  return successResponse({ counts: counts as Record<WorkflowStatus, number> });
+  return successResponse({ counts: counts });
 });

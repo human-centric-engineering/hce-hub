@@ -123,7 +123,7 @@ export const POST = withAdminAuth<{ id: string; versionId: string }>(
         changedBy: session.user.id,
       });
       updateData.systemInstructions = snapshot.systemInstructions;
-      updateData.systemInstructionsHistory = history as unknown as Prisma.InputJsonValue;
+      updateData.systemInstructionsHistory = history;
     } else if (snapshot.systemInstructions !== undefined) {
       updateData.systemInstructions = snapshot.systemInstructions;
     }

@@ -148,7 +148,7 @@ function makeChunk(overrides: Record<string, unknown> = {}) {
 describe('GET /api/v1/admin/orchestration/knowledge/graph', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
 
     // Default: one document, three chunks (below 500 threshold)
     vi.mocked(prisma.aiKnowledgeDocument.findMany).mockResolvedValue([makeDocument()] as never);
@@ -562,7 +562,7 @@ describe('GET /api/v1/admin/orchestration/knowledge/graph', () => {
 
   it('returns 401 when unauthenticated', async () => {
     // Arrange
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     // Act
     const res = await GET(makeGetRequest());
@@ -574,7 +574,7 @@ describe('GET /api/v1/admin/orchestration/knowledge/graph', () => {
 
   it('returns 403 when authenticated but not admin', async () => {
     // Arrange: regular user, not admin
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER') as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER'));
 
     // Act
     const res = await GET(makeGetRequest());

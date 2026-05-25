@@ -69,7 +69,7 @@ function dropUndefined(attrs: SpanAttributes | undefined): Otel.Attributes | und
   if (!attrs) return undefined;
   const out: Otel.Attributes = {};
   for (const [key, value] of Object.entries(attrs)) {
-    if (value !== undefined) out[key] = value as Otel.AttributeValue;
+    if (value !== undefined) out[key] = value;
   }
   return out;
 }
@@ -88,7 +88,7 @@ class OtelSpan implements Span {
 
   setAttribute(key: string, value: SpanAttributeValue): void {
     if (value === undefined) return;
-    this.inner.setAttribute(key, value as Otel.AttributeValue);
+    this.inner.setAttribute(key, value);
   }
 
   setAttributes(attrs: SpanAttributes): void {

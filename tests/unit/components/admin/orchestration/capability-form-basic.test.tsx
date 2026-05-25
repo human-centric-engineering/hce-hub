@@ -708,7 +708,7 @@ describe('CapabilityForm — Basic tab', () => {
       render(
         <CapabilityForm
           mode="edit"
-          capability={makeCapability({ isSystem: true } as Partial<AiCapability>)}
+          capability={makeCapability({ isSystem: true })}
           availableCategories={['api']}
         />
       );
@@ -720,7 +720,7 @@ describe('CapabilityForm — Basic tab', () => {
       render(
         <CapabilityForm
           mode="edit"
-          capability={makeCapability({ isSystem: false } as Partial<AiCapability>)}
+          capability={makeCapability({ isSystem: false })}
           availableCategories={['api']}
         />
       );

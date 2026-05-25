@@ -137,7 +137,7 @@ function happyAssessment(): {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+  vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
   vi.mocked(getModel).mockReturnValue({
     provider: 'anthropic',
     name: 'judge',
@@ -156,7 +156,7 @@ beforeEach(() => {
 
 describe('POST /api/v1/admin/orchestration/executions/:id/review', () => {
   it('rejects unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
     const res = await POST(makeRequest(), makeContext());
     expect(res.status).toBe(401);
   });
@@ -291,7 +291,7 @@ describe('POST /api/v1/admin/orchestration/executions/:id/review', () => {
 
   it('returns 400 when modelOverride references a model not in the registry', async () => {
     vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(happyExecution() as never);
-    vi.mocked(getModel).mockReturnValue(undefined as never);
+    vi.mocked(getModel).mockReturnValue(undefined);
     const res = await POST(makeRequest({ modelOverride: 'unknown-model' }), makeContext());
     expect(res.status).toBe(400);
   });

@@ -124,7 +124,7 @@ function makeRow(overrides: Record<string, unknown> = {}, vectorSeed = 1): Recor
 function setupQueryRawMocks(totalEmbedded: number, rows: Array<Record<string, unknown>>): void {
   vi.mocked(prisma.$queryRaw)
     .mockResolvedValueOnce([{ count: BigInt(totalEmbedded) }] as never)
-    .mockResolvedValueOnce(rows as never);
+    .mockResolvedValueOnce(rows);
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -132,17 +132,17 @@ function setupQueryRawMocks(totalEmbedded: number, rows: Array<Record<string, un
 describe('GET /api/v1/admin/orchestration/knowledge/embeddings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
   });
 
   it('returns 401 when no session is present', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(401);
   });
 
   it('returns 403 when the session is non-admin', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(403);
   });

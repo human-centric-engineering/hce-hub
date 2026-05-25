@@ -126,7 +126,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 describe('POST /api/v1/admin/orchestration/executions/:id/approve', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -367,7 +367,7 @@ describe('POST /api/v1/admin/orchestration/executions/:id/approve', () => {
       // last recorded turn rather than restarting at turn 0.
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecution() as never);
-      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
 
       await POST(makePostRequest(), makeParams(EXECUTION_ID));
 

@@ -35,12 +35,7 @@ export async function executeRagRetrieve(
 
   let results;
   try {
-    results = await searchKnowledge(
-      interpolated,
-      (config.filters as Parameters<typeof searchKnowledge>[1]) ?? undefined,
-      topK,
-      threshold
-    );
+    results = await searchKnowledge(interpolated, config.filters ?? undefined, topK, threshold);
   } catch (err) {
     throw new ExecutorError(
       step.id,

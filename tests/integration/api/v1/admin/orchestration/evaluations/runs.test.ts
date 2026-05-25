@@ -464,7 +464,7 @@ describe('POST /api/v1/admin/orchestration/evaluations/runs', () => {
     ).mockImplementation(async (args: unknown) => {
       const a = args as { where: { id?: string; slug?: string } };
       if (a.where.id === AGENT_ID) {
-        return { id: AGENT_ID, kind: 'chat', brandVoiceInstructions: null } as never;
+        return { id: AGENT_ID, kind: 'chat', brandVoiceInstructions: null };
       }
       // judge slug lookup returns null
       return null;
@@ -498,9 +498,9 @@ describe('POST /api/v1/admin/orchestration/evaluations/runs', () => {
     ).mockImplementation(async (args: unknown) => {
       const a = args as { where: { id?: string; slug?: string } };
       if (a.where.id === AGENT_ID) {
-        return { id: AGENT_ID, kind: 'chat', brandVoiceInstructions: null } as never;
+        return { id: AGENT_ID, kind: 'chat', brandVoiceInstructions: null };
       }
-      return { kind: 'chat', isActive: true } as never; // wrong kind
+      return { kind: 'chat', isActive: true }; // wrong kind
     });
 
     const response = await POST(
@@ -531,9 +531,9 @@ describe('POST /api/v1/admin/orchestration/evaluations/runs', () => {
     ).mockImplementation(async (args: unknown) => {
       const a = args as { where: { id?: string; slug?: string } };
       if (a.where.id === AGENT_ID) {
-        return { id: AGENT_ID, kind: 'chat', brandVoiceInstructions: null } as never;
+        return { id: AGENT_ID, kind: 'chat', brandVoiceInstructions: null };
       }
-      return { kind: 'judge', isActive: false } as never;
+      return { kind: 'judge', isActive: false };
     });
 
     const response = await POST(
@@ -612,9 +612,9 @@ describe('POST /api/v1/admin/orchestration/evaluations/runs', () => {
           id: AGENT_ID,
           kind: 'chat',
           brandVoiceInstructions: 'Friendly and concise.',
-        } as never;
+        };
       }
-      return { kind: 'judge', isActive: true } as never;
+      return { kind: 'judge', isActive: true };
     });
     vi.mocked(prisma.aiEvaluationRun.create).mockResolvedValue(makeRunRow() as never);
 
@@ -663,9 +663,9 @@ describe('POST /api/v1/admin/orchestration/evaluations/runs', () => {
           id: AGENT_ID,
           kind: 'chat',
           brandVoiceInstructions: 'Friendly and concise.',
-        } as never;
+        };
       }
-      return { kind: 'judge', isActive: true } as never;
+      return { kind: 'judge', isActive: true };
     });
     vi.mocked(prisma.aiEvaluationRun.create).mockResolvedValue(makeRunRow() as never);
 

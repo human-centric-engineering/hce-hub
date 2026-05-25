@@ -236,10 +236,7 @@ async function readProviderMatrixRows(res: Response): Promise<ProviderMatrixRow[
   const raw = body.data;
   const candidate = Array.isArray(raw)
     ? raw
-    : raw &&
-        typeof raw === 'object' &&
-        'data' in raw &&
-        Array.isArray((raw as { data: unknown }).data)
+    : raw && typeof raw === 'object' && 'data' in raw && Array.isArray(raw.data)
       ? (raw as { data: unknown[] }).data
       : null;
   if (candidate === null) return [];

@@ -129,7 +129,7 @@ describe('GET /mcp/settings', () => {
 
   it('returns current MCP server config', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(getMcpServerConfig).mockResolvedValue(makeMcpConfig() as never);
+    vi.mocked(getMcpServerConfig).mockResolvedValue(makeMcpConfig());
 
     const response = await GET(makeGetRequest());
 
@@ -145,7 +145,7 @@ describe('GET /mcp/settings', () => {
 
   it('calls getMcpServerConfig to retrieve settings', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(getMcpServerConfig).mockResolvedValue(makeMcpConfig() as never);
+    vi.mocked(getMcpServerConfig).mockResolvedValue(makeMcpConfig());
 
     await GET(makeGetRequest());
 
@@ -181,9 +181,7 @@ describe('PATCH /mcp/settings', () => {
 
   it('updates isEnabled to false', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(
-      makeMcpConfig({ isEnabled: false }) as never
-    );
+    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeMcpConfig({ isEnabled: false }));
 
     const response = await PATCH(makePatchRequest({ isEnabled: false }));
 
@@ -199,7 +197,7 @@ describe('PATCH /mcp/settings', () => {
   it('updates multiple fields', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(
-      makeMcpConfig({ serverName: 'My MCP', maxSessionsPerKey: 10 }) as never
+      makeMcpConfig({ serverName: 'My MCP', maxSessionsPerKey: 10 })
     );
 
     const response = await PATCH(makePatchRequest({ serverName: 'My MCP', maxSessionsPerKey: 10 }));
@@ -217,7 +215,7 @@ describe('PATCH /mcp/settings', () => {
 
   it('invalidates config cache after update', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeMcpConfig() as never);
+    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeMcpConfig());
 
     await PATCH(makePatchRequest({ isEnabled: true }));
 
@@ -228,7 +226,7 @@ describe('PATCH /mcp/settings', () => {
   it('returns updated config in response', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(
-      makeMcpConfig({ auditRetentionDays: 30 }) as never
+      makeMcpConfig({ auditRetentionDays: 30 })
     );
 
     const response = await PATCH(makePatchRequest({ auditRetentionDays: 30 }));
@@ -255,7 +253,7 @@ describe('PATCH /mcp/settings', () => {
 
   it('upserts with default create values when slug does not exist', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeMcpConfig() as never);
+    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeMcpConfig());
 
     await PATCH(makePatchRequest({ isEnabled: true }));
 

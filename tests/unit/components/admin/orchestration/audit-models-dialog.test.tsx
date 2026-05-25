@@ -1164,8 +1164,7 @@ describe('AuditModelsDialog', () => {
           .mock.calls.find(
             ([path]) => typeof path === 'string' && path.includes('/cost-estimate')
           ) ?? [];
-      const params = (opts as { params?: { itemCount?: number; supervisor?: boolean } } | undefined)
-        ?.params;
+      const params = opts?.params;
       expect(params?.itemCount).toBe(2);
     });
 

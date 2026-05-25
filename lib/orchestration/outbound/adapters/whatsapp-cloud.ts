@@ -174,7 +174,7 @@ function extractMessage(body: unknown): string | undefined {
     const obj = body as { error?: { message?: unknown }; message?: unknown };
     if (typeof obj.message === 'string') return obj.message;
     if (obj.error && typeof obj.error === 'object') {
-      const errMsg = (obj.error as { message?: unknown }).message;
+      const errMsg = obj.error.message;
       if (typeof errMsg === 'string') return errMsg;
     }
   }

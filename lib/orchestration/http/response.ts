@@ -117,9 +117,16 @@ export function applyResponseTransform(body: unknown, transform: ResponseTransfo
     return transform.expression.replace(/\{\{([^}]+)\}\}/g, (_match, path: string) => {
       const value = getNestedValue(body, path.trim());
       if (value === undefined) return '';
-      return typeof value === 'object'
-        ? JSON.stringify(value)
-        : String(value as string | number | boolean);
+      if (typeof value === 'object') return JSON.stringify(value);
+      if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean' ||
+        typeof value === 'bigint'
+      ) {
+        return String(value);
+      }
+      return ''; // symbol / function — not meaningful in a text template
     });
   }
 

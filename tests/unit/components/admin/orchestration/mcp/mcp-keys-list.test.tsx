@@ -491,7 +491,7 @@ describe('McpKeysList', () => {
         resolveRotate = res;
       });
 
-      vi.mocked(apiClient.post).mockReturnValueOnce(pendingRotate as any);
+      vi.mocked(apiClient.post).mockReturnValueOnce(pendingRotate);
       vi.mocked(apiClient.get).mockResolvedValueOnce([ACTIVE_KEY]);
 
       render(<McpKeysList initialKeys={[ACTIVE_KEY]} />);

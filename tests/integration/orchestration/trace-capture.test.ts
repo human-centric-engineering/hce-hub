@@ -101,7 +101,7 @@ beforeEach(() => {
 
   // Engine helpers (markCurrentStep, checkpoint, pauseForApproval, finalize) use
   // updateMany with a leaseToken guard. Default count=1 so the lease-loss path stays inactive.
-  vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+  vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
 
   // Lease helpers default to a valid token so resume tests don't trip the lease-conflict
   // throw, and startHeartbeat returns a no-op stop fn so no real setInterval leaks.
@@ -118,7 +118,7 @@ async function collect(
   workflow: { id: string; definition: WorkflowDefinition }
 ): Promise<ExecutionEvent[]> {
   const events: ExecutionEvent[] = [];
-  for await (const event of engine.execute(workflow as never, {}, { userId: USER_ID })) {
+  for await (const event of engine.execute(workflow, {}, { userId: USER_ID })) {
     events.push(event);
   }
   return events;

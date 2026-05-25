@@ -61,7 +61,7 @@ export function createMockRequest(options: {
     requestInit.body = JSON.stringify(body);
   }
 
-  return new NextRequest(urlObj.toString(), requestInit as any);
+  return new NextRequest(urlObj.toString(), requestInit);
 }
 
 /**

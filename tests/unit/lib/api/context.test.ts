@@ -79,7 +79,7 @@ describe('getRouteLogger', () => {
       email: 'user@example.com',
     });
     vi.mocked(getEndpointPath).mockReturnValue('/api/v1/users');
-    vi.mocked(logger.withContext).mockReturnValue(mockLog as any);
+    vi.mocked(logger.withContext).mockReturnValue(mockLog);
 
     // Act
     const result = await getRouteLogger(request);
@@ -105,7 +105,7 @@ describe('getRouteLogger', () => {
       email: 'customer@example.com',
     });
     vi.mocked(getEndpointPath).mockReturnValue('/api/v1/orders');
-    vi.mocked(logger.withContext).mockReturnValue(mockLog as any);
+    vi.mocked(logger.withContext).mockReturnValue(mockLog);
 
     // Act
     await getRouteLogger(request);
@@ -131,7 +131,7 @@ describe('getRouteLogger', () => {
       requestId: 'req-1',
     });
     vi.mocked(getEndpointPath).mockReturnValue('/api/v1/test');
-    vi.mocked(logger.withContext).mockReturnValue(expectedLogger as any);
+    vi.mocked(logger.withContext).mockReturnValue(expectedLogger);
 
     // Act
     const result = await getRouteLogger(request);
@@ -152,7 +152,7 @@ describe('getRouteLogger', () => {
       // userId, sessionId, email absent — unauthenticated path
     });
     vi.mocked(getEndpointPath).mockReturnValue('/api/v1/public');
-    vi.mocked(logger.withContext).mockReturnValue(mockLog as any);
+    vi.mocked(logger.withContext).mockReturnValue(mockLog);
 
     // Act
     await getRouteLogger(request);
@@ -178,7 +178,7 @@ describe('getRouteLogger', () => {
     vi.mocked(getFullContext).mockResolvedValue({ requestId: 'req-search' });
     // Simulate getEndpointPath stripping the query string
     vi.mocked(getEndpointPath).mockReturnValue('/api/v1/search');
-    vi.mocked(logger.withContext).mockReturnValue(mockLog as any);
+    vi.mocked(logger.withContext).mockReturnValue(mockLog);
 
     // Act
     await getRouteLogger(request);

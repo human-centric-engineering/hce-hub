@@ -147,11 +147,11 @@ describe('POST /executions/:id/rerun', () => {
     // mockAdminUser() returns a session object; we have to install it
     // on the auth.api.getSession mock ourselves — that's the project's
     // convention (see other admin-route tests).
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
   });
 
   it('returns 401 for unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
     const res = await POST(makeRequest(), makeContext());
     expect(res.status).toBe(401);
   });
@@ -188,7 +188,7 @@ describe('POST /executions/:id/rerun', () => {
 
   it('happy path: defaults to current published version when versionId is omitted', async () => {
     vi.mocked(prisma.aiWorkflowExecution.findFirst).mockResolvedValue(makeOriginal() as never);
-    vi.mocked(prepareWorkflowExecution).mockResolvedValue(happyPrepare(NEW_VERSION_ID) as never);
+    vi.mocked(prepareWorkflowExecution).mockResolvedValue(happyPrepare(NEW_VERSION_ID));
 
     const res = await POST(makeRequest(), makeContext());
 
@@ -203,7 +203,7 @@ describe('POST /executions/:id/rerun', () => {
 
   it('forwards parentExecutionId, copied inputData, and original budget to the engine', async () => {
     vi.mocked(prisma.aiWorkflowExecution.findFirst).mockResolvedValue(makeOriginal() as never);
-    vi.mocked(prepareWorkflowExecution).mockResolvedValue(happyPrepare(NEW_VERSION_ID) as never);
+    vi.mocked(prepareWorkflowExecution).mockResolvedValue(happyPrepare(NEW_VERSION_ID));
 
     await POST(makeRequest(), makeContext());
 
@@ -224,7 +224,7 @@ describe('POST /executions/:id/rerun', () => {
     vi.mocked(prisma.aiWorkflowVersion.findFirst).mockResolvedValue({
       id: NEW_VERSION_ID,
     } as never);
-    vi.mocked(prepareWorkflowExecution).mockResolvedValue(happyPrepare(NEW_VERSION_ID) as never);
+    vi.mocked(prepareWorkflowExecution).mockResolvedValue(happyPrepare(NEW_VERSION_ID));
 
     await POST(makeRequest({ versionId: NEW_VERSION_ID }), makeContext());
 
@@ -235,7 +235,7 @@ describe('POST /executions/:id/rerun', () => {
 
   it('explicit budgetLimitUsd in the body wins over the original execution', async () => {
     vi.mocked(prisma.aiWorkflowExecution.findFirst).mockResolvedValue(makeOriginal() as never);
-    vi.mocked(prepareWorkflowExecution).mockResolvedValue(happyPrepare() as never);
+    vi.mocked(prepareWorkflowExecution).mockResolvedValue(happyPrepare());
 
     await POST(makeRequest({ budgetLimitUsd: 12 }), makeContext());
 
@@ -247,7 +247,7 @@ describe('POST /executions/:id/rerun', () => {
     vi.mocked(prisma.aiWorkflowExecution.findFirst).mockResolvedValue(
       makeOriginal({ budgetLimitUsd: null }) as never
     );
-    vi.mocked(prepareWorkflowExecution).mockResolvedValue(happyPrepare() as never);
+    vi.mocked(prepareWorkflowExecution).mockResolvedValue(happyPrepare());
 
     await POST(makeRequest(), makeContext());
 

@@ -245,8 +245,9 @@ describe('OrchestrationSettingsPage', () => {
     // dispatch on the original URL — Promise.all() does not guarantee
     // call ordering, so dispatching by URL is more robust than relying
     // on mockResolvedValueOnce sequencing.
-    vi.mocked(serverFetch).mockImplementation(((url: string) =>
-      Promise.resolve({ ok: true, _testUrl: url } as unknown as Response)) as never);
+    vi.mocked(serverFetch).mockImplementation((url: string) =>
+      Promise.resolve({ ok: true, _testUrl: url } as unknown as Response)
+    );
     vi.mocked(parseApiResponse).mockImplementation(((res: Response & { _testUrl?: string }) => {
       const url = res._testUrl ?? '';
       if (url.includes(API.ADMIN.ORCHESTRATION.SETTINGS)) {

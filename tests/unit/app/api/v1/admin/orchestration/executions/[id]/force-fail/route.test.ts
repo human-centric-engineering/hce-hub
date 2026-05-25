@@ -119,13 +119,13 @@ function setupTerminalTransaction(): void {
 describe('POST /executions/:id/force-fail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
   });
 
   // ── 1. Unauthenticated ────────────────────────────────────────────────────
 
   it('returns 401 when there is no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     const res = await POST(makeRequest(), makeContext());
 
@@ -155,7 +155,7 @@ describe('POST /executions/:id/force-fail', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       },
-    } as never);
+    });
 
     const res = await POST(makeRequest(), makeContext());
 
@@ -382,7 +382,7 @@ describe('POST /executions/:id/force-fail', () => {
     // starting and the admin acting. Prisma returns workflow=null;
     // the route falls back to workflowId so the audit row is still
     // useful (the admin can correlate by id even if name is lost).
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValueOnce(
       makeExecution({ workflow: null }) as never
     );

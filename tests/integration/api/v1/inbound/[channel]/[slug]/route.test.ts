@@ -372,7 +372,7 @@ describe('rate limit', () => {
       limit: 60,
       remaining: 0,
       reset: Math.floor(Date.now() / 1000) + 60,
-    } as never);
+    });
 
     const body = { type: 'event_callback', event: { type: 'message' } };
     const request = makeSlackRequest('slack', WORKFLOW_SLUG, body, { ip: '10.9.0.1' });
@@ -434,7 +434,7 @@ describe('Slack channel', () => {
     it('returns 202 with executionId on valid Slack signature', async () => {
       // Arrange
       vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
       );
       vi.mocked(prisma.aiWorkflowExecution.create).mockResolvedValue(
         makeExecutionRow({ id: EXECUTION_ID, triggerSource: 'inbound:slack' }) as never
@@ -469,7 +469,7 @@ describe('Slack channel', () => {
     it('calls prisma.aiWorkflowExecution.create with triggerSource inbound:slack and channel-global dedupKey', async () => {
       // Arrange
       vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
       );
       const request = makeSlackRequest('slack', WORKFLOW_SLUG, slackEventBody, {
         ip: '10.0.0.21',
@@ -499,7 +499,7 @@ describe('Slack channel', () => {
     it('carries normalised Slack event payload in inputData.trigger and triggerMeta envelope', async () => {
       // Arrange
       vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
       );
       const request = makeSlackRequest('slack', WORKFLOW_SLUG, slackEventBody, {
         ip: '10.0.0.22',
@@ -537,7 +537,7 @@ describe('Slack channel', () => {
     it('fires drainEngine after successful execution insert', async () => {
       // Arrange
       vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
       );
       const request = makeSlackRequest('slack', WORKFLOW_SLUG, slackEventBody, {
         ip: '10.0.0.23',
@@ -563,7 +563,7 @@ describe('Slack channel', () => {
     it('writes an audit log entry with workflow_trigger.fire action', async () => {
       // Arrange
       vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
       );
       const request = makeSlackRequest('slack', WORKFLOW_SLUG, slackEventBody, {
         ip: '10.0.0.24',
@@ -593,7 +593,7 @@ describe('Slack channel', () => {
     it('updates trigger lastFiredAt after successful fire', async () => {
       // Arrange
       vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
       );
       const request = makeSlackRequest('slack', WORKFLOW_SLUG, slackEventBody, {
         ip: '10.0.0.25',
@@ -621,7 +621,7 @@ describe('Slack channel', () => {
     it('returns 200 with deduped:true when execution row already exists (P2002)', async () => {
       // Arrange — simulate Slack re-sending an event we already processed.
       vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
       );
 
       const p2002 = new Prisma.PrismaClientKnownRequestError(
@@ -675,7 +675,7 @@ describe('Slack channel', () => {
           id: TRIGGER_ID_SLACK,
           channel: 'slack',
           workflowId: 'wf-A',
-        }) as never
+        })
       );
 
       const requestA = makeSlackRequest('slack', 'workflow-a', body, { ip: '10.0.0.50' });
@@ -696,7 +696,7 @@ describe('Slack channel', () => {
           id: 'trigger-id-slack-B',
           channel: 'slack',
           workflowId: 'wf-B',
-        }) as never
+        })
       );
 
       const requestB = makeSlackRequest('slack', 'workflow-b', body, { ip: '10.0.0.50' });
@@ -720,7 +720,7 @@ describe('Slack channel', () => {
     it('returns 401 on tampered body (bad Slack signature)', async () => {
       // Arrange — trigger exists but the signature is for the wrong body.
       vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
       );
       const body = {
         type: 'event_callback',
@@ -748,7 +748,7 @@ describe('Slack channel', () => {
     it('returns 401 on stale Slack timestamp (10 minutes old)', async () => {
       // Arrange — trigger exists, but the request timestamp is 600s old.
       vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
       );
       const body = {
         type: 'event_callback',
@@ -776,7 +776,7 @@ describe('Slack channel', () => {
     it('does NOT write an audit log on failed verification', async () => {
       // Arrange
       vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+        makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
       );
       const body = { type: 'event_callback', event_id: 'Ev_BAD', event: { type: 'message' } };
       const request = makeSlackRequest('slack', WORKFLOW_SLUG, body, {
@@ -807,7 +807,7 @@ describe('HMAC channel', () => {
           id: TRIGGER_ID_HMAC,
           channel: 'hmac',
           signingSecret: HMAC_TEST_SECRET,
-        }) as never
+        })
       );
       vi.mocked(prisma.aiWorkflowExecution.create).mockResolvedValue(
         makeExecutionRow({
@@ -844,7 +844,7 @@ describe('HMAC channel', () => {
           id: TRIGGER_ID_HMAC,
           channel: 'hmac',
           signingSecret: HMAC_TEST_SECRET,
-        }) as never
+        })
       );
 
       const body = { action: 'ping' };
@@ -884,7 +884,7 @@ describe('HMAC channel', () => {
           id: TRIGGER_ID_HMAC,
           channel: 'hmac',
           signingSecret: HMAC_TEST_SECRET,
-        }) as never
+        })
       );
 
       const body = { action: 'event_with_id' };
@@ -932,7 +932,7 @@ describe('HMAC channel', () => {
           id: TRIGGER_ID_HMAC,
           channel: 'hmac',
           signingSecret: HMAC_TEST_SECRET,
-        }) as never
+        })
       );
 
       const body = { action: 'no_event_id_in_body' };
@@ -981,7 +981,7 @@ describe('HMAC channel', () => {
           id: TRIGGER_ID_HMAC,
           channel: 'hmac',
           signingSecret: null, // fail-closed: missing secret config
-        }) as never
+        })
       );
 
       const body = { action: 'ping' };
@@ -1028,7 +1028,7 @@ describe('Postmark channel', () => {
           id: TRIGGER_ID_POSTMARK,
           channel: 'postmark',
           signingSecret: null,
-        }) as never
+        })
       );
       vi.mocked(prisma.aiWorkflowExecution.create).mockResolvedValue(
         makeExecutionRow({
@@ -1063,7 +1063,7 @@ describe('Postmark channel', () => {
           id: TRIGGER_ID_POSTMARK,
           channel: 'postmark',
           signingSecret: null,
-        }) as never
+        })
       );
 
       const request = makePostmarkRequest('postmark', WORKFLOW_SLUG, postmarkBody, {
@@ -1099,7 +1099,7 @@ describe('Postmark channel', () => {
           id: TRIGGER_ID_POSTMARK,
           channel: 'postmark',
           signingSecret: null,
-        }) as never
+        })
       );
 
       const request = makePostmarkRequest('postmark', WORKFLOW_SLUG, postmarkBody, {
@@ -1133,7 +1133,7 @@ describe('Postmark channel', () => {
           id: TRIGGER_ID_POSTMARK,
           channel: 'postmark',
           signingSecret: null,
-        }) as never
+        })
       );
 
       const request = makePostmarkRequest('postmark', WORKFLOW_SLUG, postmarkBody, {
@@ -1167,7 +1167,7 @@ describe('event type filter', () => {
         id: TRIGGER_ID_SLACK,
         channel: 'slack',
         metadata: { eventTypes: ['app_mention'] },
-      }) as never
+      })
     );
 
     const body = {
@@ -1199,7 +1199,7 @@ describe('event type filter', () => {
         id: TRIGGER_ID_SLACK,
         channel: 'slack',
         metadata: { eventTypes: ['app_mention'] },
-      }) as never
+      })
     );
 
     const body = {
@@ -1224,7 +1224,7 @@ describe('event type filter', () => {
         id: TRIGGER_ID_SLACK,
         channel: 'slack',
         metadata: { eventTypes: [] },
-      }) as never
+      })
     );
 
     const body = {
@@ -1250,7 +1250,7 @@ describe('observability', () => {
     // Arrange
     const eventId = 'Ev_OBSERVE_001';
     vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-      makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+      makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
     );
     vi.mocked(prisma.aiWorkflowExecution.create).mockResolvedValue(
       makeExecutionRow({ id: EXECUTION_ID }) as never
@@ -1291,7 +1291,7 @@ describe('observability', () => {
         id: TRIGGER_ID_HMAC,
         channel: 'hmac',
         signingSecret: HMAC_TEST_SECRET,
-      }) as never
+      })
     );
 
     const body = { action: 'observe_hmac' };
@@ -1317,7 +1317,7 @@ describe('observability', () => {
   it('returns 202 even when lastFiredAt update rejects (best-effort)', async () => {
     // Arrange — lastFiredAt update fails; must not affect the 202 response.
     vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-      makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+      makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
     );
     vi.mocked(prisma.aiWorkflowTrigger.update).mockRejectedValue(new Error('DB write failed'));
 
@@ -1363,7 +1363,7 @@ describe('error paths', () => {
           slug: WORKFLOW_SLUG,
           publishedVersion: null, // no published version
         },
-      }) as never
+      })
     );
 
     const body = { type: 'event_callback', event: { type: 'message' } };
@@ -1382,7 +1382,7 @@ describe('error paths', () => {
   it('returns 500 on non-P2002 DB error during execution insert', async () => {
     // Arrange — a non-dedup DB error should surface as 500.
     vi.mocked(prisma.aiWorkflowTrigger.findFirst).mockResolvedValue(
-      makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' }) as never
+      makeTriggerRow({ id: TRIGGER_ID_SLACK, channel: 'slack' })
     );
     vi.mocked(prisma.aiWorkflowExecution.create).mockRejectedValue(
       new Error('Unexpected DB connection lost')
@@ -1451,9 +1451,9 @@ describe('Twilio channel + conversation enrichment', () => {
         id: 'trig_twilio',
         channel: 'twilio',
         metadata: { conversationAgentId: 'agent-twilio-1' },
-      }) as never
+      })
     );
-    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null);
     vi.mocked(prisma.aiConversation.create).mockResolvedValue({ id: 'conv-new-1' } as never);
 
     const request = makeTwilioRequest('twilio', WORKFLOW_SLUG, params);
@@ -1490,7 +1490,7 @@ describe('Twilio channel + conversation enrichment', () => {
         id: 'trig_twilio_2',
         channel: 'twilio',
         metadata: { conversationAgentId: 'agent-twilio-1' },
-      }) as never
+      })
     );
     vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue({
       id: 'conv-existing',
@@ -1519,7 +1519,7 @@ describe('Twilio channel + conversation enrichment', () => {
         id: 'trig_twilio_3',
         channel: 'twilio',
         metadata: { conversationAgentId: 'agent-twilio-1' },
-      }) as never
+      })
     );
     vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue({
       id: 'conv-existing',
@@ -1551,7 +1551,7 @@ describe('Twilio channel + conversation enrichment', () => {
         id: 'trig_twilio_4',
         channel: 'twilio',
         metadata: {}, // no conversationAgentId
-      }) as never
+      })
     );
 
     const request = makeTwilioRequest('twilio', WORKFLOW_SLUG, params, { ip: '10.0.2.4' });
@@ -1569,7 +1569,7 @@ describe('Twilio channel + conversation enrichment', () => {
         id: 'trig_twilio_5',
         channel: 'twilio',
         metadata: { conversationAgentId: 'agent-twilio-1' },
-      }) as never
+      })
     );
     vi.mocked(prisma.aiConversation.findUnique).mockRejectedValue(new Error('DB down'));
 
@@ -1646,7 +1646,7 @@ describe('GET handshake', () => {
       limit: 60,
       remaining: 0,
       reset: 0,
-    } as never);
+    });
 
     const request = new NextRequest(
       `http://localhost:3000/api/v1/inbound/whatsapp_cloud/${WORKFLOW_SLUG}?hub.mode=subscribe&hub.verify_token=${WHATSAPP_TEST_VERIFY}&hub.challenge=y`,

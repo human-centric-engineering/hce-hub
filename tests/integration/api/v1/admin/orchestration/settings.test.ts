@@ -851,7 +851,7 @@ describe('Admin Orchestration — /settings', () => {
       vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue(
         makeSettingsRow() as never
       );
-      vi.mocked(prisma.aiProviderModel.findFirst).mockResolvedValue(null as never);
+      vi.mocked(prisma.aiProviderModel.findFirst).mockResolvedValue(null);
 
       const res = await PATCH(makePatch({ defaultModels: { audio: 'not-a-real-whisper' } }));
       const body = await parseJson<{
@@ -875,7 +875,7 @@ describe('Admin Orchestration — /settings', () => {
       vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue(
         makeSettingsRow() as never
       );
-      vi.mocked(prisma.aiProviderModel.findFirst).mockResolvedValue(null as never);
+      vi.mocked(prisma.aiProviderModel.findFirst).mockResolvedValue(null);
 
       const res = await PATCH(makePatch({ defaultModels: { audio: 'gpt-4o' } }));
       const body = await parseJson<{ error: { details?: { task?: string } } }>(res);
@@ -939,7 +939,7 @@ describe('Admin Orchestration — /settings', () => {
       vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue(
         makeSettingsRow() as never
       );
-      vi.mocked(prisma.aiProviderModel.findFirst).mockResolvedValue(null as never);
+      vi.mocked(prisma.aiProviderModel.findFirst).mockResolvedValue(null);
 
       const res = await PATCH(makePatch({ defaultModels: { audio: 'groq::whisper-1' } }));
       const body = await parseJson<{
@@ -991,7 +991,7 @@ describe('Admin Orchestration — /settings', () => {
     });
 
     it('rejects activeEmbeddingModelId that does not resolve to any row (400)', async () => {
-      vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValueOnce(null as never);
+      vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValueOnce(null);
 
       const res = await PATCH(makePatch({ activeEmbeddingModelId: 'cm_missing' }));
 

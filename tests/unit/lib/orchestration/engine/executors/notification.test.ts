@@ -139,7 +139,7 @@ describe('executeNotification', () => {
     const calls = vi.mocked(registerStepType).mock.calls;
     if (calls.length === 0)
       throw new Error('registerStepType was never called — import did not run');
-    executor = calls[0][1] as StepExecutorFn;
+    executor = calls[0][1];
   });
 
   beforeEach(() => {

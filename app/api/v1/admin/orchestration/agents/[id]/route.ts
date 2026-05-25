@@ -158,7 +158,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
   if (body.monthlyBudgetUsd !== undefined) data.monthlyBudgetUsd = body.monthlyBudgetUsd;
   if (body.maxCostPerTurnUsd !== undefined) data.maxCostPerTurnUsd = body.maxCostPerTurnUsd;
   if (body.metadata !== undefined) {
-    data.metadata = body.metadata as Prisma.InputJsonValue;
+    data.metadata = body.metadata;
   }
   if (body.isActive !== undefined) data.isActive = body.isActive;
   if (body.knowledgeAccessMode !== undefined) data.knowledgeAccessMode = body.knowledgeAccessMode;
@@ -213,7 +213,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
       changedBy: session.user.id,
     });
     data.systemInstructions = body.systemInstructions;
-    data.systemInstructionsHistory = history as unknown as Prisma.InputJsonValue;
+    data.systemInstructionsHistory = history;
   }
 
   // Version-triggering fields — snapshot the current config before
@@ -384,7 +384,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
           data: {
             agentId: id,
             version: nextVersion,
-            snapshot: snapshot as unknown as Prisma.InputJsonValue,
+            snapshot: snapshot,
             changeSummary,
             createdBy: session.user.id,
           },
@@ -442,11 +442,9 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
     //     return from `tx.aiAgent.update` with no `include`, so they'd be
     //     reported as `array → undefined` on every PATCH. The grant changes
     //     are tracked separately via `grantsChanged` higher up.
-    const changes = computeChanges(
-      current as unknown as Record<string, unknown>,
-      agent as unknown as Record<string, unknown>,
-      { ignoreKeys: ['updatedAt', 'createdAt', 'grantedTags', 'grantedDocuments'] }
-    );
+    const changes = computeChanges(current, agent, {
+      ignoreKeys: ['updatedAt', 'createdAt', 'grantedTags', 'grantedDocuments'],
+    });
     const fieldsChanged = changes ? Object.keys(changes) : [];
 
     log.info('Agent updated', {

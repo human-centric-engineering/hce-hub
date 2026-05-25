@@ -88,7 +88,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 describe('POST /api/v1/orchestration/approvals/:id/approve (token auth)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
   });
 
   it('returns 200 with valid token and transitions execution', async () => {
@@ -143,7 +143,7 @@ describe('POST /api/v1/orchestration/approvals/:id/approve (token auth)', () => 
 
   it('returns 409 when concurrent approval races (updateMany count === 0)', async () => {
     vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecution() as never);
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 });
     const { token } = generateApprovalToken(EXECUTION_ID, 'approve', 60);
 
     const response = await POST(makeRequest(EXECUTION_ID, token), makeParams(EXECUTION_ID));

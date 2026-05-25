@@ -541,7 +541,7 @@ describe('VisualizeTab', () => {
       }
       if (xBtn) {
         // The X only appears when filterText is truthy — it should be present now
-        await user.click(xBtn as HTMLElement);
+        await user.click(xBtn);
         await waitFor(() => {
           expect((filterInput as HTMLInputElement).value).toBe('');
         });

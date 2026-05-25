@@ -114,7 +114,7 @@ function readCompletionsSpec(handlerConfig: Prisma.JsonValue): Prisma.JsonValue 
     return null;
   }
   const spec = (handlerConfig as Record<string, unknown>).completionsSpec;
-  return (spec ?? null) as Prisma.JsonValue | null;
+  return spec ?? null;
 }
 
 /**

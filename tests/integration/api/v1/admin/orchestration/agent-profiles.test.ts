@@ -193,7 +193,7 @@ describe('POST /api/v1/admin/orchestration/agent-profiles', () => {
 
   it('creates a profile and returns 201 with agentCount: 0', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiAgentProfile.create).mockResolvedValue(makeProfile() as never);
+    vi.mocked(prisma.aiAgentProfile.create).mockResolvedValue(makeProfile());
 
     const response = await POST(makePostRequest(VALID_PAYLOAD));
 
@@ -209,7 +209,7 @@ describe('POST /api/v1/admin/orchestration/agent-profiles', () => {
 
   it('stores createdBy from session.user.id', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiAgentProfile.create).mockResolvedValue(makeProfile() as never);
+    vi.mocked(prisma.aiAgentProfile.create).mockResolvedValue(makeProfile());
 
     await POST(makePostRequest(VALID_PAYLOAD));
 
@@ -222,7 +222,7 @@ describe('POST /api/v1/admin/orchestration/agent-profiles', () => {
 
   it('writes a logAdminAction audit entry on create', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiAgentProfile.create).mockResolvedValue(makeProfile() as never);
+    vi.mocked(prisma.aiAgentProfile.create).mockResolvedValue(makeProfile());
 
     await POST(makePostRequest(VALID_PAYLOAD));
 
@@ -261,7 +261,7 @@ describe('POST /api/v1/admin/orchestration/agent-profiles', () => {
 
   it('persists null for optional fields when they are omitted from the payload', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiAgentProfile.create).mockResolvedValue(makeProfile() as never);
+    vi.mocked(prisma.aiAgentProfile.create).mockResolvedValue(makeProfile());
 
     await POST(makePostRequest({ name: 'Minimal', slug: 'minimal' }));
 

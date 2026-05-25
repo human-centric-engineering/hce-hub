@@ -31,7 +31,7 @@ function makeStep(id: string, label: string = 'Step'): WorkflowDefinition['steps
     type: 'llm_call',
     config: {},
     nextSteps: [],
-  } as unknown as WorkflowDefinition['steps'][0];
+  };
 }
 
 function makeDefinition(overrides: Partial<WorkflowDefinition> = {}): WorkflowDefinition {
@@ -400,10 +400,12 @@ describe('useWorkflowCostEstimate', () => {
     vi.mocked(apiClient.post).mockResolvedValue(estimate);
 
     const definition = makeDefinition();
-    const { result, rerender } = renderHook(
-      ({ def }: { def: WorkflowDefinition | null }) => useWorkflowCostEstimate(WORKFLOW_ID, def),
-      { initialProps: { def: definition as WorkflowDefinition | null } }
-    );
+    const { result, rerender } = renderHook<
+      ReturnType<typeof useWorkflowCostEstimate>,
+      { def: WorkflowDefinition | null }
+    >(({ def }) => useWorkflowCostEstimate(WORKFLOW_ID, def), {
+      initialProps: { def: definition },
+    });
 
     // The debounce timer has been scheduled but not fired yet.
     // Now null out the definition — the contentKey becomes '' and the

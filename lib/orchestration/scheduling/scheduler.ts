@@ -348,7 +348,7 @@ export async function processDueSchedules(): Promise<ScheduleProcessResult> {
       void drainEngine(
         execution.id,
         schedule.workflow,
-        defParsed.data as WorkflowDefinition,
+        defParsed.data,
         (execution.inputData ?? {}) as Record<string, unknown>,
         schedule.createdBy,
         publishedVersion.id
@@ -473,7 +473,7 @@ export async function resumeApprovedExecution(executionId: string): Promise<void
   void drainEngine(
     executionId,
     execution.workflow,
-    defParsed.data as WorkflowDefinition,
+    defParsed.data,
     (execution.inputData ?? {}) as Record<string, unknown>,
     execution.userId,
     pinnedVersionId
@@ -568,7 +568,7 @@ export async function processPendingExecutions(
       void drainEngine(
         execution.id,
         execution.workflow,
-        defParsed.data as WorkflowDefinition,
+        defParsed.data,
         (execution.inputData ?? {}) as Record<string, unknown>,
         execution.userId,
         pinnedVersionId
@@ -775,7 +775,7 @@ export async function processOrphanedExecutions(): Promise<OrphanSweepResult> {
       void drainEngine(
         execution.id,
         execution.workflow,
-        defParsed.data as WorkflowDefinition,
+        defParsed.data,
         (execution.inputData ?? {}) as Record<string, unknown>,
         execution.userId,
         pinnedVersionId

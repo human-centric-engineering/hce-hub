@@ -199,7 +199,7 @@ describe('SettingsPage', () => {
 
     it('calls clearInvalidSession and redirects when user is not found in the database', async () => {
       // Arrange: valid session but user missing from DB
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
 
       // Act & Assert
@@ -215,7 +215,7 @@ describe('SettingsPage', () => {
   describe('successful render', () => {
     it('renders the page heading', async () => {
       // Arrange
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(makeFullUser() as never);
 
       // Act
@@ -229,7 +229,7 @@ describe('SettingsPage', () => {
 
     it('renders the page subtitle', async () => {
       // Arrange
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(makeFullUser() as never);
 
       // Act
@@ -242,7 +242,7 @@ describe('SettingsPage', () => {
 
     it('renders SettingsTabs with user name and email', async () => {
       // Arrange
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(makeFullUser() as never);
 
       // Act
@@ -257,7 +257,7 @@ describe('SettingsPage', () => {
 
     it('queries the database with the session user ID', async () => {
       // Arrange
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(makeFullUser() as never);
 
       // Act
@@ -279,7 +279,7 @@ describe('SettingsPage', () => {
   describe('preferences parsing', () => {
     it('passes parsed preferences to SettingsTabs when stored preferences are valid', async () => {
       // Arrange
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(
         makeFullUser({ preferences: VALID_PREFERENCES }) as never
       );
@@ -299,7 +299,7 @@ describe('SettingsPage', () => {
 
     it('falls back to DEFAULT_USER_PREFERENCES when stored preferences are null', async () => {
       // Arrange
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(
         makeFullUser({ preferences: null }) as never
       );
@@ -316,7 +316,7 @@ describe('SettingsPage', () => {
 
     it('falls back to DEFAULT_USER_PREFERENCES when stored preferences have an invalid shape', async () => {
       // Arrange: corrupt JSON object that fails Zod parse
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(
         makeFullUser({ preferences: { unexpected_key: 42 } }) as never
       );
@@ -333,7 +333,7 @@ describe('SettingsPage', () => {
 
     it('forces securityAlerts to true even when stored value is false', async () => {
       // Arrange
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(
         makeFullUser({
           preferences: {
@@ -360,7 +360,7 @@ describe('SettingsPage', () => {
   describe('hasPasswordAccount', () => {
     it('passes hasPasswordAccount=true when the user has a credential account with a password', async () => {
       // Arrange: credential account with a non-null password
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(
         makeFullUser({
           accounts: [{ providerId: 'credential', password: 'hashed_pw' }],
@@ -377,7 +377,7 @@ describe('SettingsPage', () => {
 
     it('passes hasPasswordAccount=false when no account has a non-null password', async () => {
       // Arrange: only OAuth accounts, no password set
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(
         makeFullUser({
           accounts: [
@@ -397,7 +397,7 @@ describe('SettingsPage', () => {
 
     it('passes hasPasswordAccount=false when the user has no accounts at all', async () => {
       // Arrange
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(makeFullUser({ accounts: [] }) as never);
 
       // Act
@@ -416,7 +416,7 @@ describe('SettingsPage', () => {
   describe('oauthProviders formatting', () => {
     it('excludes the credential provider from OAuth providers list', async () => {
       // Arrange: credential + google
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(
         makeFullUser({
           accounts: [
@@ -439,7 +439,7 @@ describe('SettingsPage', () => {
 
     it('formats known provider IDs to human-readable names', async () => {
       // Arrange: all known providers
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(
         makeFullUser({
           accounts: [
@@ -463,7 +463,7 @@ describe('SettingsPage', () => {
 
     it('preserves the raw provider ID for unknown provider names', async () => {
       // Arrange: an unrecognised provider
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(
         makeFullUser({
           accounts: [{ providerId: 'okta', password: null }],
@@ -482,7 +482,7 @@ describe('SettingsPage', () => {
 
     it('produces an empty providers list when all accounts are credential-type', async () => {
       // Arrange
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(
         makeFullUser({
           accounts: [{ providerId: 'credential', password: 'hashed_pw' }],
@@ -509,7 +509,7 @@ describe('SettingsPage', () => {
   describe('initials computation', () => {
     it('passes initials derived from the user name to SettingsTabs', async () => {
       // Arrange
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(
         makeFullUser() as never // name = 'Alice Example'
       );
@@ -524,7 +524,7 @@ describe('SettingsPage', () => {
 
     it('passes single-letter initial for a single-word name', async () => {
       // Arrange
-      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION as never);
+      vi.mocked(getServerSession).mockResolvedValue(MOCK_SESSION);
       vi.mocked(prisma.user.findUnique).mockResolvedValue(makeFullUser() as never);
       // Override the name on the returned object inline
       const user = makeFullUser();

@@ -120,7 +120,7 @@ const PUBLIC_AGENT = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(auth.api.getSession).mockResolvedValue(mockSession as never);
+  vi.mocked(auth.api.getSession).mockResolvedValue(mockSession);
   vi.mocked(prisma.aiAgent.findFirst).mockResolvedValue(PUBLIC_AGENT as never);
   vi.mocked(streamChat).mockReturnValue({
     [Symbol.asyncIterator]: async function* () {
@@ -132,7 +132,7 @@ beforeEach(() => {
     limit: 20,
     remaining: 19,
     reset: 0,
-  } as never);
+  });
 });
 
 async function parseError(res: Response): Promise<{ code: string }> {
@@ -214,7 +214,7 @@ describe('Consumer chat stream — attachment regression', () => {
       limit: 20,
       remaining: 0,
       reset: 0,
-    } as never);
+    });
     const response = await POST(
       createRequest({
         message: 'hi',

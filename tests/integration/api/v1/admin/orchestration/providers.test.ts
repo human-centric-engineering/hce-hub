@@ -149,7 +149,7 @@ describe('GET /api/v1/admin/orchestration/providers', () => {
         makeProvider(),
         makeProvider({ id: 'cmjbv4i3x00003wsloputgwu2', slug: 'openai' }),
       ];
-      vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue(providers as never);
+      vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue(providers);
       vi.mocked(prisma.aiProviderConfig.count).mockResolvedValue(2);
 
       const response = await GET(makeGetRequest());
@@ -276,7 +276,7 @@ describe('POST /api/v1/admin/orchestration/providers', () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(isApiKeyEnvVarSet).mockReturnValue(true);
       const created = makeProvider();
-      vi.mocked(prisma.aiProviderConfig.create).mockResolvedValue(created as never);
+      vi.mocked(prisma.aiProviderConfig.create).mockResolvedValue(created);
 
       const response = await POST(makePostRequest(VALID_PROVIDER));
 
@@ -293,7 +293,7 @@ describe('POST /api/v1/admin/orchestration/providers', () => {
 
     it('stores createdBy from session user id', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.create).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.create).mockResolvedValue(makeProvider());
 
       await POST(makePostRequest(VALID_PROVIDER));
 

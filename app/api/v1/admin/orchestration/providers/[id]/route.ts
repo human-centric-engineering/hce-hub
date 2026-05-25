@@ -74,7 +74,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
   if (body.apiKeyEnvVar !== undefined) data.apiKeyEnvVar = body.apiKeyEnvVar;
   if (body.isLocal !== undefined) data.isLocal = body.isLocal;
   if (body.isActive !== undefined) data.isActive = body.isActive;
-  if (body.metadata !== undefined) data.metadata = body.metadata as Prisma.InputJsonValue;
+  if (body.metadata !== undefined) data.metadata = body.metadata;
   if (body.timeoutMs !== undefined) data.timeoutMs = body.timeoutMs;
   if (body.maxRetries !== undefined) data.maxRetries = body.maxRetries;
 
@@ -97,10 +97,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
       entityType: 'provider',
       entityId: id,
       entityName: updated.name,
-      changes: computeChanges(
-        current as unknown as Record<string, unknown>,
-        updated as unknown as Record<string, unknown>
-      ),
+      changes: computeChanges(current, updated),
       clientIp: clientIP,
     });
 

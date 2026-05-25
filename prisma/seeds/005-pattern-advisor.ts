@@ -222,7 +222,7 @@ const unit: SeedUnit = {
           slug: def.slug,
           description: def.description,
           category: def.category,
-          functionDefinition: def.functionDefinition as unknown as object,
+          functionDefinition: def.functionDefinition,
           executionType: def.executionType,
           executionHandler: def.executionHandler,
           isActive: true,

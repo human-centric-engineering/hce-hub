@@ -119,7 +119,7 @@ describe('POST /evaluations/runs/estimate — dataset ownership', () => {
   });
 
   it('returns 404 when the dataset is not owned by the caller', async () => {
-    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(null);
 
     const res = await POST(makeRequest({ agentId: 'a', datasetId: 'unknown' }));
 

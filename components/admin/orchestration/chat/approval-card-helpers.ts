@@ -57,12 +57,7 @@ export function extractFinalOutput(trace: unknown): unknown {
   const arr = trace as unknown[];
   for (let i = arr.length - 1; i >= 0; i--) {
     const entry = arr[i];
-    if (
-      entry &&
-      typeof entry === 'object' &&
-      'status' in entry &&
-      (entry as { status: unknown }).status === 'completed'
-    ) {
+    if (entry && typeof entry === 'object' && 'status' in entry && entry.status === 'completed') {
       return (entry as { output?: unknown }).output ?? null;
     }
   }

@@ -67,7 +67,7 @@ describe('components/forms/password-form', () => {
 
     // Setup mock analytics
     const { useAnalytics } = await import('@/lib/analytics');
-    mockTrack = vi.fn().mockResolvedValue(undefined) as unknown as ReturnType<typeof vi.fn>;
+    mockTrack = vi.fn().mockResolvedValue(undefined);
     vi.mocked(useAnalytics).mockReturnValue({
       track: mockTrack,
       identify: vi.fn(),

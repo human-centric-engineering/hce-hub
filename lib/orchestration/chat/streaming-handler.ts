@@ -147,15 +147,15 @@ function buildToolCallTrace(
 ): ToolCallTrace {
   const success =
     typeof result === 'object' && result !== null && 'success' in result
-      ? (result as { success: unknown }).success === true
+      ? result.success === true
       : false;
   const errorObj =
     typeof result === 'object' &&
     result !== null &&
     'error' in result &&
-    typeof (result as { error: unknown }).error === 'object' &&
-    (result as { error: unknown }).error !== null
-      ? ((result as { error: { code?: unknown } }).error as { code?: unknown })
+    typeof result.error === 'object' &&
+    result.error !== null
+      ? (result as { error: { code?: unknown } }).error
       : null;
   const errorCode = typeof errorObj?.code === 'string' ? errorObj.code : undefined;
 
@@ -1036,7 +1036,7 @@ export class StreamingChatHandler {
                 // Try next fallback provider
                 const nextSlug = remainingFallbacks.shift();
                 if (!nextSlug || streamRetries > MAX_STREAM_RETRIES) {
-                  log.error('Stream failed, no more fallback providers', streamErr as Error, {
+                  log.error('Stream failed, no more fallback providers', streamErr, {
                     agentSlug: request.agentSlug,
                     provider: currentProviderSlug,
                     retries: streamRetries,
@@ -2041,7 +2041,7 @@ export class StreamingChatHandler {
       if (resolvedProviderSlug) {
         getBreaker(resolvedProviderSlug).recordFailure();
       }
-      log.error('Streaming chat handler crashed', err as Error, {
+      log.error('Streaming chat handler crashed', err, {
         agentSlug: request.agentSlug,
         userId: request.userId,
         conversationId,
@@ -2321,8 +2321,7 @@ export class StreamingChatHandler {
       if (params.outputData !== undefined)
         data.outputData = params.outputData as Prisma.InputJsonValue;
       if (params.executionTimeMs !== undefined) data.executionTimeMs = params.executionTimeMs;
-      if (params.tokenUsage !== undefined)
-        data.tokenUsage = params.tokenUsage as Prisma.InputJsonValue;
+      if (params.tokenUsage !== undefined) data.tokenUsage = params.tokenUsage;
       if (params.metadata !== undefined) data.metadata = params.metadata as Prisma.InputJsonValue;
 
       await prisma.aiEvaluationLog.create({ data });

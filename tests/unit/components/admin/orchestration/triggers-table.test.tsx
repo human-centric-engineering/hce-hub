@@ -131,7 +131,7 @@ describe('TriggersTable — populated', () => {
 
 describe('TriggersTable — delete handler', () => {
   it('calls apiClient.delete with the correct URL and refreshes on success', async () => {
-    vi.mocked(apiClient.delete).mockResolvedValue(undefined as never);
+    vi.mocked(apiClient.delete).mockResolvedValue(undefined);
 
     render(
       <TriggersTable triggers={[makeTrigger({ id: 'trig_abc' })]} enabledChannels={['twilio']} />

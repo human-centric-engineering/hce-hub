@@ -157,7 +157,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       const model = makeModel();
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([model] as never);
-      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(1 as never);
+      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(1);
       vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([
         { slug: 'anthropic', isActive: true },
       ] as never);
@@ -184,7 +184,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
         makeModel({ providerSlug: 'openai', modelId: 'gpt-4o-mini' }),
         makeModel({ providerSlug: 'openai', modelId: 'gpt-4o' }),
       ] as never);
-      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(2 as never);
+      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(2);
       vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([
         { slug: 'openai', isActive: true },
       ] as never);
@@ -233,7 +233,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
         makeModel({ providerSlug: 'openai', modelId: 'gpt-4o-mini' }),
         makeModel({ providerSlug: 'openai', modelId: 'text-embedding-3-small' }),
       ] as never);
-      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(3 as never);
+      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(3);
       vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([
         { slug: 'openai', isActive: true },
       ] as never);
@@ -268,7 +268,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([
         makeModel({ providerSlug: 'openai', modelId: 'gpt-3.5-turbo' }),
       ] as never);
-      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(1 as never);
+      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(1);
       vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([] as never);
       // All slots empty — matches the default-mock at the top of this
       // suite, but stated explicitly here so the empty case is read-
@@ -293,7 +293,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
         makeModel({ providerSlug: 'openai', modelId: 'whisper-1', slug: 'openai-whisper-1' }),
         makeModel({ providerSlug: 'groq', modelId: 'whisper-1', slug: 'groq-whisper-1' }),
       ] as never);
-      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(2 as never);
+      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(2);
       vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([
         { slug: 'openai', isActive: true },
         { slug: 'groq', isActive: true },
@@ -333,7 +333,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([
         makeModel({ providerSlug: 'openai', modelId: 'whisper-1', slug: 'openai-whisper-1' }),
       ] as never);
-      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(1 as never);
+      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(1);
       vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([
         { slug: 'openai', isActive: true },
       ] as never);
@@ -355,7 +355,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
     it('marks unconfigured providers correctly', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([makeModel()] as never);
-      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(1 as never);
+      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(1);
       vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([] as never);
 
       const response = await GET(makeGetRequest());
@@ -366,7 +366,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
     it('passes capability filter to prisma where clause', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([] as never);
-      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(0 as never);
+      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(0);
       vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([] as never);
 
       await GET(makeGetRequest({ capability: 'embedding' }));
@@ -385,7 +385,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
       async (capability) => {
         vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
         vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([] as never);
-        vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(0 as never);
+        vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(0);
         vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([] as never);
 
         await GET(makeGetRequest({ capability }));
@@ -417,7 +417,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
     it('passes providerSlug filter to prisma where clause', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([] as never);
-      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(0 as never);
+      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(0);
       vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([] as never);
 
       await GET(makeGetRequest({ providerSlug: 'openai' }));
@@ -434,7 +434,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
     it('passes tierRole filter to prisma where clause', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([] as never);
-      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(0 as never);
+      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(0);
       vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([] as never);
 
       await GET(makeGetRequest({ tierRole: 'thinking' }));
@@ -451,7 +451,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
     it('passes isActive filter to prisma where clause', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([] as never);
-      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(0 as never);
+      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(0);
       vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([] as never);
 
       await GET(makeGetRequest({ isActive: 'false' }));
@@ -468,7 +468,7 @@ describe('GET /api/v1/admin/orchestration/provider-models', () => {
     it('applies text search across name, slug, providerSlug, modelId, description', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([] as never);
-      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(0 as never);
+      vi.mocked(prisma.aiProviderModel.count).mockResolvedValue(0);
       vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([] as never);
 
       await GET(makeGetRequest({ q: 'claude' }));

@@ -152,7 +152,7 @@ function mockFetchSuccess(runId = 'run-99'): ReturnType<typeof vi.fn> {
     ok: true,
     status: 200,
     json: async () => ({ success: true, data: { id: runId } }),
-  } as Response);
+  });
   vi.stubGlobal('fetch', fn);
   return fn;
 }

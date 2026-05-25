@@ -287,15 +287,15 @@ function makeWorkflow(overrides: AiWorkflowOverrides = {}): AiWorkflowWithVersio
   const publishedVersion: AiWorkflowVersion | null =
     pvOverride !== undefined
       ? pvOverride
-      : ({
+      : {
           id: 'wfv-1',
           workflowId: 'wf-1',
           version: 1,
-          snapshot: snapshot as AiWorkflowVersion['snapshot'],
+          snapshot: snapshot,
           changeSummary: null,
           createdBy: 'user-1',
           createdAt: new Date('2025-01-01'),
-        } as AiWorkflowVersion);
+        };
   return {
     id: 'wf-1',
     name: 'Test Workflow',
@@ -1350,7 +1350,7 @@ describe('WorkflowBuilder', () => {
       vi.mocked(apiClient.post).mockResolvedValue({
         version: { id: 'wfv-2', version: 2, snapshot: TWO_STEP_DEFINITION },
         workflow: {},
-      } as never);
+      });
       render(<WorkflowBuilder mode="edit" workflow={workflowWithDraft()} />);
 
       // Click the toolbar Publish button (the one that opens the dialog).
@@ -1377,7 +1377,7 @@ describe('WorkflowBuilder', () => {
       vi.mocked(apiClient.post).mockResolvedValue({
         version: { id: 'wfv-2', version: 2, snapshot: TWO_STEP_DEFINITION },
         workflow: {},
-      } as never);
+      });
       render(<WorkflowBuilder mode="edit" workflow={workflowWithDraft()} />);
 
       const publishToolbarBtn = screen.getByRole('button', {
@@ -1492,7 +1492,7 @@ describe('WorkflowBuilder', () => {
         'confirm',
         vi.fn(() => true)
       );
-      vi.mocked(apiClient.post).mockResolvedValue({} as never);
+      vi.mocked(apiClient.post).mockResolvedValue({});
       // Refetch returns the workflow with the draft cleared.
       vi.mocked(apiClient.get).mockImplementation((url: string) => {
         if (url.includes('capabilities') || url.includes('agents')) return new Promise(() => {});

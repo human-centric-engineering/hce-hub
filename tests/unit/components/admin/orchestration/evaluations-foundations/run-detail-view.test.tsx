@@ -39,14 +39,12 @@ import { API } from '@/lib/api/endpoints';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-type RunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
-
 function buildRun(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: 'run-1',
     name: 'Smoke run',
     description: 'After refactor',
-    status: 'completed' as RunStatus,
+    status: 'completed',
     subjectKind: 'agent',
     agent: { id: 'a-1', name: 'Bot Alpha', slug: 'bot-alpha' },
     workflow: null,

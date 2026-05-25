@@ -653,7 +653,7 @@ describe('components/admin/feature-flag-list', () => {
 
       // Make the API call slow but eventually succeed
       vi.mocked(apiClient.delete).mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve({ success: true } as never), 100))
+        () => new Promise((resolve) => setTimeout(() => resolve({ success: true }), 100))
       );
 
       const { container } = render(

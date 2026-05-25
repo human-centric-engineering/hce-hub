@@ -33,7 +33,7 @@ import { inboundLimiter, createRateLimitResponse } from '@/lib/security/rate-lim
 import { getClientIP } from '@/lib/security/ip';
 import { slugSchema } from '@/lib/validations/common';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
-import { WorkflowStatus, type WorkflowDefinition } from '@/types/orchestration';
+import { WorkflowStatus } from '@/types/orchestration';
 import { workflowDefinitionSchema } from '@/lib/validations/orchestration';
 import { drainEngine } from '@/lib/orchestration/scheduling/scheduler';
 import { resolveMaxCostPerExecution } from '@/lib/orchestration/llm/cost-caps';
@@ -399,8 +399,8 @@ export async function POST(
   void drainEngine(
     executionId,
     trigger.workflow,
-    defParsed.data as WorkflowDefinition,
-    inputData as Record<string, unknown>,
+    defParsed.data,
+    inputData,
     trigger.createdBy,
     trigger.workflow.publishedVersion.id
   );

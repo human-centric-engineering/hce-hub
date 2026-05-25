@@ -870,7 +870,7 @@ describe('scrubSensitiveData edge cases (tested via handleClientError)', () => {
   it('handles a number as the error value (primitive scrub path)', () => {
     // Arrange: number → normalizeError returns metadata: { originalValue: 42 }
     // scrubSensitiveData({ originalValue: 42 }) → 42 is not object → passes through unchanged
-    expect(() => handleClientError(42 as unknown)).not.toThrow();
+    expect(() => handleClientError(42)).not.toThrow();
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 });

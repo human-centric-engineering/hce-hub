@@ -136,7 +136,7 @@ function makeMockAgents(): Agent[] {
 describe('GET /api/v1/chat/agents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession());
     vi.mocked(prisma.aiAgent.findMany).mockResolvedValue(makeMockAgents() as never);
   });
 
@@ -280,7 +280,7 @@ describe('GET /api/v1/chat/agents', () => {
   describe('Authentication', () => {
     it('should return 401 when there is no active session', async () => {
       // Arrange
-      vi.mocked(auth.api.getSession).mockResolvedValue(null as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(null);
       const request = createMockRequest();
 
       // Act

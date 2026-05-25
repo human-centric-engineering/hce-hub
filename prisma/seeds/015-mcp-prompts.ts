@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import type { SeedUnit } from '@/prisma/runner';
 
 /**
@@ -59,7 +58,7 @@ const unit: SeedUnit = {
           name: p.name,
           description: p.description,
           template: p.template,
-          argumentsSpec: p.argumentsSpec as unknown as Prisma.InputJsonValue,
+          argumentsSpec: p.argumentsSpec,
           isEnabled: true,
           createdBy: admin.id,
         },

@@ -156,7 +156,7 @@ describe('POST /api/v1/admin/orchestration/agents/:id/capabilities', () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(makeAgent() as never);
       vi.mocked(prisma.aiCapability.findUnique).mockResolvedValue(makeCapability() as never);
-      vi.mocked(prisma.aiAgentCapability.create).mockResolvedValue(makeLink() as never);
+      vi.mocked(prisma.aiAgentCapability.create).mockResolvedValue(makeLink());
 
       const response = await POST(makeAttachRequest(VALID_ATTACH_BODY), makeAttachParams(AGENT_ID));
 
@@ -276,9 +276,7 @@ describe('PATCH /api/v1/admin/orchestration/agents/:id/capabilities/:capId', () 
   describe('Successful update', () => {
     it('updates link and clears capability cache', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiAgentCapability.update).mockResolvedValue(
-        makeLink({ isEnabled: false }) as never
-      );
+      vi.mocked(prisma.aiAgentCapability.update).mockResolvedValue(makeLink({ isEnabled: false }));
 
       const response = await PATCH(
         makeCapIdRequest('PATCH', { isEnabled: false }),
@@ -294,7 +292,7 @@ describe('PATCH /api/v1/admin/orchestration/agents/:id/capabilities/:capId', () 
 
     it('uses compound agentId_capabilityId where clause', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiAgentCapability.update).mockResolvedValue(makeLink() as never);
+      vi.mocked(prisma.aiAgentCapability.update).mockResolvedValue(makeLink());
 
       await PATCH(
         makeCapIdRequest('PATCH', { isEnabled: false }),
@@ -310,7 +308,7 @@ describe('PATCH /api/v1/admin/orchestration/agents/:id/capabilities/:capId', () 
 
     it('updates all optional fields in a single payload', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiAgentCapability.update).mockResolvedValue(makeLink() as never);
+      vi.mocked(prisma.aiAgentCapability.update).mockResolvedValue(makeLink());
 
       const fullPayload = {
         isEnabled: false,
@@ -382,7 +380,7 @@ describe('DELETE /api/v1/admin/orchestration/agents/:id/capabilities/:capId', ()
   describe('Successful detach', () => {
     it('deletes link and clears capability cache', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiAgentCapability.delete).mockResolvedValue(makeLink() as never);
+      vi.mocked(prisma.aiAgentCapability.delete).mockResolvedValue(makeLink());
 
       const response = await DELETE(
         makeCapIdRequest('DELETE'),
@@ -403,7 +401,7 @@ describe('DELETE /api/v1/admin/orchestration/agents/:id/capabilities/:capId', ()
 
     it('uses compound agentId_capabilityId where clause', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiAgentCapability.delete).mockResolvedValue(makeLink() as never);
+      vi.mocked(prisma.aiAgentCapability.delete).mockResolvedValue(makeLink());
 
       await DELETE(makeCapIdRequest('DELETE'), makeCapIdParams(AGENT_ID, CAPABILITY_ID));
 
@@ -469,7 +467,7 @@ describe('GET /api/v1/admin/orchestration/agents/:id/capabilities', () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(makeAgent() as never);
       const mockLinks = [{ ...makeLink(), capability: makeCapability() }];
-      vi.mocked(prisma.aiAgentCapability.findMany).mockResolvedValue(mockLinks as never);
+      vi.mocked(prisma.aiAgentCapability.findMany).mockResolvedValue(mockLinks);
 
       const response = await GET(makeAttachRequest({}), makeAttachParams(AGENT_ID));
       const data = await parseJson<{ success: boolean; data: unknown[] }>(response);
@@ -613,8 +611,8 @@ describe('${env:VAR} save-time warnings on capability binding routes', () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(makeAgent() as never);
     vi.mocked(prisma.aiCapability.findUnique).mockResolvedValue(makeCapability() as never);
-    vi.mocked(prisma.aiAgentCapability.create).mockResolvedValue(makeLink() as never);
-    vi.mocked(prisma.aiAgentCapability.update).mockResolvedValue(makeLink() as never);
+    vi.mocked(prisma.aiAgentCapability.create).mockResolvedValue(makeLink());
+    vi.mocked(prisma.aiAgentCapability.update).mockResolvedValue(makeLink());
     process.env = { ...originalEnv };
   });
 

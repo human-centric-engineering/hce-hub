@@ -143,7 +143,7 @@ const TWO_STEP_WORKFLOW = {
 describe('EditWorkflowPage (server component)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(apiClient.get).mockResolvedValue({ schedules: [] } as never);
+    vi.mocked(apiClient.get).mockResolvedValue({ schedules: [] });
   });
 
   afterEach(() => {

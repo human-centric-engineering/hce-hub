@@ -173,7 +173,7 @@ function buildVerdictContextPatch(report: SupervisorReport): Record<string, unkn
   return {
     supervisorVerdict: report.verdict,
     supervisorScore: report.score,
-    supervisorReport: report as unknown as Record<string, unknown>,
+    supervisorReport: report,
     supervisorReviewedAt: new Date(),
   };
 }

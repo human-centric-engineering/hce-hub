@@ -104,7 +104,7 @@ beforeEach(() => {
   latestRecorder = null;
   getUserMediaMock.mockResolvedValue({
     getTracks: () => [{ stop: stopTrackMock }],
-  } as unknown as MediaStream);
+  });
   // @ts-expect-error attaching to global for the hook to pick up
   globalThis.MediaRecorder = MockRecorder;
   // @ts-expect-error happy-dom doesn't expose mediaDevices by default

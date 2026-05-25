@@ -221,7 +221,7 @@ describe('PATCH /webhooks/:id', () => {
   const updatePayload = { isActive: false };
 
   beforeEach(() => {
-    vi.mocked(validateRequestBody).mockResolvedValue(updatePayload as never);
+    vi.mocked(validateRequestBody).mockResolvedValue(updatePayload);
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -327,7 +327,7 @@ describe('PATCH /webhooks/:id', () => {
     it('rejects webhook→email flip when emailAddress is absent on both patch and row', async () => {
       const existing = makeWebhook({ channel: 'webhook', emailAddress: null });
       vi.mocked(prisma.aiWebhookSubscription.findFirst).mockResolvedValue(existing as never);
-      vi.mocked(validateRequestBody).mockResolvedValue({ channel: 'email' } as never);
+      vi.mocked(validateRequestBody).mockResolvedValue({ channel: 'email' });
 
       const response = await PATCH(makePatchRequest({ channel: 'email' }), makeParams(WEBHOOK_ID));
       const body = await parseJson<{
@@ -353,7 +353,7 @@ describe('PATCH /webhooks/:id', () => {
       vi.mocked(validateRequestBody).mockResolvedValue({
         channel: 'webhook',
         secret: 'new-secret-123456',
-      } as never);
+      });
 
       const response = await PATCH(
         makePatchRequest({ channel: 'webhook', secret: 'new-secret-123456' }),
@@ -382,7 +382,7 @@ describe('PATCH /webhooks/:id', () => {
       vi.mocked(validateRequestBody).mockResolvedValue({
         channel: 'webhook',
         url: 'https://example.com/hook',
-      } as never);
+      });
 
       const response = await PATCH(
         makePatchRequest({ channel: 'webhook', url: 'https://example.com/hook' }),
@@ -412,7 +412,7 @@ describe('PATCH /webhooks/:id', () => {
       vi.mocked(validateRequestBody).mockResolvedValue({
         channel: 'email',
         emailAddress: 'alerts@example.com',
-      } as never);
+      });
 
       const response = await PATCH(
         makePatchRequest({ channel: 'email', emailAddress: 'alerts@example.com' }),
@@ -443,7 +443,7 @@ describe('PATCH /webhooks/:id', () => {
         channel: 'webhook',
         url: 'https://example.com/hook',
         secret: 'new-secret-123456',
-      } as never);
+      });
 
       const response = await PATCH(
         makePatchRequest({
@@ -465,7 +465,7 @@ describe('PATCH /webhooks/:id', () => {
       const updated = makeWebhook({ channel: 'webhook', isActive: false });
       vi.mocked(prisma.aiWebhookSubscription.findFirst).mockResolvedValue(existing as never);
       vi.mocked(prisma.aiWebhookSubscription.update).mockResolvedValue(updated as never);
-      vi.mocked(validateRequestBody).mockResolvedValue({ isActive: false } as never);
+      vi.mocked(validateRequestBody).mockResolvedValue({ isActive: false });
 
       const response = await PATCH(makePatchRequest({ isActive: false }), makeParams(WEBHOOK_ID));
 
@@ -481,7 +481,7 @@ describe('PATCH /webhooks/:id', () => {
       vi.mocked(prisma.aiWebhookSubscription.update).mockResolvedValue(updated as never);
       vi.mocked(validateRequestBody).mockResolvedValue({
         url: 'https://new.example.com/hook',
-      } as never);
+      });
 
       const response = await PATCH(
         makePatchRequest({ url: 'https://new.example.com/hook' }),
@@ -496,7 +496,7 @@ describe('PATCH /webhooks/:id', () => {
       vi.mocked(prisma.aiWebhookSubscription.findFirst).mockResolvedValue(existing as never);
       // The 'url' key IS present on the patch, but its value is null —
       // coherence check uses `'url' in body`, so this branch fires.
-      vi.mocked(validateRequestBody).mockResolvedValue({ url: null } as never);
+      vi.mocked(validateRequestBody).mockResolvedValue({ url: null });
 
       const response = await PATCH(makePatchRequest({ url: null }), makeParams(WEBHOOK_ID));
       const body = await parseJson<{ error: { message: string } }>(response);
@@ -513,7 +513,7 @@ describe('PATCH /webhooks/:id', () => {
         emailAddress: 'alerts@example.com',
       });
       vi.mocked(prisma.aiWebhookSubscription.findFirst).mockResolvedValue(existing as never);
-      vi.mocked(validateRequestBody).mockResolvedValue({ emailAddress: null } as never);
+      vi.mocked(validateRequestBody).mockResolvedValue({ emailAddress: null });
 
       const response = await PATCH(
         makePatchRequest({ emailAddress: null }),
@@ -535,7 +535,7 @@ describe('PATCH /webhooks/:id', () => {
       const updated = makeWebhook({ channel: 'webhook', url: 'https://example.com/webhook' });
       vi.mocked(prisma.aiWebhookSubscription.findFirst).mockResolvedValue(existing as never);
       vi.mocked(prisma.aiWebhookSubscription.update).mockResolvedValue(updated as never);
-      vi.mocked(validateRequestBody).mockResolvedValue({ isActive: false } as never);
+      vi.mocked(validateRequestBody).mockResolvedValue({ isActive: false });
 
       await PATCH(makePatchRequest({ isActive: false }), makeParams(WEBHOOK_ID));
 
@@ -558,7 +558,7 @@ describe('PATCH /webhooks/:id', () => {
       });
       vi.mocked(prisma.aiWebhookSubscription.findFirst).mockResolvedValue(existing as never);
       vi.mocked(prisma.aiWebhookSubscription.update).mockResolvedValue(updated as never);
-      vi.mocked(validateRequestBody).mockResolvedValue({ isActive: false } as never);
+      vi.mocked(validateRequestBody).mockResolvedValue({ isActive: false });
 
       await PATCH(makePatchRequest({ isActive: false }), makeParams(WEBHOOK_ID));
 

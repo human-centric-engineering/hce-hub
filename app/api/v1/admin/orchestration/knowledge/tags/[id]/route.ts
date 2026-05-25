@@ -125,10 +125,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
       entityType: 'knowledge_tag',
       entityId: id,
       entityName: tag.name,
-      changes: computeChanges(
-        current as unknown as Record<string, unknown>,
-        tag as unknown as Record<string, unknown>
-      ),
+      changes: computeChanges(current, tag),
       clientIp: clientIP,
     });
 

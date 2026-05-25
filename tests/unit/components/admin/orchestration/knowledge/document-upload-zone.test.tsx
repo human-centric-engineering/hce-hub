@@ -1018,7 +1018,7 @@ describe('DocumentUploadZone', () => {
     // Covers branch 0 (line 138): `Array.isArray(tags) ? tags : []` false path.
     // When apiClient.get returns a non-array, the component uses [] instead.
     const { apiClient } = await import('@/lib/api/client');
-    vi.mocked(apiClient.get).mockResolvedValue({ unexpected: 'object' } as never);
+    vi.mocked(apiClient.get).mockResolvedValue({ unexpected: 'object' });
 
     await act(async () => {
       render(<DocumentUploadZone onUploadComplete={onUploadComplete} />);

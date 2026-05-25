@@ -79,8 +79,8 @@ describe('components/auth/logout-button', () => {
     // Setup mock analytics
     const { useAnalytics } = await import('@/lib/analytics');
     mockAnalytics = {
-      track: vi.fn().mockResolvedValue(undefined) as unknown as ReturnType<typeof vi.fn>,
-      reset: vi.fn().mockResolvedValue(undefined) as unknown as ReturnType<typeof vi.fn>,
+      track: vi.fn().mockResolvedValue(undefined),
+      reset: vi.fn().mockResolvedValue(undefined),
     };
     vi.mocked(useAnalytics).mockReturnValue({
       ...mockAnalytics,
@@ -320,7 +320,7 @@ describe('components/auth/logout-button', () => {
           error: mockError,
           response: {} as never,
           request: {} as never,
-        } as never);
+        });
         return undefined as never;
       });
 
@@ -402,7 +402,7 @@ describe('components/auth/logout-button', () => {
           }),
           response: {} as never,
           request: {} as never,
-        } as never);
+        });
         return undefined as never;
       });
 
@@ -433,7 +433,7 @@ describe('components/auth/logout-button', () => {
           }),
           response: {} as never,
           request: {} as never,
-        } as never);
+        });
         return undefined as never;
       });
 

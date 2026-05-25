@@ -1860,7 +1860,7 @@ export class OrchestrationEngine {
       const trace: ExecutionTraceEntry[] = Array.isArray(rawTrace)
         ? rawTrace.flatMap((entry) => {
             const parsed = executionTraceEntrySchema.safeParse(entry);
-            return parsed.success ? [parsed.data as ExecutionTraceEntry] : [];
+            return parsed.success ? [parsed.data] : [];
           })
         : [];
       if (Array.isArray(rawTrace) && trace.length < rawTrace.length) {
@@ -1965,7 +1965,7 @@ export class OrchestrationEngine {
         // legacy executions. Only the rerun endpoint passes it today.
         ...(options.parentExecutionId ? { parentExecutionId: options.parentExecutionId } : {}),
         status: WorkflowStatus.RUNNING,
-        inputData: inputData as object,
+        inputData: inputData as unknown as Prisma.InputJsonValue,
         executionTrace: [],
         totalTokensUsed: 0,
         totalCostUsd: 0,
@@ -2169,7 +2169,7 @@ export class OrchestrationEngine {
       if (refreshed.count === 0) return;
       await prisma.aiWorkflowRunningStep.updateMany({
         where: { executionId, stepId },
-        data: { turns: turns as unknown as object },
+        data: { turns: turns as unknown as Prisma.InputJsonValue },
       });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -2198,7 +2198,7 @@ export class OrchestrationEngine {
       const result = await prisma.aiWorkflowExecution.updateMany({
         where: { id: executionId, leaseToken: token },
         data: {
-          executionTrace: trace as unknown as object,
+          executionTrace: trace as unknown as Prisma.InputJsonValue,
           totalTokensUsed: ctx.totalTokensUsed,
           totalCostUsd: ctx.totalCostUsd,
           leaseExpiresAt: leaseExpiry(),
@@ -2247,7 +2247,7 @@ export class OrchestrationEngine {
         data: {
           status: WorkflowStatus.PAUSED_FOR_APPROVAL,
           currentStep: stepId,
-          executionTrace: trace as unknown as object,
+          executionTrace: trace as unknown as Prisma.InputJsonValue,
           totalTokensUsed: ctx.totalTokensUsed,
           totalCostUsd: ctx.totalCostUsd,
           leaseToken: null,
@@ -2350,7 +2350,7 @@ export class OrchestrationEngine {
         where: { id: executionId, leaseToken: token },
         data: {
           status,
-          executionTrace: trace as unknown as object,
+          executionTrace: trace as unknown as Prisma.InputJsonValue,
           totalTokensUsed: ctx.totalTokensUsed,
           totalCostUsd: ctx.totalCostUsd,
           completedAt: new Date(),

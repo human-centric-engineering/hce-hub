@@ -57,9 +57,9 @@ export function toTemplateItem(workflow: {
     slug: workflow.slug,
     name: workflow.name,
     description: workflow.description,
-    workflowDefinition: defResult.success ? (defResult.data as WorkflowDefinition) : emptyDef,
+    workflowDefinition: defResult.success ? defResult.data : emptyDef,
     patternsUsed: workflow.patternsUsed,
     isTemplate: workflow.isTemplate,
-    metadata: metaResult.success ? (metaResult.data as WorkflowTemplateMetadata) : null,
+    metadata: metaResult.success ? metaResult.data : null,
   };
 }

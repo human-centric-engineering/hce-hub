@@ -190,7 +190,7 @@ describe('POST /api/auth/accept-invite', () => {
           invitedAt: '2024-01-01T00:00:00.000Z',
         },
       };
-      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation as any);
+      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation);
 
       // Mock better-auth signup and sign-in responses
       const createdUserId = 'user-id-123';
@@ -320,7 +320,7 @@ describe('POST /api/auth/accept-invite', () => {
           invitedAt: '2024-01-01T00:00:00.000Z',
         },
       };
-      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation as any);
+      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation);
 
       // Mock better-auth signup response (creates USER by default)
       const createdUserId = 'admin-id-123';
@@ -414,7 +414,7 @@ describe('POST /api/auth/accept-invite', () => {
           invitedAt: '2024-01-01T00:00:00.000Z',
         },
       };
-      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation as any);
+      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation);
 
       const createdUserId = 'user-id-cookies';
       const sessionCookies = [
@@ -492,7 +492,7 @@ describe('POST /api/auth/accept-invite', () => {
           invitedAt: '2024-01-01T00:00:00.000Z',
         },
       };
-      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation as any);
+      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation);
 
       const createdUserId = 'user-id-no-cookies';
       vi.mocked(auth.api.signUpEmail).mockResolvedValue({
@@ -651,7 +651,7 @@ describe('POST /api/auth/accept-invite', () => {
         updatedAt: new Date('2024-01-01T00:00:00.000Z'),
         metadata: null, // Missing metadata
       };
-      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation as any);
+      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation);
 
       // Act: Call the accept-invite endpoint
       const request = createMockRequest({
@@ -796,7 +796,7 @@ describe('POST /api/auth/accept-invite', () => {
           invitedAt: '2024-01-01T00:00:00.000Z',
         },
       };
-      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation as any);
+      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation);
 
       // Mock better-auth signup failure - auth.api throws on error
       vi.mocked(auth.api.signUpEmail).mockRejectedValue(new Error('Email already exists'));
@@ -899,7 +899,7 @@ describe('POST /api/auth/accept-invite', () => {
           invitedAt: '2024-01-01T00:00:00.000Z',
         },
       };
-      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation as any);
+      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation);
 
       // Mock better-auth signup response
       const createdUserId = 'user-role-error';
@@ -967,7 +967,7 @@ describe('POST /api/auth/accept-invite', () => {
           invitedAt: '2024-01-01T00:00:00.000Z',
         },
       };
-      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation as any);
+      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation);
 
       const createdUserId = 'user-signin-error';
       // Signup succeeds
@@ -1043,7 +1043,7 @@ describe('POST /api/auth/accept-invite', () => {
           invitedAt: '2024-01-01T00:00:00.000Z',
         },
       };
-      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation as any);
+      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation);
 
       // Mock better-auth signup failure (email exists) - auth.api throws on error
       vi.mocked(auth.api.signUpEmail).mockRejectedValue(
@@ -1102,7 +1102,7 @@ describe('POST /api/auth/accept-invite', () => {
           invitedAt: '2024-01-01T00:00:00.000Z',
         },
       };
-      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation as any);
+      vi.mocked(prisma.verification.findFirst).mockResolvedValue(mockInvitation);
 
       const createdUserId = 'user-deletion-test';
       vi.mocked(auth.api.signUpEmail).mockResolvedValue({

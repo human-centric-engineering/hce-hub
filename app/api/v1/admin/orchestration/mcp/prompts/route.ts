@@ -10,7 +10,6 @@ import { prisma } from '@/lib/db/client';
 import { successResponse, paginatedResponse, errorResponse } from '@/lib/api/responses';
 import { validateRequestBody, validateQueryParams } from '@/lib/api/validation';
 import { getRouteLogger } from '@/lib/api/context';
-import { Prisma } from '@prisma/client';
 import {
   broadcastMcpPromptsChanged,
   clearMcpPromptCache,
@@ -66,7 +65,7 @@ export const POST = withAdminAuth(async (request, session) => {
       name: body.name,
       description: body.description,
       template: body.template,
-      argumentsSpec: body.argumentsSpec as unknown as Prisma.InputJsonValue,
+      argumentsSpec: body.argumentsSpec,
       isEnabled: body.isEnabled,
       createdBy: session.user.id,
     },

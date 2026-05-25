@@ -192,7 +192,7 @@ describe('POST /mcp/resources', () => {
 
   it('creates resource and returns 201', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpExposedResource.create).mockResolvedValue(makeResource() as never);
+    vi.mocked(prisma.mcpExposedResource.create).mockResolvedValue(makeResource());
 
     const response = await POST(makePostRequest(VALID_RESOURCE_BODY));
 
@@ -203,7 +203,7 @@ describe('POST /mcp/resources', () => {
 
   it('clears cache and broadcasts change after creation', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.mcpExposedResource.create).mockResolvedValue(makeResource() as never);
+    vi.mocked(prisma.mcpExposedResource.create).mockResolvedValue(makeResource());
 
     await POST(makePostRequest(VALID_RESOURCE_BODY));
 

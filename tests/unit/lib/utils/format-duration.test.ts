@@ -26,7 +26,7 @@ describe('formatDuration', () => {
 
   it('returns em-dash when start is empty string (falsy)', () => {
     // empty string is falsy, hits the !start guard
-    expect(formatDuration('' as unknown as null, null)).toBe('—');
+    expect(formatDuration('', null)).toBe('—');
   });
 
   it('returns em-dash when start is an invalid date string', () => {

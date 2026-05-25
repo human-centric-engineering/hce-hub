@@ -54,7 +54,7 @@ function makeRequest(): NextRequest {
 describe('GET /api/v1/admin/orchestration/knowledge/embedding-status', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiKnowledgeChunk.count).mockResolvedValue(100);
     vi.mocked(prisma.$queryRaw).mockResolvedValue([{ count: BigInt(80) }] as never);
     vi.mocked(prisma.aiProviderConfig.findFirst).mockResolvedValue({ id: 'prov-1' } as never);
@@ -117,7 +117,7 @@ describe('GET /api/v1/admin/orchestration/knowledge/embedding-status', () => {
   });
 
   it('rejects unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     const res = await GET(makeRequest());
     expect(res.status).toBe(401);

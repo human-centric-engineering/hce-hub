@@ -158,7 +158,7 @@ describe('GET /api/v1/admin/orchestration/agents/:id/budget', () => {
   describe('Not found', () => {
     it('returns 404 when agent does not exist', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(null as never);
+      vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(null);
 
       const response = await GET(makeRequest(), makeParams(AGENT_ID));
 

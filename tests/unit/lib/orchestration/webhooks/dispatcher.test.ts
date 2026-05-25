@@ -113,9 +113,9 @@ describe('dispatchWebhookEvent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockResolvedValue({ ok: true, status: 200 });
-    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery() as never);
+    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery());
   });
 
   it('does nothing when no subscriptions match', async () => {
@@ -283,8 +283,8 @@ describe('retryDelivery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockResolvedValue({ ok: true, status: 200 });
-    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery() as never);
+    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery());
   });
 
   it('returns false when delivery not found', async () => {
@@ -376,8 +376,8 @@ describe('processPendingRetries', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockResolvedValue({ ok: true, status: 200 });
-    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery() as never);
+    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery());
   });
 
   it('returns 0 when no pending retries', async () => {
@@ -420,16 +420,14 @@ describe('processPendingRetries', () => {
 describe('delivery failure behaviour', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery() as never);
+    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery());
   });
 
   it('marks delivery as exhausted when attempts reach MAX_ATTEMPTS', async () => {
     // Arrange: delivery already at attempt 2 (next attempt = 3 = MAX)
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([makeSub()] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 2 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 2 }));
     mockFetch.mockResolvedValue({ ok: false, status: 500 });
 
     await dispatchWebhookEvent('budget_exceeded', { agentId: 'agent-1' });
@@ -446,9 +444,7 @@ describe('delivery failure behaviour', () => {
   it('marks delivery as failed (not exhausted) on first failure', async () => {
     // Arrange: fresh delivery (0 attempts)
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([makeSub()] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
     mockFetch.mockResolvedValue({ ok: false, status: 500 });
 
     await dispatchWebhookEvent('budget_exceeded', { agentId: 'agent-1' });
@@ -489,9 +485,7 @@ describe('delivery failure behaviour', () => {
 
   it('records lastResponseCode on non-ok response', async () => {
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([makeSub()] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
     mockFetch.mockResolvedValue({ ok: false, status: 422 });
 
     await dispatchWebhookEvent('budget_exceeded', {});
@@ -505,9 +499,7 @@ describe('delivery failure behaviour', () => {
 
   it('records AbortError (timeout) as string error message', async () => {
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([makeSub()] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
     // Simulate abort from timeout
     const abortErr = new DOMException('The operation was aborted.', 'AbortError');
     mockFetch.mockRejectedValue(abortErr);
@@ -527,8 +519,8 @@ describe('per-subscription retry policy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery() as never);
+    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery());
   });
 
   afterEach(() => {
@@ -541,9 +533,7 @@ describe('per-subscription retry policy', () => {
       makeSub({ maxAttempts: 2, retryBackoffMs: [5_000] }),
     ] as never);
     // Delivery already has 1 attempt — next attempt becomes #2.
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 1 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 1 }));
     mockFetch.mockResolvedValue({ ok: false, status: 500 });
 
     await dispatchWebhookEvent('budget_exceeded', { agentId: 'a' });
@@ -560,9 +550,7 @@ describe('per-subscription retry policy', () => {
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
       makeSub({ maxAttempts: 3, retryBackoffMs: [5_000, 30_000] }),
     ] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
     const beforeMs = Date.now();
     mockFetch.mockResolvedValue({ ok: false, status: 500 });
 
@@ -587,9 +575,7 @@ describe('per-subscription retry policy', () => {
     ] as never);
     // Delivery has 2 attempts; next failure is attempt #3 → would normally
     // need retryBackoffMs[2], but we only have index 0.
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 2 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 2 }));
     mockFetch.mockResolvedValue({ ok: false, status: 500 });
     const beforeMs = Date.now();
 
@@ -612,11 +598,9 @@ describe('scheduleRetry (in-process timer-based retry)', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     mockFetch.mockResolvedValue({ ok: true, status: 200 });
-    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
   });
 
   afterEach(() => {
@@ -626,16 +610,14 @@ describe('scheduleRetry (in-process timer-based retry)', () => {
   it('retries delivery after delay when first attempt fails and subscription is still active', async () => {
     // Arrange: first attempt fails (attempts=0 → scheduleRetry fires after delay)
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([makeSub()] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
     // First fetch fails, retry fetch succeeds
     mockFetch
       .mockResolvedValueOnce({ ok: false, status: 500 })
       .mockResolvedValueOnce({ ok: true, status: 200 });
 
     // findUnique for subscription lookup inside scheduleRetry
-    vi.mocked(prisma.aiWebhookSubscription.findUnique).mockResolvedValue(makeSub() as never);
+    vi.mocked(prisma.aiWebhookSubscription.findUnique).mockResolvedValue(makeSub());
 
     // Trigger initial dispatch (which internally calls scheduleRetry via setTimeout)
     await dispatchWebhookEvent('budget_exceeded', { agentId: 'agent-1' });
@@ -654,14 +636,12 @@ describe('scheduleRetry (in-process timer-based retry)', () => {
   it('marks delivery as exhausted when subscription is inactive during scheduled retry', async () => {
     // Arrange: first attempt fails, subscription deactivated before retry fires
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([makeSub()] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
     mockFetch.mockResolvedValue({ ok: false, status: 503 });
 
     // Subscription is inactive when the timer fires
     vi.mocked(prisma.aiWebhookSubscription.findUnique).mockResolvedValue(
-      makeSub({ isActive: false }) as never
+      makeSub({ isActive: false })
     );
 
     await dispatchWebhookEvent('budget_exceeded', { agentId: 'agent-1' });
@@ -680,9 +660,7 @@ describe('scheduleRetry (in-process timer-based retry)', () => {
   it('marks delivery as exhausted when subscription is null during scheduled retry', async () => {
     // Arrange: subscription was deleted before retry fires
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([makeSub()] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
     mockFetch.mockResolvedValue({ ok: false, status: 503 });
 
     // Subscription no longer exists
@@ -702,9 +680,7 @@ describe('scheduleRetry (in-process timer-based retry)', () => {
   it('logs error and does not throw when scheduled retry throws unexpectedly', async () => {
     // Arrange: first attempt fails, then subscription lookup throws
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([makeSub()] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
     mockFetch.mockResolvedValue({ ok: false, status: 503 });
 
     // Subscription lookup inside scheduleRetry throws
@@ -728,9 +704,9 @@ describe('scheduleRetry (in-process timer-based retry)', () => {
 describe('email-channel delivery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery() as never);
+    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery());
     mockResendSend.mockResolvedValue({ data: { id: 'resend_msg_id' }, error: null });
   });
 
@@ -812,9 +788,7 @@ describe('email-channel delivery', () => {
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([
       makeEmailSub({ emailAddress: null }),
     ] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
 
     await dispatchWebhookEvent('workflow_failed', {});
 
@@ -841,9 +815,7 @@ describe('email-channel delivery', () => {
     const { getResendClient } = await import('@/lib/email/client');
     vi.mocked(getResendClient).mockReturnValueOnce(null);
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([makeEmailSub()] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
 
     await dispatchWebhookEvent('workflow_failed', {});
 
@@ -861,9 +833,7 @@ describe('email-channel delivery', () => {
     const { render } = await import('@react-email/render');
     vi.mocked(render).mockRejectedValueOnce(new Error('template blew up'));
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([makeEmailSub()] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
 
     await dispatchWebhookEvent('workflow_failed', {});
 
@@ -877,9 +847,7 @@ describe('email-channel delivery', () => {
   it('marks email delivery failed with fallback message when Resend error has no message', async () => {
     mockResendSend.mockResolvedValue({ data: null, error: {} });
     vi.mocked(prisma.aiWebhookSubscription.findMany).mockResolvedValue([makeEmailSub()] as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
 
     await dispatchWebhookEvent('workflow_failed', {});
 
@@ -935,11 +903,9 @@ describe('email-channel delivery', () => {
 describe('webhook-channel delivery edge cases', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 0 }) as never
-    );
+    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery({ attempts: 0 }));
   });
 
   it('marks delivery exhausted when webhook subscription has a secret but no URL (terminal)', async () => {
@@ -977,9 +943,9 @@ describe('dispatchWebhookEvent: entity-scoped matching', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockResolvedValue({ ok: true, status: 200 });
-    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery() as never);
-    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery() as never);
+    vi.mocked(prisma.aiWebhookDelivery.create).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.update).mockResolvedValue(makeDelivery());
+    vi.mocked(prisma.aiWebhookDelivery.findUnique).mockResolvedValue(makeDelivery());
   });
 
   it('delivers to a sub with empty filters (backward compat)', async () => {

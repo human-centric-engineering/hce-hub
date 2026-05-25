@@ -280,7 +280,7 @@ describe('fetchWithTimeout', () => {
     // Arrange
     const mockResponse = new Response('', { status: 200 });
     const fetchMock = vi.fn().mockResolvedValue(mockResponse);
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
     const init = { method: 'POST', headers: { 'Content-Type': 'application/json' } };
 
     // Act
@@ -318,7 +318,7 @@ describe('fetchWithTimeout', () => {
     const controller = new AbortController();
     controller.abort();
     const fetchMock = vi.fn();
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
 
     // Act & Assert — should throw synchronously/immediately without calling fetch
     await expect(

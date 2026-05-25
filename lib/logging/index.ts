@@ -429,9 +429,9 @@ export class Logger {
       };
       logModule.addLogEntry({
         timestamp: entry.timestamp,
-        level: entry.level as 'debug' | 'info' | 'warn' | 'error',
+        level: entry.level,
         message: entry.message,
-        context: entry.context as Record<string, unknown> | undefined,
+        context: entry.context,
         meta: entry.meta,
         error: entry.error,
       });

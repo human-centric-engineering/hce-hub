@@ -127,7 +127,7 @@ describe('getBaseURL (via buildURL)', () => {
       status: 200,
       json: async () => ({ success: true, data: { id: '1' } }),
     });
-    global.fetch = mockFetch as unknown as typeof fetch;
+    global.fetch = mockFetch;
 
     // Act
     await apiClient.get('/api/v1/users');
@@ -151,7 +151,7 @@ describe('getBaseURL (via buildURL)', () => {
       status: 200,
       json: async () => ({ success: true, data: { id: '1' } }),
     });
-    global.fetch = mockFetch as unknown as typeof fetch;
+    global.fetch = mockFetch;
 
     // Act
     await apiClient.get('/api/v1/users');
@@ -171,7 +171,7 @@ describe('getBaseURL (via buildURL)', () => {
       status: 200,
       json: async () => ({ success: true, data: { id: '1' } }),
     });
-    global.fetch = mockFetch as unknown as typeof fetch;
+    global.fetch = mockFetch;
 
     // Act
     await apiClient.get('/api/v1/users');

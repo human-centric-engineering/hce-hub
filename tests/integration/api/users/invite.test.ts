@@ -187,7 +187,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should create invitation successfully without creating user (admin user)', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock no existing user
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
@@ -256,7 +256,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should create invitation with default role when not specified', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock no existing user
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
@@ -292,7 +292,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should continue even if email sending fails', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock no existing user
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
@@ -340,7 +340,7 @@ describe('POST /api/v1/users/invite', () => {
   describe('Authorization scenarios', () => {
     it('should return 401 when not authenticated', async () => {
       // Arrange: Mock no session
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
       // Act: Call the invite endpoint
       const request = createMockRequest({
@@ -363,7 +363,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should return 403 when user is not admin', async () => {
       // Arrange: Mock non-admin session
       const userSession = mockAuthenticatedUser('USER');
-      vi.mocked(auth.api.getSession).mockResolvedValue(userSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(userSession);
 
       // Act: Call the invite endpoint
       const request = createMockRequest({
@@ -392,7 +392,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should return 409 when user already exists', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock existing user
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
@@ -433,7 +433,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should return 200 with pending status and NO link when invitation already exists (without resend)', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock no existing user
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
@@ -495,7 +495,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should resend invitation with new token when ?resend=true', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock no existing user
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
@@ -567,7 +567,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should return 400 when name is missing', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Act: Call the invite endpoint without name
       const request = createMockRequest({
@@ -586,7 +586,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should return 400 when email is invalid', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Act: Call the invite endpoint with invalid email
       const request = createMockRequest({
@@ -606,7 +606,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should return 400 when role is invalid', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Act: Call the invite endpoint with invalid role
       const request = createMockRequest({
@@ -633,7 +633,7 @@ describe('POST /api/v1/users/invite', () => {
       const adminSession = mockAdminUser();
       // Override name to null
       adminSession.user.name = null as unknown as string;
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock no existing user
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
@@ -671,7 +671,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should log email success when email sends successfully', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock no existing user
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
@@ -725,7 +725,7 @@ describe('POST /api/v1/users/invite', () => {
       try {
         // Arrange: Mock admin session
         const adminSession = mockAdminUser();
-        vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+        vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
         // Mock no existing user
         vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
@@ -775,7 +775,7 @@ describe('POST /api/v1/users/invite', () => {
       try {
         // Arrange: Mock admin session
         const adminSession = mockAdminUser();
-        vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+        vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
         // Mock no existing user
         vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
@@ -815,7 +815,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should not return link for existing invitation (security - prevents link reuse)', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock no existing user
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
@@ -852,7 +852,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should generate different tokens on each resend (security)', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock no existing user
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
@@ -912,7 +912,7 @@ describe('POST /api/v1/users/invite', () => {
       try {
         // Arrange: Mock admin session
         const adminSession = mockAdminUser();
-        vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+        vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
         // Mock no existing user
         vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
@@ -969,7 +969,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should return 429 when rate limit is exceeded', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock rate limit exceeded
       vi.mocked(inviteLimiter.check).mockReturnValue({
@@ -1009,7 +1009,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should log warning with IP and admin ID when rate limited', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock getClientIP to return specific IP
       vi.mocked(getClientIP).mockReturnValue('192.168.1.100');
@@ -1055,7 +1055,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should not proceed to validation or database queries when rate limited', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock rate limit exceeded
       vi.mocked(inviteLimiter.check).mockReturnValue({
@@ -1096,7 +1096,7 @@ describe('POST /api/v1/users/invite', () => {
     it('should use client IP from getClientIP for rate limiting', async () => {
       // Arrange: Mock admin session
       const adminSession = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(adminSession);
 
       // Mock getClientIP to return specific IP
       const testIP = '203.0.113.42';

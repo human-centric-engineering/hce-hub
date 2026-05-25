@@ -203,7 +203,7 @@ describe('POST /hooks', () => {
 
   it('creates a webhook hook', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.create).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.create).mockResolvedValue(makeHook());
 
     const response = await CreateHook(
       makeCreateRequest({
@@ -298,7 +298,7 @@ describe('POST /hooks', () => {
 
   it('drops admin-supplied `secret` from POST body (not persisted via create route)', async () => {
     // Arrange: body includes a `secret` field that must not reach the DB
-    vi.mocked(prisma.aiEventHook.create).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.create).mockResolvedValue(makeHook());
 
     // Act
     await CreateHook(
@@ -327,7 +327,7 @@ describe('GET /hooks/:id', () => {
 
   it('returns hook details', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
 
     const response = await GetHook(makeDetailRequest(), makeParams(HOOK_ID));
     expect(response.status).toBe(200);
@@ -338,9 +338,7 @@ describe('GET /hooks/:id', () => {
 
   it('strips `secret` from the response and exposes `hasSecret`', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(
-      makeHook({ secret: 'deadbeef' }) as never
-    );
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook({ secret: 'deadbeef' }));
 
     const response = await GetHook(makeDetailRequest(), makeParams(HOOK_ID));
     const body = await parseJson<{ data: Record<string, unknown> }>(response);
@@ -353,8 +351,8 @@ describe('GET /hooks/:id', () => {
 describe('PATCH /hooks/:id', () => {
   it('updates hook fields', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook({ name: 'Updated' }) as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook({ name: 'Updated' }));
 
     const response = await UpdateHook(
       makePatchRequest({ name: 'Updated', isEnabled: false }),
@@ -385,7 +383,7 @@ describe('PATCH /hooks/:id', () => {
   it('returns 400 for invalid eventType in PATCH body', async () => {
     // Arrange: hook exists but body contains invalid eventType
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
 
     // Act
     const response = await UpdateHook(
@@ -401,7 +399,7 @@ describe('PATCH /hooks/:id', () => {
   it('returns 400 for invalid webhook URL in PATCH body', async () => {
     // Arrange: hook exists but action contains a bad URL
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
 
     // Act
     const response = await UpdateHook(
@@ -428,9 +426,9 @@ describe('PATCH /hooks/:id', () => {
   it('updates only eventType and passes it through to prisma.update', async () => {
     // Arrange: only eventType provided — all other optional fields absent
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
     vi.mocked(prisma.aiEventHook.update).mockResolvedValue(
-      makeHook({ eventType: 'message.created' }) as never
+      makeHook({ eventType: 'message.created' })
     );
 
     // Act
@@ -454,10 +452,8 @@ describe('PATCH /hooks/:id', () => {
     // Arrange: only action provided
     const newAction = { type: 'webhook', url: 'https://hooks.example.com/x' };
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(
-      makeHook({ action: newAction }) as never
-    );
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook({ action: newAction }));
 
     // Act
     const response = await UpdateHook(makePatchRequest({ action: newAction }), makeParams(HOOK_ID));
@@ -476,10 +472,8 @@ describe('PATCH /hooks/:id', () => {
     // Arrange: filter is a non-null object (agentSlug selector)
     const filterValue = { agentSlug: 'support-bot' };
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(
-      makeHook({ filter: filterValue }) as never
-    );
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook({ filter: filterValue }));
 
     // Act
     const response = await UpdateHook(
@@ -501,9 +495,9 @@ describe('PATCH /hooks/:id', () => {
     // Arrange: filter is explicitly null — clears any previously set filter
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(
-      makeHook({ filter: { agentSlug: 'old-bot' } }) as never
+      makeHook({ filter: { agentSlug: 'old-bot' } })
     );
-    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook({ filter: null }) as never);
+    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook({ filter: null }));
 
     // Act
     const response = await UpdateHook(makePatchRequest({ filter: null }), makeParams(HOOK_ID));
@@ -521,10 +515,8 @@ describe('PATCH /hooks/:id', () => {
   it('calls invalidateHookCache after a successful update', async () => {
     // Arrange: happy-path PATCH
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(
-      makeHook({ name: 'Cache Test' }) as never
-    );
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook({ name: 'Cache Test' }));
 
     // Act
     const response = await UpdateHook(
@@ -540,8 +532,8 @@ describe('PATCH /hooks/:id', () => {
   it('drops admin-supplied `secret` from PATCH body', async () => {
     // Arrange: body includes a `secret` field that must not reach the DB
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook());
 
     // Act
     await UpdateHook(
@@ -558,8 +550,8 @@ describe('PATCH /hooks/:id', () => {
 describe('DELETE /hooks/:id', () => {
   it('deletes a hook', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.delete).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.delete).mockResolvedValue(makeHook());
 
     const response = await DeleteHook(makeDeleteRequest(), makeParams(HOOK_ID));
     expect(response.status).toBe(200);
@@ -591,8 +583,8 @@ describe('DELETE /hooks/:id', () => {
   it('calls invalidateHookCache after a successful delete', async () => {
     // Arrange: happy-path DELETE
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.delete).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.delete).mockResolvedValue(makeHook());
 
     // Act
     const response = await DeleteHook(makeDeleteRequest(), makeParams(HOOK_ID));

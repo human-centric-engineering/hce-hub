@@ -98,7 +98,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
   if (body.rateLimit !== undefined) data.rateLimit = body.rateLimit;
   if (body.isActive !== undefined) data.isActive = body.isActive;
   if (body.metadata !== undefined) {
-    data.metadata = body.metadata as Prisma.InputJsonValue;
+    data.metadata = body.metadata;
   }
 
   try {
@@ -118,10 +118,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
       entityType: 'capability',
       entityId: id,
       entityName: capability.name,
-      changes: computeChanges(
-        current as unknown as Record<string, unknown>,
-        capability as unknown as Record<string, unknown>
-      ),
+      changes: computeChanges(current, capability),
       clientIp: clientIP,
     });
 

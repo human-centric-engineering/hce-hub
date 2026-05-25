@@ -100,12 +100,8 @@ describe('matchesEntityScope', () => {
   });
 
   it('tolerates a non-string payload entity value (fails closed when filtered)', () => {
-    expect(
-      matchesEntityScope(
-        'budget_exceeded',
-        { agentId: 123 as unknown as string },
-        { agentIds: ['a1'] }
-      )
-    ).toBe(false);
+    expect(matchesEntityScope('budget_exceeded', { agentId: 123 }, { agentIds: ['a1'] })).toBe(
+      false
+    );
   });
 });

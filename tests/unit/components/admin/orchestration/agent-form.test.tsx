@@ -484,7 +484,7 @@ describe('AgentForm — function coverage gaps', () => {
       vi.mocked(apiClient.patch).mockResolvedValue({ id: 'agent-1' });
 
       const user = userEvent.setup();
-      const agent = makeAgent({ inputGuardMode: 'log_only' as AiAgent['inputGuardMode'] });
+      const agent = makeAgent({ inputGuardMode: 'log_only' });
       render(
         <AgentForm mode="edit" agent={agent} providers={MOCK_PROVIDERS} models={MOCK_MODELS} />
       );
@@ -518,7 +518,7 @@ describe('AgentForm — function coverage gaps', () => {
       vi.mocked(apiClient.patch).mockResolvedValue({ id: 'agent-1' });
 
       const user = userEvent.setup();
-      const agent = makeAgent({ outputGuardMode: 'block' as AiAgent['outputGuardMode'] });
+      const agent = makeAgent({ outputGuardMode: 'block' });
       render(
         <AgentForm mode="edit" agent={agent} providers={MOCK_PROVIDERS} models={MOCK_MODELS} />
       );

@@ -349,7 +349,7 @@ describe('GET /api/v1/admin/stats', () => {
         .mockReturnValueOnce(countPromise3 as never);
 
       vi.mocked(prisma.user.groupBy).mockReturnValue(groupByPromise as never);
-      vi.mocked(getDatabaseHealth).mockReturnValue(healthPromise as never);
+      vi.mocked(getDatabaseHealth).mockReturnValue(healthPromise);
 
       // Act
       const responsePromise = GET(dummyRequest);
@@ -726,7 +726,7 @@ describe('GET /api/v1/admin/stats', () => {
 
     it('should handle unexpected error types', async () => {
       // Arrange
-      vi.mocked(prisma.user.count).mockRejectedValue('String error' as never);
+      vi.mocked(prisma.user.count).mockRejectedValue('String error');
 
       // Act
       const response = await GET(dummyRequest);

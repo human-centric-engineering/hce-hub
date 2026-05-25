@@ -136,7 +136,7 @@ function seedExecutionMocks(): void {
     const { where, data } = args as { where: { id: string }; data: Record<string, unknown> };
     return { id: where.id, ...data };
   }) as never);
-  vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+  vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
   vi.mocked(claimLease).mockResolvedValue('lease-token-test');
   vi.mocked(startHeartbeat).mockReturnValue(vi.fn());
 }
@@ -146,7 +146,7 @@ async function collectEvents(
   workflow: { id: string; definition: WorkflowDefinition }
 ): Promise<ExecutionEvent[]> {
   const events: ExecutionEvent[] = [];
-  for await (const event of engine.execute(workflow as never, {}, { userId: USER_ID })) {
+  for await (const event of engine.execute(workflow, {}, { userId: USER_ID })) {
     events.push(event);
   }
   return events;

@@ -115,7 +115,7 @@ describe('WorkflowSchedulesTab', () => {
     const pending = new Promise((res) => {
       resolve = res;
     });
-    vi.mocked(apiClient.get).mockReturnValue(pending as never);
+    vi.mocked(apiClient.get).mockReturnValue(pending);
 
     // Act
     render(<WorkflowSchedulesTab workflowId="wf-1" />);

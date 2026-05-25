@@ -182,9 +182,9 @@ describe('PATCH /api/v1/admin/orchestration/agent-profiles/[id]', () => {
 
   it('updates name + persona and audit-logs the change', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiAgentProfile.findUnique).mockResolvedValue(makeProfile() as never);
+    vi.mocked(prisma.aiAgentProfile.findUnique).mockResolvedValue(makeProfile());
     vi.mocked(prisma.aiAgentProfile.update).mockResolvedValue(
-      makeProfile({ name: 'Renamed', persona: 'New persona.' }) as never
+      makeProfile({ name: 'Renamed', persona: 'New persona.' })
     );
 
     const response = await PATCH(
@@ -212,8 +212,8 @@ describe('PATCH /api/v1/admin/orchestration/agent-profiles/[id]', () => {
     // unknown fields are silently dropped. The contract is: slug rename is
     // not supported via PATCH (create a new profile and re-point agents).
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiAgentProfile.findUnique).mockResolvedValue(makeProfile() as never);
-    vi.mocked(prisma.aiAgentProfile.update).mockResolvedValue(makeProfile() as never);
+    vi.mocked(prisma.aiAgentProfile.findUnique).mockResolvedValue(makeProfile());
+    vi.mocked(prisma.aiAgentProfile.update).mockResolvedValue(makeProfile());
 
     const response = await PATCH(
       makePatchRequest(PROFILE_ID, { slug: 'renamed', name: 'Renamed' }),
@@ -233,10 +233,8 @@ describe('PATCH /api/v1/admin/orchestration/agent-profiles/[id]', () => {
 
   it('accepts null to clear a text field', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiAgentProfile.findUnique).mockResolvedValue(makeProfile() as never);
-    vi.mocked(prisma.aiAgentProfile.update).mockResolvedValue(
-      makeProfile({ guardrails: null }) as never
-    );
+    vi.mocked(prisma.aiAgentProfile.findUnique).mockResolvedValue(makeProfile());
+    vi.mocked(prisma.aiAgentProfile.update).mockResolvedValue(makeProfile({ guardrails: null }));
 
     const response = await PATCH(
       makePatchRequest(PROFILE_ID, { guardrails: null }),
@@ -268,7 +266,7 @@ describe('DELETE /api/v1/admin/orchestration/agent-profiles/[id]', () => {
       ...makeProfile(),
       _count: { agents: 4 },
     } as never);
-    vi.mocked(prisma.aiAgentProfile.delete).mockResolvedValue(makeProfile() as never);
+    vi.mocked(prisma.aiAgentProfile.delete).mockResolvedValue(makeProfile());
 
     const response = await DELETE(makeDeleteRequest(PROFILE_ID), paramsOf(PROFILE_ID));
 

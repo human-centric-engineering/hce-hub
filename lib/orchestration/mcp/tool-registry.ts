@@ -233,7 +233,7 @@ function validateAndCapBlocks(
       logger.warn('MCP tool: malformed content block', { toolSlug, index: i });
       return { error: 'Tool returned a malformed content block.' };
     }
-    const type = (r as { type: unknown }).type;
+    const type = r.type;
 
     if (type === 'text') {
       const text = (r as { text?: unknown }).text;

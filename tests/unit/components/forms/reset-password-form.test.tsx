@@ -568,7 +568,7 @@ describe('components/forms/reset-password-form', () => {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       authClient.resetPassword.mockImplementation(async (_data, callbacks) => {
         if (callbacks?.onSuccess) {
-          callbacks.onSuccess(undefined as never);
+          callbacks.onSuccess(undefined);
         }
         return Promise.resolve();
       });
@@ -924,7 +924,7 @@ describe('components/forms/reset-password-form', () => {
             new Promise((resolve) => {
               setTimeout(() => {
                 if (callbacks?.onSuccess) {
-                  callbacks.onSuccess(undefined as never);
+                  callbacks.onSuccess(undefined);
                 }
                 resolve(undefined);
               }, 100);
@@ -965,7 +965,7 @@ describe('components/forms/reset-password-form', () => {
             new Promise((resolve) => {
               setTimeout(() => {
                 if (callbacks?.onSuccess) {
-                  callbacks.onSuccess(undefined as never);
+                  callbacks.onSuccess(undefined);
                 }
                 resolve(undefined);
               }, 100);
@@ -1056,7 +1056,7 @@ describe('components/forms/reset-password-form', () => {
           if (callbacks?.onError) {
             callbacks.onError({
               error: { message: errorMessage, status: 400 },
-            } as never);
+            });
           }
           return Promise.resolve();
         });
@@ -1089,7 +1089,7 @@ describe('components/forms/reset-password-form', () => {
           if (callbacks?.onError) {
             callbacks.onError({
               error: { message: 'Token is invalid or expired', status: 400 },
-            } as never);
+            });
           }
           return Promise.resolve();
         });
@@ -1124,7 +1124,7 @@ describe('components/forms/reset-password-form', () => {
           if (callbacks?.onError) {
             callbacks.onError({
               error: { message: 'Token is expired', status: 400 },
-            } as never);
+            });
           }
           return Promise.resolve();
         });
@@ -1181,7 +1181,7 @@ describe('components/forms/reset-password-form', () => {
         authClient.resetPassword.mockImplementation(async (_data, callbacks) => {
           await Promise.resolve();
           if (callbacks?.onSuccess) {
-            callbacks.onSuccess(undefined as never);
+            callbacks.onSuccess(undefined);
           }
           return Promise.resolve();
         });

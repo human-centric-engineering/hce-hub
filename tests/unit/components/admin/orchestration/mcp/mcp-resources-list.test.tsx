@@ -381,7 +381,7 @@ describe('create submit flow', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, data: newResource }),
-    } as Response);
+    });
 
     render(<McpResourcesList initialResources={[]} />);
     await openDialogAndFill(user);
@@ -432,7 +432,7 @@ describe('create submit flow', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, data: newResource }),
-    } as Response);
+    });
 
     render(<McpResourcesList initialResources={[]} />);
     await openDialogAndFill(user);
@@ -454,7 +454,7 @@ describe('create submit flow', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, data: newResource }),
-    } as Response);
+    });
 
     render(<McpResourcesList initialResources={[]} />);
     await openDialogAndFill(user);
@@ -475,7 +475,7 @@ describe('create submit flow', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, data: newResource }),
-    } as Response);
+    });
 
     render(<McpResourcesList initialResources={[]} />);
     await openDialogAndFill(user);
@@ -507,7 +507,7 @@ describe('create submit flow', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ success: false }),
-    } as Response);
+    });
 
     render(<McpResourcesList initialResources={[]} />);
     await openDialogAndFill(user);
@@ -525,7 +525,7 @@ describe('create submit flow', () => {
   it('on res.ok=false: resource NOT added; creating resets to "Create Resource"', async () => {
     // Arrange
     const user = userEvent.setup();
-    mockFetch.mockResolvedValue({ ok: false } as Response);
+    mockFetch.mockResolvedValue({ ok: false });
 
     render(<McpResourcesList initialResources={[]} />);
     await openDialogAndFill(user);
@@ -588,7 +588,7 @@ describe('toggle handler', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, data: {} }),
-    } as Response);
+    });
     render(<McpResourcesList initialResources={[resource]} />);
 
     // Act
@@ -611,7 +611,7 @@ describe('toggle handler', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, data: {} }),
-    } as Response);
+    });
     render(<McpResourcesList initialResources={[resource]} />);
 
     // Act
@@ -632,7 +632,7 @@ describe('toggle handler', () => {
       status: 500,
       statusText: 'Internal Server Error',
       json: async () => ({ success: false, error: { code: 'ERROR', message: 'fail' } }),
-    } as Response);
+    });
     render(<McpResourcesList initialResources={[resource]} />);
 
     // Act
@@ -657,7 +657,7 @@ describe('remove handler', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, data: {} }),
-    } as Response);
+    });
     render(<McpResourcesList initialResources={[resource]} />);
 
     // Act — open confirmation dialog then confirm
@@ -680,7 +680,7 @@ describe('remove handler', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, data: {} }),
-    } as Response);
+    });
     render(<McpResourcesList initialResources={[resource]} />);
 
     // Act — open confirmation dialog then confirm
@@ -703,7 +703,7 @@ describe('remove handler', () => {
       status: 500,
       statusText: 'Internal Server Error',
       json: async () => ({ success: false, error: { code: 'ERROR', message: 'fail' } }),
-    } as Response);
+    });
     render(<McpResourcesList initialResources={[resource]} />);
 
     // Act — open confirmation dialog then confirm

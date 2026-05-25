@@ -160,7 +160,7 @@ export async function userCreateAfterHook(
   try {
     await prisma.user.update({
       where: { id: user.id },
-      data: { preferences: DEFAULT_USER_PREFERENCES as object },
+      data: { preferences: DEFAULT_USER_PREFERENCES },
     });
     logger.info('Default preferences set for new user', {
       userId: user.id,

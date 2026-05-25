@@ -107,7 +107,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 describe('POST /api/v1/admin/orchestration/executions/:id/cancel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
   });
 
   describe('Authentication & Authorization', () => {
@@ -226,7 +226,7 @@ describe('POST /api/v1/admin/orchestration/executions/:id/cancel', () => {
       vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(
         makeExecution({ status: 'running' }) as never
       );
-      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 } as never);
+      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 });
 
       const response = await POST(makePostRequest(), makeParams(EXECUTION_ID));
       expect(response.status).toBe(409);
@@ -340,7 +340,7 @@ describe('POST /api/v1/admin/orchestration/executions/:id/cancel', () => {
       vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(
         makeExecution({ status: 'running' }) as never
       );
-      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
 
       await POST(makePostRequest(), makeParams(EXECUTION_ID));
 
@@ -357,7 +357,7 @@ describe('POST /api/v1/admin/orchestration/executions/:id/cancel', () => {
       vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(
         makeExecution({ status: 'running' }) as never
       );
-      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 } as never);
+      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 });
 
       await POST(makePostRequest(), makeParams(EXECUTION_ID));
 

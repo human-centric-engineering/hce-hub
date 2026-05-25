@@ -493,7 +493,7 @@ function formatValidationIssues(issues: unknown[]): string {
         'path' in issue && Array.isArray((issue as { path: unknown[] }).path)
           ? (issue as { path: unknown[] }).path.join('.')
           : '';
-      const message = String((issue as { message: unknown }).message);
+      const message = String(issue.message);
       return path ? `${path}: ${message}` : message;
     }
     return String(issue);

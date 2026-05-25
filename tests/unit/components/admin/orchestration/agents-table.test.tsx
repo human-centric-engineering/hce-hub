@@ -125,7 +125,7 @@ describe('AgentsTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch = vi.fn<typeof fetch>();
-    global.fetch = mockFetch as typeof fetch;
+    global.fetch = mockFetch;
 
     // Default: list fetch returns THREE_AGENTS with inline _count and _budget
     mockFetch.mockImplementation(() => Promise.resolve(makeAgentsListResponse()));
@@ -279,9 +279,7 @@ describe('AgentsTable', () => {
 
       // Assert
       await waitFor(() => {
-        const fetchUrls = mockFetch.mock.calls.map((call) =>
-          toUrlString(call[0] as RequestInfo | URL)
-        );
+        const fetchUrls = mockFetch.mock.calls.map((call) => toUrlString(call[0]));
         expect(fetchUrls.some((u) => u.includes('q=al'))).toBe(true); // test-review:accept tobe_true — structural boolean/predicate assertion;
       });
     });
@@ -307,7 +305,7 @@ describe('AgentsTable', () => {
       // Assert: at least one list fetch was fired
       await waitFor(() => {
         const listFetches = mockFetch.mock.calls.filter(
-          (call) => !toUrlString(call[0] as RequestInfo | URL).includes('/export')
+          (call) => !toUrlString(call[0]).includes('/export')
         );
         expect(listFetches.length).toBeGreaterThan(0);
       });
@@ -433,8 +431,7 @@ describe('AgentsTable', () => {
       await waitFor(() => {
         const exportCalls = mockFetch.mock.calls.filter(
           (call) =>
-            toUrlString(call[0] as RequestInfo | URL).includes('/export') &&
-            (call[1] as RequestInit)?.method === 'POST'
+            toUrlString(call[0]).includes('/export') && (call[1] as RequestInit)?.method === 'POST'
         );
         expect(exportCalls.length).toBe(1);
         const body = JSON.parse((exportCalls[0][1] as RequestInit).body as string) as {
@@ -620,7 +617,7 @@ describe('AgentsTable', () => {
       render(<AgentsTable initialAgents={THREE_AGENTS} initialMeta={MOCK_META} />);
 
       // Assert: no per-row fetch calls for capabilities or conversations
-      const allUrls = mockFetch.mock.calls.map((call) => toUrlString(call[0] as RequestInfo | URL));
+      const allUrls = mockFetch.mock.calls.map((call) => toUrlString(call[0]));
       expect(allUrls.every((u) => !u.includes('/capabilities'))).toBe(true); // test-review:accept tobe_true — structural boolean/predicate assertion;
       expect(allUrls.every((u) => !u.includes('agentId='))).toBe(true); // test-review:accept tobe_true — structural boolean/predicate assertion;
     });
@@ -666,8 +663,8 @@ describe('AgentsTable', () => {
       // Assert: a list fetch with page=2 was fired
       await waitFor(() => {
         const listFetches = mockFetch.mock.calls
-          .filter((call) => !toUrlString(call[0] as RequestInfo | URL).includes('/export'))
-          .map((call) => toUrlString(call[0] as RequestInfo | URL));
+          .filter((call) => !toUrlString(call[0]).includes('/export'))
+          .map((call) => toUrlString(call[0]));
         expect(listFetches.some((u) => u.includes('page=2'))).toBe(true); // test-review:accept tobe_true — structural boolean/predicate assertion;
       });
     });
@@ -967,7 +964,7 @@ describe('AgentsTable', () => {
         back: vi.fn(),
         forward: vi.fn(),
         prefetch: vi.fn(),
-      } as ReturnType<typeof useRouter>);
+      });
 
       const user = userEvent.setup();
       render(<AgentsTable initialAgents={THREE_AGENTS} initialMeta={MOCK_META} />);
@@ -1109,7 +1106,7 @@ describe('AgentsTable', () => {
         back: vi.fn(),
         forward: vi.fn(),
         prefetch: vi.fn(),
-      } as ReturnType<typeof useRouter>);
+      });
 
       const user = userEvent.setup();
       render(<AgentsTable initialAgents={THREE_AGENTS} initialMeta={MOCK_META} />);

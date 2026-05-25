@@ -139,7 +139,7 @@ describe('CapabilitiesTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch = vi.fn<typeof fetch>();
-    global.fetch = mockFetch as typeof fetch;
+    global.fetch = mockFetch;
 
     mockFetch.mockImplementation(() => {
       return Promise.resolve(makeCapabilitiesListResponse());
@@ -293,9 +293,7 @@ describe('CapabilitiesTable', () => {
       });
 
       await waitFor(() => {
-        const fetchUrls = mockFetch.mock.calls.map((call) =>
-          toUrlString(call[0] as RequestInfo | URL)
-        );
+        const fetchUrls = mockFetch.mock.calls.map((call) => toUrlString(call[0]));
         expect(fetchUrls.some((u) => u.includes('q=al'))).toBe(true); // test-review:accept tobe_true — structural boolean/predicate assertion;
       });
     });
@@ -323,9 +321,7 @@ describe('CapabilitiesTable', () => {
       });
 
       await waitFor(() => {
-        const fetchUrls = mockFetch.mock.calls.map((call) =>
-          toUrlString(call[0] as RequestInfo | URL)
-        );
+        const fetchUrls = mockFetch.mock.calls.map((call) => toUrlString(call[0]));
         expect(fetchUrls.some((u) => u.includes('q=myquery'))).toBe(true); // test-review:accept tobe_true — structural boolean/predicate assertion;
       });
     });
@@ -358,9 +354,7 @@ describe('CapabilitiesTable', () => {
       await user.click(knowledgeOption);
 
       await waitFor(() => {
-        const fetchUrls = mockFetch.mock.calls.map((call) =>
-          toUrlString(call[0] as RequestInfo | URL)
-        );
+        const fetchUrls = mockFetch.mock.calls.map((call) => toUrlString(call[0]));
         expect(fetchUrls.some((u) => u.includes('category=knowledge'))).toBe(true); // test-review:accept tobe_true — structural boolean/predicate assertion;
       });
     });
@@ -705,9 +699,7 @@ describe('CapabilitiesTable', () => {
 
       // Always fail — the table shows error when page button triggers refetch
       mockFetch.mockImplementation(() =>
-        Promise.resolve(
-          createMockFetchResponse({ error: 'server error' }, 500) as unknown as Response
-        )
+        Promise.resolve(createMockFetchResponse({ error: 'server error' }, 500))
       );
 
       const meta2pages: typeof MOCK_META = { page: 1, limit: 25, total: 50, totalPages: 2 };
@@ -978,9 +970,7 @@ describe('CapabilitiesTable', () => {
 
       // Assert: a list fetch with page=2 was fired
       await waitFor(() => {
-        const fetchUrls = mockFetch.mock.calls.map((call) =>
-          toUrlString(call[0] as RequestInfo | URL)
-        );
+        const fetchUrls = mockFetch.mock.calls.map((call) => toUrlString(call[0]));
         expect(fetchUrls.some((u) => u.includes('page=2'))).toBe(true); // test-review:accept tobe_true — structural boolean/predicate assertion;
       });
     });

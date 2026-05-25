@@ -217,7 +217,7 @@ describe('POST /workflows/:id/save-as-template', () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiWorkflow.findUnique)
       .mockResolvedValueOnce(makeWorkflow() as never) // workflow lookup
-      .mockResolvedValueOnce(null as never); // slug uniqueness check
+      .mockResolvedValueOnce(null); // slug uniqueness check
     txMocks.workflowCreate.mockResolvedValueOnce({ id: 'wf-new' });
     txMocks.versionCreate.mockResolvedValueOnce({ id: 'wfv-new', version: 1 });
     txMocks.workflowFindUniqueOrThrow.mockResolvedValueOnce(
@@ -250,7 +250,7 @@ describe('POST /workflows/:id/save-as-template', () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiWorkflow.findUnique)
       .mockResolvedValueOnce(makeWorkflow() as never)
-      .mockResolvedValueOnce(null as never);
+      .mockResolvedValueOnce(null);
     txMocks.workflowCreate.mockResolvedValueOnce({ id: 'wf-new' });
     txMocks.versionCreate.mockResolvedValueOnce({ id: 'wfv-new', version: 1 });
     txMocks.workflowFindUniqueOrThrow.mockResolvedValueOnce(makeTemplate());

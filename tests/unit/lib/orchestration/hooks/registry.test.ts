@@ -89,9 +89,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   invalidateHookCache();
   mockFetch.mockResolvedValue({ ok: true, status: 200 });
-  vi.mocked(prisma.aiEventHookDelivery.create).mockResolvedValue(makeDelivery() as never);
-  vi.mocked(prisma.aiEventHookDelivery.update).mockResolvedValue(makeDelivery() as never);
-  vi.mocked(prisma.aiEventHookDelivery.findUnique).mockResolvedValue(makeDelivery() as never);
+  vi.mocked(prisma.aiEventHookDelivery.create).mockResolvedValue(makeDelivery());
+  vi.mocked(prisma.aiEventHookDelivery.update).mockResolvedValue(makeDelivery());
+  vi.mocked(prisma.aiEventHookDelivery.findUnique).mockResolvedValue(makeDelivery());
 });
 
 afterEach(() => {
@@ -199,7 +199,7 @@ describe('emitHookEvent', () => {
     vi.mocked(prisma.aiEventHook.findMany).mockResolvedValue([makeHook()] as never);
     // Simulate this being the final retry (attempts already 2 → becomes 3)
     vi.mocked(prisma.aiEventHookDelivery.findUnique).mockResolvedValue(
-      makeDelivery({ attempts: 2 }) as never
+      makeDelivery({ attempts: 2 })
     );
 
     emitHookEvent('conversation.started', { conversationId: 'conv-1' });
@@ -371,7 +371,7 @@ describe('scheduleRetry (via emitHookEvent failure + timer advancement)', () => 
     ] as never);
 
     vi.mocked(prisma.aiEventHookDelivery.create).mockResolvedValue(
-      makeDelivery({ id: deliveryId, hookId, attempts: 0 }) as never
+      makeDelivery({ id: deliveryId, hookId, attempts: 0 })
     );
 
     // First fetch fails — triggers scheduleRetry
@@ -381,7 +381,7 @@ describe('scheduleRetry (via emitHookEvent failure + timer advancement)', () => 
 
     // findUnique call 1 (in attemptDelivery failure path, no include) — returns attempts: 0
     vi.mocked(prisma.aiEventHookDelivery.findUnique).mockResolvedValueOnce(
-      makeDelivery({ id: deliveryId, attempts: 0 }) as never
+      makeDelivery({ id: deliveryId, attempts: 0 })
     );
 
     // findUnique call 2 (in scheduleRetry timer, with include: { hook: true }) — returns delivery with enabled hook
@@ -443,7 +443,7 @@ describe('scheduleRetry (via emitHookEvent failure + timer advancement)', () => 
     ] as never);
 
     vi.mocked(prisma.aiEventHookDelivery.create).mockResolvedValue(
-      makeDelivery({ id: deliveryId, hookId, attempts: 0 }) as never
+      makeDelivery({ id: deliveryId, hookId, attempts: 0 })
     );
 
     // Initial fetch fails — triggers scheduleRetry
@@ -451,7 +451,7 @@ describe('scheduleRetry (via emitHookEvent failure + timer advancement)', () => 
 
     // findUnique call 1 (in attemptDelivery failure path) — returns attempts: 0
     vi.mocked(prisma.aiEventHookDelivery.findUnique).mockResolvedValueOnce(
-      makeDelivery({ id: deliveryId, attempts: 0 }) as never
+      makeDelivery({ id: deliveryId, attempts: 0 })
     );
 
     // findUnique call 2 (in scheduleRetry timer) — hook is now disabled
@@ -497,7 +497,7 @@ describe('scheduleRetry (via emitHookEvent failure + timer advancement)', () => 
     ] as never);
 
     vi.mocked(prisma.aiEventHookDelivery.create).mockResolvedValue(
-      makeDelivery({ id: deliveryId, hookId, attempts: 0 }) as never
+      makeDelivery({ id: deliveryId, hookId, attempts: 0 })
     );
 
     // Initial fetch fails — triggers scheduleRetry
@@ -505,7 +505,7 @@ describe('scheduleRetry (via emitHookEvent failure + timer advancement)', () => 
 
     // findUnique call 1 (in attemptDelivery failure path) — returns attempts: 0
     vi.mocked(prisma.aiEventHookDelivery.findUnique).mockResolvedValueOnce(
-      makeDelivery({ id: deliveryId, attempts: 0 }) as never
+      makeDelivery({ id: deliveryId, attempts: 0 })
     );
 
     // findUnique call 2 (in scheduleRetry timer) — hook action is no longer a webhook
@@ -636,7 +636,7 @@ describe('loadHooks (via emitHookEvent — invalid action skip)', () => {
 
     // Delivery created only for the valid hook
     vi.mocked(prisma.aiEventHookDelivery.create).mockResolvedValue(
-      makeDelivery({ hookId: validHookId }) as never
+      makeDelivery({ hookId: validHookId })
     );
 
     // Act
@@ -873,7 +873,7 @@ describe('attemptDelivery (null-delivery guard after HTTP failure)', () => {
     ] as never);
 
     vi.mocked(prisma.aiEventHookDelivery.create).mockResolvedValue(
-      makeDelivery({ id: 'del-null-guard' }) as never
+      makeDelivery({ id: 'del-null-guard' })
     );
 
     mockFetch.mockRejectedValueOnce(new Error('network failure'));
@@ -987,7 +987,7 @@ describe('HMAC signing (via dispatchWebhook)', () => {
     ] as never);
 
     vi.mocked(prisma.aiEventHookDelivery.create).mockResolvedValue(
-      makeDelivery({ id: deliveryId, hookId, attempts: 0 }) as never
+      makeDelivery({ id: deliveryId, hookId, attempts: 0 })
     );
 
     // First attempt fails → schedules retry 10s out
@@ -996,7 +996,7 @@ describe('HMAC signing (via dispatchWebhook)', () => {
     mockFetch.mockResolvedValueOnce({ ok: true, status: 200 });
 
     vi.mocked(prisma.aiEventHookDelivery.findUnique).mockResolvedValueOnce(
-      makeDelivery({ id: deliveryId, attempts: 0 }) as never
+      makeDelivery({ id: deliveryId, attempts: 0 })
     );
     vi.mocked(prisma.aiEventHookDelivery.findUnique).mockResolvedValueOnce({
       ...makeDelivery({ id: deliveryId, attempts: 1 }),

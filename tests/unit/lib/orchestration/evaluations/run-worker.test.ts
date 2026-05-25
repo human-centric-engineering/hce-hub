@@ -318,7 +318,7 @@ describe('hash mismatch', () => {
 
 describe('metric config validation', () => {
   it('marks failed when metricConfigs is not an array', async () => {
-    mockedClaim.mockResolvedValueOnce(makeRun({ metricConfigs: 'not-an-array' as unknown }));
+    mockedClaim.mockResolvedValueOnce(makeRun({ metricConfigs: 'not-an-array' }));
     findManyCases.mockResolvedValueOnce([makeCase(1)]);
 
     const result = await processPendingEvaluationRuns();

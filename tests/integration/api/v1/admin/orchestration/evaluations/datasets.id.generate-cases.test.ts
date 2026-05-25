@@ -139,14 +139,14 @@ describe('POST /generate-cases (preview) — validation + ownership', () => {
   });
 
   it('returns 404 when the dataset is not owned by the caller', async () => {
-    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(null);
     const res = await PreviewPOST(makeRequest({ agentId: 'a', mode: 'kb' }), ctx());
     expect(res.status).toBe(404);
   });
 
   it('returns 404 when the subject agent does not exist', async () => {
     vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue({ id: DATASET_ID } as never);
-    vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(null);
     const res = await PreviewPOST(makeRequest({ agentId: 'missing', mode: 'kb' }), ctx());
     expect(res.status).toBe(404);
   });
@@ -205,7 +205,7 @@ describe('POST /generate-cases/commit — happy path + guardrails', () => {
   });
 
   it('returns 404 on cross-user dataset', async () => {
-    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(null);
     const res = await CommitPOST(
       makeRequest({ cases: [{ input: 'q', expectedOutput: 'a' }] }, '/commit'),
       ctx()

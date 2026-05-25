@@ -209,9 +209,7 @@ describe('DELETE /mcp/audit', () => {
 
   it('skips purge and returns deleted:0 when auditRetentionDays is 0', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(getMcpServerConfig).mockResolvedValue(
-      makeMcpConfig({ auditRetentionDays: 0 }) as never
-    );
+    vi.mocked(getMcpServerConfig).mockResolvedValue(makeMcpConfig({ auditRetentionDays: 0 }));
 
     const response = await DELETE(makeDeleteRequest());
 
@@ -224,9 +222,7 @@ describe('DELETE /mcp/audit', () => {
 
   it('purges logs older than retention cutoff', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(getMcpServerConfig).mockResolvedValue(
-      makeMcpConfig({ auditRetentionDays: 30 }) as never
-    );
+    vi.mocked(getMcpServerConfig).mockResolvedValue(makeMcpConfig({ auditRetentionDays: 30 }));
     vi.mocked(prisma.mcpAuditLog.deleteMany).mockResolvedValue({ count: 5 });
 
     const response = await DELETE(makeDeleteRequest());
@@ -244,9 +240,7 @@ describe('DELETE /mcp/audit', () => {
 
   it('returns cutoff ISO string in response', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(getMcpServerConfig).mockResolvedValue(
-      makeMcpConfig({ auditRetentionDays: 90 }) as never
-    );
+    vi.mocked(getMcpServerConfig).mockResolvedValue(makeMcpConfig({ auditRetentionDays: 90 }));
     vi.mocked(prisma.mcpAuditLog.deleteMany).mockResolvedValue({ count: 0 });
 
     const response = await DELETE(makeDeleteRequest());

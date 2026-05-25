@@ -70,7 +70,7 @@ describe('resolveUserDisplayName', () => {
   });
 
   it('returns undefined when the row is not found', async () => {
-    vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
     expect(await resolveUserDisplayName('u_missing')).toBeUndefined();
   });
 
@@ -110,7 +110,7 @@ describe('resolveWorkflowDisplay', () => {
   });
 
   it('returns an empty object when the row is not found', async () => {
-    vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue(null);
     expect(await resolveWorkflowDisplay('wf_missing')).toEqual({});
   });
 
@@ -150,7 +150,7 @@ describe('resolveAgentDisplay', () => {
   });
 
   it('returns an empty object when the row is not found', async () => {
-    vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(null);
     expect(await resolveAgentDisplay('agent_missing')).toEqual({});
   });
 

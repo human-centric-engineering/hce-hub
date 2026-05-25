@@ -215,7 +215,7 @@ describe('GET /agents/:id/versions/:versionId (detail)', () => {
 
   it('returns version with full snapshot', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(makeVersion() as never);
+    vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(makeVersion());
 
     const response = await GetVersion(
       makeDetailRequest(AGENT_ID, VERSION_ID),

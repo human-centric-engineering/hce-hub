@@ -128,7 +128,7 @@ describe('GET /api/v1/admin/orchestration/conversations', () => {
   function extractVisibility(where: unknown): { OR?: unknown[] } | null {
     if (where === null || typeof where !== 'object') return null;
     const w = where as { OR?: unknown[]; AND?: unknown[] };
-    if (Array.isArray(w.OR)) return w as { OR: unknown[] };
+    if (Array.isArray(w.OR)) return w;
     if (Array.isArray(w.AND)) {
       for (const clause of w.AND) {
         const v = extractVisibility(clause);

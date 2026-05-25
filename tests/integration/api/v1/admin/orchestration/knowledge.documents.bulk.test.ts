@@ -474,7 +474,7 @@ describe('POST /api/v1/admin/orchestration/knowledge/documents/bulk', () => {
     it('applies tag grants for a successfully uploaded file', async () => {
       // Arrange: valid tag ID on the form
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiKnowledgeDocumentTag.createMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiKnowledgeDocumentTag.createMany).mockResolvedValue({ count: 1 });
 
       const fd = makeFormDataWithFiles([
         new File(['# Hello'], 'notes.md', { type: 'text/markdown' }),
@@ -496,7 +496,7 @@ describe('POST /api/v1/admin/orchestration/knowledge/documents/bulk', () => {
     it('invalidates agent access cache when tags are applied to successful uploads', async () => {
       // Arrange
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiKnowledgeDocumentTag.createMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiKnowledgeDocumentTag.createMany).mockResolvedValue({ count: 1 });
 
       const fd = makeFormDataWithFiles([
         new File(['# Hello'], 'notes.md', { type: 'text/markdown' }),

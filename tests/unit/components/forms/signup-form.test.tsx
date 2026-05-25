@@ -418,7 +418,7 @@ describe('components/forms/signup-form', () => {
       });
       vi.mocked(authClient.getSession).mockResolvedValue({
         data: { user: { id: '1' } },
-      } as unknown as Awaited<ReturnType<typeof authClient.getSession>>);
+      });
 
       render(<SignupForm />);
 
@@ -451,9 +451,7 @@ describe('components/forms/signup-form', () => {
           {} as unknown as Parameters<NonNullable<typeof callbacks.onSuccess>>[0]
         );
       });
-      vi.mocked(authClient.getSession).mockResolvedValue({ data: null } as unknown as Awaited<
-        ReturnType<typeof authClient.getSession>
-      >);
+      vi.mocked(authClient.getSession).mockResolvedValue({ data: null });
 
       render(<SignupForm />);
 
@@ -613,7 +611,7 @@ describe('components/forms/signup-form', () => {
       });
       vi.mocked(authClient.getSession).mockResolvedValue({
         data: { user: { id: 'user-123' } },
-      } as unknown as Awaited<ReturnType<typeof authClient.getSession>>);
+      });
 
       render(<SignupForm />);
 
@@ -648,7 +646,7 @@ describe('components/forms/signup-form', () => {
       });
       vi.mocked(authClient.getSession).mockResolvedValue({
         data: { user: { id: 'user-123' } },
-      } as unknown as Awaited<ReturnType<typeof authClient.getSession>>);
+      });
 
       render(<SignupForm />);
 
@@ -683,7 +681,7 @@ describe('components/forms/signup-form', () => {
       });
       vi.mocked(authClient.getSession).mockResolvedValue({
         data: { user: { id: 'user-123' } },
-      } as unknown as Awaited<ReturnType<typeof authClient.getSession>>);
+      });
 
       render(<SignupForm />);
 
@@ -723,9 +721,7 @@ describe('components/forms/signup-form', () => {
           {} as unknown as Parameters<NonNullable<typeof callbacks.onSuccess>>[0]
         );
       });
-      vi.mocked(authClient.getSession).mockResolvedValue({ data: null } as unknown as Awaited<
-        ReturnType<typeof authClient.getSession>
-      >);
+      vi.mocked(authClient.getSession).mockResolvedValue({ data: null });
 
       render(<SignupForm />);
 

@@ -86,14 +86,14 @@ function happyExecution(): Record<string, unknown> {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+  vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
 });
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('GET /api/v1/admin/orchestration/executions/:id/report.md', () => {
   it('rejects unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
     const res = await GET(makeRequest(), makeContext());
     expect(res.status).toBe(401);
   });

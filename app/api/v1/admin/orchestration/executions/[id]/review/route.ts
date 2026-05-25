@@ -24,6 +24,7 @@
  */
 
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 
 import { withAdminAuth } from '@/lib/auth/guards';
 import { prisma } from '@/lib/db/client';
@@ -224,7 +225,7 @@ export const POST = withAdminAuth<{ id: string }>(async (request, session, { par
     data: {
       supervisorVerdict: finalReport.verdict,
       supervisorScore: finalReport.score,
-      supervisorReport: finalReport as unknown as object,
+      supervisorReport: finalReport as unknown as Prisma.InputJsonValue,
       supervisorReviewedAt: new Date(),
     },
   });

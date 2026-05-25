@@ -322,7 +322,7 @@ function setupDefaultBudget() {
     spent: 0,
     limit: null,
     remaining: null,
-  } as never);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +358,7 @@ describe('StreamingChatHandler — OTEL span tree (integration)', () => {
       { type: 'done', usage: { inputTokens: 10, outputTokens: 20 } },
     ]);
     vi.mocked(getProviderWithFallbacks).mockResolvedValue({
-      provider: mockProvider as never,
+      provider: mockProvider,
       usedSlug: 'openai',
     });
 
@@ -432,7 +432,7 @@ describe('StreamingChatHandler — OTEL span tree (integration)', () => {
     };
 
     vi.mocked(getProviderWithFallbacks).mockResolvedValue({
-      provider: mockProvider as never,
+      provider: mockProvider,
       usedSlug: 'openai',
     });
 
@@ -440,7 +440,7 @@ describe('StreamingChatHandler — OTEL span tree (integration)', () => {
     vi.mocked(capabilityDispatcher.dispatch).mockResolvedValue({
       success: true,
       data: { answer: '42' },
-    } as never);
+    });
 
     // Persist tool message between the two LLM turns
     vi.mocked(prisma.aiMessage.create)
@@ -518,10 +518,10 @@ describe('StreamingChatHandler — OTEL span tree (integration)', () => {
 
     // Primary via getProviderWithFallbacks, fallback via getProvider after failover
     vi.mocked(getProviderWithFallbacks).mockResolvedValue({
-      provider: primaryProvider as never,
+      provider: primaryProvider,
       usedSlug: 'openai',
     });
-    vi.mocked(getProvider).mockResolvedValue(fallbackProvider as never);
+    vi.mocked(getProvider).mockResolvedValue(fallbackProvider);
 
     // Configure agent with a fallback provider
     vi.mocked(prisma.aiAgent.findFirst).mockResolvedValue(
@@ -613,7 +613,7 @@ describe('StreamingChatHandler — OTEL span tree (integration)', () => {
       { type: 'done', usage: { inputTokens: 10, outputTokens: 10 } },
     ]);
     vi.mocked(getProviderWithFallbacks).mockResolvedValue({
-      provider: mockProvider as never,
+      provider: mockProvider,
       usedSlug: 'openai',
     });
 
@@ -622,7 +622,7 @@ describe('StreamingChatHandler — OTEL span tree (integration)', () => {
       flagged: true,
       topicMatches: ['off-topic'],
       builtInMatches: [],
-    } as never);
+    });
 
     // Act
     const handler = new StreamingChatHandler();

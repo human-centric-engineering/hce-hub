@@ -54,7 +54,6 @@ import {
   HttpError,
   MultipartError,
   type HttpAuthConfig,
-  type HttpMethod,
 } from '@/lib/orchestration/http';
 
 const HTTP_TO_EXECUTOR_CODE: Record<string, string> = {
@@ -141,7 +140,7 @@ export async function executeExternalCall(
     }
     throw err;
   }
-  const method = (config.method ?? 'POST') as HttpMethod;
+  const method = config.method ?? 'POST';
 
   // Pre-check execution-level abort so we surface as request_aborted
   // (rather than the generic request_failed the HTTP layer would emit).

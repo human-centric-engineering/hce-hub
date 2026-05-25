@@ -92,7 +92,7 @@ function makeLeaseEvents(count: number): Record<string, unknown>[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+  vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
   vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecution() as never);
   vi.mocked(prisma.aiWorkflowExecutionLeaseEvent.findMany).mockResolvedValue(
     makeLeaseEvents(3) as never
@@ -105,7 +105,7 @@ describe('GET /api/v1/admin/orchestration/executions/:id/lease', () => {
   // ── 1. Auth: 401 unauthenticated ──────────────────────────────────────────
 
   it('returns 401 when the request has no session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
     const res = await GET(makeRequest(), makeContext());
     expect(res.status).toBe(401);
     const body = await parseJSON<{ success: boolean; error: { code: string } }>(res);
@@ -116,7 +116,7 @@ describe('GET /api/v1/admin/orchestration/executions/:id/lease', () => {
   // ── 2. Auth: 403 non-admin ────────────────────────────────────────────────
 
   it('returns 403 when the session belongs to a non-admin user', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER') as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER'));
     const res = await GET(makeRequest(), makeContext());
     expect(res.status).toBe(403);
     const body = await parseJSON<{ success: boolean; error: { code: string } }>(res);

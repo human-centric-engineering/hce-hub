@@ -204,9 +204,7 @@ describe('applyRateLimit', () => {
       const userId = uniqueUserId();
       const token = `mw:orchestration:session-user:user:${userId}`;
       RATE_LIMIT_TIERS.orchestration.reset(token);
-      vi.mocked(auth.api.getSession).mockResolvedValue(
-        createMockSession({ user: { id: userId } }) as never
-      );
+      vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession({ user: { id: userId } }));
       const request = makeRequest('/api/v1/admin/orchestration/agents');
 
       // Act
@@ -225,9 +223,7 @@ describe('applyRateLimit', () => {
       const userId = uniqueUserId();
       const token = `mw:orchestration:session-user:user:${userId}`;
       RATE_LIMIT_TIERS.orchestration.reset(token);
-      vi.mocked(auth.api.getSession).mockResolvedValue(
-        createMockSession({ user: { id: userId } }) as never
-      );
+      vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession({ user: { id: userId } }));
       const path = '/api/v1/admin/orchestration/agents';
 
       // Fill the 120-request cap
@@ -267,9 +263,7 @@ describe('applyRateLimit', () => {
       const userId = uniqueUserId();
       const token = `mw:admin:session-user:user:${userId}`;
       RATE_LIMIT_TIERS.admin.reset(token);
-      vi.mocked(auth.api.getSession).mockResolvedValue(
-        createMockSession({ user: { id: userId } }) as never
-      );
+      vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession({ user: { id: userId } }));
       const path = '/api/v1/admin/users';
 
       // Fill the 30-request cap exactly
@@ -302,7 +296,7 @@ describe('applyRateLimit', () => {
 
       // Exhaust user A's bucket
       vi.mocked(auth.api.getSession).mockResolvedValue(
-        createMockSession({ user: { id: userIdA } }) as never
+        createMockSession({ user: { id: userIdA } })
       );
       await exhaust(path, 30);
       const responseA = await applyRateLimit(makeRequest(path));
@@ -310,7 +304,7 @@ describe('applyRateLimit', () => {
 
       // Act: switch to user B — should not be affected by A's bucket
       vi.mocked(auth.api.getSession).mockResolvedValue(
-        createMockSession({ user: { id: userIdB } }) as never
+        createMockSession({ user: { id: userIdB } })
       );
       const responseB = await applyRateLimit(makeRequest(path));
 
@@ -358,9 +352,7 @@ describe('applyRateLimit', () => {
       const userId = `user_mw_sess_${Date.now()}`;
       const token = `mw:orchestration:session-user:user:${userId}`;
       RATE_LIMIT_TIERS.orchestration.reset(token);
-      vi.mocked(auth.api.getSession).mockResolvedValue(
-        createMockSession({ user: { id: userId } }) as never
-      );
+      vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession({ user: { id: userId } }));
       const request = makeRequest('/api/v1/admin/orchestration/agents');
 
       // Act
@@ -703,9 +695,7 @@ describe('applyRateLimit', () => {
       // (otherwise it falls back to IP keying which is fine but irrelevant).
       const userId = uniqueUserId();
       RATE_LIMIT_TIERS.admin.reset(`mw:admin:session-user:user:${userId}`);
-      vi.mocked(auth.api.getSession).mockResolvedValue(
-        createMockSession({ user: { id: userId } }) as never
-      );
+      vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession({ user: { id: userId } }));
 
       // Act
       const result = await applyRateLimit(makeRequest('/api/v1/admin/users'));

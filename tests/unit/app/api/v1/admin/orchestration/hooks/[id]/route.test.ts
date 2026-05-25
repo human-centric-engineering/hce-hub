@@ -181,7 +181,7 @@ describe('GET /hooks/:id', () => {
 
   it('returns 200 with serialized hook data on success', async () => {
     // Arrange
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
 
     // Act
     const response = await GET(makeGetRequest(), makeParams(HOOK_ID));
@@ -198,7 +198,7 @@ describe('GET /hooks/:id', () => {
 
   it('strips `secret` and exposes `hasSecret: false` when no secret is set', async () => {
     // Arrange: hook has no secret
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook({ secret: null }) as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook({ secret: null }));
 
     // Act
     const response = await GET(makeGetRequest(), makeParams(HOOK_ID));
@@ -212,7 +212,7 @@ describe('GET /hooks/:id', () => {
   it('strips `secret` and exposes `hasSecret: true` when a secret is set', async () => {
     // Arrange: hook has a secret
     vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(
-      makeHook({ secret: 'deadbeef'.repeat(8) }) as never
+      makeHook({ secret: 'deadbeef'.repeat(8) })
     );
 
     // Act
@@ -226,7 +226,7 @@ describe('GET /hooks/:id', () => {
 
   it('resolveHookId accepts a bare CUID and queries with it', async () => {
     // Arrange
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
 
     // Act
     await GET(makeGetRequest(HOOK_ID), makeParams(HOOK_ID));
@@ -242,7 +242,7 @@ describe('PATCH /hooks/:id', () => {
   const updatePayload = { name: 'Updated Hook', isEnabled: false };
 
   beforeEach(() => {
-    vi.mocked(validateRequestBody).mockResolvedValue(updatePayload as never);
+    vi.mocked(validateRequestBody).mockResolvedValue(updatePayload);
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -284,8 +284,8 @@ describe('PATCH /hooks/:id', () => {
     // Arrange
     const existing = makeHook();
     const updated = makeHook({ name: 'Updated Hook', isEnabled: false });
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(existing as never);
-    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(updated as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(existing);
+    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(updated);
 
     // Act
     const response = await PATCH(makePatchRequest(updatePayload), makeParams(HOOK_ID));
@@ -300,9 +300,9 @@ describe('PATCH /hooks/:id', () => {
 
   it('passes validated name and isEnabled to prisma.update', async () => {
     // Arrange
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
     vi.mocked(prisma.aiEventHook.update).mockResolvedValue(
-      makeHook({ name: 'Updated Hook', isEnabled: false }) as never
+      makeHook({ name: 'Updated Hook', isEnabled: false })
     );
 
     // Act
@@ -319,8 +319,8 @@ describe('PATCH /hooks/:id', () => {
 
   it('calls invalidateHookCache after a successful update', async () => {
     // Arrange
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook());
 
     // Act
     await PATCH(makePatchRequest(updatePayload), makeParams(HOOK_ID));
@@ -331,10 +331,8 @@ describe('PATCH /hooks/:id', () => {
 
   it('calls logAdminAction with hook.update and entityType "hook"', async () => {
     // Arrange
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(
-      makeHook({ name: 'Updated Hook' }) as never
-    );
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook({ name: 'Updated Hook' }));
 
     // Act
     await PATCH(makePatchRequest(updatePayload), makeParams(HOOK_ID));
@@ -352,11 +350,9 @@ describe('PATCH /hooks/:id', () => {
 
   it('does not include secret in the update data', async () => {
     // Arrange: validated body contains only allowed fields (no secret)
-    vi.mocked(validateRequestBody).mockResolvedValue({ name: 'No Secret' } as never);
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(
-      makeHook({ name: 'No Secret' }) as never
-    );
+    vi.mocked(validateRequestBody).mockResolvedValue({ name: 'No Secret' });
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.update).mockResolvedValue(makeHook({ name: 'No Secret' }));
 
     // Act
     await PATCH(makePatchRequest({ name: 'No Secret', secret: 'sneaky' }), makeParams(HOOK_ID));
@@ -402,8 +398,8 @@ describe('DELETE /hooks/:id', () => {
 
   it('deletes the hook and returns { deleted: true }', async () => {
     // Arrange
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.delete).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.delete).mockResolvedValue(makeHook());
 
     // Act
     const response = await DELETE(makeDeleteRequest(), makeParams(HOOK_ID));
@@ -418,8 +414,8 @@ describe('DELETE /hooks/:id', () => {
 
   it('calls prisma.delete with the correct where clause', async () => {
     // Arrange
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.delete).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.delete).mockResolvedValue(makeHook());
 
     // Act
     await DELETE(makeDeleteRequest(), makeParams(HOOK_ID));
@@ -432,8 +428,8 @@ describe('DELETE /hooks/:id', () => {
 
   it('calls invalidateHookCache after a successful delete', async () => {
     // Arrange
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.delete).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.delete).mockResolvedValue(makeHook());
 
     // Act
     await DELETE(makeDeleteRequest(), makeParams(HOOK_ID));
@@ -444,8 +440,8 @@ describe('DELETE /hooks/:id', () => {
 
   it('calls logAdminAction with hook.delete and entityType "hook"', async () => {
     // Arrange
-    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook() as never);
-    vi.mocked(prisma.aiEventHook.delete).mockResolvedValue(makeHook() as never);
+    vi.mocked(prisma.aiEventHook.findUnique).mockResolvedValue(makeHook());
+    vi.mocked(prisma.aiEventHook.delete).mockResolvedValue(makeHook());
 
     // Act
     await DELETE(makeDeleteRequest(), makeParams(HOOK_ID));

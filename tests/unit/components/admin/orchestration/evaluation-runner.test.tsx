@@ -144,7 +144,7 @@ describe('EvaluationRunner', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch = vi.fn<typeof fetch>();
-    global.fetch = mockFetch as typeof fetch;
+    global.fetch = mockFetch;
 
     // Default: all fetches succeed with empty JSON
     mockFetch.mockResolvedValue(

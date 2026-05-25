@@ -56,10 +56,10 @@ describe('enforceRetentionPolicies', () => {
     vi.clearAllMocks();
     // Default: no agents, no settings, no rows to delete
     vi.mocked(prisma.aiAgent.findMany).mockResolvedValue([]);
-    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 0 } as never);
-    vi.mocked(prisma.aiEventHookDelivery.deleteMany).mockResolvedValue({ count: 0 } as never);
-    vi.mocked(prisma.aiCostLog.deleteMany).mockResolvedValue({ count: 0 } as never);
-    vi.mocked(prisma.aiAdminAuditLog.deleteMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 0 });
+    vi.mocked(prisma.aiEventHookDelivery.deleteMany).mockResolvedValue({ count: 0 });
+    vi.mocked(prisma.aiCostLog.deleteMany).mockResolvedValue({ count: 0 });
+    vi.mocked(prisma.aiAdminAuditLog.deleteMany).mockResolvedValue({ count: 0 });
     vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue(null);
   });
 
@@ -83,8 +83,8 @@ describe('enforceRetentionPolicies', () => {
       { id: 'a2', slug: 'support-bot', retentionDays: 90 },
     ] as never);
     vi.mocked(prisma.aiConversation.deleteMany)
-      .mockResolvedValueOnce({ count: 5 } as never)
-      .mockResolvedValueOnce({ count: 2 } as never);
+      .mockResolvedValueOnce({ count: 5 })
+      .mockResolvedValueOnce({ count: 2 });
 
     const result = await enforceRetentionPolicies();
 
@@ -108,7 +108,7 @@ describe('enforceRetentionPolicies', () => {
     vi.mocked(prisma.aiAgent.findMany).mockResolvedValue([
       { id: 'a1', slug: 'faq-bot', retentionDays: 365 },
     ] as never);
-    vi.mocked(prisma.aiConversation.deleteMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.aiConversation.deleteMany).mockResolvedValue({ count: 0 });
 
     const result = await enforceRetentionPolicies();
 
@@ -122,9 +122,9 @@ describe('enforceRetentionPolicies', () => {
       costLogRetentionDays: 60,
       auditLogRetentionDays: 365,
     } as never);
-    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 12 } as never);
-    vi.mocked(prisma.aiCostLog.deleteMany).mockResolvedValue({ count: 8 } as never);
-    vi.mocked(prisma.aiAdminAuditLog.deleteMany).mockResolvedValue({ count: 3 } as never);
+    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 12 });
+    vi.mocked(prisma.aiCostLog.deleteMany).mockResolvedValue({ count: 8 });
+    vi.mocked(prisma.aiAdminAuditLog.deleteMany).mockResolvedValue({ count: 3 });
 
     const result = await enforceRetentionPolicies();
 
@@ -172,7 +172,7 @@ describe('pruneWebhookDeliveries', () => {
       webhookRetentionDays: 14,
       webhookDlqRetentionDays: null,
     } as never);
-    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 12 } as never);
+    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 12 });
 
     const result = await pruneWebhookDeliveries();
 
@@ -193,7 +193,7 @@ describe('pruneWebhookDeliveries', () => {
       webhookRetentionDays: 7,
       webhookDlqRetentionDays: 30,
     } as never);
-    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 4 } as never);
+    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 4 });
 
     const result = await pruneWebhookDeliveries();
 
@@ -219,7 +219,7 @@ describe('pruneWebhookDeliveries', () => {
   });
 
   it('honours explicit maxAgeDays + dlqMaxAgeDays args over settings', async () => {
-    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 3 } as never);
+    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 3 });
 
     const result = await pruneWebhookDeliveries(7, 90);
 
@@ -234,7 +234,7 @@ describe('pruneWebhookDeliveries', () => {
       webhookRetentionDays: null,
       webhookDlqRetentionDays: 30,
     } as never);
-    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 5 } as never);
+    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 5 });
 
     const result = await pruneWebhookDeliveries();
 
@@ -245,7 +245,7 @@ describe('pruneWebhookDeliveries', () => {
   });
 
   it('returns deleted: 0 when no rows match cutoff', async () => {
-    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 0 });
 
     const result = await pruneWebhookDeliveries(30, 30);
 
@@ -284,7 +284,7 @@ describe('pruneCostLogs', () => {
     vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue({
       costLogRetentionDays: 60,
     } as never);
-    vi.mocked(prisma.aiCostLog.deleteMany).mockResolvedValue({ count: 100 } as never);
+    vi.mocked(prisma.aiCostLog.deleteMany).mockResolvedValue({ count: 100 });
 
     const result = await pruneCostLogs();
 
@@ -301,7 +301,7 @@ describe('pruneCostLogs', () => {
   });
 
   it('uses explicit maxAgeDays over settings', async () => {
-    vi.mocked(prisma.aiCostLog.deleteMany).mockResolvedValue({ count: 5 } as never);
+    vi.mocked(prisma.aiCostLog.deleteMany).mockResolvedValue({ count: 5 });
 
     const result = await pruneCostLogs(90);
 
@@ -352,7 +352,7 @@ describe('pruneAuditLogs', () => {
     vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue({
       auditLogRetentionDays: 365,
     } as never);
-    vi.mocked(prisma.aiAdminAuditLog.deleteMany).mockResolvedValue({ count: 42 } as never);
+    vi.mocked(prisma.aiAdminAuditLog.deleteMany).mockResolvedValue({ count: 42 });
 
     const result = await pruneAuditLogs();
 
@@ -367,7 +367,7 @@ describe('pruneAuditLogs', () => {
   });
 
   it('uses explicit maxAgeDays over settings', async () => {
-    vi.mocked(prisma.aiAdminAuditLog.deleteMany).mockResolvedValue({ count: 5 } as never);
+    vi.mocked(prisma.aiAdminAuditLog.deleteMany).mockResolvedValue({ count: 5 });
 
     const result = await pruneAuditLogs(30);
 
@@ -376,7 +376,7 @@ describe('pruneAuditLogs', () => {
   });
 
   it('returns deleted: 0 when no rows match cutoff', async () => {
-    vi.mocked(prisma.aiAdminAuditLog.deleteMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.aiAdminAuditLog.deleteMany).mockResolvedValue({ count: 0 });
 
     const result = await pruneAuditLogs(90);
 
@@ -410,7 +410,7 @@ describe('pruneHookDeliveries', () => {
     vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue({
       webhookRetentionDays: 30,
     } as never);
-    vi.mocked(prisma.aiEventHookDelivery.deleteMany).mockResolvedValue({ count: 5 } as never);
+    vi.mocked(prisma.aiEventHookDelivery.deleteMany).mockResolvedValue({ count: 5 });
 
     // Act
     const result = await pruneHookDeliveries();
@@ -433,7 +433,7 @@ describe('pruneHookDeliveries', () => {
     vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue({
       webhookRetentionDays: 90,
     } as never);
-    vi.mocked(prisma.aiEventHookDelivery.deleteMany).mockResolvedValue({ count: 2 } as never);
+    vi.mocked(prisma.aiEventHookDelivery.deleteMany).mockResolvedValue({ count: 2 });
 
     // Act — explicit override
     const result = await pruneHookDeliveries(7);
@@ -457,10 +457,10 @@ describe('enforceRetentionPolicies (hookDeliveriesDeleted)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(prisma.aiAgent.findMany).mockResolvedValue([]);
-    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 0 } as never);
-    vi.mocked(prisma.aiEventHookDelivery.deleteMany).mockResolvedValue({ count: 0 } as never);
-    vi.mocked(prisma.aiCostLog.deleteMany).mockResolvedValue({ count: 0 } as never);
-    vi.mocked(prisma.aiAdminAuditLog.deleteMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.aiWebhookDelivery.deleteMany).mockResolvedValue({ count: 0 });
+    vi.mocked(prisma.aiEventHookDelivery.deleteMany).mockResolvedValue({ count: 0 });
+    vi.mocked(prisma.aiCostLog.deleteMany).mockResolvedValue({ count: 0 });
+    vi.mocked(prisma.aiAdminAuditLog.deleteMany).mockResolvedValue({ count: 0 });
     vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue(null);
   });
 
@@ -472,7 +472,7 @@ describe('enforceRetentionPolicies (hookDeliveriesDeleted)', () => {
       costLogRetentionDays: null,
       auditLogRetentionDays: null,
     } as never);
-    vi.mocked(prisma.aiEventHookDelivery.deleteMany).mockResolvedValue({ count: 7 } as never);
+    vi.mocked(prisma.aiEventHookDelivery.deleteMany).mockResolvedValue({ count: 7 });
 
     // Act
     const result = await enforceRetentionPolicies();

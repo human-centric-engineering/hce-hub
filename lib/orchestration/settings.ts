@@ -289,7 +289,7 @@ export async function getOrchestrationSettings(): Promise<OrchestrationSettings>
     where: { slug: 'global' },
     create: {
       slug: 'global',
-      defaultModels: defaults as unknown as Prisma.InputJsonValue,
+      defaultModels: defaults,
       globalMonthlyBudgetUsd: null,
       searchConfig: Prisma.JsonNull,
       lastSeededAt: null,

@@ -346,10 +346,7 @@ export async function parsePdf(
 
   const rawText = textResult.text?.trim() ?? '';
 
-  let pageEntries = extractPages(
-    textResult.pages as ReadonlyArray<RawPageResult> | undefined,
-    rawText
-  );
+  let pageEntries = extractPages(textResult.pages, rawText);
 
   if (opts.extractTables) {
     const tableResult = await parser.getTable();

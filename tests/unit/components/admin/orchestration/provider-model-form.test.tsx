@@ -662,7 +662,7 @@ describe('ProviderModelForm', () => {
         // drop it instead of crashing or persisting the bad value.
         model={makeModel({
           deploymentProfiles: ['hosted', 'legacy-unknown-profile'],
-        } as unknown as Partial<ProviderModelData>)}
+        })}
       />
     );
 

@@ -125,7 +125,7 @@ describe('GET /workflows/:id/schedules/:scheduleId', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord as never);
+    vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord);
   });
 
   it('returns 200 with schedule data on happy path', async () => {
@@ -165,7 +165,7 @@ describe('GET /workflows/:id/schedules/:scheduleId', () => {
 
   it('returns 404 when schedule does not exist', async () => {
     // Arrange: findFirst returns null (schedule absent or wrong workflowId)
-    vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(null);
 
     const res = await getSchedule(makeGetRequest(), makeParams(VALID_WF_ID, VALID_SCHED_ID));
     const json = JSON.parse(await res.text());
@@ -189,7 +189,7 @@ describe('PATCH /workflows/:id/schedules/:scheduleId', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord as never);
+    vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord);
   });
 
   it('returns 200 with updated schedule when only name changes', async () => {
@@ -197,7 +197,7 @@ describe('PATCH /workflows/:id/schedules/:scheduleId', () => {
     vi.mocked(prisma.aiWorkflowSchedule.update).mockResolvedValue({
       ...mockScheduleRecord,
       name: 'Renamed',
-    } as never);
+    });
 
     // Act
     const res = await updateSchedule(
@@ -223,7 +223,7 @@ describe('PATCH /workflows/:id/schedules/:scheduleId', () => {
       ...mockScheduleRecord,
       cronExpression: '*/5 * * * *',
       nextRunAt: new Date('2026-04-19T09:00:00Z'),
-    } as never);
+    });
 
     const res = await updateSchedule(
       makePatchRequest({ cronExpression: '*/5 * * * *' }),
@@ -241,7 +241,7 @@ describe('PATCH /workflows/:id/schedules/:scheduleId', () => {
       ...mockScheduleRecord,
       isEnabled: false,
       nextRunAt: null,
-    } as never);
+    });
 
     const res = await updateSchedule(
       makePatchRequest({ isEnabled: false }),
@@ -301,7 +301,7 @@ describe('PATCH /workflows/:id/schedules/:scheduleId', () => {
 
   it('returns 404 when schedule does not exist', async () => {
     // Arrange: findFirst returns null
-    vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(null);
 
     const res = await updateSchedule(
       makePatchRequest({ name: 'X' }),
@@ -318,7 +318,7 @@ describe('PATCH /workflows/:id/schedules/:scheduleId', () => {
     vi.mocked(prisma.aiWorkflowSchedule.update).mockResolvedValue({
       ...mockScheduleRecord,
       inputTemplate: newTemplate,
-    } as never);
+    });
 
     const res = await updateSchedule(
       makePatchRequest({ inputTemplate: newTemplate }),
@@ -351,8 +351,8 @@ describe('DELETE /workflows/:id/schedules/:scheduleId', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord as never);
-    vi.mocked(prisma.aiWorkflowSchedule.delete).mockResolvedValue(mockScheduleRecord as never);
+    vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord);
+    vi.mocked(prisma.aiWorkflowSchedule.delete).mockResolvedValue(mockScheduleRecord);
   });
 
   it('returns 200 with deleted=true on happy path', async () => {
@@ -399,7 +399,7 @@ describe('DELETE /workflows/:id/schedules/:scheduleId', () => {
 
   it('returns 404 when schedule does not exist', async () => {
     // Arrange: findFirst returns null (already deleted or wrong workflowId)
-    vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(null);
 
     const res = await deleteSchedule(makeDeleteRequest(), makeParams(VALID_WF_ID, VALID_SCHED_ID));
     const json = JSON.parse(await res.text());

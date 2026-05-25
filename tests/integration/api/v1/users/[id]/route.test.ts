@@ -350,7 +350,7 @@ describe('PATCH /api/v1/users/:id', () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
     // Default to a valid fixture so tests that override findUnique+update independently
     // don't receive undefined from update and produce a garbled response body.
-    vi.mocked(prisma.user.update).mockResolvedValue(makeUserFixture() as never);
+    vi.mocked(prisma.user.update).mockResolvedValue(makeUserFixture());
   });
 
   describe('Auth boundary (withAdminAuth)', () => {
@@ -613,7 +613,7 @@ describe('DELETE /api/v1/users/:id', () => {
     );
 
     // Default sub-transaction collaborators — each test can override per-case.
-    vi.mocked(prisma.aiAdminAuditLog.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.aiAdminAuditLog.updateMany).mockResolvedValue({ count: 1 });
     vi.mocked(prisma.dataErasureReceipt.create).mockResolvedValue(RECEIPT_FIXTURE as never);
     vi.mocked(prisma.user.delete).mockResolvedValue(undefined as never);
   });

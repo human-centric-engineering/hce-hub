@@ -137,7 +137,7 @@ describe('GET /api/v1/admin/orchestration/providers/:id/health', () => {
 
   it('returns circuit breaker status for existing provider', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
 
     const res = await GET(makeRequest(), makeParams());
 
@@ -164,7 +164,7 @@ describe('GET /api/v1/admin/orchestration/providers/:id/health', () => {
 
   it('returns default status when no breaker exists for the slug', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
     vi.mocked(getCircuitBreakerStatus).mockReturnValue(null);
 
     const res = await GET(makeRequest(), makeParams());
@@ -197,7 +197,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/health', () => {
 
   it('resets the circuit breaker and returns new status', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
 
     const res = await POST(makeRequest('POST'), makeParams());
 

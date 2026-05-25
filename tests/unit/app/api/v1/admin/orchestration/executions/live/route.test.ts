@@ -89,7 +89,7 @@ describe('GET /api/v1/admin/orchestration/executions/live', () => {
   });
 
   it('returns 401 when unauthenticated', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     const response = await GET(makeRequest());
 
@@ -97,7 +97,7 @@ describe('GET /api/v1/admin/orchestration/executions/live', () => {
   });
 
   it('returns 403 when authenticated as a non-admin user', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER') as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER'));
 
     const response = await GET(makeRequest());
 
@@ -106,7 +106,7 @@ describe('GET /api/v1/admin/orchestration/executions/live', () => {
 
   it('returns 200 with the snapshot wrapped in the success envelope', async () => {
     const snapshot = makeSnapshot();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(getLiveEngineSnapshot).mockResolvedValue(snapshot);
 
     const response = await GET(makeRequest());
@@ -121,7 +121,7 @@ describe('GET /api/v1/admin/orchestration/executions/live', () => {
   });
 
   it('calls getLiveEngineSnapshot exactly once per request', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
 
     await GET(makeRequest());
 
@@ -148,7 +148,7 @@ describe('GET /api/v1/admin/orchestration/executions/live', () => {
       ],
       generatedAt: '2026-05-20T12:34:56.789Z',
     });
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(getLiveEngineSnapshot).mockResolvedValue(snapshot);
 
     const response = await GET(makeRequest());

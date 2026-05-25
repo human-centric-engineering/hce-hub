@@ -130,7 +130,7 @@ describe('withAuth', () => {
   describe('Authentication Checks', () => {
     it('should return 401 when auth.api.getSession returns null', async () => {
       // Arrange
-      vi.mocked(auth.api.getSession).mockResolvedValue(null as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(null);
 
       const handler = vi.fn(async () => {
         return Response.json({ success: true, data: 'test' });
@@ -454,7 +454,7 @@ describe('withAdminAuth', () => {
   describe('Authentication Checks', () => {
     it('should return 401 when auth.api.getSession returns null', async () => {
       // Arrange
-      vi.mocked(auth.api.getSession).mockResolvedValue(null as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(null);
 
       const handler = vi.fn(async () => {
         return Response.json({ success: true, data: 'admin data' });

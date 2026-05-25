@@ -86,7 +86,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
   if (body.strengths !== undefined) data.strengths = body.strengths;
   if (body.setup !== undefined) data.setup = body.setup;
   if (body.isActive !== undefined) data.isActive = body.isActive;
-  if (body.metadata !== undefined) data.metadata = body.metadata as Prisma.InputJsonValue;
+  if (body.metadata !== undefined) data.metadata = body.metadata;
 
   // Admin editing a seed-managed row opts it out of future seed updates
   if (current.isDefault) {

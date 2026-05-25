@@ -114,7 +114,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 describe('POST /api/v1/admin/orchestration/webhooks/:id/test', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }) as never);
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
   });
 
   afterEach(() => {
@@ -377,7 +377,7 @@ describe('POST /api/v1/admin/orchestration/webhooks/:id/test', () => {
       vi.mocked(prisma.aiWebhookSubscription.findFirst).mockResolvedValue(
         makeWebhookRow() as never
       );
-      vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 500 }) as never);
+      vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 500 }));
 
       // Act
       const response = await POST(makeRequest(), makeParams(WEBHOOK_ID));
@@ -433,7 +433,7 @@ describe('POST /api/v1/admin/orchestration/webhooks/:id/test', () => {
       vi.mocked(prisma.aiWebhookSubscription.findFirst).mockResolvedValue(
         makeWebhookRow() as never
       );
-      vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }) as never);
+      vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
 
       // Act
       const response = await POST(makeRequest(), makeParams(WEBHOOK_ID));

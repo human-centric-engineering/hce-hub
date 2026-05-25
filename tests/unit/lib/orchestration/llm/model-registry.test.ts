@@ -36,9 +36,7 @@ describe('fallback map', () => {
   });
 
   it('is used when OpenRouter refresh rejects', async () => {
-    globalThis.fetch = vi
-      .fn()
-      .mockRejectedValue(new Error('network down')) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('network down'));
     await registry.refreshFromOpenRouter({ force: true });
     // Still resolves known fallback entries.
     expect(registry.getModel('claude-sonnet-4-6')).toBeDefined();
@@ -74,7 +72,7 @@ describe('refreshFromOpenRouter', () => {
           },
         ],
       }),
-    }) as unknown as typeof fetch;
+    });
 
     await registry.refreshFromOpenRouter({ force: true });
 
@@ -106,7 +104,7 @@ describe('refreshFromOpenRouter', () => {
         json: vi.fn().mockResolvedValue({ data: [] }),
       }))
     );
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    globalThis.fetch = mockFetch;
 
     const a = registry.refreshFromOpenRouter({ force: true });
     const b = registry.refreshFromOpenRouter({ force: true });
@@ -158,7 +156,7 @@ describe('refreshFromOpenRouter TTL cache', () => {
         ],
       }),
     });
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    globalThis.fetch = mockFetch;
 
     // Act: first call populates the cache with fetchedAt = now
     await registry.refreshFromOpenRouter({ force: true });
@@ -176,7 +174,7 @@ describe('refreshFromOpenRouter TTL cache', () => {
     // would re-issue a 10-second timeout. The 5-minute backoff turns a
     // remote outage into one slow request, not N.
     const mockFetch = vi.fn().mockRejectedValue(new Error('Network unreachable'));
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    globalThis.fetch = mockFetch;
 
     // First call fails — fetch fires, error is swallowed inside the
     // function (no throw), failedAt is stamped.
@@ -203,7 +201,7 @@ describe('refreshFromOpenRouter error cases', () => {
       status: 500,
       json: vi.fn(),
     });
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    globalThis.fetch = mockFetch;
 
     // Act: a failed refresh should log a warning (not throw) and preserve fallback map
     await registry.refreshFromOpenRouter({ force: true });
@@ -219,7 +217,7 @@ describe('refreshFromOpenRouter error cases', () => {
       status: 200,
       json: vi.fn().mockResolvedValue({ models: [] }), // wrong shape
     });
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    globalThis.fetch = mockFetch;
 
     // Act: refresh should catch the error and fall back silently
     await registry.refreshFromOpenRouter({ force: true });
@@ -250,7 +248,7 @@ describe('OpenRouter merge overwrites fallback data', () => {
           },
         ],
       }),
-    }) as unknown as typeof fetch;
+    });
 
     await registry.refreshFromOpenRouter({ force: true });
 
@@ -422,7 +420,7 @@ describe('getRegistryFetchedAt', () => {
       ok: true,
       status: 200,
       json: vi.fn().mockResolvedValue({ data: [] }),
-    }) as unknown as typeof fetch;
+    });
     // Act
     await registry.refreshFromOpenRouter({ force: true });
     const ts = registry.getRegistryFetchedAt();
@@ -435,9 +433,7 @@ describe('refreshFromOpenRouter — first-run failure preserves fallback map', (
   it('seeds the fallback map when fetchedAt is 0 and the refresh fails', async () => {
     // Arrange: fresh registry (fetchedAt=0), network error
     registry.__resetForTests();
-    globalThis.fetch = vi
-      .fn()
-      .mockRejectedValue(new Error('network down')) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('network down'));
 
     // Act
     await registry.refreshFromOpenRouter({ force: true });
@@ -579,7 +575,7 @@ describe('refreshFromOpenRouter — retriable flag on 429 response', () => {
       ok: false,
       status: 429,
       json: vi.fn(),
-    }) as unknown as typeof fetch;
+    });
 
     // Act: refresh should absorb the error and preserve fallback
     await registry.refreshFromOpenRouter({ force: true });
@@ -605,7 +601,7 @@ describe('parseOpenRouterEntry — entry.id has no provider prefix (no slash)', 
           },
         ],
       }),
-    }) as unknown as typeof fetch;
+    });
 
     await registry.refreshFromOpenRouter({ force: true });
 
@@ -634,7 +630,7 @@ describe('parseOpenRouterEntry — missing optional pricing and metadata fields'
           },
         ],
       }),
-    }) as unknown as typeof fetch;
+    });
 
     await registry.refreshFromOpenRouter({ force: true });
 
@@ -659,7 +655,7 @@ describe('parseOpenRouterEntry — missing optional pricing and metadata fields'
           },
         ],
       }),
-    }) as unknown as typeof fetch;
+    });
 
     await registry.refreshFromOpenRouter({ force: true });
 
@@ -682,7 +678,7 @@ describe('parseOpenRouterEntry — missing optional pricing and metadata fields'
           },
         ],
       }),
-    }) as unknown as typeof fetch;
+    });
 
     await registry.refreshFromOpenRouter({ force: true });
 
@@ -707,7 +703,7 @@ describe('parseOpenRouterEntry — missing optional pricing and metadata fields'
           },
         ],
       }),
-    }) as unknown as typeof fetch;
+    });
 
     await registry.refreshFromOpenRouter({ force: true });
 
@@ -735,7 +731,7 @@ describe('classifyTier — boundary values', () => {
           },
         ],
       }),
-    }) as unknown as typeof fetch;
+    });
 
     await registry.refreshFromOpenRouter({ force: true });
 
@@ -759,7 +755,7 @@ describe('classifyTier — boundary values', () => {
           },
         ],
       }),
-    }) as unknown as typeof fetch;
+    });
 
     await registry.refreshFromOpenRouter({ force: true });
 
@@ -817,16 +813,14 @@ describe('refreshFromOpenRouter — catch preserves previously-cached state', ()
           },
         ],
       }),
-    }) as unknown as typeof fetch;
+    });
 
     await registry.refreshFromOpenRouter({ force: true });
     const fetchedAtAfterFirst = registry.getRegistryFetchedAt();
     expect(fetchedAtAfterFirst).toBeGreaterThan(0);
 
     // Arrange: second forced refresh fails
-    globalThis.fetch = vi
-      .fn()
-      .mockRejectedValue(new Error('network error')) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('network error'));
 
     // Act
     await registry.refreshFromOpenRouter({ force: true });

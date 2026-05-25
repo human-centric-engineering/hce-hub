@@ -90,10 +90,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
     entityType: 'agent_profile',
     entityId: id,
     entityName: updated.name,
-    changes: computeChanges(
-      current as unknown as Record<string, unknown>,
-      updated as unknown as Record<string, unknown>
-    ),
+    changes: computeChanges(current, updated),
     clientIp: clientIP,
   });
 

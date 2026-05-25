@@ -81,7 +81,7 @@ export function mockEmailSuccess(
     success: true,
     status: 'sent',
     id,
-  } as SendEmailResult);
+  });
 }
 
 /**
@@ -113,7 +113,7 @@ export function mockEmailFailure(
     success: false,
     status: 'failed',
     error: errorMessage,
-  } as SendEmailResult);
+  });
 }
 
 /**

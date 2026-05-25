@@ -18,6 +18,7 @@
  */
 
 import { withAdminAuth } from '@/lib/auth/guards';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { successResponse } from '@/lib/api/responses';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
@@ -95,7 +96,7 @@ export const POST = withAdminAuth<{ id: string }>(async (request, session, { par
       where: { id, status: WorkflowStatus.FAILED },
       data: {
         status: WorkflowStatus.PENDING,
-        executionTrace: keptTrace as unknown as object,
+        executionTrace: keptTrace as unknown as Prisma.InputJsonValue,
         totalTokensUsed,
         totalCostUsd,
         currentStep,

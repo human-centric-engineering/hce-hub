@@ -120,7 +120,7 @@ describe('components/admin/user-table', () => {
 
     // Mock fetch
     mockFetch = vi.fn<typeof fetch>();
-    global.fetch = mockFetch as typeof fetch;
+    global.fetch = mockFetch;
 
     // Use fake timers with shouldAdvanceTime to prevent hanging with React Testing Library
     vi.useFakeTimers({ shouldAdvanceTime: true });

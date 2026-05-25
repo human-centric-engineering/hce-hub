@@ -131,7 +131,7 @@ export function formatToolsForOpenAi(tools: LlmToolDefinition[]): string {
       typeof params === 'object' &&
       params.properties &&
       typeof params.properties === 'object' &&
-      Object.keys(params.properties as Record<string, unknown>).length > 0;
+      Object.keys(params.properties).length > 0;
     if (hasProps) {
       lines.push(`type ${t.name} = (_: ${renderObjectProperties(params, 0)}) => any;`);
     } else {

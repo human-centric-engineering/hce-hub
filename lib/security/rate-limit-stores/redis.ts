@@ -76,7 +76,7 @@ export class RedisRateLimitStore implements RateLimitStore {
         maxRetriesPerRequest: 2,
         enableReadyCheck: true,
         lazyConnect: false,
-      }) as unknown as RedisClient;
+      });
       this.client.on('error', (err: Error) => {
         logger.error('Redis rate limit store connection error', err);
       });

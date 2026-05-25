@@ -144,7 +144,7 @@ describe('POST /api/v1/admin/orchestration/provider-models/bulk', () => {
     it('creates all rows when none conflict', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([] as never);
-      vi.mocked(prisma.aiProviderModel.createMany).mockResolvedValue({ count: 3 } as never);
+      vi.mocked(prisma.aiProviderModel.createMany).mockResolvedValue({ count: 3 });
 
       const response = await POST(
         makeRequest({
@@ -174,7 +174,7 @@ describe('POST /api/v1/admin/orchestration/provider-models/bulk', () => {
         { modelId: 'gpt-4o', isActive: true },
         { modelId: 'gpt-5', isActive: true },
       ] as never);
-      vi.mocked(prisma.aiProviderModel.createMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiProviderModel.createMany).mockResolvedValue({ count: 1 });
 
       const response = await POST(
         makeRequest({
@@ -213,7 +213,7 @@ describe('POST /api/v1/admin/orchestration/provider-models/bulk', () => {
         { modelId: 'gpt-4o-mini', isActive: true },
         { modelId: 'gpt-4o', isActive: true },
       ] as never);
-      vi.mocked(prisma.aiProviderModel.createMany).mockResolvedValue({ count: 0 } as never);
+      vi.mocked(prisma.aiProviderModel.createMany).mockResolvedValue({ count: 0 });
 
       const response = await POST(
         makeRequest({
@@ -231,7 +231,7 @@ describe('POST /api/v1/admin/orchestration/provider-models/bulk', () => {
     it('derives slug from (providerSlug + modelId)', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([] as never);
-      vi.mocked(prisma.aiProviderModel.createMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiProviderModel.createMany).mockResolvedValue({ count: 1 });
 
       await POST(
         makeRequest({
@@ -249,7 +249,7 @@ describe('POST /api/v1/admin/orchestration/provider-models/bulk', () => {
     it('marks isDefault false and isActive true on created rows', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([] as never);
-      vi.mocked(prisma.aiProviderModel.createMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiProviderModel.createMany).mockResolvedValue({ count: 1 });
 
       await POST(makeRequest({ providerSlug: 'openai', models: [makeRow()] }));
 
@@ -269,7 +269,7 @@ describe('POST /api/v1/admin/orchestration/provider-models/bulk', () => {
       vi.mocked(prisma.aiProviderModel.findMany).mockResolvedValue([
         { modelId: 'gpt-4o-mini', isActive: false },
       ] as never);
-      vi.mocked(prisma.aiProviderModel.createMany).mockResolvedValue({ count: 0 } as never);
+      vi.mocked(prisma.aiProviderModel.createMany).mockResolvedValue({ count: 0 });
 
       const response = await POST(
         makeRequest({

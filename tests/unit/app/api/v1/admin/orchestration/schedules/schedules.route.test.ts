@@ -155,7 +155,7 @@ describe('Schedule CRUD API', () => {
     });
 
     it('returns 404 for unknown workflow', async () => {
-      vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue(null as never);
+      vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue(null);
 
       const res = await listSchedules(makeGetRequest(), {
         params: Promise.resolve({ id: VALID_WF_ID }),
@@ -188,8 +188,8 @@ describe('Schedule CRUD API', () => {
   describe('POST /workflows/:id/schedules', () => {
     it('creates a schedule with valid data (201)', async () => {
       vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue(mockWorkflow as never);
-      vi.mocked(prisma.aiWorkflowSchedule.count).mockResolvedValue(0 as never);
-      vi.mocked(prisma.aiWorkflowSchedule.create).mockResolvedValue(mockScheduleRecord as never);
+      vi.mocked(prisma.aiWorkflowSchedule.count).mockResolvedValue(0);
+      vi.mocked(prisma.aiWorkflowSchedule.create).mockResolvedValue(mockScheduleRecord);
 
       const res = await createSchedule(
         makePostRequest({ name: 'Daily run', cronExpression: '0 9 * * *' }),
@@ -203,7 +203,7 @@ describe('Schedule CRUD API', () => {
 
     it('rejects invalid cron expression (400)', async () => {
       vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue(mockWorkflow as never);
-      vi.mocked(prisma.aiWorkflowSchedule.count).mockResolvedValue(0 as never);
+      vi.mocked(prisma.aiWorkflowSchedule.count).mockResolvedValue(0);
 
       const res = await createSchedule(
         makePostRequest({ name: 'Bad cron', cronExpression: 'nope nope' }),
@@ -214,7 +214,7 @@ describe('Schedule CRUD API', () => {
     });
 
     it('returns 404 when workflow does not exist', async () => {
-      vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue(null as never);
+      vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue(null);
 
       const res = await createSchedule(
         makePostRequest({ name: 'Test', cronExpression: '0 9 * * *' }),
@@ -229,7 +229,7 @@ describe('Schedule CRUD API', () => {
 
   describe('GET /workflows/:id/schedules/:scheduleId', () => {
     it('returns the schedule', async () => {
-      vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord as never);
+      vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord);
 
       const res = await getSchedule(makeGetRequest(), {
         params: Promise.resolve({ id: VALID_WF_ID, scheduleId: VALID_SCHED_ID }),
@@ -241,7 +241,7 @@ describe('Schedule CRUD API', () => {
     });
 
     it('returns 404 when schedule not found', async () => {
-      vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(null as never);
+      vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(null);
 
       const res = await getSchedule(makeGetRequest(), {
         params: Promise.resolve({ id: VALID_WF_ID, scheduleId: VALID_SCHED_ID }),
@@ -255,11 +255,11 @@ describe('Schedule CRUD API', () => {
 
   describe('PATCH /workflows/:id/schedules/:scheduleId', () => {
     it('updates schedule fields', async () => {
-      vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord as never);
+      vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord);
       vi.mocked(prisma.aiWorkflowSchedule.update).mockResolvedValue({
         ...mockScheduleRecord,
         name: 'Updated name',
-      } as never);
+      });
 
       const res = await updateSchedule(makePatchRequest({ name: 'Updated name' }), {
         params: Promise.resolve({ id: VALID_WF_ID, scheduleId: VALID_SCHED_ID }),
@@ -271,7 +271,7 @@ describe('Schedule CRUD API', () => {
     });
 
     it('rejects invalid cron on update (400)', async () => {
-      vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord as never);
+      vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord);
 
       const res = await updateSchedule(makePatchRequest({ cronExpression: 'bad cron' }), {
         params: Promise.resolve({ id: VALID_WF_ID, scheduleId: VALID_SCHED_ID }),
@@ -285,8 +285,8 @@ describe('Schedule CRUD API', () => {
 
   describe('DELETE /workflows/:id/schedules/:scheduleId', () => {
     it('deletes the schedule', async () => {
-      vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord as never);
-      vi.mocked(prisma.aiWorkflowSchedule.delete).mockResolvedValue(mockScheduleRecord as never);
+      vi.mocked(prisma.aiWorkflowSchedule.findFirst).mockResolvedValue(mockScheduleRecord);
+      vi.mocked(prisma.aiWorkflowSchedule.delete).mockResolvedValue(mockScheduleRecord);
 
       const res = await deleteSchedule(makeDeleteRequest(), {
         params: Promise.resolve({ id: VALID_WF_ID, scheduleId: VALID_SCHED_ID }),

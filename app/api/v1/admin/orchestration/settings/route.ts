@@ -180,16 +180,13 @@ export const PATCH = withAdminAuth(async (request, session) => {
 
   const updateData: Prisma.AiOrchestrationSettingsUpdateInput = {};
   if (body.defaultModels) {
-    updateData.defaultModels = mergedDefaults as unknown as Prisma.InputJsonValue;
+    updateData.defaultModels = mergedDefaults;
   }
   if (body.globalMonthlyBudgetUsd !== undefined) {
     updateData.globalMonthlyBudgetUsd = body.globalMonthlyBudgetUsd;
   }
   if (body.searchConfig !== undefined) {
-    updateData.searchConfig =
-      body.searchConfig === null
-        ? Prisma.JsonNull
-        : (body.searchConfig as unknown as Prisma.InputJsonValue);
+    updateData.searchConfig = body.searchConfig === null ? Prisma.JsonNull : body.searchConfig;
   }
   if (body.defaultApprovalTimeoutMs !== undefined) {
     updateData.defaultApprovalTimeoutMs = body.defaultApprovalTimeoutMs;
@@ -235,14 +232,12 @@ export const PATCH = withAdminAuth(async (request, session) => {
   }
   if (body.escalationConfig !== undefined) {
     updateData.escalationConfig =
-      body.escalationConfig === null
-        ? Prisma.JsonNull
-        : (body.escalationConfig as unknown as Prisma.InputJsonValue);
+      body.escalationConfig === null ? Prisma.JsonNull : body.escalationConfig;
   }
   if (body.embedAllowedOrigins !== undefined) {
     // Schema's `.transform` already normalised each entry to its
     // canonical `.origin` form — write straight through.
-    updateData.embedAllowedOrigins = body.embedAllowedOrigins as unknown as Prisma.InputJsonValue;
+    updateData.embedAllowedOrigins = body.embedAllowedOrigins;
   }
   if (body.activeEmbeddingModelId !== undefined) {
     updateData.activeEmbeddingModel = body.activeEmbeddingModelId
@@ -254,7 +249,7 @@ export const PATCH = withAdminAuth(async (request, session) => {
     where: { slug: 'global' },
     create: {
       slug: 'global',
-      defaultModels: mergedDefaults as unknown as Prisma.InputJsonValue,
+      defaultModels: mergedDefaults,
       globalMonthlyBudgetUsd: body.globalMonthlyBudgetUsd ?? null,
       searchConfig: body.searchConfig
         ? (body.searchConfig as unknown as Prisma.InputJsonValue)
@@ -270,10 +265,7 @@ export const PATCH = withAdminAuth(async (request, session) => {
     action: 'settings.update',
     entityType: 'settings',
     entityId: 'global',
-    changes: computeChanges(
-      (existing ?? {}) as Record<string, unknown>,
-      row as unknown as Record<string, unknown>
-    ),
+    changes: computeChanges(existing ?? {}, row),
     metadata: { changedKeys: Object.keys(body) },
     clientIp: clientIP,
   });

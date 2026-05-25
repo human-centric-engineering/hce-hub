@@ -53,10 +53,7 @@ export const PATCH = withAdminAuth(async (request, session) => {
     action: 'mcp_settings.update',
     entityType: 'mcp_settings',
     entityId: 'global',
-    changes: computeChanges(
-      (existing ?? {}) as Record<string, unknown>,
-      row as unknown as Record<string, unknown>
-    ),
+    changes: computeChanges(existing ?? {}, row),
     metadata: { changedKeys: Object.keys(body) },
     clientIp: clientIP,
   });

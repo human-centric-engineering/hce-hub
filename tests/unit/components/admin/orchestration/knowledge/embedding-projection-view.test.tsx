@@ -396,7 +396,7 @@ describe('EmbeddingProjectionView', () => {
       };
     }
     const option = lastChartOption.current as ChartWithTooltip;
-    const html = option.tooltip.formatter({ data: { chunk: chunks[0] as never } });
+    const html = option.tooltip.formatter({ data: { chunk: chunks[0] } });
 
     // No literal "<script>" tag survives — the open angle bracket
     // got escaped to "&lt;".

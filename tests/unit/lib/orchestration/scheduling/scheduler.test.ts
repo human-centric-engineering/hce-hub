@@ -920,7 +920,7 @@ describe('resumeApprovedExecution', () => {
         publishedVersion: { id: 'wfv_1', snapshot: VALID_DEFINITION },
       },
     } as never);
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
 
     await resumeApprovedExecution('exec_deact');
 

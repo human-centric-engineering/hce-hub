@@ -347,7 +347,7 @@ describe('POST /api/v1/admin/orchestration/agents/import', () => {
       };
       await POST(
         makeRequest({
-          bundle: makeBundle([bundledWithWidget as ReturnType<typeof makeBundledAgent>]),
+          bundle: makeBundle([bundledWithWidget]),
           conflictMode: 'overwrite',
         })
       );

@@ -52,7 +52,7 @@ function makeRequest(): NextRequest {
 describe('DELETE /webhooks/deliveries/:id', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
   });
 
   it('deletes the row and writes an audit entry when admin owns the parent subscription', async () => {
@@ -120,7 +120,7 @@ describe('DELETE /webhooks/deliveries/:id', () => {
   });
 
   it('returns 401 for unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     const res = await DELETE(makeRequest(), {
       params: Promise.resolve({ id: DELIVERY_ID }),

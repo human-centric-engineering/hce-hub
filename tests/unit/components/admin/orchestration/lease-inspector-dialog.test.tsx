@@ -109,7 +109,7 @@ describe('LeaseInspectorDialog', () => {
   describe('closed state', () => {
     it('does not call fetch and does not render dialog content when executionId is null', () => {
       // Arrange: spy on fetch — it must not be called at all
-      globalThis.fetch = vi.fn() as unknown as typeof globalThis.fetch;
+      globalThis.fetch = vi.fn();
       const onClose = vi.fn();
 
       // Act
@@ -291,7 +291,7 @@ describe('LeaseInspectorDialog', () => {
         });
 
       const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(makeFetchResponse()));
-      globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+      globalThis.fetch = fetchMock;
 
       const onClose = vi.fn();
       const { rerender } = render(

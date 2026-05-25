@@ -62,7 +62,7 @@ function makeGetRequest(): NextRequest {
 describe('POST /api/v1/admin/orchestration/quiz-scores', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue({ id: 'agent-1' } as never);
     vi.mocked(prisma.aiEvaluationSession.create).mockResolvedValue({
       id: 'session-1',
@@ -71,7 +71,7 @@ describe('POST /api/v1/admin/orchestration/quiz-scores', () => {
   });
 
   it('rejects unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     const res = await POST(makePostRequest({ correct: 3, total: 5 }));
     expect(res.status).toBe(401);
@@ -121,7 +121,7 @@ describe('POST /api/v1/admin/orchestration/quiz-scores', () => {
 describe('GET /api/v1/admin/orchestration/quiz-scores', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
   });
 
   it('returns persisted quiz scores', async () => {
@@ -185,7 +185,7 @@ describe('GET /api/v1/admin/orchestration/quiz-scores', () => {
   });
 
   it('rejects unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(401);
@@ -195,7 +195,7 @@ describe('GET /api/v1/admin/orchestration/quiz-scores', () => {
 describe('POST /api/v1/admin/orchestration/quiz-scores — agent fallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiEvaluationSession.create).mockResolvedValue({
       id: 'session-orphan',
       metadata: { quizScore: { correct: 1, total: 2 } },

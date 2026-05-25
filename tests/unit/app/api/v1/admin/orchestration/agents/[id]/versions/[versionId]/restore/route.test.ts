@@ -247,7 +247,7 @@ describe('POST /agents/:id/versions/:versionId/restore', () => {
     vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(
       makeVersion({
         snapshot: { visibility: 'not_a_valid_enum_value' },
-      }) as never
+      })
     );
 
     // Act
@@ -271,7 +271,7 @@ describe('POST /agents/:id/versions/:versionId/restore', () => {
     const updatedAgent = makeAgent({ systemInstructions: 'old instructions' });
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(makeAgent() as never);
-    vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(makeVersion() as never);
+    vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(makeVersion());
     // The transaction callback is invoked with a tx client; mock it to
     // return the {updated, nextVersion} shape that the handler destructures.
     vi.mocked(prisma.$transaction).mockImplementation(async (callback) => {
@@ -313,7 +313,7 @@ describe('POST /agents/:id/versions/:versionId/restore', () => {
     const updatedAgent = makeAgent();
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(makeAgent() as never);
-    vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(version as never);
+    vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(version);
 
     const txAgentUpdate = vi.fn().mockResolvedValue(updatedAgent);
     const txVersionFindFirst = vi.fn().mockResolvedValue({ version: 5 });
@@ -351,7 +351,7 @@ describe('POST /agents/:id/versions/:versionId/restore', () => {
     const updatedAgent = makeAgent();
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(makeAgent() as never);
-    vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(makeVersion() as never);
+    vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(makeVersion());
     vi.mocked(prisma.$transaction).mockImplementation(async (callback) => {
       const tx = {
         aiAgent: { update: vi.fn().mockResolvedValue(updatedAgent) },
@@ -379,7 +379,7 @@ describe('POST /agents/:id/versions/:versionId/restore', () => {
     // Arrange: transaction fails mid-execution (DB error, constraint, etc.)
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(makeAgent() as never);
-    vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(makeVersion() as never);
+    vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(makeVersion());
     vi.mocked(prisma.$transaction).mockRejectedValue(new Error('Transaction failed'));
 
     // Act
@@ -401,7 +401,7 @@ describe('POST /agents/:id/versions/:versionId/restore', () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(makeAgent() as never);
     vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(
-      makeVersion({ snapshot: sparseSnapshot }) as never
+      makeVersion({ snapshot: sparseSnapshot })
     );
 
     const txAgentUpdate = vi.fn().mockResolvedValue(makeAgent());
@@ -446,7 +446,7 @@ describe('POST /agents/:id/versions/:versionId/restore', () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(makeAgent() as never);
     vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(
-      makeVersion({ snapshot: fullSnapshot }) as never
+      makeVersion({ snapshot: fullSnapshot })
     );
 
     const txAgentUpdate = vi.fn().mockResolvedValue(makeAgent());
@@ -485,7 +485,7 @@ describe('POST /agents/:id/versions/:versionId/restore', () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(makeAgent() as never);
     vi.mocked(prisma.aiAgentVersion.findFirst).mockResolvedValue(
-      makeVersion({ snapshot: snapshotWithNulls }) as never
+      makeVersion({ snapshot: snapshotWithNulls })
     );
 
     const txAgentUpdate = vi.fn().mockResolvedValue(makeAgent());

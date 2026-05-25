@@ -320,45 +320,37 @@ function BlockEditor({
 
   switch (node.data.type) {
     case 'llm_call':
-      return <LlmCallEditor config={config as never} onChange={onChange as never} />;
+      return <LlmCallEditor config={config as never} onChange={onChange} />;
     case 'chain':
-      return <ChainEditor config={config as never} onChange={onChange as never} />;
+      return <ChainEditor config={config} onChange={onChange} />;
     case 'route':
-      return <RouteEditor config={config as never} onChange={onChange as never} />;
+      return <RouteEditor config={config as never} onChange={onChange} />;
     case 'parallel':
-      return <ParallelEditor config={config as never} onChange={onChange as never} />;
+      return <ParallelEditor config={config} onChange={onChange} />;
     case 'reflect':
-      return <ReflectEditor config={config as never} onChange={onChange as never} />;
+      return <ReflectEditor config={config as never} onChange={onChange} />;
     case 'tool_call':
       return (
-        <ToolCallEditor
-          config={config as never}
-          onChange={onChange as never}
-          capabilities={capabilities}
-        />
+        <ToolCallEditor config={config as never} onChange={onChange} capabilities={capabilities} />
       );
     case 'plan':
-      return <PlanEditor config={config as never} onChange={onChange as never} />;
+      return <PlanEditor config={config as never} onChange={onChange} />;
     case 'human_approval':
-      return <HumanApprovalEditor config={config as never} onChange={onChange as never} />;
+      return <HumanApprovalEditor config={config as never} onChange={onChange} />;
     case 'rag_retrieve':
-      return <RagRetrieveEditor config={config as never} onChange={onChange as never} />;
+      return <RagRetrieveEditor config={config as never} onChange={onChange} />;
     case 'guard':
-      return <GuardEditor config={config as never} onChange={onChange as never} />;
+      return <GuardEditor config={config as never} onChange={onChange} />;
     case 'evaluate':
-      return <EvaluateEditor config={config as never} onChange={onChange as never} />;
+      return <EvaluateEditor config={config as never} onChange={onChange} />;
     case 'external_call':
-      return <ExternalCallEditor config={config as never} onChange={onChange as never} />;
+      return <ExternalCallEditor config={config as never} onChange={onChange} />;
     case 'orchestrator':
-      return (
-        <OrchestratorEditor config={config as never} onChange={onChange as never} agents={agents} />
-      );
+      return <OrchestratorEditor config={config as never} onChange={onChange} agents={agents} />;
     case 'agent_call':
-      return (
-        <AgentCallEditor config={config as never} onChange={onChange as never} agents={agents} />
-      );
+      return <AgentCallEditor config={config as never} onChange={onChange} agents={agents} />;
     case 'send_notification':
-      return <NotificationEditor config={config as never} onChange={onChange as never} />;
+      return <NotificationEditor config={config as never} onChange={onChange} />;
     default:
       return (
         <p className="text-muted-foreground text-xs italic">

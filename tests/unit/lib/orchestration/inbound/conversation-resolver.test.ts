@@ -57,7 +57,7 @@ function defaultArgs(overrides: Partial<Parameters<typeof resolveConversation>[0
 
 describe('resolveConversation — create new', () => {
   it('creates a new conversation when none exists for (agentId, channel, fromAddress)', async () => {
-    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null);
     vi.mocked(prisma.aiConversation.create).mockResolvedValue({ id: 'conv-new' } as never);
 
     const result = await resolveConversation(defaultArgs());
@@ -79,7 +79,7 @@ describe('resolveConversation — create new', () => {
   });
 
   it('creates with smsOptedOut=true when the first message is a STOP keyword', async () => {
-    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null);
     vi.mocked(prisma.aiConversation.create).mockResolvedValue({ id: 'conv-new' } as never);
 
     const result = await resolveConversation(defaultArgs({ text: 'STOP' }));
@@ -189,7 +189,7 @@ describe('resolveConversation — concurrent inbound race', () => {
     // a duplicate conversation and subsequent outbound could load the
     // wrong row (still opted-in) → TCPA/PECR violation.
     vi.mocked(prisma.aiConversation.findUnique)
-      .mockResolvedValueOnce(null as never)
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         id: 'conv-from-race',
         smsOptedOut: false,
@@ -200,7 +200,7 @@ describe('resolveConversation — concurrent inbound race', () => {
       code: 'P2002',
       clientVersion: '7.0.0',
     });
-    vi.mocked(prisma.aiConversation.create).mockRejectedValue(p2002 as never);
+    vi.mocked(prisma.aiConversation.create).mockRejectedValue(p2002);
     vi.mocked(prisma.aiConversation.update).mockResolvedValue({} as never);
 
     const result = await resolveConversation(defaultArgs({ text: 'STOP' }));
@@ -220,10 +220,8 @@ describe('resolveConversation — concurrent inbound race', () => {
   });
 
   it('re-throws non-P2002 errors from create (e.g. DB connection failure)', async () => {
-    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null as never);
-    vi.mocked(prisma.aiConversation.create).mockRejectedValue(
-      new Error('connection refused') as never
-    );
+    vi.mocked(prisma.aiConversation.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.aiConversation.create).mockRejectedValue(new Error('connection refused'));
 
     await expect(resolveConversation(defaultArgs())).rejects.toThrow('connection refused');
   });

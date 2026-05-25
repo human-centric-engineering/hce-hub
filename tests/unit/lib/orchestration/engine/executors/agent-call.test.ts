@@ -316,7 +316,7 @@ describe('executeAgentCall', () => {
   });
 
   it('throws agent_not_found when agent does not exist', async () => {
-    vi.mocked(prisma.aiAgent.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiAgent.findFirst).mockResolvedValue(null);
 
     await expect(executeAgentCall(makeStep(), makeCtx())).rejects.toMatchObject({
       name: 'ExecutorError',

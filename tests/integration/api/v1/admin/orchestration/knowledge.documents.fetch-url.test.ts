@@ -299,7 +299,7 @@ describe('POST /api/v1/admin/orchestration/knowledge/documents/fetch-url', () =>
     it('applies tag grants when tagIds are provided', async () => {
       // Arrange
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiKnowledgeDocumentTag.createMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiKnowledgeDocumentTag.createMany).mockResolvedValue({ count: 1 });
 
       const response = await POST(makePostRequest({ url: VALID_URL, tagIds: [TAG_ID] }));
 
@@ -316,7 +316,7 @@ describe('POST /api/v1/admin/orchestration/knowledge/documents/fetch-url', () =>
     it('invalidates agent access cache after tagging', async () => {
       // Arrange
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiKnowledgeDocumentTag.createMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiKnowledgeDocumentTag.createMany).mockResolvedValue({ count: 1 });
 
       await POST(makePostRequest({ url: VALID_URL, tagIds: [TAG_ID] }));
 
@@ -351,7 +351,7 @@ describe('POST /api/v1/admin/orchestration/knowledge/documents/fetch-url', () =>
     it('includes tagsApplied count in logAdminAction metadata', async () => {
       // Arrange
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiKnowledgeDocumentTag.createMany).mockResolvedValue({ count: 2 } as never);
+      vi.mocked(prisma.aiKnowledgeDocumentTag.createMany).mockResolvedValue({ count: 2 });
 
       await POST(
         makePostRequest({ url: VALID_URL, tagIds: [TAG_ID, 'cmjbv4i3x00003wsloputgwu2'] })

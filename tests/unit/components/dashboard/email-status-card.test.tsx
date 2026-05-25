@@ -691,7 +691,7 @@ describe('components/dashboard/email-status-card', () => {
     it('should handle fetch returning undefined response', async () => {
       // Arrange
       const user = userEvent.setup();
-      mockFetch.mockResolvedValue(undefined as unknown as Response);
+      mockFetch.mockResolvedValue(undefined);
 
       render(<EmailStatusCard status="not_sent" email={testEmail} />);
 

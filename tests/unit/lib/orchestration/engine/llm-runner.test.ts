@@ -85,8 +85,8 @@ describe('runLlmCall', () => {
       isLocal: false,
       inputCostUsd: 0.0006,
       outputCostUsd: 0.0004,
-    } as any);
-    vi.mocked(logCost).mockResolvedValue(null as any);
+    });
+    vi.mocked(logCost).mockResolvedValue(null);
 
     const ctx = makeCtx();
     const result = await runLlmCall(ctx, {
@@ -116,7 +116,7 @@ describe('runLlmCall', () => {
       totalCostUsd: 0.0005,
       isLocal: false,
     } as any);
-    vi.mocked(logCost).mockResolvedValue(null as any);
+    vi.mocked(logCost).mockResolvedValue(null);
 
     const ctx = makeCtx();
     await runLlmCall(ctx, { stepId: 's1', prompt: 'test', modelOverride: '' });
@@ -138,7 +138,7 @@ describe('runLlmCall', () => {
       totalCostUsd: 0.0005,
       isLocal: false,
     } as any);
-    vi.mocked(logCost).mockResolvedValue(null as any);
+    vi.mocked(logCost).mockResolvedValue(null);
 
     const ctx = makeCtx();
     await runLlmCall(ctx, { stepId: 's1', prompt: 'test' });
@@ -200,7 +200,7 @@ describe('runLlmCall', () => {
       totalCostUsd: 0.001,
       isLocal: false,
     } as any);
-    vi.mocked(logCost).mockResolvedValue(null as any);
+    vi.mocked(logCost).mockResolvedValue(null);
 
     const telemetry: import('@/types/orchestration').LlmTelemetryEntry[] = [];
     const ctx = makeCtx({ stepTelemetry: telemetry });
@@ -224,7 +224,7 @@ describe('runLlmCall', () => {
     vi.mocked(getModel).mockReturnValue({ provider: 'openai' } as any);
     vi.mocked(getProvider).mockResolvedValue({ chat: mockChat } as any);
     vi.mocked(calculateCost).mockReturnValue({ totalCostUsd: 0.001, isLocal: false } as any);
-    vi.mocked(logCost).mockResolvedValue(null as any);
+    vi.mocked(logCost).mockResolvedValue(null);
 
     const telemetry: import('@/types/orchestration').LlmTelemetryEntry[] = [];
     const ctx = makeCtx({ stepTelemetry: telemetry });
@@ -253,7 +253,7 @@ describe('runLlmCall', () => {
     vi.mocked(getModel).mockReturnValue({ provider: 'openai' } as any);
     vi.mocked(getProvider).mockResolvedValue({ chat: mockChat } as any);
     vi.mocked(calculateCost).mockReturnValue({ totalCostUsd: 0.001, isLocal: false } as any);
-    vi.mocked(logCost).mockResolvedValue(null as any);
+    vi.mocked(logCost).mockResolvedValue(null);
 
     const telemetry: import('@/types/orchestration').LlmTelemetryEntry[] = [];
     const ctx = makeCtx({ stepTelemetry: telemetry });
@@ -279,7 +279,7 @@ describe('runLlmCall', () => {
       }),
     } as any);
     vi.mocked(calculateCost).mockReturnValue({ totalCostUsd: 0.001, isLocal: false } as any);
-    vi.mocked(logCost).mockResolvedValue(null as any);
+    vi.mocked(logCost).mockResolvedValue(null);
 
     const telemetry: import('@/types/orchestration').LlmTelemetryEntry[] = [];
     const ctx = makeCtx({ stepTelemetry: telemetry });
@@ -298,7 +298,7 @@ describe('runLlmCall', () => {
       }),
     } as any);
     vi.mocked(calculateCost).mockReturnValue({ totalCostUsd: 0.001, isLocal: false } as any);
-    vi.mocked(logCost).mockResolvedValue(null as any);
+    vi.mocked(logCost).mockResolvedValue(null);
 
     // No `stepTelemetry` passed — the optional-chain push must be a no-op,
     // not a TypeError.
@@ -351,7 +351,7 @@ describe('runLlmCall', () => {
     vi.mocked(getModel).mockReturnValue({ provider: 'openai' } as any);
     vi.mocked(getProvider).mockResolvedValue({ chat: mockChat } as any);
     vi.mocked(calculateCost).mockReturnValue({ totalCostUsd: 0, isLocal: false } as any);
-    vi.mocked(logCost).mockResolvedValue(null as any);
+    vi.mocked(logCost).mockResolvedValue(null);
 
     const ctx = makeCtx();
     await runLlmCall(ctx, {
@@ -372,7 +372,7 @@ describe('runLlmCall', () => {
     // Some providers / network layers reject with strings or plain objects.
     vi.mocked(getModel).mockReturnValue({ provider: 'openai' } as any);
     vi.mocked(getProvider).mockResolvedValue({
-      chat: vi.fn().mockRejectedValue('plain string failure' as any),
+      chat: vi.fn().mockRejectedValue('plain string failure'),
     } as any);
 
     const ctx = makeCtx();
@@ -400,7 +400,7 @@ describe('runLlmCall', () => {
     vi.mocked(calculateCost).mockReturnValue({ totalCostUsd: 0.001, isLocal: false } as any);
     // logCost rejects with a non-Error — String(err) branch handles it.
 
-    vi.mocked(logCost).mockRejectedValue('db unreachable' as any);
+    vi.mocked(logCost).mockRejectedValue('db unreachable');
 
     const ctx = makeCtx();
     const result = await runLlmCall(ctx, {

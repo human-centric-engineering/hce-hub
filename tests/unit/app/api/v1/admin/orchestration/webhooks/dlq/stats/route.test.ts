@@ -48,14 +48,14 @@ function makeRequest(): NextRequest {
 describe('GET /webhooks/dlq/stats', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
   });
 
   it('returns counts + oldest timestamp scoped to caller subscriptions', async () => {
     const oldest = new Date('2026-04-15T08:00:00.000Z');
     vi.mocked(prisma.aiWebhookDelivery.count)
-      .mockResolvedValueOnce(7 as never) // exhausted24h
-      .mockResolvedValueOnce(42 as never); // exhaustedTotal
+      .mockResolvedValueOnce(7) // exhausted24h
+      .mockResolvedValueOnce(42); // exhaustedTotal
     vi.mocked(prisma.aiWebhookDelivery.findFirst).mockResolvedValue({ createdAt: oldest } as never);
 
     const res = await GET(makeRequest());
@@ -87,7 +87,7 @@ describe('GET /webhooks/dlq/stats', () => {
   });
 
   it('limits the 24h count to deliveries created in the last day', async () => {
-    vi.mocked(prisma.aiWebhookDelivery.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.aiWebhookDelivery.count).mockResolvedValue(0);
     vi.mocked(prisma.aiWebhookDelivery.findFirst).mockResolvedValue(null);
     const before = Date.now();
 
@@ -103,7 +103,7 @@ describe('GET /webhooks/dlq/stats', () => {
   });
 
   it('returns zeros and null oldest when no exhausted rows exist', async () => {
-    vi.mocked(prisma.aiWebhookDelivery.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.aiWebhookDelivery.count).mockResolvedValue(0);
     vi.mocked(prisma.aiWebhookDelivery.findFirst).mockResolvedValue(null);
 
     const res = await GET(makeRequest());
@@ -117,7 +117,7 @@ describe('GET /webhooks/dlq/stats', () => {
   });
 
   it('returns 401 for unauthenticated requests', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     const res = await GET(makeRequest());
 
@@ -127,7 +127,7 @@ describe('GET /webhooks/dlq/stats', () => {
   it('returns the rate-limit response when the limiter rejects the request', async () => {
     const rlResponse = new Response('rate limited', { status: 429 });
     vi.mocked(adminLimiter.check).mockReturnValueOnce({ success: false } as never);
-    vi.mocked(createRateLimitResponse).mockReturnValueOnce(rlResponse as never);
+    vi.mocked(createRateLimitResponse).mockReturnValueOnce(rlResponse);
 
     const res = await GET(makeRequest());
 

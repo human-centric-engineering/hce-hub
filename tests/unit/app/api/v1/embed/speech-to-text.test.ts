@@ -133,7 +133,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(audioLimiter.check).mockReturnValue({ success: true } as never);
-  vi.mocked(resolveEmbedToken).mockResolvedValue(VALID_CONTEXT as never);
+  vi.mocked(resolveEmbedToken).mockResolvedValue(VALID_CONTEXT);
   vi.mocked(isOriginAllowed).mockReturnValue(true);
   vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue({
     voiceInputGloballyEnabled: true,
@@ -383,7 +383,7 @@ describe('POST /api/v1/embed/speech-to-text — origin handling', () => {
     vi.mocked(resolveEmbedToken).mockResolvedValue({
       ...VALID_CONTEXT,
       allowedOrigins: [],
-    } as never);
+    });
     vi.mocked(isOriginAllowed).mockReturnValue(true);
     const audio = makeAudioResolution();
     audio.provider.transcribe.mockResolvedValue({

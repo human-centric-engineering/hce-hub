@@ -154,7 +154,7 @@ describe('GET /api/v1/admin/orchestration/provider-models/:id', () => {
 
   it('returns 404 when model not found', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(null);
 
     const response = await GET(makeGetRequest(MODEL_ID), routeContext(MODEL_ID));
     expect(response.status).toBe(404);
@@ -189,7 +189,7 @@ describe('PATCH /api/v1/admin/orchestration/provider-models/:id', () => {
 
   it('returns 404 when model not found', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(null);
 
     const response = await PATCH(
       makePatchRequest(MODEL_ID, { name: 'Updated' }),
@@ -441,7 +441,7 @@ describe('DELETE /api/v1/admin/orchestration/provider-models/:id', () => {
 
   it('returns 404 when model not found', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(null);
 
     const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
     expect(response.status).toBe(404);

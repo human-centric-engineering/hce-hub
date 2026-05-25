@@ -177,7 +177,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
 
     it('returns 400 when model is missing from body', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
 
       const response = await POST(makeRequest({}), makeParams());
 
@@ -188,7 +188,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
 
     it('returns 400 when model is an empty string', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
 
       const response = await POST(makeRequest({ model: '' }), makeParams());
 
@@ -212,7 +212,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
   describe('Successful model test', () => {
     it('returns 200 with ok=true and latencyMs when model responds', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(getProvider).mockResolvedValue(
         makeMockProvider({ chat: vi.fn().mockResolvedValue({ content: 'Hello!' }) }) as never
       );
@@ -234,7 +234,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
 
     it('returns 200 with ok=false and latencyMs=null when provider throws', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(getProvider).mockResolvedValue(
         makeMockProvider({
           chat: vi.fn().mockRejectedValue(new Error('Connection refused')),
@@ -258,7 +258,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
 
     it('returns 200 with ok=false when getProvider itself throws', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(getProvider).mockRejectedValue(new Error('Provider not configured'));
 
       const response = await POST(makeRequest(), makeParams());
@@ -273,7 +273,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
   describe('Capability-aware routing', () => {
     it('routes embedding capability through provider.embed (not chat)', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       const chatMock = vi.fn();
       const embedMock = vi.fn().mockResolvedValue([0.1, 0.2, 0.3]);
       vi.mocked(getProvider).mockResolvedValue(
@@ -298,7 +298,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
 
     it('refuses unsupported capabilities without invoking the SDK', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       const chatMock = vi.fn();
       const embedMock = vi.fn();
       vi.mocked(getProvider).mockResolvedValue(
@@ -329,7 +329,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
       // silent-WAV transcribe roundtrip — see the Audio capability
       // describe block below for its happy + failure paths.
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       vi.mocked(getProvider).mockResolvedValue(makeMockProvider() as never);
 
       for (const capability of ['image', 'moderation', 'unknown'] as const) {
@@ -346,7 +346,7 @@ describe('POST /api/v1/admin/orchestration/providers/:id/test-model', () => {
 
     it('defaults to chat capability when omitted (backwards compat)', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider() as never);
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
       const chatMock = vi.fn().mockResolvedValue({ content: 'Hello' });
       vi.mocked(getProvider).mockResolvedValue(makeMockProvider({ chat: chatMock }) as never);
 

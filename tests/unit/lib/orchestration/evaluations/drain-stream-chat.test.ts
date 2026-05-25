@@ -108,7 +108,7 @@ describe('drainStreamChat', () => {
         patternName: null,
         excerpt: 'Body.',
         similarity: 0.9,
-      } as unknown as Citation,
+      },
     ];
 
     mockedStreamChat.mockReturnValueOnce(fromEvents([{ type: 'citations', citations }]));

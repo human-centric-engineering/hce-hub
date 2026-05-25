@@ -78,7 +78,7 @@ export function ReviewItem({ section, item, state, onChange }: ReviewItemProps) 
     // user types. Click-to-enter pre-creates an empty overrides record
     // so unrelated edits in other rows don't get lost in render churn.
     if (section.subItems) return; // nested rows manage their own state
-    const current = state as FlatItemState | undefined;
+    const current = state && 'overrides' in state ? state : undefined;
     onChange({
       decision: 'accept',
       overrides: current?.overrides ?? {},

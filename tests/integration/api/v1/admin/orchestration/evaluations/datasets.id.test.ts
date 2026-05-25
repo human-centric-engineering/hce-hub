@@ -175,7 +175,7 @@ describe('GET /api/v1/admin/orchestration/evaluations/datasets/:id', () => {
 
   it('returns 200 with dataset + first 50 cases preview', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(makeDatasetRow() as never);
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(makeDatasetRow());
     vi.mocked(prisma.aiDatasetCase.findMany).mockResolvedValue([
       { id: 'c1', position: 0 } as never,
     ]);
@@ -238,7 +238,7 @@ describe('PATCH /api/v1/admin/orchestration/evaluations/datasets/:id', () => {
 
   it('returns 400 when body is empty (refine: at least one field required)', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(makeDatasetRow() as never);
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(makeDatasetRow());
 
     const response = await PATCH(makePatchRequest(DATASET_ID, {}), makeParams(DATASET_ID));
 
@@ -248,9 +248,9 @@ describe('PATCH /api/v1/admin/orchestration/evaluations/datasets/:id', () => {
 
   it('returns 200 and updates only provided fields', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(makeDatasetRow() as never);
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(makeDatasetRow());
     vi.mocked(prisma.aiDataset.update).mockResolvedValue(
-      makeDatasetRow({ name: 'renamed', tags: ['x'] }) as never
+      makeDatasetRow({ name: 'renamed', tags: ['x'] })
     );
 
     const response = await PATCH(
@@ -267,10 +267,8 @@ describe('PATCH /api/v1/admin/orchestration/evaluations/datasets/:id', () => {
 
   it('allows description: null to clear the field', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(makeDatasetRow() as never);
-    vi.mocked(prisma.aiDataset.update).mockResolvedValue(
-      makeDatasetRow({ description: null }) as never
-    );
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(makeDatasetRow());
+    vi.mocked(prisma.aiDataset.update).mockResolvedValue(makeDatasetRow({ description: null }));
 
     const response = await PATCH(
       makePatchRequest(DATASET_ID, { description: null }),
@@ -326,7 +324,7 @@ describe('DELETE /api/v1/admin/orchestration/evaluations/datasets/:id', () => {
 
   it('returns 409 when an active (queued/running) run references the dataset', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(makeDatasetRow() as never);
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(makeDatasetRow());
     vi.mocked(prisma.aiEvaluationRun.findFirst).mockResolvedValue({
       id: 'run-1',
       name: 'blocking run',
@@ -344,9 +342,9 @@ describe('DELETE /api/v1/admin/orchestration/evaluations/datasets/:id', () => {
 
   it('returns 200 and deletes the dataset on the happy path', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
-    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(makeDatasetRow() as never);
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(makeDatasetRow());
     vi.mocked(prisma.aiEvaluationRun.findFirst).mockResolvedValue(null);
-    vi.mocked(prisma.aiDataset.delete).mockResolvedValue(makeDatasetRow() as never);
+    vi.mocked(prisma.aiDataset.delete).mockResolvedValue(makeDatasetRow());
 
     const response = await DELETE(makeDeleteRequest(DATASET_ID), makeParams(DATASET_ID));
 

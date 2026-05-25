@@ -43,7 +43,7 @@ describe('getMcpServerConfig', () => {
   });
 
   it('calls prisma.mcpServerConfig.upsert with slug global', async () => {
-    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeConfigRow() as never);
+    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeConfigRow());
 
     await getMcpServerConfig();
 
@@ -53,7 +53,7 @@ describe('getMcpServerConfig', () => {
   });
 
   it('passes the correct create defaults', async () => {
-    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeConfigRow() as never);
+    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeConfigRow());
 
     await getMcpServerConfig();
 
@@ -73,7 +73,7 @@ describe('getMcpServerConfig', () => {
   });
 
   it('passes an empty update object to avoid overwriting existing config', async () => {
-    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeConfigRow() as never);
+    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeConfigRow());
 
     await getMcpServerConfig();
 
@@ -84,7 +84,7 @@ describe('getMcpServerConfig', () => {
 
   it('returns the mapped McpServerState from the DB row', async () => {
     vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(
-      makeConfigRow({ isEnabled: true, serverName: 'Custom MCP', globalRateLimit: 120 }) as never
+      makeConfigRow({ isEnabled: true, serverName: 'Custom MCP', globalRateLimit: 120 })
     );
 
     const result = await getMcpServerConfig();
@@ -99,7 +99,7 @@ describe('getMcpServerConfig', () => {
   });
 
   it('returns cached result on second call within TTL', async () => {
-    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeConfigRow() as never);
+    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeConfigRow());
 
     await getMcpServerConfig();
     await getMcpServerConfig();
@@ -108,7 +108,7 @@ describe('getMcpServerConfig', () => {
   });
 
   it('re-fetches after cache is invalidated', async () => {
-    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeConfigRow() as never);
+    vi.mocked(prisma.mcpServerConfig.upsert).mockResolvedValue(makeConfigRow());
 
     await getMcpServerConfig();
     invalidateMcpConfigCache();
@@ -132,8 +132,8 @@ describe('invalidateMcpConfigCache', () => {
 
   it('forces a fresh DB read on the next getMcpServerConfig call', async () => {
     vi.mocked(prisma.mcpServerConfig.upsert)
-      .mockResolvedValueOnce(makeConfigRow({ serverName: 'First' }) as never)
-      .mockResolvedValueOnce(makeConfigRow({ serverName: 'Second' }) as never);
+      .mockResolvedValueOnce(makeConfigRow({ serverName: 'First' }))
+      .mockResolvedValueOnce(makeConfigRow({ serverName: 'Second' }));
 
     const first = await getMcpServerConfig();
     expect(first.serverName).toBe('First');

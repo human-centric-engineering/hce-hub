@@ -79,7 +79,7 @@ function mockFetchSuccess(datasetId = 'ds-new-1'): ReturnType<typeof vi.fn> {
       success: true,
       data: { datasetId, caseCount: 2, contentHash: 'abc', warnings: [] },
     }),
-  } as Response);
+  });
   vi.stubGlobal('fetch', fn);
   return fn;
 }
@@ -89,7 +89,7 @@ function mockFetchServerError(message: string, status = 400): ReturnType<typeof 
     ok: false,
     status,
     json: async () => ({ success: false, error: { code: 'BAD_REQUEST', message } }),
-  } as Response);
+  });
   vi.stubGlobal('fetch', fn);
   return fn;
 }

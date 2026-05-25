@@ -51,9 +51,7 @@ describe('components/forms/contact-form', () => {
 
     // Setup mock analytics
     const { useFormAnalytics } = await import('@/lib/analytics/events');
-    mockTrackFormSubmitted = vi.fn().mockResolvedValue(undefined) as unknown as ReturnType<
-      typeof vi.fn
-    >;
+    mockTrackFormSubmitted = vi.fn().mockResolvedValue(undefined);
     vi.mocked(useFormAnalytics).mockReturnValue({
       trackFormSubmitted: mockTrackFormSubmitted,
     } as unknown as ReturnType<typeof useFormAnalytics>);

@@ -230,7 +230,7 @@ describe('getAudioProvider', () => {
       embed: vi.fn(),
       listModels: vi.fn(),
       testConnection: vi.fn(),
-    } as never);
+    });
 
     const result = await getAudioProvider();
 

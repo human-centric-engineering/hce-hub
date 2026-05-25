@@ -20,7 +20,6 @@
  * Authentication: Admin role required.
  */
 
-import type { Prisma } from '@prisma/client';
 import { withAdminAuth } from '@/lib/auth/guards';
 import { prisma } from '@/lib/db/client';
 import { successResponse } from '@/lib/api/responses';
@@ -97,7 +96,7 @@ export const POST = withAdminAuth<Params>(async (request, session, { params }) =
             agentId: experiment.agentId,
             datasetId: experiment.dataset.id,
             datasetContentHash: experiment.dataset.contentHash,
-            metricConfigs: experiment.metricConfigs as Prisma.InputJsonValue,
+            metricConfigs: experiment.metricConfigs,
             status: 'queued',
             progress: {
               casesTotal: experiment.dataset.caseCount,

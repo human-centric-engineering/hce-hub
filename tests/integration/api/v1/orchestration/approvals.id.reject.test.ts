@@ -91,7 +91,7 @@ function makeParams(id: string) {
 describe('POST /api/v1/orchestration/approvals/:id/reject (token auth)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
   });
 
   it('returns 200 with valid token and reason', async () => {
@@ -166,7 +166,7 @@ describe('POST /api/v1/orchestration/approvals/:id/reject (token auth)', () => {
 
   it('returns 409 when concurrent rejection races', async () => {
     vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecution() as never);
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 });
     const { token } = generateApprovalToken(EXECUTION_ID, 'reject', 60);
 
     const response = await POST(

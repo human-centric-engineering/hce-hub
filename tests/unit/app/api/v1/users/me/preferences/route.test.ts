@@ -82,7 +82,7 @@ beforeEach(() => {
 describe('GET /api/v1/users/me/preferences', () => {
   it('returns 401 when unauthenticated', async () => {
     // Arrange
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     const { GET } = await import('@/app/api/v1/users/me/preferences/route');
 
@@ -98,7 +98,7 @@ describe('GET /api/v1/users/me/preferences', () => {
 
   it('returns default preferences when user.preferences is null', async () => {
     // Arrange
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
     vi.mocked(prisma.user.findUnique).mockResolvedValue({ preferences: null } as never);
 
     const { GET } = await import('@/app/api/v1/users/me/preferences/route');
@@ -129,7 +129,7 @@ describe('GET /api/v1/users/me/preferences', () => {
     const storedPreferences = {
       email: { marketing: true, productUpdates: false, securityAlerts: true },
     };
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       preferences: storedPreferences,
     } as never);
@@ -155,7 +155,7 @@ describe('GET /api/v1/users/me/preferences', () => {
     // Arrange: store a preferences object whose securityAlerts field will be
     // coerced by parseUserPreferences regardless; use invalid JSON to trigger
     // the default-preferences fallback path, which always sets securityAlerts=true.
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
     vi.mocked(prisma.user.findUnique).mockResolvedValue({ preferences: null } as never);
 
     const { GET } = await import('@/app/api/v1/users/me/preferences/route');
@@ -174,7 +174,7 @@ describe('GET /api/v1/users/me/preferences', () => {
 
   it('returns 401 when authenticated session exists but user is not found in DB', async () => {
     // Arrange: session is valid but DB row is missing (e.g., deleted account)
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
 
     const { GET } = await import('@/app/api/v1/users/me/preferences/route');
@@ -193,7 +193,7 @@ describe('GET /api/v1/users/me/preferences', () => {
 describe('PATCH /api/v1/users/me/preferences', () => {
   it('returns 401 when unauthenticated', async () => {
     // Arrange
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
     const { PATCH } = await import('@/app/api/v1/users/me/preferences/route');
 
@@ -212,7 +212,7 @@ describe('PATCH /api/v1/users/me/preferences', () => {
     const existingPreferences = {
       email: { marketing: false, productUpdates: true, securityAlerts: true },
     };
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       preferences: existingPreferences,
     } as never);
@@ -256,7 +256,7 @@ describe('PATCH /api/v1/users/me/preferences', () => {
     const existingPreferences = {
       email: { marketing: false, productUpdates: true, securityAlerts: true },
     };
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       preferences: existingPreferences,
     } as never);
@@ -295,7 +295,7 @@ describe('PATCH /api/v1/users/me/preferences', () => {
     const existingPreferences = {
       email: { marketing: false, productUpdates: true, securityAlerts: true },
     };
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       preferences: existingPreferences,
     } as never);
@@ -322,7 +322,7 @@ describe('PATCH /api/v1/users/me/preferences', () => {
 
   it('returns 400 when request body fails schema validation', async () => {
     // Arrange: send an invalid field type
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
 
     const { PATCH } = await import('@/app/api/v1/users/me/preferences/route');
 
@@ -341,7 +341,7 @@ describe('PATCH /api/v1/users/me/preferences', () => {
 
   it('returns 401 when authenticated session exists but user is not found in DB', async () => {
     // Arrange: session valid but DB row gone
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
 
     const { PATCH } = await import('@/app/api/v1/users/me/preferences/route');

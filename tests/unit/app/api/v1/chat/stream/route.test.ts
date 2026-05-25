@@ -197,7 +197,7 @@ describe('POST /api/v1/chat/stream', () => {
     vi.clearAllMocks();
 
     // Default: authenticated session
-    vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession());
 
     // Default: rate limits allow the request
     vi.mocked(consumerChatLimiter.check).mockReturnValue(makeRateLimitResult(true));
@@ -400,7 +400,7 @@ describe('POST /api/v1/chat/stream', () => {
   describe('Authentication', () => {
     it('should return 401 when there is no active session', async () => {
       // Arrange: no session
-      vi.mocked(auth.api.getSession).mockResolvedValue(null as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(null);
       const request = createMockRequest(validPayload);
 
       // Act
@@ -566,7 +566,7 @@ describe('POST /api/v1/chat/stream', () => {
         useCount: 3,
       } as never);
       // Atomic increment succeeds (1 row updated)
-      vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as never);
+      vi.mocked(prisma.$executeRaw).mockResolvedValue(1);
       const request = createMockRequest({
         ...validPayload,
         agentSlug: 'private-bot',
@@ -594,7 +594,7 @@ describe('POST /api/v1/chat/stream', () => {
         useCount: 9999,
       } as never);
       // Atomic increment succeeds (1 row updated — maxUses IS NULL matches)
-      vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as never);
+      vi.mocked(prisma.$executeRaw).mockResolvedValue(1);
       const request = createMockRequest({
         ...validPayload,
         agentSlug: 'private-bot',

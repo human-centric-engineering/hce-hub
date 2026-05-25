@@ -354,7 +354,7 @@ function WorkflowBuilderInner({
       // Only ask the estimator about *valid* drafts — a half-wired
       // canvas would just generate noise. Zod parse is cheap.
       const parsed = workflowDefinitionSchema.safeParse(raw);
-      return parsed.success ? (parsed.data as WorkflowDefinition) : null;
+      return parsed.success ? parsed.data : null;
     } catch {
       return null;
     }
@@ -778,9 +778,7 @@ function WorkflowBuilderInner({
               | undefined) ?? null
           }
           workflowDefinition={
-            (workflowDefinitionSchema.safeParse(pickEditableDefinition(workflow)).data as
-              | WorkflowDefinition
-              | undefined) ?? null
+            workflowDefinitionSchema.safeParse(pickEditableDefinition(workflow)).data ?? null
           }
         />
       ) : workflow?.description ? (

@@ -89,7 +89,7 @@ describe('POST /api/v1/chat/agents/:slug/validate-token', () => {
   it('returns 401 unauthenticated', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
-    const response = await POST(makeRequest({ inviteToken: 'tok123' }), routeContext as never);
+    const response = await POST(makeRequest({ inviteToken: 'tok123' }), routeContext);
 
     expect(response.status).toBe(401);
   });
@@ -109,7 +109,7 @@ describe('POST /api/v1/chat/agents/:slug/validate-token', () => {
       useCount: 0,
     } as never);
 
-    const response = await POST(makeRequest({ inviteToken: 'tok123' }), routeContext as never);
+    const response = await POST(makeRequest({ inviteToken: 'tok123' }), routeContext);
 
     expect(response.status).toBe(200);
     const body = await parseJson<{ success: boolean; data: { valid: boolean } }>(response);
@@ -132,7 +132,7 @@ describe('POST /api/v1/chat/agents/:slug/validate-token', () => {
       useCount: 0,
     } as never);
 
-    const response = await POST(makeRequest({ inviteToken: 'tok123' }), routeContext as never);
+    const response = await POST(makeRequest({ inviteToken: 'tok123' }), routeContext);
 
     expect(response.status).toBe(200);
     const body = await parseJson<{ success: boolean; data: { valid: boolean; reason: string } }>(
@@ -157,7 +157,7 @@ describe('POST /api/v1/chat/agents/:slug/validate-token', () => {
       useCount: 0,
     } as never);
 
-    const response = await POST(makeRequest({ inviteToken: 'tok123' }), routeContext as never);
+    const response = await POST(makeRequest({ inviteToken: 'tok123' }), routeContext);
 
     expect(response.status).toBe(200);
     const body = await parseJson<{ success: boolean; data: { valid: boolean; reason: string } }>(
@@ -175,7 +175,7 @@ describe('POST /api/v1/chat/agents/:slug/validate-token', () => {
     } as never);
     vi.mocked(prisma.aiAgentInviteToken.findFirst).mockResolvedValue(null);
 
-    const response = await POST(makeRequest({ inviteToken: 'bad-token' }), routeContext as never);
+    const response = await POST(makeRequest({ inviteToken: 'bad-token' }), routeContext);
 
     expect(response.status).toBe(200);
     const body = await parseJson<{ success: boolean; data: { valid: boolean; reason: string } }>(
@@ -200,7 +200,7 @@ describe('POST /api/v1/chat/agents/:slug/validate-token', () => {
       useCount: 5,
     } as never);
 
-    const response = await POST(makeRequest({ inviteToken: 'tok123' }), routeContext as never);
+    const response = await POST(makeRequest({ inviteToken: 'tok123' }), routeContext);
 
     expect(response.status).toBe(200);
     const body = await parseJson<{ success: boolean; data: { valid: boolean; reason: string } }>(

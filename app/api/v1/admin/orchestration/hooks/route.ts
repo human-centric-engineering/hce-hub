@@ -79,7 +79,7 @@ export const POST = withAdminAuth(async (request, session) => {
     data: {
       name,
       eventType,
-      action: action as unknown as Prisma.InputJsonValue,
+      action: action,
       filter: (filter ?? undefined) as Prisma.InputJsonValue | undefined,
       isEnabled,
       createdBy: session.user.id,

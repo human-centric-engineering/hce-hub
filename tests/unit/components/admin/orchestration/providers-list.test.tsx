@@ -435,7 +435,7 @@ describe('ProvidersList', () => {
         <ProvidersList initialProviders={[{ ...inactiveProvider, id: failingProvider.id }]} />
       );
       const moreBtn = document.querySelectorAll('button[aria-haspopup="menu"]')[0];
-      await user.click(moreBtn as HTMLElement);
+      await user.click(moreBtn);
       const reactivate = await screen.findByRole('menuitem', {
         name: /^reactivate$/i,
         hidden: true,
@@ -513,7 +513,7 @@ describe('ProvidersList', () => {
   describe('deactivate confirm flow', () => {
     async function openDeactivateDialog(user: ReturnType<typeof userEvent.setup>) {
       const moreBtn = document.querySelectorAll('button[aria-haspopup="menu"]')[0];
-      await user.click(moreBtn as HTMLElement);
+      await user.click(moreBtn);
 
       const deactivateItem = await screen.findByRole('menuitem', {
         name: /^deactivate$/i,
@@ -572,7 +572,7 @@ describe('ProvidersList', () => {
   describe('permanent delete flow', () => {
     async function openPermanentDialog(user: ReturnType<typeof userEvent.setup>) {
       const moreBtn = document.querySelectorAll('button[aria-haspopup="menu"]')[0];
-      await user.click(moreBtn as HTMLElement);
+      await user.click(moreBtn);
 
       const permanentItem = await screen.findByRole('menuitem', {
         name: /delete permanently/i,
@@ -746,7 +746,7 @@ describe('ProvidersList', () => {
       render(<ProvidersList initialProviders={[THREE_PROVIDERS[0]]} />);
 
       const moreBtn = document.querySelector('button[aria-haspopup="menu"]')!;
-      await user.click(moreBtn as HTMLElement);
+      await user.click(moreBtn);
 
       const viewModels = await screen.findByRole('menuitem', { name: /view models/i });
       await user.click(viewModels);
@@ -772,7 +772,7 @@ describe('ProvidersList', () => {
       render(<ProvidersList initialProviders={[inactiveProvider]} />);
 
       const moreBtn = document.querySelector('button[aria-haspopup="menu"]')!;
-      await user.click(moreBtn as HTMLElement);
+      await user.click(moreBtn);
 
       expect(await screen.findByRole('menuitem', { name: /reactivate/i })).toBeInTheDocument();
     });
@@ -783,7 +783,7 @@ describe('ProvidersList', () => {
       render(<ProvidersList initialProviders={[activeProvider]} />);
 
       const moreBtn = document.querySelector('button[aria-haspopup="menu"]')!;
-      await user.click(moreBtn as HTMLElement);
+      await user.click(moreBtn);
 
       await waitFor(() => {
         expect(screen.queryByRole('menuitem', { name: /reactivate/i })).not.toBeInTheDocument();
@@ -799,7 +799,7 @@ describe('ProvidersList', () => {
       render(<ProvidersList initialProviders={[inactiveProvider]} />);
 
       const moreBtn = document.querySelector('button[aria-haspopup="menu"]')!;
-      await user.click(moreBtn as HTMLElement);
+      await user.click(moreBtn);
 
       const reactivateItem = await screen.findByRole('menuitem', { name: /reactivate/i });
       await user.click(reactivateItem);

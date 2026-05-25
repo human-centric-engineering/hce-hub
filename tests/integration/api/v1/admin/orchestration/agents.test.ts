@@ -155,7 +155,7 @@ describe('GET /api/v1/admin/orchestration/agents', () => {
       vi.mocked(prisma.aiAgent.findMany).mockResolvedValue(agents as never);
       vi.mocked(prisma.aiAgent.count).mockResolvedValue(2);
       vi.mocked(prisma.aiCostLog.groupBy).mockResolvedValue([] as never);
-      vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue(null as never);
+      vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue(null);
 
       const response = await GET(makeGetRequest());
 

@@ -22,11 +22,7 @@
 
 import { z } from 'zod';
 
-import type {
-  SupervisorConfidence,
-  SupervisorReport,
-  SupervisorVerdict,
-} from '@/types/orchestration';
+import type { SupervisorReport, SupervisorVerdict } from '@/types/orchestration';
 import {
   DEFAULT_PER_STEP_CAP_BYTES,
   TERMINAL_HEAD_CAP_BYTES,
@@ -431,7 +427,7 @@ export function validateCitations(
     weaknesses: validWeaknesses,
     anomalies: parsed.anomalies,
     unverifiedAreas: parsed.unverifiedAreas,
-    confidence: parsed.confidence as SupervisorConfidence,
+    confidence: parsed.confidence,
     ...(invalidCitations.length > 0 ? { invalidCitations } : {}),
   };
 

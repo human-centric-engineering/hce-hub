@@ -110,7 +110,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 describe('POST /api/v1/admin/orchestration/executions/:id/reject', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -218,7 +218,7 @@ describe('POST /api/v1/admin/orchestration/executions/:id/reject', () => {
   it('returns 409 when concurrent rejection races (updateMany count === 0)', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecution() as never);
-    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 });
 
     const response = await POST(makePostRequest({ reason: 'Rejected' }), makeParams(EXECUTION_ID));
     expect(response.status).toBe(409);
@@ -356,7 +356,7 @@ describe('POST /api/v1/admin/orchestration/executions/:id/reject', () => {
     it('sweeps ai_workflow_running_step rows when the status flip succeeds', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecution() as never);
-      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
 
       await POST(makePostRequest({ reason: 'Rejected' }), makeParams(EXECUTION_ID));
 
@@ -368,7 +368,7 @@ describe('POST /api/v1/admin/orchestration/executions/:id/reject', () => {
     it('does not sweep ai_workflow_running_step rows when the status guard fails', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiWorkflowExecution.findUnique).mockResolvedValue(makeExecution() as never);
-      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 } as never);
+      vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 0 });
 
       await POST(makePostRequest({ reason: 'Rejected' }), makeParams(EXECUTION_ID));
 

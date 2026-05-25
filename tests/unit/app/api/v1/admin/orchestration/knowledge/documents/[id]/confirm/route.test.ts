@@ -121,7 +121,7 @@ interface ErrorBody {
 describe('POST /api/v1/admin/orchestration/knowledge/documents/:id/confirm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(confirmPreview).mockResolvedValue(makeMockDocument() as never);
   });
 
@@ -146,7 +146,7 @@ describe('POST /api/v1/admin/orchestration/knowledge/documents/:id/confirm', () 
 
     it('should call confirmPreview with (id, userId, correctedContent)', async () => {
       const admin = mockAdminUser();
-      vi.mocked(auth.api.getSession).mockResolvedValue(admin as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(admin);
 
       const body = {
         documentId: VALID_DOC_ID,
@@ -239,7 +239,7 @@ describe('POST /api/v1/admin/orchestration/knowledge/documents/:id/confirm', () 
 
   describe('Authentication', () => {
     it('should return 401 when the request is unauthenticated', async () => {
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser() as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
 
       const body = { documentId: VALID_DOC_ID };
       const response = await POST(makeRequest(VALID_DOC_ID, body), makeContext(VALID_DOC_ID));
@@ -251,7 +251,7 @@ describe('POST /api/v1/admin/orchestration/knowledge/documents/:id/confirm', () 
     });
 
     it('should return 403 when the user is not an admin', async () => {
-      vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER') as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER'));
 
       const body = { documentId: VALID_DOC_ID };
       const response = await POST(makeRequest(VALID_DOC_ID, body), makeContext(VALID_DOC_ID));

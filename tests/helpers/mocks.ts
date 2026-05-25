@@ -35,7 +35,7 @@ export function mockConsole() {
       warn: vi.fn(),
       info: vi.fn(),
       debug: vi.fn(),
-    } as Console;
+    };
   });
 
   afterEach(() => {

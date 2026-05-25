@@ -80,7 +80,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(resolveEmbedToken).mockResolvedValue(VALID_CONTEXT as never);
+  vi.mocked(resolveEmbedToken).mockResolvedValue(VALID_CONTEXT);
   vi.mocked(isOriginAllowed).mockReturnValue(true);
   // `vi.clearAllMocks()` wipes any mock implementation set in `vi.mock()`
   // factories — so re-stub the defaults here every run rather than relying
@@ -153,7 +153,7 @@ describe('GET /api/v1/embed/widget-config', () => {
     vi.mocked(resolveEmbedToken).mockResolvedValue({
       ...VALID_CONTEXT,
       allowedOrigins: [],
-    } as never);
+    });
     const response = await GET(makeGetRequest({ 'X-Embed-Token': VALID_TOKEN }));
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
   });

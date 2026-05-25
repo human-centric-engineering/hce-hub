@@ -1,4 +1,5 @@
 import { BUILTIN_WORKFLOW_TEMPLATES } from '@/prisma/seeds/data/templates';
+import { Prisma } from '@prisma/client';
 import { createInitialVersion } from '@/lib/orchestration/workflows/version-service';
 import type { SeedUnit } from '@/prisma/runner';
 
@@ -51,7 +52,7 @@ const unit: SeedUnit = {
       if (existing) {
         await prisma.aiWorkflow.update({
           where: { slug: template.slug },
-          data: { metadata: templateMetadata as unknown as object },
+          data: { metadata: templateMetadata as unknown as Prisma.InputJsonValue },
         });
         continue;
       }
@@ -66,7 +67,7 @@ const unit: SeedUnit = {
             patternsUsed,
             isActive: true,
             isTemplate: true,
-            metadata: templateMetadata as unknown as object,
+            metadata: templateMetadata as unknown as Prisma.InputJsonValue,
             createdBy,
           },
         });

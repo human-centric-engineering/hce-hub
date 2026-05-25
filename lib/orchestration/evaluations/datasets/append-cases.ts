@@ -124,10 +124,10 @@ export async function appendCasesToDataset(params: {
     const newContentHash = hashDatasetCases(
       allCases.map((c) => ({
         position: c.position,
-        input: c.input as unknown,
+        input: c.input,
         expectedOutput: c.expectedOutput,
-        metadata: c.metadata as unknown,
-        referenceCitations: c.referenceCitations as unknown,
+        metadata: c.metadata,
+        referenceCitations: c.referenceCitations,
       }))
     );
 

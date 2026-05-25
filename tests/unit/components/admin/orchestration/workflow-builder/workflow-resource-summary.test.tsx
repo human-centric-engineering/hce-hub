@@ -499,7 +499,7 @@ describe('WorkflowResourceSummary', () => {
         makeNode('step-1', 'tool_call', { capabilitySlug: '' }),
         makeNode('step-2', 'tool_call', {}),
 
-        makeNode('step-3', 'tool_call', { capabilitySlug: 42 as any }),
+        makeNode('step-3', 'tool_call', { capabilitySlug: 42 }),
       ] as PatternNode[];
       const { container } = render(
         <WorkflowResourceSummary {...DEFAULT_PROPS} nodes={nodes} capabilities={[CAP_A]} />

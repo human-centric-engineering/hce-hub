@@ -119,7 +119,7 @@ function seedExecutionMocks(): void {
     return { id: where.id, ...data };
   }) as never);
   // Engine writes use updateMany (lease-guarded). Default count=1 keeps lease-loss inactive.
-  vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 } as never);
+  vi.mocked(prisma.aiWorkflowExecution.updateMany).mockResolvedValue({ count: 1 });
   // Lease helpers — claim returns a valid token, heartbeat returns a no-op stop fn.
   vi.mocked(claimLease).mockResolvedValue('lease-token-test');
   vi.mocked(startHeartbeat).mockReturnValue(vi.fn());
@@ -130,7 +130,7 @@ async function collectEvents(
   workflow: { id: string; definition: WorkflowDefinition }
 ): Promise<ExecutionEvent[]> {
   const events: ExecutionEvent[] = [];
-  for await (const event of engine.execute(workflow as never, {}, { userId: USER_ID })) {
+  for await (const event of engine.execute(workflow, {}, { userId: USER_ID })) {
     events.push(event);
   }
   return events;

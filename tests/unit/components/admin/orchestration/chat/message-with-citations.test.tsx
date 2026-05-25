@@ -72,10 +72,7 @@ describe('MessageWithCitations', () => {
     render(<MessageWithCitations content="See [1] and [3]." citations={citations} />);
     const bad = screen.getByLabelText('Unmatched citation marker 3');
     expect(bad).toBeInTheDocument();
-    expect(bad).toHaveAttribute(
-      'title',
-      expect.stringContaining('hallucinated') as unknown as string
-    );
+    expect(bad).toHaveAttribute('title', expect.stringContaining('hallucinated') as unknown);
   });
 
   it('falls back to patternName when documentName is missing', async () => {

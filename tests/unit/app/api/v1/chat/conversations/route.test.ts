@@ -144,7 +144,7 @@ describe('GET /api/v1/chat/conversations', () => {
     vi.clearAllMocks();
 
     // Default: authenticated session
-    vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession() as never);
+    vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession());
 
     // Default: no conversations
     vi.mocked(prisma.aiConversation.findMany).mockResolvedValue([]);
@@ -295,7 +295,7 @@ describe('GET /api/v1/chat/conversations', () => {
   describe('Authentication', () => {
     it('should return 401 when there is no active session', async () => {
       // Arrange
-      vi.mocked(auth.api.getSession).mockResolvedValue(null as never);
+      vi.mocked(auth.api.getSession).mockResolvedValue(null);
       const request = createMockRequest();
 
       // Act

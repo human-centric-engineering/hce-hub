@@ -22,7 +22,7 @@ import { DocumentKeywordsModal } from '@/components/admin/orchestration/knowledg
 const mockFetch = vi.fn();
 beforeEach(() => {
   mockFetch.mockReset();
-  global.fetch = mockFetch as unknown as typeof fetch;
+  global.fetch = mockFetch;
 });
 
 function chunksResponse(chunks: Array<{ id: string; keywords: string | null }>): {

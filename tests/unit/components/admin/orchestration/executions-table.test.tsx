@@ -70,7 +70,7 @@ describe('ExecutionsTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch = vi.fn<typeof fetch>();
-    global.fetch = mockFetch as typeof fetch;
+    global.fetch = mockFetch;
     mockFetch.mockResolvedValue(
       createMockFetchResponse({ success: true, data: TWO_EXECUTIONS, meta: MOCK_META })
     );
@@ -234,7 +234,7 @@ describe('ExecutionsTable', () => {
         forward: vi.fn(),
         refresh: vi.fn(),
         prefetch: vi.fn(),
-      } as never);
+      });
 
       const user = userEvent.setup();
       render(<ExecutionsTable initialExecutions={TWO_EXECUTIONS} initialMeta={MOCK_META} />);
@@ -259,7 +259,7 @@ describe('ExecutionsTable', () => {
         forward: vi.fn(),
         refresh: vi.fn(),
         prefetch: vi.fn(),
-      } as never);
+      });
 
       const user = userEvent.setup();
       render(

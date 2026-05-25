@@ -84,17 +84,13 @@ function setupAgentMocks() {
         _count: 80,
       }) as never
     );
-  vi.mocked(prisma.aiConversation.count)
-    .mockResolvedValueOnce(10 as never)
-    .mockResolvedValueOnce(25 as never);
-  vi.mocked(prisma.aiAgentCapability.count)
-    .mockResolvedValueOnce(3 as never)
-    .mockResolvedValueOnce(5 as never);
+  vi.mocked(prisma.aiConversation.count).mockResolvedValueOnce(10).mockResolvedValueOnce(25);
+  vi.mocked(prisma.aiAgentCapability.count).mockResolvedValueOnce(3).mockResolvedValueOnce(5);
   vi.mocked(prisma.aiEvaluationSession.count)
-    .mockResolvedValueOnce(4 as never) // agent A total
-    .mockResolvedValueOnce(2 as never) // agent A completed
-    .mockResolvedValueOnce(6 as never) // agent B total
-    .mockResolvedValueOnce(5 as never); // agent B completed
+    .mockResolvedValueOnce(4) // agent A total
+    .mockResolvedValueOnce(2) // agent A completed
+    .mockResolvedValueOnce(6) // agent B total
+    .mockResolvedValueOnce(5); // agent B completed
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -131,12 +127,12 @@ describe('Agent Comparison', () => {
   it('returns 404 when agent is not found', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiAgent.findUnique)
-      .mockResolvedValueOnce(null as never)
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(mockAgent(AGENT_B, 'Agent Beta') as never);
     vi.mocked(prisma.aiCostLog.aggregate).mockResolvedValue(mockCostAgg() as never);
-    vi.mocked(prisma.aiConversation.count).mockResolvedValue(0 as never);
-    vi.mocked(prisma.aiAgentCapability.count).mockResolvedValue(0 as never);
-    vi.mocked(prisma.aiEvaluationSession.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.aiConversation.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiAgentCapability.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiEvaluationSession.count).mockResolvedValue(0);
 
     const res = await GET(makeRequest(`${AGENT_A},${AGENT_B}`));
     expect(res.status).toBe(404);
@@ -151,13 +147,13 @@ describe('Agent Comparison', () => {
     // agentA is present — full Promise.all path executes for agentA
     vi.mocked(prisma.aiAgent.findUnique)
       .mockResolvedValueOnce(mockAgent(AGENT_A, 'Agent Alpha') as never)
-      .mockResolvedValueOnce(null as never); // agentB is missing
+      .mockResolvedValueOnce(null); // agentB is missing
 
     // Counts for agentA (6 calls: cost×1, conversation×1, capability×1, eval×2; agentB: cost×1, conversation×1, capability×1, eval×2 — all resolve before the null check)
     vi.mocked(prisma.aiCostLog.aggregate).mockResolvedValue(mockCostAgg() as never);
-    vi.mocked(prisma.aiConversation.count).mockResolvedValue(0 as never);
-    vi.mocked(prisma.aiAgentCapability.count).mockResolvedValue(0 as never);
-    vi.mocked(prisma.aiEvaluationSession.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.aiConversation.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiAgentCapability.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiEvaluationSession.count).mockResolvedValue(0);
 
     const res = await GET(makeRequest(`${AGENT_A},${AGENT_B}`));
     const body = (await res.json()) as { success: false; error: { message: string } };
@@ -172,14 +168,14 @@ describe('Agent Comparison', () => {
     // Covers the case where missing.join(', ') concatenates two ids
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
 
-    vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(null as never); // both null
+    vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue(null); // both null
 
     // Both agents null — Promise.all still resolves the count queries before
     // getAgentStats returns null, so defensive mocks prevent brittleness.
     vi.mocked(prisma.aiCostLog.aggregate).mockResolvedValue(mockCostAgg() as never);
-    vi.mocked(prisma.aiConversation.count).mockResolvedValue(0 as never);
-    vi.mocked(prisma.aiAgentCapability.count).mockResolvedValue(0 as never);
-    vi.mocked(prisma.aiEvaluationSession.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.aiConversation.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiAgentCapability.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiEvaluationSession.count).mockResolvedValue(0);
 
     const res = await GET(makeRequest(`${AGENT_A},${AGENT_B}`));
     const body = (await res.json()) as { success: false; error: { message: string } };
@@ -265,9 +261,9 @@ describe('Agent Comparison', () => {
       .mockResolvedValueOnce(nullCostAgg as never)
       .mockResolvedValueOnce(nullCostAgg as never);
 
-    vi.mocked(prisma.aiConversation.count).mockResolvedValue(0 as never);
-    vi.mocked(prisma.aiAgentCapability.count).mockResolvedValue(0 as never);
-    vi.mocked(prisma.aiEvaluationSession.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.aiConversation.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiAgentCapability.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiEvaluationSession.count).mockResolvedValue(0);
 
     const res = await GET(makeRequest(`${AGENT_A},${AGENT_B}`));
     expect(res.status).toBe(200);
