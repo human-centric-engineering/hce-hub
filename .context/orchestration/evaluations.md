@@ -343,6 +343,43 @@ own), and source execution (caller must own). Without the source-side
 check, a user could capture another user's prod traffic. UI entry
 points land in 2.6.
 
+## Phase 2 — synthetic case generation
+
+A new `kind='generator'` `AiAgent` (`eval-case-generator`, seeded by
+`017-case-generator-agent`) writes proposed cases from one of two
+seed sources. The agent kind is deliberately distinct from `'judge'`
+so the run-create form's judge picker (which filters
+`WHERE kind = 'judge'`) never accidentally surfaces the generator.
+
+Two modes:
+
+- **`kb`** — `seed-loader.loadKbSeed()` pulls a representative breadth
+  sample of chunks from the subject agent's accessible documents
+  (via `resolveAgentDocumentAccess`). The generator turns those into
+  grounded `{ input, expectedOutput, citations }` cases.
+- **`failure_mining`** — `seed-loader.loadFailureSeed()` pulls
+  low-scoring (`mean < 0.6`) prior `AiEvaluationCaseResult` rows for
+  the subject agent, joined to their source case + worst-grader
+  reasoning. The generator writes "similar but harder" variants
+  targeting the same failure mode.
+
+Two-step route flow:
+
+- `POST /datasets/:id/generate-cases` — preview only. One LLM call,
+  no writes. Sub-capped at **10/min/user** via `synthesisLimiter`
+  (genuinely expensive — every request invokes the case-generator
+  agent). Returns proposed cases for the admin to review and edit.
+- `POST /datasets/:id/generate-cases/commit` — writes accepted cases
+  via `appendCasesToDataset` with `source: 'synthetic'`. No LLM call,
+  inherits the default 100/min.
+
+Cost is tagged: the generator's chat call stamps
+`costLogMetadata: { role: 'generator', mode, agentSlug }` so synthesis
+spend appears as a third role alongside `'subject'` and `'judge'` in
+the cost analytics. Existing role filters (`role: 'subject' | 'judge'`)
+ignore the new value, so they don't double-count synthesis spend as
+either of the other two.
+
 ## Roadmap: judges in workflows
 
 Confirmed as future work. Two complementary integrations let workflows
@@ -418,30 +455,35 @@ type; `workflow_as_judge` reuses the same workflow execution path).
 
 ## Critical files
 
-| Concern             | Path                                                                                       |
-| ------------------- | ------------------------------------------------------------------------------------------ |
-| Schema              | `prisma/schema.prisma` (AiDataset, AiDatasetCase, AiEvaluationRun, AiEvaluationCaseResult) |
-| Worker              | `lib/orchestration/evaluations/run-worker.ts`                                              |
-| Lease helpers       | `lib/orchestration/evaluations/run-claim.ts`                                               |
-| Agent case dispatch | `lib/orchestration/evaluations/run-cases/agent-case.ts`                                    |
-| Workflow case stub  | `lib/orchestration/evaluations/run-cases/workflow-case.ts`                                 |
-| Dataset upload      | `lib/orchestration/evaluations/datasets/upload-handler.ts`                                 |
-| CSV parser          | `lib/orchestration/evaluations/datasets/parsers/csv-parser.ts`                             |
-| JSONL parser        | `lib/orchestration/evaluations/datasets/parsers/jsonl-parser.ts`                           |
-| Hash function       | `lib/orchestration/evaluations/datasets/hash.ts`                                           |
-| Grader registry     | `lib/orchestration/evaluations/graders/registry.ts`                                        |
-| Grader types        | `lib/orchestration/evaluations/graders/types.ts`                                           |
-| judge_agent grader  | `lib/orchestration/evaluations/graders/model/judge-agent.ts`                               |
-| Judge agents seed   | `prisma/seeds/016-evaluation-judges.ts`                                                    |
-| drainStreamChat     | `lib/orchestration/evaluations/drain-stream-chat.ts`                                       |
-| Tick wiring         | `app/api/v1/admin/orchestration/maintenance/tick/route.ts`                                 |
-| Cost estimator      | `lib/orchestration/cost-estimation/evaluation-cost.ts`                                     |
-| Estimate route      | `app/api/v1/admin/orchestration/evaluations/runs/estimate/route.ts`                        |
-| Append helper       | `lib/orchestration/evaluations/datasets/append-cases.ts`                                   |
-| Capture helpers     | `lib/orchestration/evaluations/datasets/capture.ts`                                        |
-| Capture route       | `app/api/v1/admin/orchestration/evaluations/datasets/[id]/capture/route.ts`                |
-| API routes          | `app/api/v1/admin/orchestration/evaluations/{datasets,runs,graders}/`                      |
-| UI pages            | `app/admin/orchestration/evaluations/{datasets,runs}/`                                     |
-| UI components       | `components/admin/orchestration/evaluations-foundations/`                                  |
-| UI copy             | `components/admin/orchestration/evaluations-foundations/help-text.ts`                      |
-| Validation schemas  | `lib/validations/orchestration-evaluations.ts`                                             |
+| Concern                 | Path                                                                                       |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| Schema                  | `prisma/schema.prisma` (AiDataset, AiDatasetCase, AiEvaluationRun, AiEvaluationCaseResult) |
+| Worker                  | `lib/orchestration/evaluations/run-worker.ts`                                              |
+| Lease helpers           | `lib/orchestration/evaluations/run-claim.ts`                                               |
+| Agent case dispatch     | `lib/orchestration/evaluations/run-cases/agent-case.ts`                                    |
+| Workflow case stub      | `lib/orchestration/evaluations/run-cases/workflow-case.ts`                                 |
+| Dataset upload          | `lib/orchestration/evaluations/datasets/upload-handler.ts`                                 |
+| CSV parser              | `lib/orchestration/evaluations/datasets/parsers/csv-parser.ts`                             |
+| JSONL parser            | `lib/orchestration/evaluations/datasets/parsers/jsonl-parser.ts`                           |
+| Hash function           | `lib/orchestration/evaluations/datasets/hash.ts`                                           |
+| Grader registry         | `lib/orchestration/evaluations/graders/registry.ts`                                        |
+| Grader types            | `lib/orchestration/evaluations/graders/types.ts`                                           |
+| judge_agent grader      | `lib/orchestration/evaluations/graders/model/judge-agent.ts`                               |
+| Judge agents seed       | `prisma/seeds/016-evaluation-judges.ts`                                                    |
+| drainStreamChat         | `lib/orchestration/evaluations/drain-stream-chat.ts`                                       |
+| Tick wiring             | `app/api/v1/admin/orchestration/maintenance/tick/route.ts`                                 |
+| Cost estimator          | `lib/orchestration/cost-estimation/evaluation-cost.ts`                                     |
+| Estimate route          | `app/api/v1/admin/orchestration/evaluations/runs/estimate/route.ts`                        |
+| Append helper           | `lib/orchestration/evaluations/datasets/append-cases.ts`                                   |
+| Capture helpers         | `lib/orchestration/evaluations/datasets/capture.ts`                                        |
+| Capture route           | `app/api/v1/admin/orchestration/evaluations/datasets/[id]/capture/route.ts`                |
+| Synthesis seed-loader   | `lib/orchestration/evaluations/synthesis/seed-loader.ts`                                   |
+| Case generator          | `lib/orchestration/evaluations/synthesis/case-generator.ts`                                |
+| Generator agent seed    | `prisma/seeds/017-case-generator-agent.ts`                                                 |
+| Synthesis preview route | `app/api/v1/admin/orchestration/evaluations/datasets/[id]/generate-cases/route.ts`         |
+| Synthesis commit route  | `app/api/v1/admin/orchestration/evaluations/datasets/[id]/generate-cases/commit/route.ts`  |
+| API routes              | `app/api/v1/admin/orchestration/evaluations/{datasets,runs,graders}/`                      |
+| UI pages                | `app/admin/orchestration/evaluations/{datasets,runs}/`                                     |
+| UI components           | `components/admin/orchestration/evaluations-foundations/`                                  |
+| UI copy                 | `components/admin/orchestration/evaluations-foundations/help-text.ts`                      |
+| Validation schemas      | `lib/validations/orchestration-evaluations.ts`                                             |

@@ -196,3 +196,53 @@ export const captureDatasetCaseSchema = z.discriminatedUnion('kind', [
 ]);
 
 export type CaptureDatasetCaseInput = z.infer<typeof captureDatasetCaseSchema>;
+
+// ---------------------------------------------------------------------------
+// Datasets — synthetic case generation
+// ---------------------------------------------------------------------------
+
+/**
+ * Body of `POST /evaluations/datasets/:id/generate-cases`.
+ *
+ * `mode` picks the seed source:
+ *   - `'kb'` — pull representative chunks from the subject agent's
+ *     accessible knowledge. Optional `topic` anchors the prompt.
+ *   - `'failure_mining'` — pull low-scoring prior cases for the subject
+ *     agent and generate "similar but harder" variants.
+ *
+ * `commit: false` (default) returns proposed cases for preview only —
+ * the form shows them to the admin to edit/accept. `commit: true` is
+ * the second call: the form sends the *accepted* cases back so the
+ * route writes them via `appendCasesToDataset`. Two-step keeps the
+ * generator's spend on the preview path and the write transactional
+ * on the accept path.
+ */
+export const generateCasesPreviewSchema = z
+  .object({
+    agentId: z.string().min(1),
+    mode: z.enum(['kb', 'failure_mining']),
+    count: z.coerce.number().int().min(1).max(25).default(5),
+    topic: z.string().min(1).max(500).optional(),
+  })
+  .strict();
+
+export const generateCasesCommitSchema = z
+  .object({
+    cases: z
+      .array(
+        z
+          .object({
+            input: z.union([z.string().min(1).max(50_000), z.record(z.string(), z.unknown())]),
+            expectedOutput: z.string().max(50_000).optional(),
+            metadata: z.record(z.string(), z.unknown()).optional(),
+            referenceCitations: z.array(z.unknown()).optional(),
+          })
+          .strict()
+      )
+      .min(1)
+      .max(25),
+  })
+  .strict();
+
+export type GenerateCasesPreviewInput = z.infer<typeof generateCasesPreviewSchema>;
+export type GenerateCasesCommitInput = z.infer<typeof generateCasesCommitSchema>;
