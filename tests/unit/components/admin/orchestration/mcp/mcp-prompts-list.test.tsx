@@ -530,6 +530,34 @@ describe('edit dialog edge branches', () => {
     });
   });
 
+  it('toggling the in-dialog "Enabled" switch flips the value sent on save', async () => {
+    // The PromptFormFields bottom Switch updates the form's isEnabled flag —
+    // exercise the setField('isEnabled', checked) branch and confirm the body
+    // reflects the toggled value.
+    const user = userEvent.setup();
+    render(<McpPromptsList initialPrompts={[makePrompt({ isEnabled: true })]} />);
+
+    await user.click(screen.getByTestId('edit-prompt-p-1'));
+    // The dialog now contains two switches with role=switch — the table row
+    // toggle and the in-dialog enabled toggle. Target the dialog's by label.
+    const enabledLabel = await screen.findByText(/Enabled \(visible to MCP clients\)/i);
+    const enabledSwitch = enabledLabel.parentElement?.querySelector(
+      '[role="switch"]'
+    ) as HTMLElement;
+    expect(enabledSwitch).toBeChecked();
+    await user.click(enabledSwitch);
+
+    mockOk(makePrompt({ isEnabled: false }));
+    await user.click(screen.getByTestId('edit-prompt-save'));
+
+    await waitFor(() => {
+      const body = JSON.parse((vi.mocked(mockFetch).mock.calls[0][1] as { body: string }).body) as {
+        isEnabled: boolean;
+      };
+      expect(body.isEnabled).toBe(false);
+    });
+  });
+
   it('filters argument rows whose name is blank when saving', async () => {
     // Add an empty argument row before save — the handler must drop it
     // so the server never sees `{ name: '' }`.
@@ -549,6 +577,72 @@ describe('edit dialog edge branches', () => {
       };
       expect(body.argumentsSpec).toEqual([]);
     });
+  });
+});
+
+describe('multi-row state updates', () => {
+  // These tests exercise the "non-matching" branch in each prev.map() —
+  // i.e. the `id === id ? {...} : p` else arm — which can't fire when the
+  // table only has one row. Coverage on those else branches.
+
+  it('toggling one prompt leaves siblings untouched in local state', async () => {
+    const user = userEvent.setup();
+    const a = makePrompt({ id: 'p-a', name: 'alpha', isEnabled: true });
+    const b = makePrompt({ id: 'p-b', name: 'bravo', isEnabled: true });
+    mockOk({ id: 'p-a' });
+
+    render(<McpPromptsList initialPrompts={[a, b]} />);
+    await user.click(screen.getByRole('switch', { name: /Enable alpha/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch', { name: /Enable alpha/i })).not.toBeChecked();
+    });
+    // Sibling switch unchanged.
+    expect(screen.getByRole('switch', { name: /Enable bravo/i })).toBeChecked();
+  });
+
+  it('editing one prompt leaves siblings untouched in local state', async () => {
+    const user = userEvent.setup();
+    const a = makePrompt({ id: 'p-a', name: 'alpha', description: 'A desc' });
+    const b = makePrompt({ id: 'p-b', name: 'bravo', description: 'B desc' });
+
+    render(<McpPromptsList initialPrompts={[a, b]} />);
+
+    await user.click(screen.getByTestId('edit-prompt-p-a'));
+    const desc = await screen.findByLabelText(/Description/i);
+    await user.clear(desc);
+    await user.type(desc, 'New A desc');
+
+    mockOk(makePrompt({ id: 'p-a', description: 'New A desc' }));
+    await user.click(screen.getByTestId('edit-prompt-save'));
+
+    await waitFor(() => {
+      expect(screen.getByText('New A desc')).toBeInTheDocument();
+    });
+    // Sibling description unchanged.
+    expect(screen.getByText('B desc')).toBeInTheDocument();
+  });
+
+  it('removing one prompt leaves siblings in the table', async () => {
+    const user = userEvent.setup();
+    const a = makePrompt({ id: 'p-a', name: 'alpha' });
+    const b = makePrompt({ id: 'p-b', name: 'bravo' });
+
+    render(<McpPromptsList initialPrompts={[a, b]} />);
+
+    // Open the AlertDialog confirm for the first row.
+    const removeButtons = screen.getAllByRole('button', { name: /^Remove$/i });
+    await user.click(removeButtons[0]);
+    mockOk({ id: 'p-a', deleted: true });
+    // The confirm action button is the second "Remove" — the one inside the
+    // AlertDialog footer that's now mounted.
+    const confirms = screen.getAllByRole('button', { name: /^Remove$/i });
+    await user.click(confirms[confirms.length - 1]);
+
+    await waitFor(() => {
+      expect(screen.queryByText('alpha')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('bravo')).toBeInTheDocument();
   });
 });
 
