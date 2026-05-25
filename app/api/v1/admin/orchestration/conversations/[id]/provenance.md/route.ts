@@ -89,7 +89,7 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
     {
       id: conversation.id,
       title: conversation.title,
-      userId: conversation.userId,
+      userId: conversation.userId ?? '',
       agentId: conversation.agentId,
       agentSlug: conversation.agent?.slug ?? null,
       agentName: conversation.agent?.name ?? null,

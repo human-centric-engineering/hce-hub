@@ -37,7 +37,7 @@ function isUniqueViolation(err: unknown): boolean {
 
 export interface ResolveConversationArgs {
   agentId: string;
-  userId: string;
+  userId: string | null;
   channel: ConversationChannel;
   provider: string;
   fromAddress: string;

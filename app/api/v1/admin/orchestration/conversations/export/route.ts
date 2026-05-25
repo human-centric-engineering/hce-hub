@@ -99,7 +99,7 @@ export const GET = withAdminAuth(async (request, session) => {
             csvEscape(conv.id),
             csvEscape(conv.title ?? ''),
             csvEscape(conv.agent?.slug ?? ''),
-            csvEscape(conv.userId),
+            csvEscape(conv.userId ?? ''),
             csvEscape(msg.role),
             csvEscape(msg.content),
             csvEscape(msg.createdAt.toISOString()),

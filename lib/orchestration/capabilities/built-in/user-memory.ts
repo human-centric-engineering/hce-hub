@@ -100,6 +100,12 @@ export class ReadUserMemoryCapability extends BaseCapability<ReadArgs, ReadData>
   protected readonly schema = readSchema;
 
   async execute(args: ReadArgs, context: CapabilityContext): Promise<CapabilityResult<ReadData>> {
+    if (!context.userId) {
+      return this.error(
+        'User memory is unavailable for system-initiated runs (no user context).',
+        'no_user_context'
+      );
+    }
     const where: { userId: string; agentId: string; key?: string } = {
       userId: context.userId,
       agentId: context.agentId,
@@ -195,6 +201,12 @@ export class WriteUserMemoryCapability extends BaseCapability<WriteArgs, WriteDa
   protected readonly schema = writeSchema;
 
   async execute(args: WriteArgs, context: CapabilityContext): Promise<CapabilityResult<WriteData>> {
+    if (!context.userId) {
+      return this.error(
+        'User memory is unavailable for system-initiated runs (no user context).',
+        'no_user_context'
+      );
+    }
     const existing = await prisma.aiUserMemory.findUnique({
       where: {
         userId_agentId_key: {

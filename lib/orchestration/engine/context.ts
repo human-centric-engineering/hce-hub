@@ -27,7 +27,7 @@ export interface ExecutionContext {
   /** `AiWorkflow.id` being executed. */
   workflowId: string;
   /** User who initiated the execution. Forwarded to cost-tracking. */
-  userId: string;
+  userId: string | null;
   /** The raw `inputData` supplied by the caller. */
   inputData: Record<string, unknown>;
   /** Map of `step.id` → that step's structured output so far. */
@@ -106,7 +106,7 @@ export interface ExecutionContext {
 export function createContext(params: {
   executionId: string;
   workflowId: string;
-  userId: string;
+  userId: string | null;
   inputData: Record<string, unknown>;
   defaultErrorStrategy?: 'retry' | 'fallback' | 'skip' | 'fail';
   budgetLimitUsd?: number;

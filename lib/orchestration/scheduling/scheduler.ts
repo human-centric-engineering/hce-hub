@@ -104,7 +104,7 @@ export async function drainEngine(
   workflow: { id: string; slug: string },
   definition: WorkflowDefinition,
   inputData: Record<string, unknown>,
-  userId: string,
+  userId: string | null,
   versionId: string | null
 ): Promise<void> {
   const engine = new OrchestrationEngine();

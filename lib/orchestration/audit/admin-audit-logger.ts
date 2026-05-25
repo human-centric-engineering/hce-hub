@@ -15,7 +15,7 @@ import { logger } from '@/lib/logging';
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface AdminAuditEntry {
-  userId: string;
+  userId: string | null;
   action: string; // e.g. "agent.create", "workflow.update", "settings.update"
   entityType: string; // "agent", "workflow", "capability", "knowledge_document", "settings", "webhook"
   entityId?: string | null;
@@ -176,7 +176,7 @@ export function logConversationAccess(params: {
   adminUserId: string;
   conversationId: string;
   conversationTitle: string | null;
-  conversationOwnerId: string;
+  conversationOwnerId: string | null;
   /** `'owner'` accesses are intentionally not logged — see fn docstring. */
   accessBasis: 'owner' | 'shared';
   /** Route-level action name, e.g. `'conversation.messages_viewed'`. */

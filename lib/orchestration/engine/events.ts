@@ -132,7 +132,7 @@ export interface WorkflowFailedWebhookMeta {
   executionId?: string;
   workflowId?: string;
   /** User who initiated the execution. */
-  userId?: string;
+  userId?: string | null;
   /** Engine running totals at the point of failure. */
   totalCostUsd?: number;
   totalTokensUsed?: number;

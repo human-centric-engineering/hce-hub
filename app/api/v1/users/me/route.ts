@@ -145,6 +145,21 @@ export const DELETE = withAuth(async (request, session) => {
     // Validate confirmation (ensures user typed "DELETE")
     await validateRequestBody(request, deleteAccountSchema);
 
+    // Block deletion of the last remaining admin — the system must always
+    // retain an operator. Non-last admins and regular users may self-delete.
+    // (Admin-deletes-other-admin is separately blocked in users/[id], which
+    // requires demoting to USER first; self-delete has no such demotion gate,
+    // so the last-admin check lives here.)
+    if (session.user.role === 'ADMIN') {
+      const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
+      if (adminCount <= 1) {
+        return errorResponse(
+          'Cannot delete the last admin account. Transfer admin access to another user first.',
+          { status: 400, code: 'LAST_ADMIN' }
+        );
+      }
+    }
+
     // Log the deletion for audit purposes
     log.info('User account deletion initiated', {
       email: session.user.email,
@@ -156,7 +171,10 @@ export const DELETE = withAuth(async (request, session) => {
       await deleteByPrefix(`avatars/${session.user.id}/`);
     }
 
-    // Delete user (cascades to sessions and accounts via Prisma schema)
+    // Delete user. Schema cascades erase the user's personal data (sessions,
+    // accounts, conversations, executions, user memory, evaluations, API keys,
+    // webhook subscriptions); org config + audit rows are retained with their
+    // creator/userId set null. See the account_deletion_erasure_cascade migration.
     await prisma.user.delete({
       where: { id: session.user.id },
     });

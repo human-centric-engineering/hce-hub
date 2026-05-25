@@ -16,7 +16,7 @@ export type HookRow = {
   filter: Prisma.JsonValue;
   isEnabled: boolean;
   secret: string | null;
-  createdBy: string;
+  createdBy: string | null;
   createdAt: Date;
   updatedAt: Date;
 };

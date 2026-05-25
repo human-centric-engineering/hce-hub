@@ -366,7 +366,7 @@ export interface McpAuthContext {
   apiKeyId: string;
   apiKeyName: string;
   scopes: string[];
-  createdBy: string;
+  createdBy: string | null;
   clientIp: string;
   userAgent: string;
   /**
