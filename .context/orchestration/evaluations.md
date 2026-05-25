@@ -380,6 +380,40 @@ the cost analytics. Existing role filters (`role: 'subject' | 'judge'`)
 ignore the new value, so they don't double-count synthesis spend as
 either of the other two.
 
+## Phase 2 — variant runs + raw scores
+
+A/B experiments now run against a shared dataset, with one
+`AiEvaluationRun` per variant instead of the legacy `AiEvaluationSession`
+manual chat. Schema additions on `AiExperiment` (migration
+`20260525173530_add_experiment_dataset_fields`):
+
+- `datasetId: String?` — every variant's eval run fires against this
+  dataset. Nullable on legacy rows that pre-date the change.
+- `metricConfigs: Json?` — pinned at create time, mirrors
+  `AiEvaluationRun.metricConfigs`. Required when `datasetId` is set
+  (`.refine()` on the create-experiment schema).
+
+The run route at `POST /experiments/:id/run` branches:
+
+- **Dataset-driven**: `datasetId` and `metricConfigs` are both set →
+  create one `AiEvaluationRun` per variant against the experiment's
+  dataset, hash-pinned via the dataset's current `contentHash` (same
+  pinning the existing run-create route does). Variants compare via
+  `AiEvaluationRun.summary.stats` per metric.
+- **Legacy session**: otherwise → create one `AiEvaluationSession`
+  per variant (the existing manual-chat path). Preserved for the
+  back-compat window so experiments running at deploy time keep
+  completing.
+
+`AiEvaluationRun.summary` gains a `rawScores: Record<graderSlug, number[]>`
+field, populated by the worker's aggregator at completion. Pure additive
+JSON — no migration. The raw scores power the experiment compare view's
+statistical tests (Welch's t-test + Cohen's d) — `mean`/`median`/`p95`
+throw away the variance the test statistic needs, so the raw array is
+the source of truth for "are these two variants distinguishable".
+
+Phase 2.4 is back-end only. The compare view UI lands in 2.5.
+
 ## Roadmap: judges in workflows
 
 Confirmed as future work. Two complementary integrations let workflows
@@ -482,6 +516,8 @@ type; `workflow_as_judge` reuses the same workflow execution path).
 | Generator agent seed    | `prisma/seeds/017-case-generator-agent.ts`                                                 |
 | Synthesis preview route | `app/api/v1/admin/orchestration/evaluations/datasets/[id]/generate-cases/route.ts`         |
 | Synthesis commit route  | `app/api/v1/admin/orchestration/evaluations/datasets/[id]/generate-cases/commit/route.ts`  |
+| Experiment run route    | `app/api/v1/admin/orchestration/experiments/[id]/run/route.ts`                             |
+| Phase 2.4 migration     | `prisma/migrations/20260525173530_add_experiment_dataset_fields/`                          |
 | API routes              | `app/api/v1/admin/orchestration/evaluations/{datasets,runs,graders}/`                      |
 | UI pages                | `app/admin/orchestration/evaluations/{datasets,runs}/`                                     |
 | UI components           | `components/admin/orchestration/evaluations-foundations/`                                  |

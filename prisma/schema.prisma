@@ -1222,6 +1222,7 @@ model AiDataset {
   user           User                @relation("AiDatasetUser", fields: [userId], references: [id])
   cases          AiDatasetCase[]
   evaluationRuns AiEvaluationRun[]
+  experiments    AiExperiment[]      @relation("AiExperimentDataset")
 
   @@index([userId, updatedAt])
   @@map("ai_dataset")
@@ -1671,16 +1672,28 @@ model AiExperiment {
   description String?  @db.Text
   status      String   @default("draft") // "draft" | "running" | "completed"
   agentId     String
+  // Phase 2: shared dataset every variant's eval run fires against.
+  // Null on legacy rows that pre-date dataset-driven experiments — those
+  // still execute via the legacy AiEvaluationSession path. Required on
+  // any new experiment that opts into per-variant AiEvaluationRun.
+  datasetId   String?
+  // Phase 2: metric configs pinned at run time. Array<{ slug, config }>
+  // mirroring AiEvaluationRun.metricConfigs. Null on legacy rows; the
+  // run route uses [judge_agent: eval-judge-relevance] as a sensible
+  // default when both fields are null on a draft.
+  metricConfigs Json?
   createdBy   String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   agent    AiAgent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  dataset  AiDataset?            @relation("AiExperimentDataset", fields: [datasetId], references: [id], onDelete: SetNull)
   creator  User                  @relation("AiExperimentCreator", fields: [createdBy], references: [id])
   variants AiExperimentVariant[]
 
   @@index([agentId])
   @@index([status])
+  @@index([datasetId])
   @@map("ai_experiment")
 }
 

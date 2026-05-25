@@ -485,6 +485,17 @@ interface RunSummary {
       scoredCount: number;
     }
   >;
+  /**
+   * Phase 2.4: raw per-case scores per metric, in case-result write
+   * order. Powers the experiment compare view's statistical tests
+   * (Welch's t-test + Cohen's d, Phase 2.5). Persisting the array
+   * keeps the variance information that `mean`/`median`/`p95` alone
+   * throws away — a 0.5 mean from {0.0, 1.0, 0.5} is qualitatively
+   * different from a 0.5 mean from {0.5, 0.5, 0.5}, and the test
+   * statistic needs both to tell them apart. JSON-only additive,
+   * no migration.
+   */
+  rawScores: Record<string, number[]>;
   completedAt: string;
   note?: string;
 }
@@ -497,6 +508,7 @@ function aggregateSummary(
   metricConfigs: MetricConfigEntry[]
 ): RunSummary {
   const stats: RunSummary['stats'] = {};
+  const rawScores: RunSummary['rawScores'] = {};
   const keys = metricConfigs.map(metricKey);
   for (const key of keys) {
     const scores: number[] = [];
@@ -515,10 +527,12 @@ function aggregateSummary(
       passRate: passed.length > 0 ? passed.filter(Boolean).length / passed.length : null,
       scoredCount: scores.length,
     };
+    rawScores[key] = scores;
   }
   return {
     metricSlugs: keys,
     stats,
+    rawScores,
     completedAt: new Date().toISOString(),
   };
 }

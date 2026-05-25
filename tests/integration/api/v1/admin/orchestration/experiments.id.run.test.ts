@@ -25,16 +25,26 @@ vi.mock('next/headers', () => ({
   headers: vi.fn(() => Promise.resolve(new Headers())),
 }));
 
-const mockEvalSessionCreate = vi.fn();
-const mockVariantUpdate = vi.fn();
-const mockTxFindUnique = vi.fn();
-const mockTxUpdate = vi.fn();
+const {
+  mockEvalSessionCreate,
+  mockEvalRunCreate,
+  mockVariantUpdate,
+  mockTxFindUnique,
+  mockTxUpdate,
+} = vi.hoisted(() => ({
+  mockEvalSessionCreate: vi.fn(),
+  mockEvalRunCreate: vi.fn(),
+  mockVariantUpdate: vi.fn(),
+  mockTxFindUnique: vi.fn(),
+  mockTxUpdate: vi.fn(),
+}));
 
 vi.mock('@/lib/db/client', () => {
   const experimentFindUnique = vi.fn();
 
   const txProxy = {
     aiEvaluationSession: { create: (...args: unknown[]) => mockEvalSessionCreate(...args) },
+    aiEvaluationRun: { create: (...args: unknown[]) => mockEvalRunCreate(...args) },
     aiExperimentVariant: { update: (...args: unknown[]) => mockVariantUpdate(...args) },
     aiExperiment: {
       findUnique: (...args: unknown[]) => mockTxFindUnique(...args),
@@ -133,6 +143,7 @@ describe('POST /api/v1/admin/orchestration/experiments/:id/run', () => {
     mockTxFindUnique.mockResolvedValue(makeExperiment() as never);
     mockTxUpdate.mockResolvedValue(makeExperimentWithAgent({ status: 'running' }) as never);
     mockEvalSessionCreate.mockResolvedValue({ id: 'eval-session-1' });
+    mockEvalRunCreate.mockResolvedValue({ id: 'eval-run-1' });
     mockVariantUpdate.mockResolvedValue({});
   });
 
@@ -282,11 +293,14 @@ describe('POST /api/v1/admin/orchestration/experiments/:id/run', () => {
 
       await POST(makePostRequest(), makeContext());
 
-      // tx.aiExperiment.findUnique is called inside the transaction
+      // tx.aiExperiment.findUnique is called inside the transaction.
+      // The include shape grew in Phase 2.4 to load `dataset` so the
+      // route can branch on dataset-driven vs legacy. We assert only on
+      // the where clause + `variants: true` here.
       expect(mockTxFindUnique).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: EXPERIMENT_ID },
-          include: { variants: true },
+          include: expect.objectContaining({ variants: true }),
         })
       );
       // The outer prisma.aiExperiment.findUnique only does a lightweight 404 check
@@ -294,6 +308,86 @@ describe('POST /api/v1/admin/orchestration/experiments/:id/run', () => {
         expect.objectContaining({
           where: { id: EXPERIMENT_ID },
           select: { id: true },
+        })
+      );
+    });
+  });
+
+  describe('Dataset-driven path (Phase 2.4)', () => {
+    function datasetDrivenExperiment(overrides: Record<string, unknown> = {}) {
+      return makeExperiment({
+        datasetId: 'ds-1',
+        metricConfigs: [{ slug: 'judge_agent', config: { agentSlug: 'eval-judge-relevance' } }],
+        dataset: { id: 'ds-1', contentHash: 'h-abc', caseCount: 12 },
+        ...overrides,
+      });
+    }
+
+    it('creates one AiEvaluationRun per variant when datasetId + metricConfigs are set', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      mockTxFindUnique.mockResolvedValue(datasetDrivenExperiment() as never);
+
+      await POST(makePostRequest(), makeContext());
+
+      expect(mockEvalRunCreate).toHaveBeenCalledTimes(2);
+      expect(mockEvalSessionCreate).not.toHaveBeenCalled();
+      expect(mockEvalRunCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            subjectKind: 'agent',
+            agentId: 'agent-1',
+            datasetId: 'ds-1',
+            datasetContentHash: 'h-abc',
+            status: 'queued',
+          }),
+        })
+      );
+    });
+
+    it('links the new eval runs to variants via evaluationRunId', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      mockTxFindUnique.mockResolvedValue(datasetDrivenExperiment() as never);
+      mockEvalRunCreate.mockResolvedValue({ id: 'eval-run-123' });
+
+      await POST(makePostRequest(), makeContext());
+
+      expect(mockVariantUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'v1' },
+          data: { evaluationRunId: 'eval-run-123' },
+        })
+      );
+    });
+
+    it('falls back to the legacy session path when datasetId is null', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      // datasetId omitted, dataset relation null
+      mockTxFindUnique.mockResolvedValue(
+        makeExperiment({ datasetId: null, dataset: null }) as never
+      );
+
+      await POST(makePostRequest(), makeContext());
+
+      expect(mockEvalSessionCreate).toHaveBeenCalledTimes(2);
+      expect(mockEvalRunCreate).not.toHaveBeenCalled();
+    });
+
+    it('records the dataset_driven mode on the admin audit entry', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      mockTxFindUnique.mockResolvedValue(datasetDrivenExperiment() as never);
+      mockTxUpdate.mockResolvedValue({
+        ...makeExperimentWithAgent({ status: 'running' }),
+        variants: [
+          { id: 'v1', evaluationRunId: 'eval-run-123' },
+          { id: 'v2', evaluationRunId: 'eval-run-124' },
+        ],
+      } as never);
+
+      await POST(makePostRequest(), makeContext());
+
+      expect(vi.mocked(logAdminAction)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ mode: 'dataset_driven' }),
         })
       );
     });
