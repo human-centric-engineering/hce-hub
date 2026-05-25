@@ -210,6 +210,7 @@ export const DELETE = withAdminAuth<{ id: string }>(async (request, session, { p
   if (user.role === 'ADMIN') {
     return errorResponse('Cannot delete an admin account. Demote the user first.', {
       status: 400,
+      code: 'CANNOT_DELETE_ADMIN',
     });
   }
 

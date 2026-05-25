@@ -133,6 +133,24 @@ describe('ReadUserMemoryCapability', () => {
     // Assert: the error propagates unmodified
     await expect(cap.execute({}, context)).rejects.toThrow('Connection lost');
   });
+
+  it('returns no_user_context error and does not query the DB when userId is null', async () => {
+    // Arrange: system-run context with no user
+    const systemContext = { userId: null, agentId: 'agent-1' };
+
+    // Act
+    const cap = new ReadUserMemoryCapability();
+    const result = await cap.execute({}, systemContext);
+
+    // Assert: guard fires and returns the structured error envelope
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('no_user_context');
+    expect(result.error?.message).toBe(
+      'User memory is unavailable for system-initiated runs (no user context).'
+    );
+    // Assert: the guard short-circuits before any DB access
+    expect(findMany).not.toHaveBeenCalled();
+  });
 });
 
 // ── WriteUserMemoryCapability ─────────────────────────────────────────────────
@@ -222,6 +240,25 @@ describe('WriteUserMemoryCapability', () => {
     await expect(cap.execute({ key: 'language', value: 'Rust' }, context)).rejects.toThrow(
       'Deadlock detected'
     );
+  });
+
+  it('returns no_user_context error and does not touch the DB when userId is null', async () => {
+    // Arrange: system-run context with no user
+    const systemContext = { userId: null, agentId: 'agent-1' };
+
+    // Act
+    const cap = new WriteUserMemoryCapability();
+    const result = await cap.execute({ key: 'language', value: 'Rust' }, systemContext);
+
+    // Assert: guard fires and returns the structured error envelope
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('no_user_context');
+    expect(result.error?.message).toBe(
+      'User memory is unavailable for system-initiated runs (no user context).'
+    );
+    // Assert: the guard short-circuits before any DB access (findUnique and upsert both skipped)
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
   });
 });
 

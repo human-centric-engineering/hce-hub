@@ -23,7 +23,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { GET, PATCH } from '@/app/api/v1/users/[id]/route';
+import { GET, PATCH, DELETE } from '@/app/api/v1/users/[id]/route';
 import type { NextRequest } from 'next/server';
 import {
   mockAdminUser,
@@ -60,6 +60,11 @@ vi.mock('@/lib/db/client', () => ({
   },
 }));
 
+// Mock eraseUser — assert called, don't execute real erasure
+vi.mock('@/lib/privacy/erase-user', () => ({
+  eraseUser: vi.fn(),
+}));
+
 // Mock route logger
 const mockLogger = {
   info: vi.fn(),
@@ -78,6 +83,7 @@ vi.mock('@/lib/api/context', async () => {
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db/client';
+import { eraseUser } from '@/lib/privacy/erase-user';
 
 /**
  * Response type interfaces
@@ -1574,5 +1580,182 @@ describe('PATCH /api/v1/users/[id]', () => {
       // ('User updated by admin') is never reached when update throws. The key behavioral
       // contract is the 500 envelope and that update was attempted (verified above).
     });
+  });
+});
+
+/**
+ * Test Suite: DELETE /api/v1/users/[id]
+ *
+ * DELETE is wrapped with withAdminAuth. The existing file's guard-mock pattern
+ * (mock @/lib/auth/config to expose auth.api.getSession as a vi.fn, mock
+ * next/headers headers, set session via vi.mocked(auth.api.getSession)) is
+ * reused here — no changes to the existing mocks are needed.
+ *
+ * eraseUser is mocked at the module level (see vi.mock('@/lib/privacy/erase-user')
+ * above) so the real erasure pipeline never runs in these tests.
+ */
+describe('DELETE /api/v1/users/[id]', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(headers).mockResolvedValue(new Headers());
+    // Default: admin caller for DELETE (withAdminAuth requires ADMIN role)
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    // Default: eraseUser resolves (no return value needed — route ignores it)
+    vi.mocked(eraseUser).mockResolvedValue(undefined as any);
+  });
+
+  it('should return 400 CANNOT_DELETE_SELF when session.user.id matches the target id', async () => {
+    // Arrange — admin tries to delete their own account
+    const adminUser = mockAdminUser();
+    const adminId = adminUser.user.id; // same ID used for both session and params
+    vi.mocked(auth.api.getSession).mockResolvedValue(adminUser);
+
+    const mockRequest = {} as NextRequest;
+    const params = createMockParams(adminId);
+
+    // Act
+    const response = await DELETE(mockRequest, { params });
+    const data = await parseResponse<ErrorResponse>(response);
+
+    // Assert — self-delete guard fires before any DB access
+    expect(response.status).toBe(400);
+    expect(data.success).toBe(false);
+    expect(data.error.code).toBe('CANNOT_DELETE_SELF');
+
+    // eraseUser must NOT have been called — self-delete is blocked before erasure
+    expect(eraseUser).not.toHaveBeenCalled();
+    // findUnique must NOT have been reached — self check precedes DB lookup
+    expect(prisma.user.findUnique).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: self-delete check fires before DB access
+  });
+
+  it('should return 400 with admin-delete message when target user has role ADMIN', async () => {
+    // Arrange — admin tries to delete another admin account
+    const adminUser = mockAdminUser();
+    vi.mocked(auth.api.getSession).mockResolvedValue(adminUser);
+
+    const targetUserId = 'cmjbv4i3x00020wsloputgwab';
+    const targetUser = {
+      id: targetUserId,
+      name: 'Other Admin',
+      email: 'otheradmin@example.com',
+      role: 'ADMIN', // <- role that triggers the admin-delete guard
+      emailVerified: true,
+      image: null,
+      createdAt: new Date('2025-01-01'),
+      updatedAt: new Date('2025-01-01'),
+    };
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(targetUser as any);
+
+    const mockRequest = {} as NextRequest;
+    const params = createMockParams(targetUserId);
+
+    // Act
+    const response = await DELETE(mockRequest, { params });
+    const data = await parseResponse<ErrorResponse>(response);
+
+    // Assert — admin-target guard fires after findUnique, before eraseUser
+    expect(response.status).toBe(400);
+    expect(data.success).toBe(false);
+    expect(data.error.code).toBe('CANNOT_DELETE_ADMIN');
+    expect(data.error.message).toBe('Cannot delete an admin account. Demote the user first.');
+
+    // eraseUser must NOT have been called
+    expect(eraseUser).not.toHaveBeenCalled();
+  });
+
+  it('should return 404 when target user does not exist', async () => {
+    // Arrange — findUnique returns null (user not found)
+    const adminUser = mockAdminUser();
+    vi.mocked(auth.api.getSession).mockResolvedValue(adminUser);
+
+    const nonExistentId = 'cmjbv4i3x00021wsloputgwac';
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
+
+    const mockRequest = {} as NextRequest;
+    const params = createMockParams(nonExistentId);
+
+    // Act
+    const response = await DELETE(mockRequest, { params });
+    const data = await parseResponse<ErrorResponse>(response);
+
+    // Assert — NotFoundError thrown and converted to 404 envelope
+    expect(response.status).toBe(404);
+    expect(data.success).toBe(false);
+    expect(data.error.code).toBe('NOT_FOUND');
+
+    // eraseUser must NOT have been called — user didn't exist
+    expect(eraseUser).not.toHaveBeenCalled();
+  });
+
+  it('should call eraseUser with the correct arguments and return 200 { id, deleted: true } for a USER target', async () => {
+    // Arrange — admin deletes a regular USER target
+    const adminUser = mockAdminUser();
+    const adminId = adminUser.user.id;
+    vi.mocked(auth.api.getSession).mockResolvedValue(adminUser);
+
+    const targetUserId = 'cmjbv4i3x00022wsloputgwad';
+    const targetUser = {
+      id: targetUserId,
+      name: 'Regular User',
+      email: 'regular@example.com',
+      role: 'USER',
+      emailVerified: true,
+      image: null,
+      createdAt: new Date('2025-01-01'),
+      updatedAt: new Date('2025-01-01'),
+    };
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(targetUser as any);
+
+    const mockRequest = {} as NextRequest;
+    const params = createMockParams(targetUserId);
+
+    // Act
+    const response = await DELETE(mockRequest, { params });
+    const data = await parseResponse<SuccessResponse>(response);
+
+    // Assert — success envelope with the deleted user's id
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.data).toMatchObject({ id: targetUserId, deleted: true });
+
+    // Assert — eraseUser was called exactly once with the right contract arguments.
+    // The route passes target email (not session email) and admin id as actorUserId.
+    // This is the key behavioral proof: the handler passes the TARGET's email and
+    // the ADMIN's id, not any echo of the mock's return value.
+    expect(eraseUser).toHaveBeenCalledOnce();
+    expect(eraseUser).toHaveBeenCalledWith({
+      userId: targetUserId,
+      userEmail: targetUser.email,
+      actorUserId: adminId,
+      reason: 'admin_action',
+    });
+  });
+
+  it('should hit CANNOT_DELETE_SELF before the role check when the caller is both self and an ADMIN account', async () => {
+    // Arrange — the caller IS an ADMIN, and the target ID is their own ID.
+    // If guard order were reversed (role first, then self), this test would return the
+    // admin-target 400 instead of CANNOT_DELETE_SELF. The source L192 checks self FIRST.
+    const adminUser = mockAdminUser();
+    const adminId = adminUser.user.id;
+    vi.mocked(auth.api.getSession).mockResolvedValue(adminUser);
+
+    // Target is the admin's own id — so both self AND would-be admin-target conditions
+    // could fire if the order were wrong. The source checks self first (L192-197),
+    // so we never reach findUnique or the role check.
+    const mockRequest = {} as NextRequest;
+    const params = createMockParams(adminId);
+
+    // Act
+    const response = await DELETE(mockRequest, { params });
+    const data = await parseResponse<ErrorResponse>(response);
+
+    // Assert — CANNOT_DELETE_SELF wins because it is checked first
+    expect(response.status).toBe(400);
+    expect(data.success).toBe(false);
+    expect(data.error.code).toBe('CANNOT_DELETE_SELF');
+
+    // Neither findUnique (role check prereq) nor eraseUser should be reached
+    expect(prisma.user.findUnique).not.toHaveBeenCalled(); // test-review:accept no_arg_called — guard-order proof: self check fires first, DB not reached
+    expect(eraseUser).not.toHaveBeenCalled();
   });
 });
