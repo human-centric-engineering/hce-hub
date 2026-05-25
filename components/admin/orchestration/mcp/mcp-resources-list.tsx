@@ -298,7 +298,15 @@ export function McpResourcesList({ initialResources }: McpResourcesListProps) {
               />
             </div>
             <div>
-              <Label htmlFor="edit-res-mime">MIME Type</Label>
+              <Label htmlFor="edit-res-mime">
+                MIME Type
+                <FieldHelp title="MIME Type">
+                  IANA media type returned to MCP clients (e.g. <code>application/json</code>,{' '}
+                  <code>text/markdown</code>, <code>text/plain</code>). Clients use this to decide
+                  how to parse the resource body — get it wrong and the resource may render as raw
+                  text or fail to parse.
+                </FieldHelp>
+              </Label>
               <Input
                 id="edit-res-mime"
                 value={editForm.mimeType}
