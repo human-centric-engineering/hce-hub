@@ -133,6 +133,24 @@ describe('ReadUserMemoryCapability', () => {
     // Assert: the error propagates unmodified
     await expect(cap.execute({}, context)).rejects.toThrow('Connection lost');
   });
+
+  it('returns no_user_context error and does not query the DB when userId is null', async () => {
+    // Arrange: system-run context with no user
+    const systemContext = { userId: null, agentId: 'agent-1' };
+
+    // Act
+    const cap = new ReadUserMemoryCapability();
+    const result = await cap.execute({}, systemContext);
+
+    // Assert: guard fires and returns the structured error envelope
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('no_user_context');
+    expect(result.error?.message).toBe(
+      'User memory is unavailable for system-initiated runs (no user context).'
+    );
+    // Assert: the guard short-circuits before any DB access
+    expect(findMany).not.toHaveBeenCalled();
+  });
 });
 
 // ── WriteUserMemoryCapability ─────────────────────────────────────────────────
@@ -223,6 +241,25 @@ describe('WriteUserMemoryCapability', () => {
       'Deadlock detected'
     );
   });
+
+  it('returns no_user_context error and does not touch the DB when userId is null', async () => {
+    // Arrange: system-run context with no user
+    const systemContext = { userId: null, agentId: 'agent-1' };
+
+    // Act
+    const cap = new WriteUserMemoryCapability();
+    const result = await cap.execute({ key: 'language', value: 'Rust' }, systemContext);
+
+    // Assert: guard fires and returns the structured error envelope
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('no_user_context');
+    expect(result.error?.message).toBe(
+      'User memory is unavailable for system-initiated runs (no user context).'
+    );
+    // Assert: the guard short-circuits before any DB access (findUnique and upsert both skipped)
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
 });
 
 describe('User-memory redactProvenance', () => {
@@ -265,6 +302,26 @@ describe('User-memory redactProvenance', () => {
     const safeArgs = redacted.args as { key: string; value: string };
     expect(safeArgs.key).toBe('address');
     expect(safeArgs.value).toMatch(/^<redacted: memory-value, \d+ chars>$/);
+  });
+
+  it('Read: returns raw result as resultPreview and passes args through when result.success is false', () => {
+    // Arrange: a failure result — e.g. the no_user_context guard fired
+    const failureResult = {
+      success: false as const,
+      error: {
+        code: 'no_user_context',
+        message: 'User memory is unavailable for system-initiated runs (no user context).',
+      },
+    };
+
+    // Act
+    const cap = new ReadUserMemoryCapability();
+    const redacted = cap.redactProvenance({}, failureResult);
+
+    // Assert: the else branch serialises the raw result unchanged (no PII to strip)
+    expect(redacted.resultPreview).toBe(JSON.stringify(failureResult));
+    // Assert: args are passed through as-is
+    expect(redacted.args).toEqual({});
   });
 
   it('Write: result envelope (key + action) passes through (no PII)', () => {

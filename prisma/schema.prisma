@@ -16,6 +16,14 @@ datasource db {
 // ID Generation: @default(cuid()) generates 25-character CUIDs (format: c[a-z0-9]{24})
 // better-auth is configured to delegate ID generation to Prisma (see lib/auth/config.ts)
 // This ensures consistent CUID format across all user creation methods (UI, API, OAuth, seed)
+//
+// ⚠️ ERASURE POLICY — any NEW relation that points at User (a `userId` or
+// `createdBy` FK) MUST declare an explicit `onDelete`:
+//   • personal data            → onDelete: Cascade   (erased with the user)
+//   • org config / audit / logs → onDelete: SetNull  (retained, de-attributed; make the FK nullable)
+// Omitting it defaults to Restrict, which silently breaks GDPR erasure
+// (prisma.user.delete throws P2003 for any user with activity). After adding
+// one, extend scripts/smoke/erasure.ts to prove it. See .context/privacy/data-erasure.md.
 model User {
   id            String   @id @default(cuid())
   name          String
@@ -65,7 +73,7 @@ model User {
   aiExperiments          AiExperiment[]          @relation("AiExperimentCreator")
 
   // MCP Server relations
-  mcpApiKeys       McpApiKey[]        @relation("McpApiKeyCreator")
+  mcpApiKeys        McpApiKey[]        @relation("McpApiKeyCreator")
   mcpExposedPrompts McpExposedPrompt[] @relation("McpPromptCreator")
 
   @@unique([email])
@@ -208,7 +216,7 @@ model AiAgent {
   personaMode               String   @default("override") // "override" | "append"
   voiceMode                 String   @default("override") // "override" | "append"
   guardrailsMode            String   @default("override") // "override" | "append"
-  profileId                 String?  // optional link to AiAgentProfile
+  profileId                 String? // optional link to AiAgentProfile
   rateLimitRpm              Int? // per-agent rate limit (requests per minute); null = use global default
   inputGuardMode            String? // "log_only" | "warn_and_continue" | "block"; null = use global default
   outputGuardMode           String? // "log_only" | "warn_and_continue" | "block"; null = use global default
@@ -231,12 +239,12 @@ model AiAgent {
   // Values: 'chat' (default) | 'judge'. New roles added by future phases
   // (e.g. 'subject' for workflow-only) become new enum values here.
   kind                      String   @default("chat")
-  createdBy                 String
+  createdBy                 String?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
   // Relations
-  creator          User                       @relation("AiAgentCreator", fields: [createdBy], references: [id])
+  creator          User?                      @relation("AiAgentCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   profile          AiAgentProfile?            @relation(fields: [profileId], references: [id], onDelete: SetNull)
   capabilities     AiAgentCapability[]
   conversations    AiConversation[]
@@ -277,11 +285,11 @@ model AiAgentProfile {
   guardrails             String? @db.Text
 
   isSystem  Boolean  @default(false)
-  createdBy String
+  createdBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  creator User      @relation("AiAgentProfileCreator", fields: [createdBy], references: [id])
+  creator User?     @relation("AiAgentProfileCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   agents  AiAgent[]
 
   @@index([createdBy])
@@ -298,11 +306,11 @@ model AiAgentInviteToken {
   useCount  Int       @default(0)
   expiresAt DateTime? // null = never expires
   revokedAt DateTime? // non-null = revoked
-  createdBy String
+  createdBy String?
   createdAt DateTime  @default(now())
 
   agent   AiAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  creator User    @relation("InviteTokenCreator", fields: [createdBy], references: [id])
+  creator User?   @relation("InviteTokenCreator", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([agentId])
   @@map("ai_agent_invite_token")
@@ -315,11 +323,11 @@ model AiAgentVersion {
   version       Int // monotonically increasing per agent
   snapshot      Json // full agent config at this point in time
   changeSummary String?  @db.Text // auto-generated description of what changed
-  createdBy     String
+  createdBy     String?
   createdAt     DateTime @default(now())
 
   agent   AiAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  creator User    @relation("AgentVersionCreator", fields: [createdBy], references: [id])
+  creator User?   @relation("AgentVersionCreator", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@unique([agentId, version])
   @@map("ai_agent_version")
@@ -333,12 +341,12 @@ model AiAgentEmbedToken {
   label          String? // admin label (e.g. "Marketing site", "Help center")
   allowedOrigins String[] @default([]) // CORS origins; empty = allow all
   isActive       Boolean  @default(true)
-  createdBy      String
+  createdBy      String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   agent   AiAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  creator User    @relation("EmbedTokenCreator", fields: [createdBy], references: [id])
+  creator User?   @relation("EmbedTokenCreator", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([agentId])
   @@map("ai_agent_embed_token")
@@ -404,12 +412,12 @@ model AiAgentCapability {
 // Executions resolve their definition via `publishedVersionId` so a mid-edit
 // draft never alters in-flight runs. See `.context/orchestration/workflow-versioning.md`.
 model AiWorkflow {
-  id                 String   @id @default(cuid())
-  name               String
-  slug               String   @unique
-  description        String   @db.Text
-  draftDefinition    Json? // in-progress edit; null when there is no draft
-  publishedVersionId String? // FK to the version executions pin to
+  id                     String   @id @default(cuid())
+  name                   String
+  slug                   String   @unique
+  description            String   @db.Text
+  draftDefinition        Json? // in-progress edit; null when there is no draft
+  publishedVersionId     String? // FK to the version executions pin to
   // Per-execution hard cost cap (USD). Default for executions of this
   // workflow when the caller does not pass an explicit budgetLimitUsd.
   // Resolution order at execution-creation time: caller override >
@@ -419,18 +427,18 @@ model AiWorkflow {
   // lease-reaper paths inherit it without re-resolving. See
   // lib/orchestration/llm/cost-caps.ts.
   maxCostPerExecutionUsd Float?
-  patternsUsed       Int[] // pattern numbers used in this workflow
-  isActive           Boolean  @default(true)
-  isTemplate         Boolean  @default(false)
-  isSystem           Boolean  @default(false)
-  templateSource     String? // null = regular workflow, "builtin" = seed template, "custom" = admin-created
-  metadata           Json?
-  createdBy          String
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  patternsUsed           Int[] // pattern numbers used in this workflow
+  isActive               Boolean  @default(true)
+  isTemplate             Boolean  @default(false)
+  isSystem               Boolean  @default(false)
+  templateSource         String? // null = regular workflow, "builtin" = seed template, "custom" = admin-created
+  metadata               Json?
+  createdBy              String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   // Relations
-  creator          User                  @relation("AiWorkflowCreator", fields: [createdBy], references: [id])
+  creator          User?                 @relation("AiWorkflowCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   publishedVersion AiWorkflowVersion?    @relation("WorkflowPublishedVersion", fields: [publishedVersionId], references: [id])
   versions         AiWorkflowVersion[]   @relation("WorkflowVersions")
   executions       AiWorkflowExecution[]
@@ -457,11 +465,11 @@ model AiWorkflowVersion {
   version       Int // monotonic per workflow, starts at 1
   snapshot      Json // full WorkflowDefinition at publish time
   changeSummary String?  @db.Text // optional admin-supplied label
-  createdBy     String
+  createdBy     String?
   createdAt     DateTime @default(now())
 
   workflow     AiWorkflow            @relation("WorkflowVersions", fields: [workflowId], references: [id], onDelete: Cascade)
-  creator      User                  @relation("WorkflowVersionCreator", fields: [createdBy], references: [id])
+  creator      User?                 @relation("WorkflowVersionCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   publishedFor AiWorkflow[]          @relation("WorkflowPublishedVersion")
   executions   AiWorkflowExecution[]
 
@@ -480,13 +488,13 @@ model AiWorkflowSchedule {
   isEnabled      Boolean   @default(true)
   lastRunAt      DateTime?
   nextRunAt      DateTime?
-  createdBy      String
+  createdBy      String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   // Relations
   workflow AiWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  creator  User       @relation("AiWorkflowScheduleCreator", fields: [createdBy], references: [id])
+  creator  User?      @relation("AiWorkflowScheduleCreator", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([workflowId])
   @@index([isEnabled, nextRunAt])
@@ -509,13 +517,13 @@ model AiWorkflowTrigger {
   signingSecret String?   @db.Text // per-trigger HMAC shared secret (plaintext, mirrors AiEventHook.secret); null for env-var-keyed channels
   isEnabled     Boolean   @default(true)
   lastFiredAt   DateTime?
-  createdBy     String
+  createdBy     String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   // Relations
   workflow AiWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  creator  User       @relation("AiWorkflowTriggerCreator", fields: [createdBy], references: [id])
+  creator  User?      @relation("AiWorkflowTriggerCreator", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@unique([channel, workflowId]) // one trigger per (channel, workflow); v2 may relax for multi-event setups
   @@index([workflowId])
@@ -525,45 +533,45 @@ model AiWorkflowTrigger {
 
 // Runtime workflow instances
 model AiWorkflowExecution {
-  id                String    @id @default(cuid())
-  workflowId        String
-  versionId         String? // pinned AiWorkflowVersion at trigger time; null on legacy rows only
-  status            String // "pending", "running", "paused_for_approval", "completed", "failed", "cancelled"
-  inputData         Json
-  outputData        Json?
+  id                   String    @id @default(cuid())
+  workflowId           String
+  versionId            String? // pinned AiWorkflowVersion at trigger time; null on legacy rows only
+  status               String // "pending", "running", "paused_for_approval", "completed", "failed", "cancelled"
+  inputData            Json
+  outputData           Json?
   // Resume cursor: the most-recently-entered step's id. Engine writes on
   // every `markCurrentStep`; preserved across finalize for post-mortem
   // diagnostics. The full set of in-flight steps lives on the side table
   // `AiWorkflowRunningStep` (one row per running branch) so a `parallel`
   // fan-out is fully observable; this scalar is just the cursor used by
   // the resume path and as a short pointer for the in-flight banner.
-  currentStep       String?
-  executionTrace    Json // array of step execution logs
-  totalTokensUsed   Int       @default(0)
-  totalCostUsd      Float     @default(0)
-  budgetLimitUsd    Float?
-  startedAt         DateTime?
-  completedAt       DateTime?
-  errorMessage      String?   @db.Text
+  currentStep          String?
+  executionTrace       Json // array of step execution logs
+  totalTokensUsed      Int       @default(0)
+  totalCostUsd         Float     @default(0)
+  budgetLimitUsd       Float?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  errorMessage         String?   @db.Text
   // Trigger attribution. Source is `schedule | webhook | chat | inbound:<channel>` (free-form;
   // not enforced as enum so new sources can be added without migration). External ID carries
   // vendor-supplied identifiers (Slack `event_id`, Postmark `MessageID`); used for human/audit
   // attribution only. Dedup is keyed on `dedupKey` so shared-secret channels (Slack, Postmark)
   // can dedup globally across workflows even though the same external ID is allowed to appear
   // for unrelated per-trigger HMAC events.
-  triggerSource     String?   @db.VarChar(50)
-  triggerExternalId String?
-  dedupKey          String?
+  triggerSource        String?   @db.VarChar(50)
+  triggerExternalId    String?
+  dedupKey             String?
   // Recovery state for crash-survival. `leaseToken` identifies the host currently driving
   // the run; the orphan sweep claims rows whose `leaseExpiresAt` has elapsed and re-drives
   // them through the resume path. `lastHeartbeatAt` is observability-only. `recoveryAttempts`
   // caps re-drives — after the cap the row is failed permanently. See
   // `lib/orchestration/engine/orchestration-engine.ts` (claim/refresh/clear) and
   // `lib/orchestration/engine/execution-reaper.ts` (sweep).
-  leaseToken        String?
-  leaseExpiresAt    DateTime?
-  lastHeartbeatAt   DateTime?
-  recoveryAttempts  Int       @default(0)
+  leaseToken           String?
+  leaseExpiresAt       DateTime?
+  lastHeartbeatAt      DateTime?
+  recoveryAttempts     Int       @default(0)
   // Supervisor verdict columns. Populated by any executor that emits
   // `StepResult.contextPatch` — the supervisor step is the first user.
   // Persisted on the row for fast querying ("which runs failed the
@@ -581,17 +589,17 @@ model AiWorkflowExecution {
   // rerun chain. `onDelete: SetNull` so deleting the parent doesn't
   // cascade away children's history — the lineage link goes muted but
   // the child stays.
-  parentExecutionId String?
-  userId            String
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  parentExecutionId    String?
+  userId               String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   // Relations
-  workflow       AiWorkflow               @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  version        AiWorkflowVersion?       @relation(fields: [versionId], references: [id], onDelete: SetNull)
-  user           User                     @relation("AiWorkflowExecutionUser", fields: [userId], references: [id])
-  parent         AiWorkflowExecution?     @relation("ExecutionLineage", fields: [parentExecutionId], references: [id], onDelete: SetNull)
-  reruns         AiWorkflowExecution[]    @relation("ExecutionLineage")
+  workflow       AiWorkflow                      @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  version        AiWorkflowVersion?              @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  user           User?                           @relation("AiWorkflowExecutionUser", fields: [userId], references: [id], onDelete: Cascade)
+  parent         AiWorkflowExecution?            @relation("ExecutionLineage", fields: [parentExecutionId], references: [id], onDelete: SetNull)
+  reruns         AiWorkflowExecution[]           @relation("ExecutionLineage")
   costLogs       AiCostLog[]
   stepDispatches AiWorkflowStepDispatch[]
   runningSteps   AiWorkflowRunningStep[]
@@ -721,17 +729,17 @@ model AiWorkflowExecutionLeaseEvent {
 
 // Chat sessions
 model AiConversation {
-  id                   String   @id @default(cuid())
-  userId               String
+  id                   String    @id @default(cuid())
+  userId               String?
   agentId              String
   title                String?
   contextType          String?
   contextId            String?
   metadata             Json?
-  summary              String?  @db.Text
+  summary              String?   @db.Text
   summaryUpToMessageId String?
-  tags                 String[] @default([])
-  isActive             Boolean  @default(true)
+  tags                 String[]  @default([])
+  isActive             Boolean   @default(true)
   // Channel/provider split — see plan decision 3.
   // `channel` is the semantic medium (sms / whatsapp / email / slack / chat).
   // `provider` is the vendor slug (twilio / meta / vonage / ...). The
@@ -745,24 +753,24 @@ model AiConversation {
   provider             String?
   fromAddress          String?
   lastInboundAt        DateTime?
-  smsOptedOut          Boolean  @default(false)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  smsOptedOut          Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   // Relations
-  user             User                @relation("AiConversationUser", fields: [userId], references: [id])
-  agent            AiAgent             @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user             User?                @relation("AiConversationUser", fields: [userId], references: [id], onDelete: Cascade)
+  agent            AiAgent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
   messages         AiMessage[]
   costLogs         AiCostLog[]
   share            AiConversationShare?
   outboundMessages AiOutboundMessage[]
 
+  @@unique([agentId, channel, fromAddress], name: "ai_conversation_inbound_key")
   @@index([userId])
   @@index([agentId])
   @@index([contextType, contextId])
   @@index([isActive])
   @@index([updatedAt])
-  @@unique([agentId, channel, fromAddress], name: "ai_conversation_inbound_key")
   @@map("ai_conversation")
 }
 
@@ -780,10 +788,10 @@ model AiOutboundMessage {
   id             String   @id @default(cuid())
   conversationId String
   dedupKey       String   @unique
-  channel        String   // 'sms' | 'whatsapp' | future
-  provider       String   // 'twilio' | 'meta' | future
+  channel        String // 'sms' | 'whatsapp' | future
+  provider       String // 'twilio' | 'meta' | future
   transactionId  String?
-  status         String   // 'pending' | 'sent' | 'failed'
+  status         String // 'pending' | 'sent' | 'failed'
   errorCode      String?
   errorMessage   String?  @db.Text
   createdAt      DateTime @default(now())
@@ -811,13 +819,13 @@ model AiOutboundMessage {
 //
 // See `.context/security/conversation-access.md` for the consent posture.
 model AiConversationShare {
-  id             String   @id @default(cuid())
-  conversationId String   @unique
-  reason         String?  @db.Text
+  id             String    @id @default(cuid())
+  conversationId String    @unique
+  reason         String?   @db.Text
   expiresAt      DateTime?
   revokedAt      DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -920,12 +928,12 @@ model AiEventHook {
   filter    Json? // optional event filtering e.g. { agentSlug: 'support-bot' }
   isEnabled Boolean  @default(true)
   secret    String?  @db.Text // HMAC-SHA256 signing key (hex); nullable = unsigned
-  createdBy String
+  createdBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  creator    User                  @relation("AiEventHookCreator", fields: [createdBy], references: [id])
+  creator    User?                 @relation("AiEventHookCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   deliveries AiEventHookDelivery[]
 
   @@index([eventType])
@@ -967,7 +975,7 @@ model AiUserMemory {
   updatedAt DateTime @updatedAt
 
   // Relations
-  user  User    @relation("AiUserMemoryUser", fields: [userId], references: [id])
+  user  User    @relation("AiUserMemoryUser", fields: [userId], references: [id], onDelete: Cascade)
   agent AiAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@unique([userId, agentId, key])
@@ -1005,13 +1013,13 @@ model AiKnowledgeDocument {
   sourceUrl       String? // URL the document was fetched from (null = manual upload)
   errorMessage    String?  @db.Text
   metadata        Json? // format-specific metadata, preview data for pending_review docs
-  uploadedBy      String
+  uploadedBy      String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   // Relations
   knowledgeBase AiKnowledgeBase            @relation(fields: [knowledgeBaseId], references: [id])
-  uploader      User                       @relation("AiKnowledgeDocumentUploader", fields: [uploadedBy], references: [id])
+  uploader      User?                      @relation("AiKnowledgeDocumentUploader", fields: [uploadedBy], references: [id], onDelete: SetNull)
   chunks        AiKnowledgeChunk[]
   tags          AiKnowledgeDocumentTag[]
   agentGrants   AiAgentKnowledgeDocument[]
@@ -1146,7 +1154,7 @@ model AiEvaluationSession {
   updatedAt              DateTime  @updatedAt
 
   // Relations
-  user               User                  @relation("AiEvaluationSessionUser", fields: [userId], references: [id])
+  user               User                  @relation("AiEvaluationSessionUser", fields: [userId], references: [id], onDelete: Cascade)
   agent              AiAgent?              @relation(fields: [agentId], references: [id], onDelete: SetNull)
   logs               AiEvaluationLog[]
   experimentVariants AiExperimentVariant[]
@@ -1201,7 +1209,7 @@ model AiEvaluationLog {
 /// hash, which makes them visible (but not destructive) to historical runs.
 model AiDataset {
   id          String   @id @default(cuid())
-  userId      String
+  userId      String?
   name        String
   description String?  @db.Text
   // Free-text tags for filtering. Mirrors the AiKnowledgeDocument tag
@@ -1220,10 +1228,10 @@ model AiDataset {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user           User                @relation("AiDatasetUser", fields: [userId], references: [id])
+  user           User?             @relation("AiDatasetUser", fields: [userId], references: [id], onDelete: SetNull)
   cases          AiDatasetCase[]
   evaluationRuns AiEvaluationRun[]
-  experiments    AiExperiment[]      @relation("AiExperimentDataset")
+  experiments    AiExperiment[]    @relation("AiExperimentDataset")
 
   @@index([userId, updatedAt])
   @@map("ai_dataset")
@@ -1247,7 +1255,7 @@ model AiDatasetCase {
   // source ('synthetic' | 'conversation_capture' | 'workflow_capture'), …
   metadata           Json?
 
-  dataset AiDataset                  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  dataset AiDataset                @relation(fields: [datasetId], references: [id], onDelete: Cascade)
   results AiEvaluationCaseResult[]
 
   @@unique([datasetId, position])
@@ -1310,14 +1318,14 @@ model AiEvaluationRun {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  user      User                     @relation("AiEvaluationRunUser", fields: [userId], references: [id])
-  agent     AiAgent?                 @relation("AiEvaluationRunAgent", fields: [agentId], references: [id], onDelete: SetNull)
-  workflow  AiWorkflow?              @relation("AiEvaluationRunWorkflow", fields: [workflowId], references: [id], onDelete: SetNull)
-  dataset   AiDataset                @relation(fields: [datasetId], references: [id])
-  parent    AiEvaluationRun?         @relation("AiEvaluationRunRescore", fields: [parentRunId], references: [id], onDelete: SetNull)
-  rescores  AiEvaluationRun[]        @relation("AiEvaluationRunRescore")
-  results   AiEvaluationCaseResult[]
-  variants  AiExperimentVariant[]
+  user     User                     @relation("AiEvaluationRunUser", fields: [userId], references: [id], onDelete: Cascade)
+  agent    AiAgent?                 @relation("AiEvaluationRunAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  workflow AiWorkflow?              @relation("AiEvaluationRunWorkflow", fields: [workflowId], references: [id], onDelete: SetNull)
+  dataset  AiDataset                @relation(fields: [datasetId], references: [id])
+  parent   AiEvaluationRun?         @relation("AiEvaluationRunRescore", fields: [parentRunId], references: [id], onDelete: SetNull)
+  rescores AiEvaluationRun[]        @relation("AiEvaluationRunRescore")
+  results  AiEvaluationCaseResult[]
+  variants AiExperimentVariant[]
 
   @@index([userId, updatedAt])
   @@index([status, lockedAt])
@@ -1332,13 +1340,13 @@ model AiEvaluationRun {
 /// slug; a missing key means the grader was skipped (e.g. `exact_match`
 /// without `expectedOutput`).
 model AiEvaluationCaseResult {
-  id              String  @id @default(cuid())
+  id              String   @id @default(cuid())
   runId           String
   datasetCaseId   String
   // Mirror of position at result-write time; lets us order results
   // without joining the dataset case row.
   casePosition    Int
-  subjectOutput   String  @db.Text
+  subjectOutput   String   @db.Text
   // Token usage, citations, capability calls — whatever the agent/workflow
   // emitted that graders need to inspect.
   subjectMetadata Json?
@@ -1346,10 +1354,10 @@ model AiEvaluationCaseResult {
   //                   reasoning?: string, costUsd?: number } }
   metricScores    Json
   latencyMs       Int
-  costUsd         Float   @default(0)
+  costUsd         Float    @default(0)
   // Set when subject execution itself failed (not when a grader skipped).
   errorCode       String?
-  errorMessage    String? @db.Text
+  errorMessage    String?  @db.Text
   createdAt       DateTime @default(now())
 
   run         AiEvaluationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
@@ -1402,40 +1410,40 @@ model AiCostLog {
 
 // Webhook subscriptions for outbound event notifications
 model AiWebhookSubscription {
-  id              String   @id @default(cuid())
+  id             String   @id @default(cuid())
   // Delivery channel — "webhook" routes to `url` with HMAC signing;
   // "email" routes to `emailAddress` via the generic event-notification
   // template. The model is kept as `AiWebhookSubscription` for
   // backward-compat with API paths and migrations; the channel column
   // discriminates which destination fields are required.
-  channel         String   @default("webhook")
-  url             String? // destination URL — required when channel = "webhook"
-  secret          String? // HMAC-SHA256 signing key — required when channel = "webhook"
-  emailAddress    String? // destination email — required when channel = "email"
-  events          String[] // e.g. ["budget_exceeded","workflow_failed"]
+  channel        String   @default("webhook")
+  url            String? // destination URL — required when channel = "webhook"
+  secret         String? // HMAC-SHA256 signing key — required when channel = "webhook"
+  emailAddress   String? // destination email — required when channel = "email"
+  events         String[] // e.g. ["budget_exceeded","workflow_failed"]
   // Optional entity scoping. Empty array means "no constraint on this dimension".
   // The dispatcher applies dimension-specific filtering: `agentIds` only constrains
   // events whose payload carries an agent ID, `workflowIds` only constrains events
   // whose payload carries a workflow ID. A sub with `agentIds=['x']` still receives
   // workflow-typed events unconstrained. See lib/orchestration/webhooks/event-entity-keys.ts.
-  agentIds        String[] @default([])
-  workflowIds     String[] @default([])
-  isActive        Boolean  @default(true)
-  description     String?
+  agentIds       String[] @default([])
+  workflowIds    String[] @default([])
+  isActive       Boolean  @default(true)
+  description    String?
   // Total delivery attempts before the delivery is marked `exhausted` (1–10).
   // For email rows we still record attempts in AiWebhookDelivery for audit,
   // but Resend handles its own retry semantics so the policy is effectively
   // a soft cap on local retries triggered by us.
-  maxAttempts     Int      @default(3)
+  maxAttempts    Int      @default(3)
   // Backoff delays in ms between successive attempts. Must contain at least
   // (maxAttempts - 1) entries; the dispatcher only reads the first
   // (maxAttempts - 1) values. Each entry capped at 24h.
-  retryBackoffMs  Int[]    @default([10000, 60000, 300000])
-  createdBy       String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  retryBackoffMs Int[]    @default([10000, 60000, 300000])
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  user       User                @relation("AiWebhookUser", fields: [createdBy], references: [id])
+  user       User                @relation("AiWebhookUser", fields: [createdBy], references: [id], onDelete: Cascade)
   deliveries AiWebhookDelivery[]
 
   @@index([isActive])
@@ -1479,12 +1487,12 @@ model AiProviderConfig {
   metadata     Json?
   timeoutMs    Int? // per-provider request timeout; null = use default (30s cloud, 10s local)
   maxRetries   Int? // per-provider retry count; null = use default (3)
-  createdBy    String
+  createdBy    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   // Relations
-  creator User @relation("AiProviderConfigCreator", fields: [createdBy], references: [id])
+  creator User? @relation("AiProviderConfigCreator", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([createdBy])
   @@index([providerType])
@@ -1543,12 +1551,12 @@ model AiProviderModel {
   isDefault Boolean  @default(false) // true = seed-managed, re-seedable
   isActive  Boolean  @default(true)
   metadata  Json?
-  createdBy String
+  createdBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  creator                    User                      @relation("AiProviderModelCreator", fields: [createdBy], references: [id])
+  creator                    User?                     @relation("AiProviderModelCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   activeForEmbeddingSettings AiOrchestrationSettings[] @relation("ActiveEmbeddingModel")
 
   @@unique([providerSlug, modelId])
@@ -1591,11 +1599,11 @@ model AiApiKey {
 /// Upserted lazily on the first `GET /api/v1/admin/orchestration/settings`
 /// call; never touched by the seeder so admin edits survive deploys.
 model AiOrchestrationSettings {
-  id                           String    @id @default(cuid())
-  slug                         String    @unique @default("global")
-  defaultModels                Json // { routing: string, chat: string, reasoning: string, embeddings: string }
-  activeEmbeddingModelId       String? // FK → AiProviderModel; the model whose dimension the vector columns are currently sized for. Null = use resolver default.
-  globalMonthlyBudgetUsd       Float?
+  id                            String    @id @default(cuid())
+  slug                          String    @unique @default("global")
+  defaultModels                 Json // { routing: string, chat: string, reasoning: string, embeddings: string }
+  activeEmbeddingModelId        String? // FK → AiProviderModel; the model whose dimension the vector columns are currently sized for. Null = use resolver default.
+  globalMonthlyBudgetUsd        Float?
   // Org-wide default for AiWorkflow.maxCostPerExecutionUsd. Applies when a
   // workflow has no per-workflow value AND the caller passes no explicit
   // budgetLimitUsd. Null = no default (unlimited unless caller/workflow
@@ -1605,36 +1613,36 @@ model AiOrchestrationSettings {
   // has no per-agent value. Null = no default (no per-turn cap; monthly
   // budget still applies). See lib/orchestration/llm/cost-caps.ts and
   // lib/orchestration/chat/streaming-handler.ts.
-  defaultMaxCostPerTurnUsd     Float?
-  searchConfig                 Json? // { keywordBoostWeight: number, vectorWeight: number }
-  lastSeededAt                 DateTime?
-  defaultApprovalTimeoutMs     Int? // ms before auto-action on approval gates; null = no timeout
-  approvalDefaultAction        String?   @default("deny") // "deny" or "allow"
-  inputGuardMode               String?   @default("log_only") // "log_only", "warn_and_continue", "block"
-  outputGuardMode              String?   @default("log_only") // "log_only", "warn_and_continue", "block"
-  citationGuardMode            String?   @default("log_only") // "log_only", "warn_and_continue", "block"
-  webhookRetentionDays         Int?
+  defaultMaxCostPerTurnUsd      Float?
+  searchConfig                  Json? // { keywordBoostWeight: number, vectorWeight: number }
+  lastSeededAt                  DateTime?
+  defaultApprovalTimeoutMs      Int? // ms before auto-action on approval gates; null = no timeout
+  approvalDefaultAction         String?   @default("deny") // "deny" or "allow"
+  inputGuardMode                String?   @default("log_only") // "log_only", "warn_and_continue", "block"
+  outputGuardMode               String?   @default("log_only") // "log_only", "warn_and_continue", "block"
+  citationGuardMode             String?   @default("log_only") // "log_only", "warn_and_continue", "block"
+  webhookRetentionDays          Int?
   // Separate retention window for `exhausted` (DLQ) webhook deliveries.
   // Null falls back to webhookRetentionDays so behaviour matches the
   // pre-DLQ retention model.
-  webhookDlqRetentionDays      Int?
-  costLogRetentionDays         Int?
-  auditLogRetentionDays        Int?
-  maxConversationsPerUser      Int?
-  maxMessagesPerConversation   Int?
-  escalationConfig             Json? // { emailAddresses, webhookUrl?, notifyOnPriority }
-  embedAllowedOrigins          Json      @default("[]") // [string] — allowlist for the /approvals/:id/{approve,reject}/embed CORS scope
-  voiceInputGloballyEnabled    Boolean   @default(true) // org-wide kill switch for the voice-input feature; when false, every agent's enableVoiceInput flag is treated as off regardless of its own value.
-  imageInputGloballyEnabled    Boolean   @default(true) // org-wide kill switch for image attachments on chat; when false, every agent's enableImageInput flag is treated as off regardless of its own value.
-  documentInputGloballyEnabled Boolean   @default(true) // org-wide kill switch for PDF / document attachments on chat; when false, every agent's enableDocumentInput flag is treated as off regardless of its own value.
+  webhookDlqRetentionDays       Int?
+  costLogRetentionDays          Int?
+  auditLogRetentionDays         Int?
+  maxConversationsPerUser       Int?
+  maxMessagesPerConversation    Int?
+  escalationConfig              Json? // { emailAddresses, webhookUrl?, notifyOnPriority }
+  embedAllowedOrigins           Json      @default("[]") // [string] — allowlist for the /approvals/:id/{approve,reject}/embed CORS scope
+  voiceInputGloballyEnabled     Boolean   @default(true) // org-wide kill switch for the voice-input feature; when false, every agent's enableVoiceInput flag is treated as off regardless of its own value.
+  imageInputGloballyEnabled     Boolean   @default(true) // org-wide kill switch for image attachments on chat; when false, every agent's enableImageInput flag is treated as off regardless of its own value.
+  documentInputGloballyEnabled  Boolean   @default(true) // org-wide kill switch for PDF / document attachments on chat; when false, every agent's enableDocumentInput flag is treated as off regardless of its own value.
   // Minutes a running execution may spend in its current step before the
   // executions list highlights the row as "stuck-looking" and the live-
   // engine dashboard counts it in the stuck-age band. Read by the live
   // page + the executions list. Clamped to [1, 1440] on PATCH; the read
   // path defends with the same clamp so a bad DB value never breaks the UI.
-  stuckExecutionThresholdMins  Int       @default(5)
-  createdAt                    DateTime  @default(now())
-  updatedAt                    DateTime  @updatedAt
+  stuckExecutionThresholdMins   Int       @default(5)
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
 
   activeEmbeddingModel AiProviderModel? @relation("ActiveEmbeddingModel", fields: [activeEmbeddingModelId], references: [id], onDelete: SetNull)
 
@@ -1647,7 +1655,7 @@ model AiOrchestrationSettings {
 /// workflow changes, knowledge uploads, settings changes, and deletions.
 model AiAdminAuditLog {
   id         String   @id @default(cuid())
-  userId     String
+  userId     String?
   action     String // e.g. "agent.create", "agent.update", "workflow.delete"
   entityType String // "agent", "workflow", "capability", "knowledge_document", "settings", "webhook"
   entityId   String?
@@ -1657,7 +1665,7 @@ model AiAdminAuditLog {
   clientIp   String?
   createdAt  DateTime @default(now())
 
-  user User @relation("AiAdminAuditLogUser", fields: [userId], references: [id])
+  user User? @relation("AiAdminAuditLogUser", fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([action])
@@ -1668,28 +1676,29 @@ model AiAdminAuditLog {
 
 // A/B prompt experiment — compares agent version variants
 model AiExperiment {
-  id          String   @id @default(cuid())
-  name        String
-  description String?  @db.Text
-  status      String   @default("draft") // "draft" | "running" | "completed"
-  agentId     String
+  id            String   @id @default(cuid())
+  name          String
+  description   String?  @db.Text
+  status        String   @default("draft") // "draft" | "running" | "completed"
+  agentId       String
   // Phase 2: shared dataset every variant's eval run fires against.
   // Null on legacy rows that pre-date dataset-driven experiments — those
   // still execute via the legacy AiEvaluationSession path. Required on
   // any new experiment that opts into per-variant AiEvaluationRun.
-  datasetId   String?
+  datasetId     String?
   // Phase 2: metric configs pinned at run time. Array<{ slug, config }>
   // mirroring AiEvaluationRun.metricConfigs. Null on legacy rows; the
   // run route uses [judge_agent: eval-judge-relevance] as a sensible
   // default when both fields are null on a draft.
   metricConfigs Json?
-  createdBy   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  // Erasure: SetNull-retained (de-attributed) when the creator is erased.
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   agent    AiAgent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
   dataset  AiDataset?            @relation("AiExperimentDataset", fields: [datasetId], references: [id], onDelete: SetNull)
-  creator  User                  @relation("AiExperimentCreator", fields: [createdBy], references: [id])
+  creator  User?                 @relation("AiExperimentCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   variants AiExperimentVariant[]
 
   @@index([agentId])
@@ -1735,6 +1744,29 @@ model SeedHistory {
   durationMs  Int
 
   @@map("seed_history")
+}
+
+/// Append-only receipt of a completed right-to-erasure (account deletion).
+///
+/// Written inside the same transaction as `prisma.user.delete` by
+/// `lib/privacy/erase-user.ts`, so a receipt exists iff the user was erased.
+/// Demonstrates GDPR Art. 5(2) accountability without re-introducing the
+/// subject's PII: the user id is opaque (the row is gone) and the email is
+/// stored only as a SHA-256 hash for correlating a later "did you erase me?"
+/// request. No foreign keys — the receipt must outlive every referenced row,
+/// including the actor if they are later erased too.
+model DataErasureReceipt {
+  id               String   @id @default(cuid())
+  subjectUserId    String // id of the erased user (no FK — the user row is gone)
+  subjectEmailHash String? // sha256(lowercased email); for correlation, not reversible
+  actorUserId      String? // who initiated the erasure (self or an admin)
+  reason           String // "self_service" | "admin_action"
+  erasedAt         DateTime @default(now())
+  metadata         Json? // optional summary (e.g. counts)
+
+  @@index([subjectUserId])
+  @@index([erasedAt])
+  @@map("data_erasure_receipt")
 }
 
 // ============================================================================
@@ -1809,19 +1841,19 @@ model McpExposedTool {
 /// `name` is immutable post-create because changing it breaks every
 /// bookmarked / saved client invocation. Renames require delete + recreate.
 model McpExposedPrompt {
-  id            String  @id @default(cuid())
-  name          String  @unique // /^[a-z][a-z0-9_-]*$/, max 64
-  description   String  @db.Text // shown to MCP clients in prompts/list
-  template      String  @db.Text // {{var}} substitution; max 10_000 chars
-  argumentsSpec Json // [{ name, description, required }] — max 20 entries
+  id              String  @id @default(cuid())
+  name            String  @unique // /^[a-z][a-z0-9_-]*$/, max 64
+  description     String  @db.Text // shown to MCP clients in prompts/list
+  template        String  @db.Text // {{var}} substitution; max 10_000 chars
+  argumentsSpec   Json // [{ name, description, required }] — max 20 entries
   completionsSpec Json? // optional { [argName]: string[] } for completion/complete (Phase 6)
-  isEnabled     Boolean @default(true)
-  createdBy     String
+  isEnabled       Boolean @default(true)
+  createdBy       String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  creator User @relation("McpPromptCreator", fields: [createdBy], references: [id])
+  creator User? @relation("McpPromptCreator", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([isEnabled])
   @@map("mcp_exposed_prompt")
@@ -1865,12 +1897,12 @@ model McpApiKey {
   expiresAt         DateTime?
   lastUsedAt        DateTime?
   rateLimitOverride Int? // per-key rate limit override; null = use global default
-  createdBy         String
+  createdBy         String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   // Relations
-  creator     User          @relation("McpApiKeyCreator", fields: [createdBy], references: [id])
+  creator     User?         @relation("McpApiKeyCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   scopedAgent AiAgent?      @relation(fields: [scopedAgentId], references: [id], onDelete: SetNull)
   auditLogs   McpAuditLog[]
 

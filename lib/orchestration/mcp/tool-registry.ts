@@ -102,7 +102,7 @@ async function getMcpSystemAgentId(): Promise<string | null> {
 export async function callMcpTool(
   toolName: string,
   args: Record<string, unknown> | undefined,
-  userId: string
+  userId: string | null
 ): Promise<McpToolCallResult> {
   // Resolve the actual capability slug from tool name
   // (custom names are supported, so we need to look up by either)

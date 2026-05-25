@@ -32,7 +32,7 @@ export interface CapabilityResult<T = unknown> {
  * or an admin API route). Capabilities should treat this as read-only.
  */
 export interface CapabilityContext {
-  userId: string;
+  userId: string | null;
   agentId: string;
   conversationId?: string;
   /**

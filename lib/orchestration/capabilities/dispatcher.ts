@@ -292,7 +292,7 @@ class CapabilityDispatcher {
         [GEN_AI_TOOL_NAME]: slug,
         [GEN_AI_OPERATION_NAME]: 'tool_call',
         [SUNRISE_AGENT_ID]: context.agentId,
-        [SUNRISE_USER_ID]: context.userId,
+        [SUNRISE_USER_ID]: context.userId ?? '',
         ...(context.conversationId ? { [SUNRISE_CONVERSATION_ID]: context.conversationId } : {}),
       },
       async (span) => {

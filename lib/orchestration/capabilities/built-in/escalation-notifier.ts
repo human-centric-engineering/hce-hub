@@ -20,7 +20,7 @@ import type { EscalationConfig } from '@/types/orchestration';
 interface EscalationPayload {
   agentId: string;
   agentName?: string;
-  userId: string;
+  userId: string | null;
   conversationId: string | null;
   reason: string;
   priority: 'low' | 'medium' | 'high';

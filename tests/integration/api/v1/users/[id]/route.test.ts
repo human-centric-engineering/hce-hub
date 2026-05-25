@@ -18,11 +18,14 @@
  * - 400 SELF_ROLE_CHANGE envelope
  * - 400 VALIDATION_ERROR on empty body
  *
- * DELETE /api/v1/users/:id:
+ * DELETE /api/v1/users/:id (withAdminAuth — real eraseUser over mocked Prisma):
  * - 401 unauthenticated (withAdminAuth guard)
  * - 403 non-admin
- * - 200 + prisma.user.delete called with correct where clause
- * - 400 admin-delete-admin blocked
+ * - 200 happy — receipt create + audit scrub + user.delete via $transaction
+ * - 400 CANNOT_DELETE_SELF (self-guard short-circuits before findUnique)
+ * - 400 CANNOT_DELETE_ADMIN (target role === 'ADMIN')
+ * - 404 user not found
+ * - 400 VALIDATION_ERROR invalid ID format
  *
  * @see app/api/v1/users/[id]/route.ts
  */
@@ -52,12 +55,23 @@ vi.mock('@/lib/auth/config', () => ({
 
 // Mock Prisma — this IS the DB boundary for integration tests in this project.
 // Do NOT instantiate real PrismaClient or read process.env.DATABASE_URL.
+// $transaction is mocked to invoke its callback with the same prisma mock so
+// tx.aiAdminAuditLog / tx.dataErasureReceipt / tx.user resolve through the
+// same vi.fn() spies. A no-op $transaction mock would make all downstream
+// assertions vacuous (green-bar risk — see test-plan.md brittle-patterns note).
 vi.mock('@/lib/db/client', () => ({
   prisma: {
+    $transaction: vi.fn(),
     user: {
       findUnique: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+    },
+    aiAdminAuditLog: {
+      updateMany: vi.fn(),
+    },
+    dataErasureReceipt: {
+      create: vi.fn(),
     },
   },
 }));
@@ -569,10 +583,38 @@ describe('PATCH /api/v1/users/:id', () => {
 });
 
 describe('DELETE /api/v1/users/:id', () => {
+  /**
+   * Shared receipt fixture for the happy-path $transaction mock.
+   * The real eraseUser returns { receiptId, erasedAt } from this row.
+   */
+  const RECEIPT_FIXTURE = {
+    id: 'receipt-cuid-0000000000000001',
+    subjectUserId: TARGET_USER_ID,
+    subjectEmailHash: 'abc123',
+    actorUserId: ADMIN_USER_ID,
+    reason: 'admin_action' as const,
+    erasedAt: new Date('2026-05-25T10:00:00.000Z'),
+    createdAt: new Date('2026-05-25T10:00:00.000Z'),
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-establish defaults after clearAllMocks. clearAllMocks resets call history
+    // but NOT mockResolvedValue implementations — explicit re-application ensures
+    // per-test isolation regardless of execution order.
     vi.mocked(auth.api.getSession).mockResolvedValue(null);
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
+
+    // Default $transaction: invoke the callback with the mocked prisma client as `tx`.
+    // This makes tx.aiAdminAuditLog / tx.dataErasureReceipt / tx.user resolve through
+    // the same vi.fn() spies — a no-op mock would make all downstream assertions vacuous.
+    vi.mocked(prisma.$transaction).mockImplementation(
+      async (cb: (tx: typeof prisma) => Promise<unknown>) => cb(prisma)
+    );
+
+    // Default sub-transaction collaborators — each test can override per-case.
+    vi.mocked(prisma.aiAdminAuditLog.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.dataErasureReceipt.create).mockResolvedValue(RECEIPT_FIXTURE as never);
     vi.mocked(prisma.user.delete).mockResolvedValue(undefined as never);
   });
 
@@ -591,11 +633,13 @@ describe('DELETE /api/v1/users/:id', () => {
       const body = await parseResponse<{ success: boolean; error: { code: string } }>(response);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('UNAUTHORIZED');
-      expect(prisma.user.delete).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
+      // withAdminAuth short-circuited before any DB call
+      expect(prisma.$transaction).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
+      expect(prisma.user.findUnique).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
     });
 
     it('should return 403 with FORBIDDEN envelope when non-admin sends DELETE, and not call DB', async () => {
-      // Arrange
+      // Arrange — authenticated as USER (not ADMIN), so withAdminAuth rejects.
       vi.mocked(auth.api.getSession).mockResolvedValue(
         createMockAuthSession({
           user: {
@@ -621,17 +665,18 @@ describe('DELETE /api/v1/users/:id', () => {
       const body = await parseResponse<{ success: boolean; error: { code: string } }>(response);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('FORBIDDEN');
-      expect(prisma.user.delete).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
+      // Role check fired; no DB operation should have been attempted
+      expect(prisma.$transaction).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
+      expect(prisma.user.findUnique).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
     });
   });
 
-  describe('Happy path + DB readback', () => {
-    it('should return 200 and invoke prisma.user.delete with correct where clause when admin deletes a non-admin user', async () => {
-      // Arrange — admin session with a DIFFERENT id than the target (not self-deletion).
+  describe('Happy path — real eraseUser over mocked Prisma boundary', () => {
+    it('should return 200 and run the full erase flow: receipt create, audit scrub, user delete via $transaction', async () => {
+      // Arrange — admin deletes a USER target (not self, not another admin).
+      // eraseUser is NOT mocked — the real function runs through the mocked Prisma boundary.
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.user.findUnique).mockResolvedValue(makeUserFixture({ role: 'USER' }));
-      // delete resolves — the handler doesn't use its return value directly.
-      vi.mocked(prisma.user.delete).mockResolvedValue(makeUserFixture() as never);
 
       const request = makeDeleteRequest(TARGET_USER_ID);
       const context = makeContext(TARGET_USER_ID);
@@ -639,21 +684,40 @@ describe('DELETE /api/v1/users/:id', () => {
       // Act
       const response = await DELETE(request, context);
 
-      // Assert — status first
+      // Assert — status first (brittle-patterns rule: status before body)
       expect(response.status).toBe(200);
       const body = await parseResponse<{
         success: boolean;
         data: { id: string; deleted: boolean };
       }>(response);
       // test-review:accept tobe_true — structural assertion on the API response envelope's success field, paired with status and data shape checks
-      // test-review:accept tobe_true — structural boolean assertion on API response field
       expect(body.success).toBe(true); // test-review:accept tobe_true — structural boolean/predicate assertion;
+      // The handler returns { id, deleted: true } — not a DB row echo.
       expect(body.data).toEqual({ id: TARGET_USER_ID, deleted: true });
 
-      // DB-state readback for DELETE: we cannot read the row back after deletion.
-      // Instead, we verify the mutation was issued with the correct `where` clause —
-      // this IS the readback contract for a delete operation, proving the handler
-      // targeted the right row. No follow-up findUnique is needed or appropriate.
+      // ---- DB-state readback: prove the real eraseUser ran its $transaction flow ----
+
+      // 1. $transaction was invoked (i.e. eraseUser reached the atomic-commit step)
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+
+      // 2. Residual-PII scrub: clientIp nulled on retained audit rows for this user
+      expect(prisma.aiAdminAuditLog.updateMany).toHaveBeenCalledWith({
+        where: { userId: TARGET_USER_ID },
+        data: { clientIp: null },
+      });
+
+      // 3. Erasure receipt written (GDPR Art. 5(2) accountability)
+      expect(prisma.dataErasureReceipt.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            subjectUserId: TARGET_USER_ID,
+            actorUserId: ADMIN_USER_ID,
+            reason: 'admin_action',
+          }),
+        })
+      );
+
+      // 4. User row deleted with the correct where clause — targets the right row
       expect(prisma.user.delete).toHaveBeenCalledWith({
         where: { id: TARGET_USER_ID },
       });
@@ -661,7 +725,7 @@ describe('DELETE /api/v1/users/:id', () => {
   });
 
   describe('Business rules', () => {
-    it('should return 400 CANNOT_DELETE_SELF when admin deletes their own account, and not call delete', async () => {
+    it('should return 400 CANNOT_DELETE_SELF when admin deletes their own account, and not run erase', async () => {
       // Arrange — session admin and target are the SAME id (self-deletion).
       // mockAdminUser() returns a session with user.id === ADMIN_USER_ID.
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
@@ -682,14 +746,13 @@ describe('DELETE /api/v1/users/:id', () => {
       expect(body.error.code).toBe('CANNOT_DELETE_SELF');
       expect(body.error.message).toBe('Cannot delete your own account');
 
-      // The self-guard short-circuits BEFORE the existence check, so neither
-      // findUnique nor delete should have been called.
+      // The self-guard short-circuits BEFORE the existence check — no erase should run.
       expect(prisma.user.findUnique).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
-      expect(prisma.user.delete).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
+      expect(prisma.$transaction).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
     });
 
-    it('should return 400 when admin attempts to delete another ADMIN user, and not call delete', async () => {
-      // Arrange — target is an admin (role: 'ADMIN')
+    it('should return 400 CANNOT_DELETE_ADMIN with exact message when target is an ADMIN, and not run erase', async () => {
+      // Arrange — target user is an admin (role: 'ADMIN').
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.user.findUnique).mockResolvedValue(makeUserFixture({ role: 'ADMIN' }));
 
@@ -703,20 +766,19 @@ describe('DELETE /api/v1/users/:id', () => {
       expect(response.status).toBe(400);
       const body = await parseResponse<{
         success: boolean;
-        error: { code?: string; message: string };
+        error: { code: string; message: string };
       }>(response);
       expect(body.success).toBe(false);
-      // Source L209: "Cannot delete an admin account. Demote the user first."
-      expect(body.error.message).toMatch(/admin account/i);
-      // Source L210 passes no `code:` argument to errorResponse — pin the no-code contract
-      // so a future regression adding code: 'FORBIDDEN' is caught.
-      expect(body.error.code).toBeUndefined();
-      // Proves the guard prevented the actual DB delete
-      expect(prisma.user.delete).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
+      // Source route.ts: code: 'CANNOT_DELETE_ADMIN' (asserted explicitly so a regression removing the code is caught)
+      expect(body.error.code).toBe('CANNOT_DELETE_ADMIN');
+      // Source route.ts: exact message string
+      expect(body.error.message).toBe('Cannot delete an admin account. Demote the user first.');
+      // Admin-target guard fired; erase must not have run
+      expect(prisma.$transaction).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
     });
 
     it('should return 404 with NOT_FOUND envelope when DELETE targets a non-existent user', async () => {
-      // Arrange — valid ID format but user does not exist; source L204 throws NotFoundError.
+      // Arrange — valid ID format but user does not exist in DB.
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
 
@@ -731,13 +793,12 @@ describe('DELETE /api/v1/users/:id', () => {
       const body = await parseResponse<{ success: boolean; error: { code: string } }>(response);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('NOT_FOUND');
-      // Existence check fired but delete must not have been called
-      expect(prisma.user.delete).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
+      // Existence check fired but no erase transaction should have run
+      expect(prisma.$transaction).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
     });
 
     it('should return 400 with VALIDATION_ERROR envelope for invalid DELETE ID format, and not call DB', async () => {
-      // Arrange — 'not-a-cuid' fails the userIdSchema at source L187 before the self-delete
-      // guard or any DB access.
+      // Arrange — 'not-a-cuid' fails the userIdSchema before the self-delete guard or any DB access.
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
 
       const request = makeDeleteRequest('not-a-cuid');
@@ -753,7 +814,7 @@ describe('DELETE /api/v1/users/:id', () => {
       expect(body.error.code).toBe('VALIDATION_ERROR');
       // ID validation fires before any DB access
       expect(prisma.user.findUnique).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
-      expect(prisma.user.delete).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
+      expect(prisma.$transaction).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
     });
   });
 });

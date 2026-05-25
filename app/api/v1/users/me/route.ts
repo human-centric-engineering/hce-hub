@@ -15,6 +15,7 @@ import { UnauthorizedError, ErrorCodes } from '@/lib/api/errors';
 import { validateRequestBody } from '@/lib/api/validation';
 import { updateUserSchema, deleteAccountSchema } from '@/lib/validations/user';
 import { withAuth } from '@/lib/auth/guards';
+import { eraseUser } from '@/lib/privacy/erase-user';
 import { getRouteLogger } from '@/lib/api/context';
 import { serverTrack } from '@/lib/analytics/server';
 import { EVENTS } from '@/lib/analytics/events';
@@ -145,20 +146,36 @@ export const DELETE = withAuth(async (request, session) => {
     // Validate confirmation (ensures user typed "DELETE")
     await validateRequestBody(request, deleteAccountSchema);
 
+    // Block deletion of the last remaining admin — the system must always
+    // retain an operator. Non-last admins and regular users may self-delete.
+    // (Admin-deletes-other-admin is separately blocked in users/[id], which
+    // requires demoting to USER first; self-delete has no such demotion gate,
+    // so the last-admin check lives here.)
+    if (session.user.role === 'ADMIN') {
+      const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
+      if (adminCount <= 1) {
+        return errorResponse(
+          'Cannot delete the last admin account. Transfer admin access to another user first.',
+          { status: 400, code: 'LAST_ADMIN' }
+        );
+      }
+    }
+
     // Log the deletion for audit purposes
     log.info('User account deletion initiated', {
       email: session.user.email,
     });
 
-    // Clean up stored avatar files (no-op if nothing exists)
-    const { deleteByPrefix, isStorageEnabled } = await import('@/lib/storage/upload');
-    if (isStorageEnabled()) {
-      await deleteByPrefix(`avatars/${session.user.id}/`);
-    }
-
-    // Delete user (cascades to sessions and accounts via Prisma schema)
-    await prisma.user.delete({
-      where: { id: session.user.id },
+    // Erase the user. Schema cascades remove personal data (sessions, accounts,
+    // conversations, executions, user memory, evaluations, API keys, webhook
+    // subscriptions); org config + audit rows are retained with their
+    // creator/userId set null; residual PII is scrubbed; an erasure receipt is
+    // written; and avatar blobs are removed. See lib/privacy/erase-user.ts.
+    await eraseUser({
+      userId: session.user.id,
+      userEmail: session.user.email,
+      actorUserId: session.user.id,
+      reason: 'self_service',
     });
 
     // Clear all better-auth cookies (session, cached session data, CSRF, OAuth state)

@@ -153,7 +153,7 @@ function formatBudgetExceededReason(usedUsd: number, limitUsd: number, qualifier
 export type ExecutionSubscriber = (event: ExecutionEvent) => void;
 
 export interface ExecuteOptions {
-  userId: string;
+  userId: string | null;
   budgetLimitUsd?: number;
   signal?: AbortSignal;
   /**
@@ -201,7 +201,7 @@ export class OrchestrationEngine {
   ): AsyncIterable<ExecutionEvent> {
     const baseLogger = createLogger({
       workflowId: workflow.id,
-      userId: options.userId,
+      userId: options.userId ?? undefined,
     });
 
     // --------------------------------------------------------------
@@ -214,7 +214,7 @@ export class OrchestrationEngine {
     emitHookEvent('workflow.started', {
       executionId,
       workflowId: workflow.id,
-      userId: options.userId,
+      userId: options.userId ?? undefined,
     });
 
     // Heartbeat extends the lease while a long single step (multi-minute LLM call,
@@ -233,7 +233,7 @@ export class OrchestrationEngine {
         {
           [SUNRISE_EXECUTION_ID]: executionId,
           [SUNRISE_WORKFLOW_ID]: workflow.id,
-          [SUNRISE_USER_ID]: options.userId,
+          [SUNRISE_USER_ID]: options.userId ?? '',
         },
         (workflowSpan) =>
           this.executeInner(

@@ -401,7 +401,7 @@ const CONTENT_TYPE_TO_EXT: Record<string, string> = {
 function buildMetadata(context: CapabilityContext, args: Args): Record<string, string> {
   const meta: Record<string, string> = {
     agentId: context.agentId,
-    userId: context.userId,
+    userId: context.userId ?? '',
     uploadedAt: new Date().toISOString(),
   };
   if (context.conversationId) meta.conversationId = context.conversationId;
