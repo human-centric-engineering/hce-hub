@@ -289,4 +289,196 @@ describe('citation_count_at_least grader', () => {
     });
     expect(r.passed).toBe(false);
   });
+
+  it('treats absent citations field as zero count', async () => {
+    const r = await citationCountAtLeastGrader.grade({
+      ...input(),
+      config: { min: 1 },
+    });
+    expect(r.passed).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Branch-coverage fills — drive the remaining default + edge branches.
+// ---------------------------------------------------------------------------
+
+describe('heuristic graders — branch coverage', () => {
+  describe('exact_match defaults', () => {
+    it('uses caseInsensitive=false by default (case differences fail)', async () => {
+      const r = await exactMatchGrader.grade({
+        ...input({ modelOutput: 'YES', expectedOutput: 'yes' }),
+        config: exactMatchGrader.defaultConfig ?? { trim: true, caseInsensitive: false },
+      });
+      expect(r.passed).toBe(false);
+    });
+
+    it('treats null expectedOutput same as missing (returns null score)', async () => {
+      const r = await exactMatchGrader.grade({
+        ...input({ modelOutput: 'yes', expectedOutput: undefined }),
+        config: { trim: true, caseInsensitive: false },
+      });
+      expect(r.score).toBeNull();
+      expect(r.reasoning).toMatch(/skipped/i);
+    });
+  });
+
+  describe('length_between defaults', () => {
+    it('passes via defaultConfig when output is in 10..2000 range', async () => {
+      const r = await lengthBetweenGrader.grade({
+        ...input({ modelOutput: 'hello world' }),
+        config: lengthBetweenGrader.defaultConfig ?? { min: 10, max: 2000 },
+      });
+      expect(r.passed).toBe(true);
+    });
+
+    it('boundary: exactly at min passes', async () => {
+      const r = await lengthBetweenGrader.grade({
+        ...input({ modelOutput: 'x'.repeat(10) }),
+        config: { min: 10, max: 100 },
+      });
+      expect(r.passed).toBe(true);
+    });
+
+    it('boundary: exactly at max passes', async () => {
+      const r = await lengthBetweenGrader.grade({
+        ...input({ modelOutput: 'x'.repeat(100) }),
+        config: { min: 10, max: 100 },
+      });
+      expect(r.passed).toBe(true);
+    });
+  });
+
+  describe('regex flag handling', () => {
+    it('honours case-insensitive flag', async () => {
+      const r = await regexGrader.grade({
+        ...input({ modelOutput: 'HELLO WORLD' }),
+        config: { pattern: 'hello', flags: 'i' },
+      });
+      expect(r.passed).toBe(true);
+    });
+
+    it('case-sensitive (no flag) fails on mismatched case', async () => {
+      const r = await regexGrader.grade({
+        ...input({ modelOutput: 'HELLO WORLD' }),
+        config: { pattern: 'hello', flags: '' },
+      });
+      expect(r.passed).toBe(false);
+    });
+
+    it('multiline flag matches across lines', async () => {
+      const r = await regexGrader.grade({
+        ...input({ modelOutput: 'first line\nsecond line' }),
+        config: { pattern: '^second', flags: 'm' },
+      });
+      expect(r.passed).toBe(true);
+    });
+  });
+
+  describe('json_schema branches', () => {
+    it('accepts boolean and array types', async () => {
+      const r = await jsonSchemaGrader.grade({
+        ...input({ modelOutput: JSON.stringify({ flag: true, items: [1, 2] }) }),
+        config: { fields: { flag: 'boolean', items: 'array' }, strict: false },
+      });
+      expect(r.passed).toBe(true);
+    });
+
+    it('accepts nested object type', async () => {
+      const r = await jsonSchemaGrader.grade({
+        ...input({ modelOutput: JSON.stringify({ nested: { a: 1 } }) }),
+        config: { fields: { nested: 'object' }, strict: false },
+      });
+      expect(r.passed).toBe(true);
+    });
+
+    it('rejects when type mismatch (string expected, number got)', async () => {
+      const r = await jsonSchemaGrader.grade({
+        ...input({ modelOutput: JSON.stringify({ name: 42 }) }),
+        config: { fields: { name: 'string' }, strict: false },
+      });
+      expect(r.passed).toBe(false);
+      expect(r.reasoning).toMatch(/should be string/);
+    });
+
+    it('rejects when output JSON is an array (not an object)', async () => {
+      const r = await jsonSchemaGrader.grade({
+        ...input({ modelOutput: JSON.stringify([1, 2, 3]) }),
+        config: { fields: {}, strict: false },
+      });
+      expect(r.passed).toBe(false);
+      expect(r.reasoning).toMatch(/not an object/i);
+    });
+
+    it('rejects when output JSON is null', async () => {
+      const r = await jsonSchemaGrader.grade({
+        ...input({ modelOutput: 'null' }),
+        config: { fields: {}, strict: false },
+      });
+      expect(r.passed).toBe(false);
+      expect(r.reasoning).toMatch(/not an object/i);
+    });
+
+    it('strict mode passes when extra keys are absent', async () => {
+      const r = await jsonSchemaGrader.grade({
+        ...input({ modelOutput: JSON.stringify({ name: 'a' }) }),
+        config: { fields: { name: 'string' }, strict: true },
+      });
+      expect(r.passed).toBe(true);
+    });
+  });
+
+  describe('json_path_equals branches', () => {
+    it('returns mismatch reason citing actual vs expected', async () => {
+      const r = await jsonPathEqualsGrader.grade({
+        ...input({ modelOutput: JSON.stringify({ status: 'ok' }) }),
+        config: { path: 'status', value: 'error' },
+      });
+      expect(r.passed).toBe(false);
+      expect(r.reasoning).toMatch(/"ok"/);
+    });
+
+    it('returns null for invalid JSON', async () => {
+      const r = await jsonPathEqualsGrader.grade({
+        ...input({ modelOutput: 'definitely not json' }),
+        config: { path: 'x', value: 'y' },
+      });
+      expect(r.passed).toBe(false);
+      expect(r.reasoning).toMatch(/not valid JSON/i);
+    });
+
+    it('handles undefined at the path (path miss)', async () => {
+      const r = await jsonPathEqualsGrader.grade({
+        ...input({ modelOutput: JSON.stringify({ a: { b: 1 } }) }),
+        config: { path: 'a.c', value: 1 },
+      });
+      expect(r.passed).toBe(false);
+    });
+
+    it('accepts numeric expected values', async () => {
+      const r = await jsonPathEqualsGrader.grade({
+        ...input({ modelOutput: JSON.stringify({ count: 42 }) }),
+        config: { path: 'count', value: 42 },
+      });
+      expect(r.passed).toBe(true);
+    });
+
+    it('accepts boolean expected values', async () => {
+      const r = await jsonPathEqualsGrader.grade({
+        ...input({ modelOutput: JSON.stringify({ ok: true }) }),
+        config: { path: 'ok', value: true },
+      });
+      expect(r.passed).toBe(true);
+    });
+  });
+
+  describe('tool_was_called branches', () => {
+    it('treats absent toolCalls as empty', async () => {
+      const r = await toolWasCalledGrader.grade({
+        ...input(),
+        config: { slug: 'anything', min: 1 },
+      });
+      expect(r.passed).toBe(false);
+    });
+  });
 });
