@@ -2,7 +2,32 @@
 
 End-to-end architecture for Phase 1 batch evaluations: upload a
 dataset, queue a run against an agent, drain in the background, surface
-per-case results with model-graded + heuristic + custom-rubric scores.
+per-case results with heuristic + agent-judge scores.
+
+## Architectural keystone: agents-as-judges
+
+Every model-graded metric is an `AiAgent` row with `kind='judge'`,
+driven by the evaluation worker via `streamChat`. The 6 built-in
+metrics (correctness, relevance, coherence, faithfulness,
+groundedness, brand-voice) ship as seeded `isSystem=true` agents;
+admins can create custom judges in the agent form. This means:
+
+- Judge prompts (the **rubric**) are edited in the existing agent
+  form with version history, FieldHelp, and safety guardrails.
+- Judges can have **knowledge attached** (e.g. a policy reviewer with
+  the policy doc) and **capabilities bound** (e.g. an
+  authoritative-answer lookup tool the LLM can call mid-judging).
+- **Judge spend rolls up per-agent** on the existing costs page —
+  every judge call writes a `CostOperation.CHAT` row attributed to
+  the judge agent.
+- The grader registry has ONE model-family entry, `judge_agent`, that
+  takes `{ agentSlug }` in config. Adding a new metric = creating a
+  new agent; no code change.
+
+The brand-voice judge is the showcase use case: it reads the subject
+agent's `brandVoiceInstructions` from the structured user-message
+payload (pinned at queue time, like `datasetContentHash`) — impossible
+with the previous function-grader design.
 
 This is **separate from** the manual evaluation-session flow at
 `.context/orchestration/evaluation-metrics.md`. That flow stays as-is —
@@ -129,22 +154,41 @@ fails CI rather than silently disappearing from the picker.
 - `json_schema`, `json_path_equals`
 - `tool_was_called`, `citation_count_at_least`
 
-**Model** (one judge call per case×grader):
+**Judge agents** (one `judge_agent` registry entry; per-judge slug
+picked via `config.agentSlug` at run time). Six seeded by
+`prisma/seeds/016-evaluation-judges.ts`:
 
-- `faithfulness` — for each `[N]` marker, does the cited excerpt support
-  the claim? Null when there are no markers.
-- `groundedness` — beyond markers, are the claims traceable to any
-  cited source (or common knowledge)?
-- `relevance` — does the answer address the user's question?
-- `custom_rubric` — user-supplied prompt + scale (default 1..5) +
-  optional pass threshold.
+- `eval-judge-correctness` — semantic match against `expectedOutput`.
+  The biggest current gap before this refactor: reference-required,
+  tolerant of wording / structure differences.
+- `eval-judge-relevance` — addresses the question, regardless of
+  correctness.
+- `eval-judge-coherence` — internally consistent + well-organised.
+- `eval-judge-faithfulness` — each `[N]` marker supported by its
+  citation. Null when no markers.
+- `eval-judge-groundedness` — substantive claims traceable to cited
+  sources (common-knowledge loophole removed).
+- `eval-judge-brand-voice` — response matches the subject agent's
+  `brandVoiceInstructions`. Pinned at queue time.
 
-Each model grader is a thin adapter over the shared `runJudgeForRubric()`
-helper. The manual-session path keeps using the bundled `scoreResponse()`
-from `score-response.ts` for efficiency — one judge call returns all
-three named metrics together. Batch runs use the registry for
-flexibility: a run that selects only `relevance` doesn't pay for
-faithfulness + groundedness.
+Each judge's `systemInstructions` IS the rubric, with explicit
+**IGNORE** clauses telling it what the metric does NOT cover (so the
+six don't bleed into each other). The structured user-message format
+every judge receives:
+
+    QUESTION: <case input>
+    ANSWER: <subject output>
+    [optional] EXPECTED ANSWER: <case.expectedOutput>
+    [optional] CITED SOURCES: <JSON array {marker, documentName, excerpt}>
+    [optional] TOOL CALLS: <JSON array {slug, args}>
+    [optional] SUBJECT BRAND VOICE: <subject's brandVoiceInstructions>
+
+Each judge returns `{score, reasoning}` JSON. The worker parses,
+stores under a metric key derived from the judge's slug.
+
+The manual-session path (`score-response.ts`) drives the three RAG
+judges in parallel via `drainStreamChat` (refactored from a bundled
+single-call to per-judge calls for consistency with the batch path).
 
 **Pairwise** — declared family on the registry, no built-ins yet.
 Pairwise judges land in Phase 3 (experiment compare view).
@@ -253,7 +297,9 @@ code, no "AI flourishes". One grep audits the whole surface.
 | Hash function       | `lib/orchestration/evaluations/datasets/hash.ts`                                           |
 | Grader registry     | `lib/orchestration/evaluations/graders/registry.ts`                                        |
 | Grader types        | `lib/orchestration/evaluations/graders/types.ts`                                           |
-| Judge helper        | `lib/orchestration/evaluations/graders/model/judge-helper.ts`                              |
+| judge_agent grader  | `lib/orchestration/evaluations/graders/model/judge-agent.ts`                               |
+| Judge agents seed   | `prisma/seeds/016-evaluation-judges.ts`                                                    |
+| drainStreamChat     | `lib/orchestration/evaluations/drain-stream-chat.ts`                                       |
 | Tick wiring         | `app/api/v1/admin/orchestration/maintenance/tick/route.ts`                                 |
 | API routes          | `app/api/v1/admin/orchestration/evaluations/{datasets,runs,graders}/`                      |
 | UI pages            | `app/admin/orchestration/evaluations/{datasets,runs}/`                                     |

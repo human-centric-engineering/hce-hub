@@ -32,9 +32,16 @@ const CASES = [
 ];
 
 /** Metrics — one heuristic (cheap), one model-graded (one judge call per case). */
+/**
+ * Metrics — one heuristic (cheap) and two judge-agent calls per case.
+ * Exercises the agent-as-judges path end-to-end: streamChat drives the
+ * seeded `eval-judge-relevance` and `eval-judge-coherence` agents and
+ * the worker parses each judge's {score, reasoning} response.
+ */
 const METRIC_CONFIGS = [
   { slug: 'contains', config: { caseInsensitive: true } },
-  { slug: 'relevance', config: {} },
+  { slug: 'judge_agent', config: { agentSlug: 'eval-judge-relevance' } },
+  { slug: 'judge_agent', config: { agentSlug: 'eval-judge-coherence' } },
 ];
 
 async function main(): Promise<void> {
