@@ -109,12 +109,34 @@ export const POST = withAdminAuth(async (request, session) => {
     }
     subjectBrandVoice = agent.brandVoiceInstructions ?? undefined;
   } else {
-    // Phase 1: schema is ready but the worker stub returns a typed
-    // not-supported error. Refuse at the route boundary so users get a
-    // clear error rather than a per-case "not_supported" wall.
-    throw new ValidationError(
-      "Workflow-as-subject runs land in Phase 3. The schema is ready, but the worker isn't. Use an agent subject for now."
-    );
+    // Workflow subject (Phase 3): the workflow must exist, be active, and
+    // carry a published version. Workflows are globally addressable to
+    // admins (see GET /workflows — no createdBy scope), so we don't add
+    // one here either. The run row carries the caller's userId, so
+    // case-result data flows back to the caller; the workflow itself is
+    // shared tenant state.
+    const workflow = await prisma.aiWorkflow.findUnique({
+      where: { id: body.workflowId! },
+      select: {
+        id: true,
+        isActive: true,
+        publishedVersionId: true,
+      },
+    });
+    if (!workflow) throw new NotFoundError(`Workflow ${body.workflowId} not found`);
+    if (!workflow.isActive) {
+      throw new ValidationError(
+        `Workflow "${body.workflowId}" is inactive — activate it before running an evaluation.`
+      );
+    }
+    if (!workflow.publishedVersionId) {
+      throw new ValidationError(
+        `Workflow "${body.workflowId}" has no published version. Publish a version before running an evaluation.`
+      );
+    }
+    // No brand-voice for workflow subjects — the brand-voice judge only
+    // applies to chat agents. Leaving `subjectBrandVoice` undefined makes
+    // the brand-voice judge fall back to its default rubric.
   }
 
   // 5. Per-grader config validation + judge_agent slug existence ----------

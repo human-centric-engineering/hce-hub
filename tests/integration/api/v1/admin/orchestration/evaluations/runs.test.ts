@@ -53,6 +53,7 @@ vi.mock('@/lib/db/client', () => ({
     aiDataset: { findFirst: vi.fn() },
     aiDatasetCase: { count: vi.fn() },
     aiAgent: { findUnique: vi.fn() },
+    aiWorkflow: { findUnique: vi.fn() },
   },
 }));
 
@@ -421,9 +422,9 @@ describe('POST /api/v1/admin/orchestration/evaluations/runs', () => {
     expect(data.error.message).toContain('chat agent');
   });
 
-  // ─── Preflight: workflow subject rejected at Phase 1 boundary ─────────────
+  // ─── Workflow subject path (Phase 3) ──────────────────────────────────────
 
-  it('returns 400 when subjectKind=workflow (Phase 1 boundary)', async () => {
+  it('returns 404 when subjectKind=workflow and the workflow does not exist', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue({
       id: DATASET_ID,
@@ -431,6 +432,36 @@ describe('POST /api/v1/admin/orchestration/evaluations/runs', () => {
       caseCount: 1,
     } as never);
     vi.mocked(prisma.aiDatasetCase.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue(null);
+
+    const response = await POST(
+      makePostRequest(
+        validRunBody({
+          subjectKind: 'workflow',
+          agentId: undefined,
+          workflowId: 'cmjbv4i3x00003wsloputgwu9',
+        })
+      )
+    );
+
+    expect(response.status).toBe(404);
+    const data = await parseJson<{ error: { message: string } }>(response);
+    expect(data.error.message).toContain('Workflow');
+  });
+
+  it('returns 400 when subjectKind=workflow and the workflow is inactive', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue({
+      id: DATASET_ID,
+      contentHash: 'h',
+      caseCount: 1,
+    } as never);
+    vi.mocked(prisma.aiDatasetCase.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue({
+      id: 'wf-1',
+      isActive: false,
+      publishedVersionId: 'v',
+    } as never);
 
     const response = await POST(
       makePostRequest(
@@ -444,7 +475,78 @@ describe('POST /api/v1/admin/orchestration/evaluations/runs', () => {
 
     expect(response.status).toBe(400);
     const data = await parseJson<{ error: { message: string } }>(response);
-    expect(data.error.message).toContain('Phase 3');
+    expect(data.error.message).toMatch(/inactive/i);
+  });
+
+  it('returns 400 when subjectKind=workflow and the workflow has no published version', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue({
+      id: DATASET_ID,
+      contentHash: 'h',
+      caseCount: 1,
+    } as never);
+    vi.mocked(prisma.aiDatasetCase.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue({
+      id: 'wf-1',
+      isActive: true,
+      publishedVersionId: null,
+    } as never);
+
+    const response = await POST(
+      makePostRequest(
+        validRunBody({
+          subjectKind: 'workflow',
+          agentId: undefined,
+          workflowId: 'cmjbv4i3x00003wsloputgwu9',
+        })
+      )
+    );
+
+    expect(response.status).toBe(400);
+    const data = await parseJson<{ error: { message: string } }>(response);
+    expect(data.error.message).toMatch(/published/i);
+  });
+
+  it('queues a workflow-subject run (201) when the workflow is active + published', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue({
+      id: DATASET_ID,
+      contentHash: 'h',
+      caseCount: 3,
+    } as never);
+    vi.mocked(prisma.aiDatasetCase.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiWorkflow.findUnique).mockResolvedValue({
+      id: 'wf-1',
+      isActive: true,
+      publishedVersionId: 'v',
+    } as never);
+    vi.mocked(prisma.aiEvaluationRun.create).mockResolvedValue(
+      makeRunRow({
+        subjectKind: 'workflow',
+        agentId: null,
+        workflowId: 'cmjbv4i3x00003wsloputgwu9',
+      }) as never
+    );
+
+    const response = await POST(
+      makePostRequest(
+        validRunBody({
+          subjectKind: 'workflow',
+          agentId: undefined,
+          workflowId: 'cmjbv4i3x00003wsloputgwu9',
+          subjectOutputSelector: { kind: 'last_step' },
+        })
+      )
+    );
+
+    expect(response.status).toBe(201);
+    const createArgs = vi.mocked(prisma.aiEvaluationRun.create).mock.calls[0]?.[0] as {
+      data: Record<string, unknown>;
+    };
+    expect(createArgs.data.subjectKind).toBe('workflow');
+    expect(createArgs.data.workflowId).toBe('cmjbv4i3x00003wsloputgwu9');
+    expect(createArgs.data.agentId).toBeNull();
+    expect(createArgs.data.subjectOutputSelector).toEqual({ kind: 'last_step' });
   });
 
   // ─── Preflight: judge_agent slug resolution ───────────────────────────────
