@@ -25,16 +25,15 @@
 
 import type { ZodSchema } from 'zod';
 import type { Citation } from '@/types/orchestration';
-import type { getProvider } from '@/lib/orchestration/llm/provider-manager';
 
-type LlmProvider = Awaited<ReturnType<typeof getProvider>>;
-
-/** Provider/model pair the worker resolves once per run and reuses per case. */
-export interface JudgeBinding {
-  provider: LlmProvider;
-  /** Slug used for cost logging — kept alongside the live provider handle. */
-  providerSlug: string;
-  model: string;
+/**
+ * Per-judge-call user context. Model graders need a userId so the
+ * underlying `streamChat` call attributes the judge conversation to a
+ * real account (for audit, cost rollup, ownership checks). The user
+ * here is the run's userId — the operator who queued the evaluation.
+ */
+export interface JudgeUserContext {
+  userId: string;
 }
 
 /** Family of grader — drives the registry's dispatch type. */
@@ -60,8 +59,12 @@ export interface GraderInput {
   citations?: Citation[];
   /** Tool/capability calls the subject made — used by trajectory graders. */
   toolCalls?: Array<{ slug: string; args?: Record<string, unknown> }>;
-  /** Judge binding for model graders. Heuristic graders ignore this. */
-  judge?: JudgeBinding;
+  /**
+   * User context for model graders. Heuristic graders ignore this; model
+   * graders use `userId` when invoking the judge agent via `streamChat`
+   * so the resulting conversation + cost rows attribute correctly.
+   */
+  judge?: JudgeUserContext;
   /** Validated grader-specific config (faithfulness has none; regex has `pattern`). */
   config: unknown;
   /** Optional cancellation signal — graders SHOULD honour this for long calls. */
@@ -74,7 +77,7 @@ export interface PairwiseGraderInput {
   outputA: string;
   outputB: string;
   expectedOutput?: string;
-  judge?: JudgeBinding;
+  judge?: JudgeUserContext;
   config: unknown;
   signal?: AbortSignal;
 }

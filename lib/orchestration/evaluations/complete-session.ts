@@ -55,8 +55,6 @@ import {
 import {
   EVALUATION_DEFAULT_MODEL as DEFAULT_MODEL,
   EVALUATION_DEFAULT_PROVIDER as DEFAULT_PROVIDER,
-  JUDGE_MODEL,
-  JUDGE_PROVIDER,
 } from '@/lib/orchestration/evaluations/judge-model';
 
 /** Maximum number of log events included in the analysis prompt. */
@@ -198,6 +196,7 @@ export async function completeEvaluationSession(
   try {
     metricSummary = await scoreEvaluationLogs({
       sessionId: session.id,
+      userId: params.userId,
       logs,
       agentId: session.agentId,
       previousScoringCostUsd: 0,
@@ -272,6 +271,7 @@ export async function rescoreEvaluationSession(
 
   const metricSummary = await scoreEvaluationLogs({
     sessionId: session.id,
+    userId: params.userId,
     logs,
     agentId: session.agentId,
     previousScoringCostUsd: previousCost,
@@ -433,6 +433,7 @@ function parseAnalysis(raw: string): EvaluationAnalysis | null {
 
 interface ScoreLogsOptions {
   sessionId: string;
+  userId: string;
   logs: Array<{
     id: string;
     sequenceNumber: number;
@@ -452,33 +453,17 @@ interface ScoreLogsOptions {
  * single bad turn doesn't void the whole pass.
  */
 async function scoreEvaluationLogs(opts: ScoreLogsOptions): Promise<EvaluationMetricSummary> {
-  // Resolve the judge model + provider.
-  // Priority: EVALUATION_JUDGE_* env vars > EVALUATION_DEFAULT_* env vars >
-  // system default chat model. Drops the previous hard-coded anthropic
-  // fallback so deployments without an Anthropic provider get a working
-  // judge.
-  let judgeProviderSlug: string;
-  let judgeModelId: string;
-  if (JUDGE_PROVIDER !== null && JUDGE_MODEL !== null) {
-    judgeProviderSlug = JUDGE_PROVIDER;
-    judgeModelId = JUDGE_MODEL;
-  } else {
-    const resolved = await resolveAgentProviderAndModel(
-      { provider: '', model: '', fallbackProviders: [] },
-      'chat'
-    );
-    judgeProviderSlug = resolved.providerSlug;
-    judgeModelId = resolved.model;
-  }
-  const judgeProvider = await getProvider(judgeProviderSlug);
-
+  // Phase 1.5 refactor: judge calls go through the three seeded judge
+  // agents (eval-judge-faithfulness/groundedness/relevance) via
+  // streamChat. The agents' own model/provider config takes precedence;
+  // each judge call's cost lands on the judge agent's own CHAT row, so
+  // we no longer write a per-session EVALUATION cost rollup here — the
+  // judge spend is queryable per-agent on the existing costs page.
   const faithfulnessScores: number[] = [];
   const groundednessScores: number[] = [];
   const relevanceScores: number[] = [];
   let scoredCount = 0;
   let totalRunCostUsd = 0;
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
 
   let lastUserContent: string | null = null;
   for (const log of opts.logs) {
@@ -495,8 +480,7 @@ async function scoreEvaluationLogs(opts: ScoreLogsOptions): Promise<EvaluationMe
         userQuestion: lastUserContent,
         aiResponse: log.content ?? '',
         citations,
-        judgeProvider,
-        judgeModel: judgeModelId,
+        userId: opts.userId,
       });
       const { faithfulness, groundedness, relevance } = result.scores;
 
@@ -520,8 +504,6 @@ async function scoreEvaluationLogs(opts: ScoreLogsOptions): Promise<EvaluationMe
       if (relevance.score !== null) relevanceScores.push(relevance.score);
       scoredCount++;
       totalRunCostUsd += result.costUsd;
-      totalInputTokens += result.tokenUsage.input;
-      totalOutputTokens += result.tokenUsage.output;
     } catch (err) {
       logger.warn('Per-turn metric scoring failed (run continues)', {
         sessionId: opts.sessionId,
@@ -531,34 +513,16 @@ async function scoreEvaluationLogs(opts: ScoreLogsOptions): Promise<EvaluationMe
     }
   }
 
-  // Aggregate cost into a single AiCostLog row tagged phase=scoring so
-  // analytics can split summary spend from scoring spend without a new
-  // CostOperation enum value.
-  if (scoredCount > 0) {
-    const costParams: Parameters<typeof logCost>[0] = {
-      model: judgeModelId,
-      provider: judgeProviderSlug,
-      inputTokens: totalInputTokens,
-      outputTokens: totalOutputTokens,
-      operation: CostOperation.EVALUATION,
-      metadata: { phase: 'scoring', logsScored: scoredCount },
-    };
-    if (opts.agentId) costParams.agentId = opts.agentId;
-    void logCost(costParams).catch((err) => {
-      logger.error('Failed to log evaluation scoring cost', {
-        sessionId: opts.sessionId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    });
-  }
-
   return {
     avgFaithfulness: average(faithfulnessScores),
     avgGroundedness: average(groundednessScores),
     avgRelevance: average(relevanceScores),
     scoredLogCount: scoredCount,
-    judgeProvider: judgeProviderSlug,
-    judgeModel: judgeModelId,
+    // Markers — the actual judge agents own their own provider/model
+    // configs. Keep the legacy fields populated so any UI relying on
+    // them sees coherent values.
+    judgeProvider: 'agents',
+    judgeModel: 'eval-judge-{faithfulness,groundedness,relevance}',
     scoredAt: new Date().toISOString(),
     totalScoringCostUsd: opts.previousScoringCostUsd + totalRunCostUsd,
   };

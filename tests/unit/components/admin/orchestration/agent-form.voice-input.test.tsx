@@ -82,6 +82,7 @@ function makeAgent(overrides: Record<string, unknown> = {}) {
     monthlyBudgetUsd: null,
     isActive: true,
     isSystem: false,
+    kind: 'chat',
     createdBy: 'system',
     createdAt: new Date(),
     updatedAt: new Date(),

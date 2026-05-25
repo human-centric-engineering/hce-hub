@@ -20,15 +20,11 @@ import '@/lib/orchestration/evaluations/graders/heuristic/json-path-equals';
 import '@/lib/orchestration/evaluations/graders/heuristic/tool-was-called';
 import '@/lib/orchestration/evaluations/graders/heuristic/citation-count-at-least';
 
-// Model graders — one judge call per (case × grader), so a run that
-// selects only `relevance` doesn't pay for faithfulness + groundedness.
-// The manual-session path keeps using `scoreResponse()` from
-// score-response.ts, which bundles all three rubrics into a single
-// judge call for efficiency.
-import '@/lib/orchestration/evaluations/graders/model/faithfulness';
-import '@/lib/orchestration/evaluations/graders/model/groundedness';
-import '@/lib/orchestration/evaluations/graders/model/relevance';
-import '@/lib/orchestration/evaluations/graders/model/custom-rubric';
+// Model graders — a single registry entry, `judge_agent`, that drives
+// any AiAgent with `kind='judge'`. The 6 built-in judges live as
+// seeded agents (prisma/seeds/016-evaluation-judges.ts); admins can
+// create custom judges via the agent form.
+import '@/lib/orchestration/evaluations/graders/model/judge-agent';
 
 export * from '@/lib/orchestration/evaluations/graders/types';
 export {
@@ -57,9 +53,7 @@ export const KNOWN_GRADER_SLUGS = [
   'json_path_equals',
   'tool_was_called',
   'citation_count_at_least',
-  // model
-  'faithfulness',
-  'groundedness',
-  'relevance',
-  'custom_rubric',
+  // model — one registry slug; the specific judge is picked via
+  // config.agentSlug at run time.
+  'judge_agent',
 ] as const;

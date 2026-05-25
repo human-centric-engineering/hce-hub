@@ -34,14 +34,6 @@ import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { CostOperation } from '@/types/orchestration';
 import { logCost } from '@/lib/orchestration/llm/cost-tracker';
-import { getProvider } from '@/lib/orchestration/llm/provider-manager';
-import { resolveAgentProviderAndModel } from '@/lib/orchestration/llm/agent-resolver';
-import {
-  EVALUATION_DEFAULT_MODEL,
-  EVALUATION_DEFAULT_PROVIDER,
-  JUDGE_MODEL,
-  JUDGE_PROVIDER,
-} from '@/lib/orchestration/evaluations/judge-model';
 import {
   type ClaimedRun,
   claimNextRun,
@@ -51,11 +43,7 @@ import {
 import { hashDatasetCases } from '@/lib/orchestration/evaluations/datasets/hash';
 import { runAgentCase } from '@/lib/orchestration/evaluations/run-cases/agent-case';
 import { runWorkflowCase } from '@/lib/orchestration/evaluations/run-cases/workflow-case';
-import {
-  getGrader,
-  type GraderInput,
-  type JudgeBinding,
-} from '@/lib/orchestration/evaluations/graders';
+import { getGrader, type GraderInput } from '@/lib/orchestration/evaluations/graders';
 // Side-effect import: registers every built-in grader at module load.
 import '@/lib/orchestration/evaluations/graders';
 
@@ -204,8 +192,6 @@ async function driveRun(run: ClaimedRun): Promise<RunOutcome> {
     agentSlug = agent.slug;
   }
 
-  const judge = await resolveJudgeBinding(run);
-
   // 4. Find which case positions still need processing
   const existing = await prisma.aiEvaluationCaseResult.findMany({
     where: { runId: run.id },
@@ -229,7 +215,6 @@ async function driveRun(run: ClaimedRun): Promise<RunOutcome> {
       agentSlug,
       caseRow,
       metricConfigs,
-      judge,
     });
     await prisma.aiEvaluationCaseResult.create({
       data: {
@@ -262,21 +247,26 @@ async function driveRun(run: ClaimedRun): Promise<RunOutcome> {
   const allResults = await prisma.aiEvaluationCaseResult.findMany({
     where: { runId: run.id },
   });
-  const summary = aggregateSummary(allResults, metricConfigs, judge);
+  const summary = aggregateSummary(allResults, metricConfigs);
   const totalCost = allResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
   await markTerminal(run.id, 'completed', { summary, totalCostUsd: totalCost });
 
-  // Run-level cost rollup — one row per terminal run
+  // Run-level cost-marker row. Subject + judge spend are already
+  // logged: subject by `streamChat` (CHAT rows), judge by `streamChat`
+  // again for the judge agent (CHAT rows attributed to the judge agent's
+  // id). This zero-cost EVALUATION_BATCH row exists as a join-key for
+  // analytics ("which cost rows belong to this run?") via
+  // metadata.evaluationRunId. No double-counting.
   void logCost({
     operation: CostOperation.EVALUATION_BATCH,
-    model: judge.model,
-    provider: judge.providerSlug,
-    inputTokens: summary.totalJudgeTokens.input,
-    outputTokens: summary.totalJudgeTokens.output,
-    metadata: { evaluationRunId: run.id, phase: 'rollup' },
+    model: 'n/a',
+    provider: 'n/a',
+    inputTokens: 0,
+    outputTokens: 0,
+    metadata: { evaluationRunId: run.id, phase: 'rollup', costUsd: totalCost },
     ...(run.agentId ? { agentId: run.agentId } : {}),
   }).catch((err) => {
-    logger.error('Failed to log evaluation run rollup cost', {
+    logger.error('Failed to log evaluation run rollup marker', {
       runId: run.id,
       error: err instanceof Error ? err.message : String(err),
     });
@@ -300,11 +290,27 @@ interface ProcessCaseArgs {
     metadata: unknown;
   };
   metricConfigs: MetricConfigEntry[];
-  judge: JudgeBinding;
+}
+
+/**
+ * Compute the storage key for a metric in `AiEvaluationCaseResult.metricScores`
+ * and in the run-level summary `stats`. For heuristic graders this is
+ * just the slug; for `judge_agent` it's the chosen judge's slug (so
+ * picking three different judges produces three distinct columns in
+ * the summary, all under the `judge_agent` registry entry).
+ */
+function metricKey(entry: MetricConfigEntry): string {
+  if (entry.slug === 'judge_agent') {
+    const cfg = (entry.config ?? {}) as { agentSlug?: string };
+    return typeof cfg.agentSlug === 'string' && cfg.agentSlug.length > 0
+      ? cfg.agentSlug
+      : 'judge_agent';
+  }
+  return entry.slug;
 }
 
 async function processOneCase(args: ProcessCaseArgs): Promise<CaseResultRowInput> {
-  const { run, agentSlug, caseRow, metricConfigs, judge } = args;
+  const { run, agentSlug, caseRow, metricConfigs } = args;
   // Subject dispatch ----------------------------------------------------------
   let subjectOutput = '';
   let subjectCostUsd = 0;
@@ -361,14 +367,16 @@ async function processOneCase(args: ProcessCaseArgs): Promise<CaseResultRowInput
   }
 
   // Grader dispatch -----------------------------------------------------------
+  // Heuristic graders return synchronously with no cost. Model graders
+  // (`judge_agent` family) invoke `streamChat` against the judge agent —
+  // costs for those rolls up automatically via the agent's CHAT rows.
   const metricScores: Record<string, unknown> = {};
   let graderCost = 0;
-  let graderInputTokens = 0;
-  let graderOutputTokens = 0;
   for (const entry of metricConfigs) {
+    const key = metricKey(entry);
     // Subject error => skip graders, record null score with a reason
     if (subjectErrorCode) {
-      metricScores[entry.slug] = {
+      metricScores[key] = {
         score: null,
         reasoning: `Skipped: subject execution failed (${subjectErrorCode}).`,
       };
@@ -377,7 +385,7 @@ async function processOneCase(args: ProcessCaseArgs): Promise<CaseResultRowInput
     const grader = getGrader(entry.slug);
     const parsed = grader.configSchema.safeParse(entry.config ?? grader.defaultConfig ?? {});
     if (!parsed.success) {
-      metricScores[entry.slug] = {
+      metricScores[key] = {
         score: null,
         reasoning: `Skipped: invalid config — ${parsed.error.issues.map((i) => i.message).join('; ')}`,
       };
@@ -391,45 +399,28 @@ async function processOneCase(args: ProcessCaseArgs): Promise<CaseResultRowInput
         ...(caseRow.expectedOutput ? { expectedOutput: caseRow.expectedOutput } : {}),
         citations,
         toolCalls,
-        judge: grader.family === 'model' ? judge : undefined,
+        judge: grader.family === 'model' ? { userId: run.userId } : undefined,
         config: parsed.data,
       });
-      metricScores[entry.slug] = {
+      metricScores[key] = {
         score: r.score,
         passed: r.passed,
         reasoning: r.reasoning,
         costUsd: r.costUsd,
       };
       if (r.costUsd) graderCost += r.costUsd;
-      if (r.tokenUsage) {
-        graderInputTokens += r.tokenUsage.input;
-        graderOutputTokens += r.tokenUsage.output;
-      }
     } catch (err) {
-      metricScores[entry.slug] = {
+      metricScores[key] = {
         score: null,
         reasoning: `Grader threw: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }
 
-  // Cost logging policy:
-  //   - SUBJECT cost is NOT logged here. `streamChat()` already writes a
-  //     `CostOperation.CHAT` row per LLM turn for the agent subject; double-
-  //     logging would distort analytics.
-  //   - JUDGE cost is net-new (no other code path writes it), so log it once
-  //     per case under EVALUATION_JUDGE with `metadata.evaluationRunId`.
-  if (graderCost > 0) {
-    void logCost({
-      operation: CostOperation.EVALUATION_JUDGE,
-      model: judge.model,
-      provider: judge.providerSlug,
-      inputTokens: graderInputTokens,
-      outputTokens: graderOutputTokens,
-      metadata: { evaluationRunId: run.id, phase: 'judge', casePosition: caseRow.position },
-      ...(run.agentId ? { agentId: run.agentId } : {}),
-    }).catch(() => {});
-  }
+  // No EVALUATION_JUDGE row here — `streamChat` already wrote a CHAT row
+  // attributed to the judge agent for every judge call. Cross-reference
+  // by `metadata.evaluationRunId` on the CHAT rows (set via entityContext
+  // in the judge_agent grader).
 
   const out: CaseResultRowInput = {
     runId: run.id,
@@ -456,6 +447,7 @@ async function processOneCase(args: ProcessCaseArgs): Promise<CaseResultRowInput
 // ---------------------------------------------------------------------------
 
 interface RunSummary {
+  /** Display keys (judge slug for judge_agent, grader slug for heuristic). */
   metricSlugs: string[];
   stats: Record<
     string,
@@ -467,10 +459,7 @@ interface RunSummary {
       scoredCount: number;
     }
   >;
-  judgeProvider: string;
-  judgeModel: string;
   completedAt: string;
-  totalJudgeTokens: { input: number; output: number };
   note?: string;
 }
 
@@ -479,29 +468,21 @@ function aggregateSummary(
     metricScores: unknown;
     subjectMetadata: unknown;
   }>,
-  metricConfigs: MetricConfigEntry[],
-  judge: JudgeBinding
+  metricConfigs: MetricConfigEntry[]
 ): RunSummary {
   const stats: RunSummary['stats'] = {};
-  let totalIn = 0;
-  let totalOut = 0;
-  for (const entry of metricConfigs) {
+  const keys = metricConfigs.map(metricKey);
+  for (const key of keys) {
     const scores: number[] = [];
     const passed: boolean[] = [];
     for (const r of results) {
       const ms = (r.metricScores as Record<string, unknown> | null) ?? {};
-      const cell = ms[entry.slug] as
-        | { score?: unknown; passed?: unknown; tokenUsage?: { input?: number; output?: number } }
-        | undefined;
+      const cell = ms[key] as { score?: unknown; passed?: unknown } | undefined;
       if (!cell) continue;
       if (typeof cell.score === 'number') scores.push(cell.score);
       if (typeof cell.passed === 'boolean') passed.push(cell.passed);
-      if (cell.tokenUsage) {
-        totalIn += cell.tokenUsage.input ?? 0;
-        totalOut += cell.tokenUsage.output ?? 0;
-      }
     }
-    stats[entry.slug] = {
+    stats[key] = {
       mean: mean(scores),
       median: percentile(scores, 0.5),
       p95: percentile(scores, 0.95),
@@ -510,12 +491,9 @@ function aggregateSummary(
     };
   }
   return {
-    metricSlugs: metricConfigs.map((m) => m.slug),
+    metricSlugs: keys,
     stats,
-    judgeProvider: judge.providerSlug,
-    judgeModel: judge.model,
     completedAt: new Date().toISOString(),
-    totalJudgeTokens: { input: totalIn, output: totalOut },
   };
 }
 
@@ -566,30 +544,6 @@ function preflightMetrics(
     }
   }
   return null;
-}
-
-async function resolveJudgeBinding(run: ClaimedRun): Promise<JudgeBinding> {
-  let providerSlug: string;
-  let model: string;
-  if (run.judgeProvider && run.judgeModel) {
-    providerSlug = run.judgeProvider;
-    model = run.judgeModel;
-  } else if (JUDGE_PROVIDER !== null && JUDGE_MODEL !== null) {
-    providerSlug = JUDGE_PROVIDER;
-    model = JUDGE_MODEL;
-  } else if (EVALUATION_DEFAULT_PROVIDER !== null && EVALUATION_DEFAULT_MODEL !== null) {
-    providerSlug = EVALUATION_DEFAULT_PROVIDER;
-    model = EVALUATION_DEFAULT_MODEL;
-  } else {
-    const resolved = await resolveAgentProviderAndModel(
-      { provider: '', model: '', fallbackProviders: [] },
-      'chat'
-    );
-    providerSlug = resolved.providerSlug;
-    model = resolved.model;
-  }
-  const provider = await getProvider(providerSlug);
-  return { provider, providerSlug, model };
 }
 
 async function writeProgress(runId: string, casesTotal: number): Promise<void> {
