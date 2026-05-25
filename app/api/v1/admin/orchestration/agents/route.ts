@@ -32,13 +32,14 @@ export const GET = withAdminAuth(async (request, _session) => {
   );
   const skip = (page - 1) * limit;
 
-  // Default `kind=chat` when the caller doesn't specify — keeps the
-  // standard agents list page free of judge agents without forcing
-  // every existing call site to opt in. The run-create metric picker
-  // passes `kind=judge` to surface judges; an explicit `kind=` value
-  // overrides the default and any caller can still pass nothing to
-  // see every kind (used by the agents-as-cost-targets view).
-  const where: Prisma.AiAgentWhereInput = { kind: kind ?? 'chat' };
+  // Optional kind filter. When the caller doesn't specify, return
+  // every kind — judges and chat agents alike. The agents list page
+  // renders a "Judge" badge alongside the existing "System" badge so
+  // operators can tell them apart at a glance. Callers that want a
+  // single kind (the run-create subject picker passes `kind=chat`;
+  // the run-create metric picker passes `kind=judge`) opt in.
+  const where: Prisma.AiAgentWhereInput = {};
+  if (kind !== undefined) where.kind = kind;
   if (isActive !== undefined) where.isActive = isActive;
   if (provider) where.provider = provider;
   if (isSystem !== undefined) where.isSystem = isSystem;
@@ -135,6 +136,7 @@ export const POST = withAdminAuth(async (request, session) => {
       data: {
         name: body.name,
         slug: body.slug,
+        kind: body.kind,
         description: body.description,
         systemInstructions: body.systemInstructions,
         systemInstructionsHistory: [],

@@ -63,6 +63,13 @@ export const createAgentSchema = z.object({
 
   slug: slugSchema.pipe(z.string().max(100, 'Slug must be less than 100 characters')),
 
+  /**
+   * Discriminator: `chat` (default) for end-user-facing agents, `judge`
+   * for evaluation judges driven by the worker. Mutually exclusive — a
+   * chat agent never appears in the judge picker and vice versa.
+   */
+  kind: z.enum(['chat', 'judge']).default('chat'),
+
   description: z
     .string()
     .min(1, 'Description is required')

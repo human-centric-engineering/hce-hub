@@ -521,7 +521,7 @@ function JudgeRow({
               </Badge>
             ) : null}
             <Link
-              href={`/admin/orchestration/agents/${judge.id}/edit`}
+              href={`/admin/orchestration/agents/${judge.id}`}
               target="_blank"
               className="text-muted-foreground hover:text-foreground ml-1 text-xs underline-offset-4 hover:underline"
               title="Edit this judge's rubric"
