@@ -53,13 +53,14 @@ vi.mock('@/lib/db/client', () => ({
     aiDataset: { findFirst: vi.fn() },
     aiDatasetCase: { count: vi.fn() },
     aiAgent: { findUnique: vi.fn() },
-    aiWorkflow: { findUnique: vi.fn() },
+    aiWorkflow: { findUnique: vi.fn(), findFirst: vi.fn() },
   },
 }));
 
 vi.mock('@/lib/orchestration/evaluations/graders', () => ({
   hasGrader: vi.fn(),
   getGrader: vi.fn(),
+  listGraders: vi.fn(() => []),
 }));
 
 vi.mock('@/lib/api/context', () => ({
@@ -74,7 +75,7 @@ vi.mock('@/lib/security/ip', () => ({ getClientIP: vi.fn(() => '127.0.0.1') }));
 
 import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db/client';
-import { hasGrader, getGrader } from '@/lib/orchestration/evaluations/graders';
+import { hasGrader, getGrader, listGraders } from '@/lib/orchestration/evaluations/graders';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -255,14 +256,36 @@ describe('POST /api/v1/admin/orchestration/evaluations/runs', () => {
     vi.clearAllMocks();
     // Default registry state: exact_match grader exists and is reference-required.
     vi.mocked(hasGrader).mockImplementation((slug: string) =>
-      ['exact_match', 'judge_agent', 'contains'].includes(slug)
+      [
+        'exact_match',
+        'judge_agent',
+        'contains',
+        'workflow_as_judge',
+        'pairwise_judge_agent',
+      ].includes(slug)
     );
     vi.mocked(getGrader).mockImplementation((slug: string) => {
       if (slug === 'judge_agent') return makeJudgeGrader() as never;
       if (slug === 'contains')
         return { ...makeHeuristicGrader({ referenceRequired: false }), slug: 'contains' } as never;
+      if (slug === 'workflow_as_judge') {
+        return {
+          slug: 'workflow_as_judge',
+          family: 'model',
+          referenceRequired: false,
+          configSchema: z
+            .object({
+              workflowSlug: z.string(),
+              inputMapping: z.record(z.string(), z.string()).default({}),
+            })
+            .passthrough(),
+          defaultConfig: { workflowSlug: '', inputMapping: {} },
+        } as never;
+      }
       return makeHeuristicGrader() as never;
     });
+    // Default listGraders shape — runtime calls override via mockReturnValueOnce.
+    vi.mocked(listGraders).mockReturnValue([]);
   });
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
@@ -828,5 +851,109 @@ describe('POST /api/v1/admin/orchestration/evaluations/runs', () => {
         }),
       })
     );
+  });
+
+  // ─── Pairwise + workflow_as_judge guards (Phase 3) ─────────────────────────
+
+  it('returns 400 when a pairwise grader is configured on a standalone run', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue({
+      id: DATASET_ID,
+      contentHash: 'h',
+      caseCount: 1,
+    } as never);
+    vi.mocked(prisma.aiDatasetCase.count).mockResolvedValue(0);
+    // Surface the pairwise slug in the registry so the family-check
+    // branch in the route fires.
+    vi.mocked(listGraders).mockReturnValueOnce([
+      { slug: 'pairwise_judge_agent', family: 'pairwise' } as never,
+    ]);
+
+    const response = await POST(
+      makePostRequest(
+        validRunBody({
+          metricConfigs: [{ slug: 'pairwise_judge_agent', config: { judgeAgentSlug: 'eval' } }],
+        })
+      )
+    );
+
+    expect(response.status).toBe(400);
+    const data = await parseJson<{ error: { message: string } }>(response);
+    expect(data.error.message).toMatch(/two side-by-side outputs/i);
+  });
+
+  it('returns 400 when workflow_as_judge points to an unknown workflow slug', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue({
+      id: DATASET_ID,
+      contentHash: 'h',
+      caseCount: 1,
+    } as never);
+    vi.mocked(prisma.aiDatasetCase.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue({
+      id: AGENT_ID,
+      kind: 'chat',
+      brandVoiceInstructions: null,
+    } as never);
+    vi.mocked(prisma.aiWorkflow.findFirst).mockResolvedValue(null);
+
+    const response = await POST(
+      makePostRequest(
+        validRunBody({
+          metricConfigs: [
+            {
+              slug: 'workflow_as_judge',
+              config: {
+                workflowSlug: 'no-such-judge',
+                inputMapping: { q: '$.userInput', a: '$.modelOutput' },
+              },
+            },
+          ],
+        })
+      )
+    );
+
+    expect(response.status).toBe(400);
+    const data = await parseJson<{ error: { message: string } }>(response);
+    expect(data.error.message).toMatch(/no-such-judge/);
+  });
+
+  it('returns 400 when workflow_as_judge target workflow has no published version', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue({
+      id: DATASET_ID,
+      contentHash: 'h',
+      caseCount: 1,
+    } as never);
+    vi.mocked(prisma.aiDatasetCase.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue({
+      id: AGENT_ID,
+      kind: 'chat',
+      brandVoiceInstructions: null,
+    } as never);
+    vi.mocked(prisma.aiWorkflow.findFirst).mockResolvedValue({
+      isActive: true,
+      publishedVersionId: null,
+    } as never);
+
+    const response = await POST(
+      makePostRequest(
+        validRunBody({
+          metricConfigs: [
+            {
+              slug: 'workflow_as_judge',
+              config: {
+                workflowSlug: 'draft-only',
+                inputMapping: { q: '$.userInput', a: '$.modelOutput' },
+              },
+            },
+          ],
+        })
+      )
+    );
+
+    expect(response.status).toBe(400);
+    const data = await parseJson<{ error: { message: string } }>(response);
+    expect(data.error.message).toMatch(/no published version/i);
   });
 });

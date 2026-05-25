@@ -21,7 +21,7 @@ import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { validateQueryParams, validateRequestBody } from '@/lib/api/validation';
 import { getRouteLogger } from '@/lib/api/context';
 import { createRunSchema, listRunsQuerySchema } from '@/lib/validations/orchestration-evaluations';
-import { hasGrader, getGrader } from '@/lib/orchestration/evaluations/graders';
+import { hasGrader, getGrader, listGraders } from '@/lib/orchestration/evaluations/graders';
 // Side-effect import — register every grader at module load so the
 // preflight has a populated registry.
 import '@/lib/orchestration/evaluations/graders';
@@ -69,6 +69,20 @@ export const POST = withAdminAuth(async (request, session) => {
   if (unknownGraders.length > 0) {
     throw new ValidationError(
       `Unknown grader slug(s): ${unknownGraders.map((m) => m.slug).join(', ')}`
+    );
+  }
+
+  // Pairwise graders require two side-by-side outputs which a single
+  // dataset-driven run can't supply. They're only invokable through the
+  // experiment compare view's pairwise-judge action. Refuse them here so
+  // operators don't queue a run that would silently skip them.
+  const graderEntries = new Map(listGraders().map((g) => [g.slug, g]));
+  const pairwiseInConfig = body.metricConfigs.filter(
+    (m) => graderEntries.get(m.slug)?.family === 'pairwise'
+  );
+  if (pairwiseInConfig.length > 0) {
+    throw new ValidationError(
+      `Pairwise grader(s) [${pairwiseInConfig.map((m) => m.slug).join(', ')}] need two side-by-side outputs; trigger them from the experiment compare view, not a standalone run.`
     );
   }
 
@@ -156,6 +170,26 @@ export const POST = withAdminAuth(async (request, session) => {
             .join('; ')}`
         );
       }
+      if (entry.slug === 'workflow_as_judge') {
+        const cfg = parsed.data as { workflowSlug: string };
+        const judgeWorkflow = await prisma.aiWorkflow.findFirst({
+          where: { slug: cfg.workflowSlug },
+          select: { isActive: true, publishedVersionId: true },
+        });
+        if (!judgeWorkflow) {
+          throw new ValidationError(`Judge workflow "${cfg.workflowSlug}" not found.`);
+        }
+        if (!judgeWorkflow.isActive) {
+          throw new ValidationError(`Judge workflow "${cfg.workflowSlug}" is inactive.`);
+        }
+        if (!judgeWorkflow.publishedVersionId) {
+          throw new ValidationError(
+            `Judge workflow "${cfg.workflowSlug}" has no published version.`
+          );
+        }
+        return entry;
+      }
+
       if (entry.slug !== 'judge_agent') return entry;
 
       const cfg = parsed.data as { agentSlug: string; subjectBrandVoice?: string };
