@@ -54,12 +54,24 @@ datasetContentHash)`.
    with Welch's t-test + Cohen's d badges and a winner badge when all
    three thresholds pass (higher mean ∧ p < 0.05 ∧ |d| ≥ 0.5).
 
-**UI wiring that still needs hooking up.** The capture and synthesis
-APIs are live but the admin entry points (a "Save to dataset" button
-on the conversations + workflow execution detail pages, a "Generate
-cases" button on the dataset detail page) are tracked as follow-up UI
-polish. Operators can drive both flows via the API today; the buttons
-are mechanical to add and will land in the next UI sweep.
+**Admin entry points wired.**
+
+- Conversation detail (`/admin/orchestration/conversations/:id`) — every
+  assistant message has a compact **Save** button in its header that
+  opens the destination-dataset picker and posts to
+  `/datasets/:id/capture` with `kind: 'conversation_turn'`.
+- Execution detail (`/admin/orchestration/executions/:id`) — completed
+  runs show **Save as test case** in the action bar next to **Re-run**.
+  Defaults the selector to `last_step`; admins who need a specific
+  step output can call the API with `{ kind: 'step_id', stepId }`.
+- Dataset detail (`/admin/orchestration/evaluations/datasets/:id`) —
+  the page header carries a **Generate cases** button that opens a
+  two-step modal (configure → review → save). KB / failure-mining mode
+  pickable, count 1–25, deselect bad proposals before committing. On
+  save, `router.refresh()` re-paints the page with the new caseCount
+  and content hash. `SaveToDatasetButton` and `GenerateCasesButton`
+  both live under
+  `components/admin/orchestration/evaluations-foundations/`.
 
 ## Batch run flow (Phase 1)
 
