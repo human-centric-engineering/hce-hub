@@ -46,3 +46,11 @@ updates:
       - 'dependencies'
     commit-message:
       prefix: 'chore(ci)'
+    # Collapse all action bumps — including majors — into a single PR. Action
+    # version bumps are low-risk and CI catches regressions, so reviewing them
+    # one-per-PR is pure noise (unlike npm majors, which stay individual above).
+    groups:
+      github-actions:
+        applies-to: version-updates
+        patterns:
+          - '*'
