@@ -342,6 +342,70 @@ describe('RunCreateForm', () => {
       expect(getConfigInput(/Minimum citations/i)).toBeInTheDocument();
     });
 
+    it('renders a slug dropdown populated from the selected agent capabilities', async () => {
+      // Custom fetch mock: capabilities for the chosen agent, success
+      // for everything else. The dropdown can only render if the
+      // capabilities fetch resolves before the user opens the tick.
+      const fetchMock = vi.fn(async (url: string) => {
+        if (typeof url === 'string' && url.includes('/capabilities')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true,
+              data: [
+                {
+                  isEnabled: true,
+                  capability: { slug: 'search_knowledge_base', name: 'Search Knowledge Base' },
+                },
+                {
+                  isEnabled: true,
+                  capability: { slug: 'call_external_api', name: 'Call External API' },
+                },
+                {
+                  isEnabled: false,
+                  capability: { slug: 'send_email', name: 'Send Email' },
+                },
+              ],
+            }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, data: { id: 'run-1' } }),
+        };
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const user = userEvent.setup();
+      render(<RunCreateForm {...defaultProps()} />);
+
+      // Wait for the capabilities fetch to land.
+      await waitFor(() => {
+        expect(
+          fetchMock.mock.calls.some(
+            (c) => typeof c[0] === 'string' && c[0].includes('/capabilities')
+          )
+        ).toBe(true);
+      });
+
+      await user.click(screen.getByRole('checkbox', { name: /tool_was_called/i }));
+
+      // Select trigger renders the placeholder when no value is set,
+      // and the "Lists capabilities currently attached..." hint sits
+      // under it. Together those confirm the dropdown branch fired
+      // rather than the text-input fallback.
+      expect(await screen.findByText(/Pick a tool the agent has bound/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Lists capabilities currently attached to this agent/i)
+      ).toBeInTheDocument();
+
+      // The placeholder input (text-input fallback) should NOT be in
+      // the DOM — the dropdown replaced it.
+      expect(screen.queryByPlaceholderText(/search_knowledge_base/)).not.toBeInTheDocument();
+    });
+
     it('blocks submission with a clear message when tool_was_called has no slug', async () => {
       const fetchMock = mockFetchSuccess('run-1');
       const user = userEvent.setup();
