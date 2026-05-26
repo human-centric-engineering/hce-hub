@@ -169,4 +169,38 @@ describe('executeJudgeCall', () => {
     ).rejects.toMatchObject({ code: 'missing_judge_agent_slug' });
     expect(mockedDrive).not.toHaveBeenCalled();
   });
+
+  it('throws judge_call_requires_user_context when ctx.userId is null', async () => {
+    await expect(executeJudgeCall(makeStep(), makeCtx({ userId: null }))).rejects.toMatchObject({
+      code: 'judge_call_requires_user_context',
+    });
+    expect(mockedDrive).not.toHaveBeenCalled();
+  });
+
+  it('propagates the interpolated subjectBrandVoice when set in config', async () => {
+    mockedDrive.mockResolvedValueOnce(driveResult());
+
+    await executeJudgeCall(
+      makeStep({ subjectBrandVoice: 'warm and informal' }),
+      makeCtx({ inputData: { question: 'x' }, stepOutputs: { prior: 'y' } })
+    );
+
+    const args = mockedDrive.mock.calls[0][0] as Record<string, unknown>;
+    expect(args.subjectBrandVoice).toBe('warm and informal');
+  });
+
+  it('omits expectedOutput from the driver call when the template resolves to empty', async () => {
+    mockedDrive.mockResolvedValueOnce(driveResult());
+
+    await executeJudgeCall(
+      makeStep({ expectedOutput: '{{missing.output}}' }),
+      makeCtx({ inputData: {}, stepOutputs: {} })
+    );
+
+    const args = mockedDrive.mock.calls[0][0] as Record<string, unknown>;
+    // `{{missing.output}}` interpolates to '' — the executor drops the
+    // field rather than passing '' through (the driver treats empty
+    // strings as "no expected output").
+    expect(args).not.toHaveProperty('expectedOutput');
+  });
 });

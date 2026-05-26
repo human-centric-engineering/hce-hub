@@ -171,7 +171,13 @@ async function grade(input: GraderInput & { config: Config }): Promise<GraderRes
         case 'workflow_completed':
           totalCostUsd = event.totalCostUsd;
           totalTokensUsed = event.totalTokensUsed;
-          lastStepOutput = event.output;
+          // Only override if the terminal event actually carries an
+          // output payload — preserves the last `step_completed` output
+          // when the engine emits a bare terminal (defensive against
+          // workflows whose final step is non-output-producing).
+          if (event.output !== undefined) {
+            lastStepOutput = event.output;
+          }
           break;
         case 'workflow_failed':
           failure = {

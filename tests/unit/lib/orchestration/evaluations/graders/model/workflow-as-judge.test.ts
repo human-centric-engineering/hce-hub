@@ -281,3 +281,215 @@ describe('workflow_as_judge — failure modes', () => {
     expect(r.reasoning).toContain('engine blew up');
   });
 });
+
+describe('workflow_as_judge — input mapping + signal forwarding', () => {
+  it('resolves $.citations to an empty array when no citations are present', async () => {
+    prismaMock.aiWorkflow.findFirst.mockResolvedValueOnce(publishedWorkflowRow());
+    mockEngineExecute.mockReturnValueOnce(
+      yieldEvents([
+        { type: 'workflow_started', executionId: 'e' },
+        {
+          type: 'workflow_completed',
+          totalCostUsd: 0,
+          totalTokensUsed: 0,
+          output: '{"score": 1.0, "reasoning": "ok"}',
+        },
+      ])
+    );
+
+    await workflowAsJudgeGrader.grade({
+      userInput: 'q',
+      modelOutput: 'a',
+      config: {
+        workflowSlug: 'critique-answer',
+        inputMapping: { sources: '$.citations' },
+      },
+      judge: { userId: 'user-1' },
+    });
+
+    const [, inputData] = mockEngineExecute.mock.calls[0] as [
+      unknown,
+      Record<string, unknown>,
+      unknown,
+    ];
+    expect(Array.isArray(inputData.sources)).toBe(true);
+    expect(inputData.sources).toEqual([]);
+  });
+
+  it('resolves $.expectedOutput to an empty string when expectedOutput is undefined', async () => {
+    prismaMock.aiWorkflow.findFirst.mockResolvedValueOnce(publishedWorkflowRow());
+    mockEngineExecute.mockReturnValueOnce(
+      yieldEvents([
+        { type: 'workflow_started', executionId: 'e' },
+        {
+          type: 'workflow_completed',
+          totalCostUsd: 0,
+          totalTokensUsed: 0,
+          output: '{"score": 0.5, "reasoning": "ok"}',
+        },
+      ])
+    );
+
+    await workflowAsJudgeGrader.grade({
+      userInput: 'q',
+      modelOutput: 'a',
+      // expectedOutput omitted on purpose — the mapping should yield ''
+      config: {
+        workflowSlug: 'critique-answer',
+        inputMapping: { ref: '$.expectedOutput' },
+      },
+      judge: { userId: 'user-1' },
+    });
+
+    const [, inputData] = mockEngineExecute.mock.calls[0] as [
+      unknown,
+      Record<string, unknown>,
+      unknown,
+    ];
+    expect(inputData.ref).toBe('');
+  });
+
+  it('forwards an AbortSignal to the engine when input.signal is provided', async () => {
+    prismaMock.aiWorkflow.findFirst.mockResolvedValueOnce(publishedWorkflowRow());
+    mockEngineExecute.mockReturnValueOnce(
+      yieldEvents([
+        { type: 'workflow_started', executionId: 'e' },
+        {
+          type: 'workflow_completed',
+          totalCostUsd: 0,
+          totalTokensUsed: 0,
+          output: '{"score": 0.7, "reasoning": "ok"}',
+        },
+      ])
+    );
+
+    const controller = new AbortController();
+    await workflowAsJudgeGrader.grade({
+      ...input(),
+      signal: controller.signal,
+    });
+
+    const [, , options] = mockEngineExecute.mock.calls[0] as [
+      unknown,
+      unknown,
+      { signal?: AbortSignal },
+    ];
+    expect(options.signal).toBe(controller.signal);
+  });
+
+  it('omits costLogMetadata from engine options when judge.evaluationRunId is absent', async () => {
+    prismaMock.aiWorkflow.findFirst.mockResolvedValueOnce(publishedWorkflowRow());
+    mockEngineExecute.mockReturnValueOnce(
+      yieldEvents([
+        { type: 'workflow_started', executionId: 'e' },
+        {
+          type: 'workflow_completed',
+          totalCostUsd: 0,
+          totalTokensUsed: 0,
+          output: '{"score": 0.5, "reasoning": "ok"}',
+        },
+      ])
+    );
+
+    await workflowAsJudgeGrader.grade({
+      userInput: 'q',
+      modelOutput: 'a',
+      config: { workflowSlug: 'critique-answer', inputMapping: {} },
+      judge: { userId: 'user-1' },
+    });
+
+    const [, , options] = mockEngineExecute.mock.calls[0] as [
+      unknown,
+      unknown,
+      { costLogMetadata?: unknown },
+    ];
+    expect(options.costLogMetadata).toBeUndefined();
+  });
+
+  it('returns parse-error reasoning when the workflow output is an array (not a {score, reasoning} envelope)', async () => {
+    prismaMock.aiWorkflow.findFirst.mockResolvedValueOnce(publishedWorkflowRow());
+    mockEngineExecute.mockReturnValueOnce(
+      yieldEvents([
+        { type: 'workflow_started', executionId: 'e' },
+        {
+          type: 'workflow_completed',
+          totalCostUsd: 0,
+          totalTokensUsed: 0,
+          // Arrays land in the JSON.stringify branch of the rawForParse IIFE
+          // but won't parse as a {score, reasoning} envelope.
+          output: [1, 2, 3],
+        },
+      ])
+    );
+
+    const r = await workflowAsJudgeGrader.grade(input());
+
+    expect(r.score).toBeNull();
+    expect(r.reasoning).toMatch(/not a \{score, reasoning\} envelope/);
+  });
+
+  it('returns parse-error reasoning when the workflow output is null/undefined', async () => {
+    prismaMock.aiWorkflow.findFirst.mockResolvedValueOnce(publishedWorkflowRow());
+    mockEngineExecute.mockReturnValueOnce(
+      yieldEvents([
+        { type: 'workflow_started', executionId: 'e' },
+        {
+          type: 'workflow_completed',
+          totalCostUsd: 0,
+          totalTokensUsed: 0,
+          output: null,
+        },
+      ])
+    );
+
+    const r = await workflowAsJudgeGrader.grade(input());
+
+    expect(r.score).toBeNull();
+    expect(r.reasoning).toMatch(/not a \{score, reasoning\} envelope/);
+  });
+
+  it('returns parse-error reasoning when the workflow output is a number primitive', async () => {
+    prismaMock.aiWorkflow.findFirst.mockResolvedValueOnce(publishedWorkflowRow());
+    mockEngineExecute.mockReturnValueOnce(
+      yieldEvents([
+        { type: 'workflow_started', executionId: 'e' },
+        {
+          type: 'workflow_completed',
+          totalCostUsd: 0,
+          totalTokensUsed: 0,
+          output: 42,
+        },
+      ])
+    );
+
+    const r = await workflowAsJudgeGrader.grade(input());
+
+    expect(r.score).toBeNull();
+    expect(r.reasoning).toMatch(/not a \{score, reasoning\} envelope/);
+  });
+
+  it('falls back to step_completed output when no workflow_completed event carries output', async () => {
+    prismaMock.aiWorkflow.findFirst.mockResolvedValueOnce(publishedWorkflowRow());
+    mockEngineExecute.mockReturnValueOnce(
+      yieldEvents([
+        { type: 'workflow_started', executionId: 'e' },
+        {
+          type: 'step_completed',
+          stepId: 's1',
+          output: '{"score": 0.6, "reasoning": "from step"}',
+        },
+        {
+          type: 'workflow_completed',
+          totalCostUsd: 0.01,
+          totalTokensUsed: 10,
+          // no `output` field — runner falls back to lastStepOutput
+        },
+      ])
+    );
+
+    const r = await workflowAsJudgeGrader.grade(input());
+
+    expect(r.score).toBeCloseTo(0.6);
+    expect(r.reasoning).toBe('from step');
+  });
+});
