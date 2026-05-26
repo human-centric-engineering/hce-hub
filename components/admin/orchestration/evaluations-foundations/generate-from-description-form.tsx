@@ -38,6 +38,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   CaseReviewStep,
   type PreviewResult,
+  type ProposedCase,
 } from '@/components/admin/orchestration/evaluations-foundations/case-review-step';
 import { datasetHelp } from '@/components/admin/orchestration/evaluations-foundations/help-text';
 import { API } from '@/lib/api/endpoints';
@@ -107,6 +108,17 @@ export function GenerateFromDescriptionForm({
       if (next.has(i)) next.delete(i);
       else next.add(i);
       return next;
+    });
+  }
+
+  function handleEdit(
+    i: number,
+    patch: Partial<Pick<ProposedCase, 'input' | 'expectedOutput'>>
+  ): void {
+    setPreview((prev) => {
+      if (!prev) return prev;
+      const nextCases = prev.cases.map((c, idx) => (idx === i ? { ...c, ...patch } : c));
+      return { ...prev, cases: nextCases };
     });
   }
 
@@ -210,6 +222,7 @@ export function GenerateFromDescriptionForm({
               preview={preview}
               selectedIndices={selectedIndices}
               toggleSelected={toggleSelected}
+              onEdit={handleEdit}
             />
           </CardContent>
         </Card>

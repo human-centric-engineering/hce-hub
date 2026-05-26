@@ -46,6 +46,7 @@ import {
 import {
   CaseReviewStep,
   type PreviewResult,
+  type ProposedCase,
 } from '@/components/admin/orchestration/evaluations-foundations/case-review-step';
 import { API } from '@/lib/api/endpoints';
 
@@ -140,6 +141,17 @@ export function GenerateCasesButton({
     }
   }
 
+  function handleEdit(
+    i: number,
+    patch: Partial<Pick<ProposedCase, 'input' | 'expectedOutput'>>
+  ): void {
+    setPreview((prev) => {
+      if (!prev) return prev;
+      const nextCases = prev.cases.map((c, idx) => (idx === i ? { ...c, ...patch } : c));
+      return { ...prev, cases: nextCases };
+    });
+  }
+
   async function handleCommit(): Promise<void> {
     if (!preview) return;
     const accepted = preview.cases.filter((_, i) => selectedIndices.has(i));
@@ -214,6 +226,7 @@ export function GenerateCasesButton({
               preview={preview}
               selectedIndices={selectedIndices}
               toggleSelected={toggleSelected}
+              onEdit={handleEdit}
             />
           )}
 
