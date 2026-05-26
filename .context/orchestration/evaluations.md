@@ -644,22 +644,89 @@ deferred from Phase 3 (pairwise verdict endpoint + workflow-aware
 cost estimator). Phase 3.6 is a separate, orthogonal piece of work
 on the dataset cold-start gap; bundling it would muddle the changelog.
 
+### Editable cases (pre-commit and post-commit)
+
+The review step's `input` and `expectedOutput` fields are editable
+textareas in both the per-dataset `GenerateCasesButton` modal and the
+cold-start `GenerateFromDescriptionForm`. The parent owns the preview
+state; `CaseReviewStep` accepts an `onEdit(i, patch)` callback and the
+parent merges the patch into the proposals array, so the commit step
+sends whatever the admin last typed. Object inputs (workflow subjects)
+stay read-only — freeform JSON editing is fragile and the generator
+emits string inputs in current flows.
+
+Post-commit, the dataset detail page's case-preview table grows a
+per-row **Edit** button that opens a Dialog. Saving PATCHes the new
+per-case endpoint:
+
+- `PATCH /evaluations/datasets/:id/cases/:position` — partial patch
+  body `{ input?, expectedOutput?, metadata?, referenceCitations? }`
+  (Zod-strict, at-least-one-field required). The handler updates the
+  case + re-hashes the dataset + bumps `contentHash` and `updatedAt`
+  in one Prisma transaction. `expectedOutput`/`metadata`/`referenceCitations`
+  accept `null` to clear the field; `input` must stay populated.
+
+**Why edits are safe for past runs.** `AiEvaluationRun.datasetContentHash`
+is pinned at queue time, so completed runs are immune to later edits.
+The worker's hash-pin check on claim still detects mismatches if an
+in-flight run's dataset has drifted, marking it `failed` with
+`summary.note = 'dataset_changed_post_submit'`. Position remains
+stable across edits (it's the join key against
+`AiEvaluationCaseResult.casePosition`), so drilling into a historical
+result still resolves the correct row.
+
+### Trajectory diagnostics on the case-detail dialog
+
+The per-case drill-in dialog on `/runs/[id]` renders two diagnostic
+sections sourced from the worker's persisted
+`AiEvaluationCaseResult.subjectMetadata`:
+
+- **Tool calls (N)** — per-tool row with slug, success/error badge,
+  errorCode (when failed), latency, and the LLM-supplied arguments.
+  Empty state explains the three common causes of a
+  `tool_was_called` 0/N failure (no tool-use directive in the agent's
+  prompt, input didn't demand retrieval, capability not actually
+  bound + enabled).
+- **Citations (N)** — each cited source the agent emitted (title +
+  uri + marker). Hidden when empty.
+
+The data was already on the row; this surface closes the
+"`tool_was_called` failed, why?" debugging loop without a Prisma
+query.
+
+### `tool_was_called` slug picker
+
+On `/runs/new`, the `tool_was_called` grader's slug field renders as
+a dropdown listing the **enabled** capabilities bound to the
+currently-selected subject agent — fetched live from
+`GET /agents/:id/capabilities` when the agent picker changes.
+Disabled capability rows are filtered out client-side so the operator
+can't pick a tool the agent isn't wired to. Workflow subjects, agents
+with no capabilities yet, and the brief moment before the fetch
+resolves keep the original free-text input as a fallback — a workflow
+step may bind a tool the agent itself doesn't, and we don't want to
+block typing a slug we can't enumerate.
+
 **Critical files**:
 
-| Concern             | Path                                                                                             |
-| ------------------- | ------------------------------------------------------------------------------------------------ |
-| Help copy + samples | `components/admin/orchestration/evaluations-foundations/help-text.ts`                            |
-| Download formatters | `lib/orchestration/evaluations/datasets/sample-formatters.ts`                                    |
-| Download buttons    | `components/admin/orchestration/evaluations-foundations/sample-download-buttons.tsx`             |
-| Anatomy card        | `components/admin/orchestration/evaluations-foundations/dataset-anatomy-card.tsx`                |
-| Tabs wrapper        | `components/admin/orchestration/evaluations-foundations/dataset-new-tabs.tsx`                    |
-| Generate form       | `components/admin/orchestration/evaluations-foundations/generate-from-description-form.tsx`      |
-| Shared review pane  | `components/admin/orchestration/evaluations-foundations/case-review-step.tsx`                    |
-| Description mode    | `lib/orchestration/evaluations/synthesis/case-generator.ts`                                      |
-| Preview endpoint    | `app/api/v1/admin/orchestration/evaluations/datasets/generate-from-description/route.ts`         |
-| Commit endpoint     | `app/api/v1/admin/orchestration/evaluations/datasets/generate-from-description/commit/route.ts`  |
-| Zod schemas         | `lib/validations/orchestration-evaluations.ts` (`generateFromDescription{Preview,Commit}Schema`) |
-| Seed prompt         | `prisma/seeds/017-case-generator-agent.ts`                                                       |
+| Concern             | Path                                                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Help copy + samples | `components/admin/orchestration/evaluations-foundations/help-text.ts`                                                 |
+| Download formatters | `lib/orchestration/evaluations/datasets/sample-formatters.ts`                                                         |
+| Download buttons    | `components/admin/orchestration/evaluations-foundations/sample-download-buttons.tsx`                                  |
+| Anatomy card        | `components/admin/orchestration/evaluations-foundations/dataset-anatomy-card.tsx`                                     |
+| Tabs wrapper        | `components/admin/orchestration/evaluations-foundations/dataset-new-tabs.tsx`                                         |
+| Generate form       | `components/admin/orchestration/evaluations-foundations/generate-from-description-form.tsx`                           |
+| Shared review pane  | `components/admin/orchestration/evaluations-foundations/case-review-step.tsx`                                         |
+| Description mode    | `lib/orchestration/evaluations/synthesis/case-generator.ts`                                                           |
+| Preview endpoint    | `app/api/v1/admin/orchestration/evaluations/datasets/generate-from-description/route.ts`                              |
+| Commit endpoint     | `app/api/v1/admin/orchestration/evaluations/datasets/generate-from-description/commit/route.ts`                       |
+| Zod schemas         | `lib/validations/orchestration-evaluations.ts` (`generateFromDescription{Preview,Commit}Schema`)                      |
+| Seed prompt         | `prisma/seeds/017-case-generator-agent.ts`                                                                            |
+| Per-case PATCH      | `app/api/v1/admin/orchestration/evaluations/datasets/[id]/cases/[position]/route.ts`                                  |
+| PATCH Zod schema    | `lib/validations/orchestration-evaluations.ts` (`patchDatasetCaseSchema`)                                             |
+| Edit dialog         | `components/admin/orchestration/evaluations-foundations/dataset-cases-table.tsx`                                      |
+| Trace diagnostics   | `components/admin/orchestration/evaluations-foundations/run-detail-view.tsx` (`ToolCallsSection`, `CitationsSection`) |
 
 ## Critical files
 
