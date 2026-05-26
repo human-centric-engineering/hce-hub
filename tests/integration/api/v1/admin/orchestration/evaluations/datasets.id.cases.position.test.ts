@@ -210,4 +210,72 @@ describe('PATCH /datasets/:id/cases/:position — happy path', () => {
     const updateCall = vi.mocked(prisma.aiDatasetCase.update).mock.calls[0][0];
     expect(updateCall.data.expectedOutput).toBeNull();
   });
+
+  it('metadata-only patch writes metadata without touching other fields', async () => {
+    vi.mocked(prisma.aiDatasetCase.update).mockResolvedValue({
+      id: 'case-1',
+      position: 0,
+      input: 'old input',
+      expectedOutput: 'old expected',
+    } as never);
+
+    const res = await PATCH(makeRequest({ metadata: { intent: 'refund' } }), ctx());
+
+    expect(res.status).toBe(200);
+    const updateCall = vi.mocked(prisma.aiDatasetCase.update).mock.calls[0][0];
+    expect(updateCall.data).toEqual({ metadata: { intent: 'refund' } });
+  });
+
+  it('metadata: null writes Prisma.JsonNull (clears the field)', async () => {
+    vi.mocked(prisma.aiDatasetCase.update).mockResolvedValue({
+      id: 'case-1',
+      position: 0,
+      input: 'old input',
+      expectedOutput: null,
+    } as never);
+
+    const res = await PATCH(makeRequest({ metadata: null }), ctx());
+
+    expect(res.status).toBe(200);
+    const updateCall = vi.mocked(prisma.aiDatasetCase.update).mock.calls[0][0];
+    // Prisma.JsonNull is a sentinel object — not the literal `null`.
+    expect(updateCall.data.metadata).toBeDefined();
+    expect(updateCall.data.metadata).not.toBe(null);
+  });
+
+  it('referenceCitations-only patch writes citations without touching other fields', async () => {
+    vi.mocked(prisma.aiDatasetCase.update).mockResolvedValue({
+      id: 'case-1',
+      position: 0,
+      input: 'old input',
+      expectedOutput: 'old expected',
+    } as never);
+
+    const res = await PATCH(
+      makeRequest({ referenceCitations: [{ title: 'Policy', uri: 'https://x' }] }),
+      ctx()
+    );
+
+    expect(res.status).toBe(200);
+    const updateCall = vi.mocked(prisma.aiDatasetCase.update).mock.calls[0][0];
+    expect(updateCall.data.referenceCitations).toEqual([{ title: 'Policy', uri: 'https://x' }]);
+    expect(updateCall.data.input).toBeUndefined();
+    expect(updateCall.data.expectedOutput).toBeUndefined();
+  });
+
+  it('referenceCitations: null writes Prisma.JsonNull', async () => {
+    vi.mocked(prisma.aiDatasetCase.update).mockResolvedValue({
+      id: 'case-1',
+      position: 0,
+      input: 'old input',
+      expectedOutput: null,
+    } as never);
+
+    const res = await PATCH(makeRequest({ referenceCitations: null }), ctx());
+
+    expect(res.status).toBe(200);
+    const updateCall = vi.mocked(prisma.aiDatasetCase.update).mock.calls[0][0];
+    expect(updateCall.data.referenceCitations).toBeDefined();
+    expect(updateCall.data.referenceCitations).not.toBe(null);
+  });
 });

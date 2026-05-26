@@ -254,4 +254,63 @@ describe('POST /generate-from-description/commit — happy path + guardrails', (
     expect(body.data.caseCount).toBe(2);
     expect(vi.mocked(prisma.$transaction)).toHaveBeenCalledTimes(1);
   });
+
+  it('commits successfully when description is omitted (writes null)', async () => {
+    const createdDataset = { id: 'cmtest456' };
+    const datasetCreate = vi.fn().mockResolvedValue(createdDataset);
+    vi.mocked(prisma.$transaction).mockImplementation(async (cb: unknown) => {
+      const tx = {
+        aiDataset: { create: datasetCreate },
+        aiDatasetCase: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      };
+      return (cb as (t: typeof tx) => Promise<typeof createdDataset>)(tx);
+    });
+
+    const res = await CommitPOST(
+      makeRequest(
+        {
+          name: 'No description case',
+          cases: [{ input: 'q', expectedOutput: 'a' }],
+        },
+        '/commit'
+      )
+    );
+
+    expect(res.status).toBe(201);
+    expect(datasetCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ description: null }),
+      })
+    );
+  });
+
+  it('commits successfully when tags is omitted (writes empty array)', async () => {
+    const createdDataset = { id: 'cmtest789' };
+    const datasetCreate = vi.fn().mockResolvedValue(createdDataset);
+    vi.mocked(prisma.$transaction).mockImplementation(async (cb: unknown) => {
+      const tx = {
+        aiDataset: { create: datasetCreate },
+        aiDatasetCase: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      };
+      return (cb as (t: typeof tx) => Promise<typeof createdDataset>)(tx);
+    });
+
+    const res = await CommitPOST(
+      makeRequest(
+        {
+          name: 'No tags case',
+          description: 'Has description, no tags',
+          cases: [{ input: 'q', expectedOutput: 'a' }],
+        },
+        '/commit'
+      )
+    );
+
+    expect(res.status).toBe(201);
+    expect(datasetCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ tags: [] }),
+      })
+    );
+  });
 });
