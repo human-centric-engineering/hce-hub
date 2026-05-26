@@ -59,6 +59,23 @@ export const patchDatasetSchema = z
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'At least one field must be provided' });
 
+/**
+ * Per-case patch. All fields optional; the route enforces at-least-one.
+ * `expectedOutput`, `metadata`, `referenceCitations` accept `null` to
+ * clear the field; `input` is required to stay populated.
+ */
+export const patchDatasetCaseSchema = z
+  .object({
+    input: z.union([z.string().min(1).max(50_000), z.record(z.string(), z.unknown())]).optional(),
+    expectedOutput: z.string().max(50_000).nullable().optional(),
+    metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+    referenceCitations: z.array(z.unknown()).nullable().optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, { message: 'At least one field must be provided' });
+
+export type PatchDatasetCaseInput = z.infer<typeof patchDatasetCaseSchema>;
+
 // ---------------------------------------------------------------------------
 // Datasets — cases pagination
 // ---------------------------------------------------------------------------
