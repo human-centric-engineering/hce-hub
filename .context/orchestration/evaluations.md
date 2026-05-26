@@ -571,6 +571,96 @@ Phase 3.5 follow-up; the grader is callable programmatically today.
   banner for workflow subjects; the per-step token mix needs to be
   unioned across the workflow's defined steps. Phase 3.5.
 
+## Phase 3.6 — dataset creation UX
+
+A first-time admin on `/admin/orchestration/evaluations/datasets/new`
+no longer faces a bare file picker. Two complementary surfaces remove
+the cold-start gap:
+
+### Inline guidance + downloadable starter
+
+The page is a two-column layout. The left column carries the upload
+form; the right column carries `DatasetAnatomyCard`, a worked example
+showing one `datasetSamples` case field-by-field (input, expectedOutput,
+tags, referenceCitations, metadata) so the shape of a good case is
+visible without expanding anything.
+
+Above the file picker, a **Need a starting point?** card offers
+**Download CSV** / **Download JSONL** buttons. Both emit the same
+three domain-neutral cases (`components/admin/orchestration/
+evaluations-foundations/help-text.ts → datasetSamples`); the
+client-side formatters in `lib/orchestration/evaluations/datasets/
+sample-formatters.ts` round-trip cleanly through the existing CSV +
+JSONL parsers (verified by `tests/unit/lib/orchestration/evaluations/
+datasets/parsers.test.ts`). CSV uses RFC 4180 quoting; JSONL folds
+the literal-string `tags` field into `metadata.tags` to match what
+`csv-parser.ts` does at line 186.
+
+All new help copy lives in `help-text.ts` (`datasetHelp.goodCase`,
+`.starterDownload`, `.generateFromDescription`, `.domainPrompt`,
+`.seedInputs`) — the tone-locked module.
+
+### Generate from description
+
+A second tab on `/datasets/new` (`DatasetNewTabs` + `GenerateFromDescriptionForm`)
+is the cold-start path for admins who don't have a CSV to upload and
+whose subject agent has no KB to sample from. The flow:
+
+1. Pick a subject agent.
+2. Type a 20–1000 char domain description ("Customer support agent
+   for a fintech card issuer. Handles declines, fees, refunds.").
+3. Optionally add up to 3 anchor inputs (real user questions).
+4. Pick a target count (1–25).
+5. **Generate** → preview shows proposed cases (shared
+   `CaseReviewStep` with the per-dataset modal).
+6. Untick anything wrong, give the dataset a name, **Save** →
+   commit endpoint creates `AiDataset` + writes cases in one Prisma
+   transaction; UI redirects to the new dataset's detail page.
+
+No dataset row is created at preview time. The operator can cancel
+out of review with no half-finished rows left behind.
+
+Server side, this is a **third mode on the existing case generator**.
+`SynthesisMode` widens to `'kb' | 'failure_mining' | 'description'`.
+The description mode skips both seed loaders — no KB sampling, no
+prior-failure query — and assembles the prompt from just the
+domain text and anchor inputs. The eval-case-generator agent's
+system prompt picks up a one-paragraph addition covering the new
+seed shape on next `db:seed` run (no migration).
+
+**New endpoints** (both `POST`, `withAdminAuth`):
+
+- `/evaluations/datasets/generate-from-description` — preview. Body:
+  `{ agentId, count: 1..25, domainPrompt: string(20..1000), seedInputs?: string[](0..3) }`.
+  Sub-capped at 10/min via the existing `synthesisLimiter` (same
+  per-flow cap as the per-dataset `/generate-cases` route).
+- `/evaluations/datasets/generate-from-description/commit` — atomic
+  create + write. Body: `{ name, description?, tags?, cases }`.
+  Dataset source is stamped `'synthetic'`; per-case `metadata.mode =
+'description'` distinguishes it from KB / failure-mining synthesis.
+
+**Why this isn't Phase 3.5.** Phase 3.5 is two scoped follow-ups
+deferred from Phase 3 (pairwise verdict endpoint + workflow-aware
+cost estimator). Phase 3.6 is a separate, orthogonal piece of work
+on the dataset cold-start gap; bundling it would muddle the changelog.
+
+**Critical files**:
+
+| Concern             | Path                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| Help copy + samples | `components/admin/orchestration/evaluations-foundations/help-text.ts`                            |
+| Download formatters | `lib/orchestration/evaluations/datasets/sample-formatters.ts`                                    |
+| Download buttons    | `components/admin/orchestration/evaluations-foundations/sample-download-buttons.tsx`             |
+| Anatomy card        | `components/admin/orchestration/evaluations-foundations/dataset-anatomy-card.tsx`                |
+| Tabs wrapper        | `components/admin/orchestration/evaluations-foundations/dataset-new-tabs.tsx`                    |
+| Generate form       | `components/admin/orchestration/evaluations-foundations/generate-from-description-form.tsx`      |
+| Shared review pane  | `components/admin/orchestration/evaluations-foundations/case-review-step.tsx`                    |
+| Description mode    | `lib/orchestration/evaluations/synthesis/case-generator.ts`                                      |
+| Preview endpoint    | `app/api/v1/admin/orchestration/evaluations/datasets/generate-from-description/route.ts`         |
+| Commit endpoint     | `app/api/v1/admin/orchestration/evaluations/datasets/generate-from-description/commit/route.ts`  |
+| Zod schemas         | `lib/validations/orchestration-evaluations.ts` (`generateFromDescription{Preview,Commit}Schema`) |
+| Seed prompt         | `prisma/seeds/017-case-generator-agent.ts`                                                       |
+
 ## Critical files
 
 | Concern                 | Path                                                                                       |
