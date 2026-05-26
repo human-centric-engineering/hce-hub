@@ -782,6 +782,19 @@ describe('pruneMcpAuditLogs', () => {
     expect(prisma.mcpAuditLog.deleteMany).not.toHaveBeenCalled();
   });
 
+  it('skips gracefully (no throw) when getMcpServerConfig rejects', async () => {
+    // Arrange — a transient McpServerConfig read failure must NOT propagate out
+    // of enforceRetentionPolicies (which would mask the prunes that already ran).
+    vi.mocked(getMcpServerConfig).mockRejectedValue(new Error('db down'));
+
+    // Act
+    const result = await pruneMcpAuditLogs();
+
+    // Assert — swallowed and treated as skip; deleteMany never called
+    expect(result).toEqual({ deleted: 0 });
+    expect(prisma.mcpAuditLog.deleteMany).not.toHaveBeenCalled();
+  });
+
   it('skips when explicit maxAgeDays <= 0', async () => {
     // Arrange — explicit override with 0
     vi.mocked(prisma.mcpAuditLog.deleteMany).mockResolvedValue({ count: 0 });

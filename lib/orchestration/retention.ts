@@ -325,7 +325,19 @@ export async function pruneEvaluationData(maxAgeDays?: number): Promise<Evaluati
  * misconfigured zero can't wipe the whole audit trail.
  */
 export async function pruneMcpAuditLogs(maxAgeDays?: number): Promise<PruneResult> {
-  const days = maxAgeDays ?? (await getMcpServerConfig()).auditRetentionDays;
+  let days: number;
+  if (maxAgeDays !== undefined) {
+    days = maxAgeDays;
+  } else {
+    // Mirror resolveRetentionDays' swallow-on-error contract so a transient
+    // McpServerConfig read failure skips this prune rather than throwing out
+    // of enforceRetentionPolicies (which would mask the prunes that already ran).
+    try {
+      days = (await getMcpServerConfig()).auditRetentionDays;
+    } catch {
+      return { deleted: 0 };
+    }
+  }
   if (days <= 0) return { deleted: 0 };
 
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
