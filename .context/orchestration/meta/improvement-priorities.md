@@ -23,6 +23,7 @@ Items in `maturity-analysis.md` that depend on horizontal-scale assumptions are 
 
 - ✅ **Done** — merged to main.
 - 🟢 **In progress** — branch open / next up.
+- 🟡 **Partially done** — a meaningful slice has merged; remaining scope noted in the item.
 - ⚪ **Not started**.
 
 ---
@@ -711,11 +712,46 @@ Items 29 and 30 are commercial-priority — they unblock procurement objections 
 | 35  | Shadow / canary version routing                   | Moderate      | Moderate–High | ⚪ Not started |
 | 36  | OpenAPI-driven capability generator               | Moderate      | Moderate      | ⚪ Not started |
 
-### 29. GDPR end-user erasure (DSAR / Right-to-Erasure) — ⚪ Not started
+### 29. GDPR end-user erasure (DSAR / Right-to-Erasure) — 🟡 Partially done
 
 **Why it matters.** Every regulated-vertical worked example in `business-applications.md` — legal advice, mortgage broking, tenant rights, council planning, health protocols, financial planning, customer-resolution — is sold into procurement teams that treat GDPR Article 17 Right-to-Erasure and Article 15 Right-of-Access as non-negotiable. Today the platform has _scheduled_ retention plumbing (`AiAgent.retentionDays`, `costLogRetentionDays`, `webhookRetentionDays`, `auditLogRetentionDays`) but no _on-demand_ operation that, given an end-user identifier, finds and erases their data across the eight-plus models that store it. `functional-robustness-test-plan.md` documents this as an unimplemented test scenario. The recurring partner-procurement objection makes this commercial-risk rather than nice-to-have — it is the kind of feature whose absence terminates a sales conversation regardless of how good the platform's quality posture is.
 
 This is the on-demand half of a primitive whose scheduled half already exists.
+
+**Done so far (PR #247, merged 2026-05-25 — the registered-user spine).** The
+`User.id` branch of the erasure walk is now real: deleting a registered user
+actually erases and de-attributes their data instead of failing on FK
+constraints. Shipped in `lib/privacy/erase-user.ts` (`eraseUser()`), routed
+through both `DELETE /api/v1/users/me` (self-service) and `DELETE /api/v1/users/[id]`
+(admin):
+
+- **Erase-vs-retain referential policy** across ~38 `User`-linked models — personal
+  data `onDelete: Cascade`, org config + audit `onDelete: SetNull` (de-attributed,
+  not deleted). This is exactly the "redaction-not-deletion for rows that must
+  survive" principle this item calls for, enforced at the schema level.
+- **Residual-PII scrub** the cascade can't reach (`clientIp` on retained
+  `AiAdminAuditLog` rows), inside the same `$transaction` as the delete.
+- **Append-only `DataErasureReceipt`** — a narrower cousin of the proposed
+  `AiDataSubjectRequest` table: an opaque `subjectUserId`, an **unsalted**
+  `sha256(email)`, the actor, and the reason — with no FKs, so it outlives every
+  referenced row. (When the full identifier-walk lands, switch this to the
+  salted-hash `AiDataSubjectRequest` shape described below.)
+- Last-admin guard + `CANNOT_DELETE_ADMIN`; avatar-blob cleanup; docs at
+  `.context/privacy/data-erasure.md`.
+
+Separately, **PR #257 (retention purge)** extended the _scheduled_ half this item
+references — execution / evaluation / MCP-audit pruning now join the existing
+conversation / webhook / cost-log / audit windows (`.context/orchestration/retention.md`).
+
+**Remaining (the bulk — the on-demand DSAR product).** Everything keyed on a
+**non-`userId` identifier** is still unbuilt: the `lib/orchestration/data-subject/`
+lookup module that walks `(channel, fromAddress)` inbound rows for unregistered
+end users; the `POST .../data-subject/{export,erase}` admin routes; the **export /
+Art. 15 Right-of-Access** bundle (overlaps #49); the admin compliance UI with
+preview/dry-run and Pending/History tabs; the `AiDataSubjectRequest` table with a
+**salted** `identifierHash` + `affectedRowCounts`; and the 24-hour cooling-period /
+channel-key rejection for in-flight async work. The "What we'd ship" / "UI shape"
+sections below describe this remaining scope.
 
 **What we'd ship.** A new `lib/orchestration/data-subject/` module owning the lookup contract: identifier → list of touchpoints. New admin routes `POST /api/v1/admin/orchestration/data-subject/export` and `/erase` taking `{ identifier: { type: 'email' | 'phone' | 'channelAddress' | 'userId', value } }`. The lookup walks `AiConversation` rows via the `(channel, fromAddress)` key item 14 already populates, or via `User.id` cascade for registered users, then traverses every owning model: `AiMessage`, `AiCostLog`, `AiEvaluationLog`, `AiUserMemory`, `AiWorkflowExecution.inputData`, `AiInboundTriggerDelivery.payload`, plus any future model that captures user content (a per-model audit during implementation enumerates the full surface). Export returns a signed-URL JSON bundle (chains `upload_to_storage` from item 16). Erasure runs the same walk inside a single `$transaction`, replaces user-content fields with redaction markers where rows must survive for aggregate integrity (`AiCostLog.metadata` retains tokens but nulls user-identifying fields; `AiAdminAuditLog` rows are preserved because the audit trail of erasure must itself be auditable, but with content redacted), and writes a `data_subject.erasure` audit row recording the actor, identifier hash, and which models were touched. A new `AiDataSubjectRequest` table records every request with `requestId`, `requestType`, `identifierHash` (SHA-256 with a system-secret salt so the audit table does not itself become a re-identification surface), `requestedAt`, `completedAt`, `actorUserId`, and `affectedRowCounts` for the compliance audit trail partners will be asked for during their own audits.
 
