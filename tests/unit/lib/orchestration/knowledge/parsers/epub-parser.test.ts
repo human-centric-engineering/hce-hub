@@ -159,6 +159,16 @@ describe('parseEpub', () => {
       expect(mocks.rm).toHaveBeenCalledTimes(1);
     });
 
+    it('should remove the temp directory even when writeFile throws', async () => {
+      // Arrange: the write into the (already created) temp dir fails
+      mocks.writeFile.mockRejectedValue(new Error('ENOSPC: no space left on device'));
+
+      // Act + Assert: error re-thrown, but the mkdtemp directory is still cleaned up
+      await expect(parseEpub(fakeBuffer(), 'book.epub')).rejects.toThrow('ENOSPC');
+      expect(mocks.rm).toHaveBeenCalledTimes(1);
+      expect(mocks.rm.mock.calls[0][0]).toBe('/tmp/sunrise-epub-abc123');
+    });
+
     it('should not throw if removing the temp directory fails', async () => {
       // Arrange: rm fails (e.g. temp dir already cleaned)
       mocks.epubInstance.flow = [];

@@ -53,12 +53,14 @@ export async function parseEpub(buffer: Buffer, fileName: string): Promise<Parse
   // epub2 reads from a file path, so write the upload into a private temp
   // directory created with mkdtemp (mode 0700, unpredictable name) — this
   // avoids the predictable-name / symlink races a shared os.tmpdir() path
-  // would invite.
+  // would invite. The write lives inside the try so the finally cleans up
+  // the directory even if writeFile fails.
   const tempDir = await mkdtemp(join(tmpdir(), 'sunrise-epub-'));
-  const tempPath = join(tempDir, 'book.epub');
-  await writeFile(tempPath, buffer);
 
   try {
+    const tempPath = join(tempDir, 'book.epub');
+    await writeFile(tempPath, buffer);
+
     const epub = new EPub(tempPath);
     await epub.parse();
 

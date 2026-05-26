@@ -77,8 +77,9 @@ function extractPages(
  * The first row is treated as the header row (mirrors common PDF table layout).
  * Returns the empty string for empty/degenerate tables.
  *
- * SECURITY INVARIANT — cell sanitisation only escapes pipes and replaces
- * newlines. It deliberately does NOT escape `<` / `>` / `&`, because:
+ * SECURITY INVARIANT — cell sanitisation escapes backslashes and pipes and
+ * replaces newlines (so table delimiters stay intact). It deliberately does
+ * NOT escape `<` / `>` / `&`, because:
  *
  *  1. Chunk content is rendered downstream by `react-markdown` with no
  *     plugins (see `components/admin/orchestration/knowledge/explore-tab.tsx`
