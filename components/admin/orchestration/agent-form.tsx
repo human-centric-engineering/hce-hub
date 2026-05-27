@@ -113,6 +113,8 @@ const agentFormSchema = z.object({
   enableDocumentInput: z.boolean(),
   fallbackProviders: z.array(z.string()),
   knowledgeAccessMode: z.enum(['full', 'restricted']),
+  knowledgeRetrievalMode: z.enum(['model', 'first_turn', 'every_turn', 'keywords']),
+  knowledgeTriggerKeywords: z.string().optional(),
   knowledgeTagIds: z.array(z.string()),
   knowledgeDocumentIds: z.array(z.string()),
   topicBoundaries: z.string().optional(),
@@ -247,6 +249,10 @@ export function AgentForm({
       fallbackProviders: agent?.fallbackProviders ?? [],
       knowledgeAccessMode:
         (agent?.knowledgeAccessMode as 'full' | 'restricted' | undefined) ?? 'full',
+      knowledgeRetrievalMode:
+        (agent?.knowledgeRetrievalMode as AgentFormData['knowledgeRetrievalMode'] | undefined) ??
+        'model',
+      knowledgeTriggerKeywords: agent?.knowledgeTriggerKeywords?.join(', ') ?? '',
       knowledgeTagIds: agent?.grantedTagIds ?? [],
       knowledgeDocumentIds: agent?.grantedDocumentIds ?? [],
       topicBoundaries: agent?.topicBoundaries?.join(', ') ?? '',
@@ -428,6 +434,12 @@ export function AgentForm({
       reasoningEffort: reasoningEffort === 'auto' ? null : reasoningEffort,
       topicBoundaries: rest.topicBoundaries
         ? rest.topicBoundaries
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : [],
+      knowledgeTriggerKeywords: rest.knowledgeTriggerKeywords
+        ? rest.knowledgeTriggerKeywords
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean)
@@ -1589,6 +1601,70 @@ export function AgentForm({
           />
 
           <div className="grid gap-2">
+            <Label htmlFor="knowledgeRetrievalMode">
+              Knowledge retrieval{' '}
+              <FieldHelp title="When the agent searches its knowledge base">
+                Controls when a knowledge base search is forced.
+                <br />
+                <br />
+                <strong>Model decides</strong> — the agent searches only when it judges the question
+                needs it (default).
+                <br />
+                <br />
+                <strong>Force on first message</strong> — search on the first message of each
+                conversation, then let the agent decide.
+                <br />
+                <br />
+                <strong>Force on every message</strong> — search before answering every message.
+                <br />
+                <br />
+                <strong>Force on keywords</strong> — search whenever the message contains a trigger
+                word from the list below.
+                <br />
+                <br />
+                Forcing has no effect unless the Search Knowledge Base capability is enabled for
+                this agent on the Capabilities tab.
+              </FieldHelp>
+            </Label>
+            <Select
+              value={watch('knowledgeRetrievalMode')}
+              onValueChange={(v) =>
+                setValue('knowledgeRetrievalMode', v as AgentFormData['knowledgeRetrievalMode'], {
+                  shouldDirty: true,
+                })
+              }
+            >
+              <SelectTrigger id="knowledgeRetrievalMode">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="model">Model decides (default)</SelectItem>
+                <SelectItem value="first_turn">Force on first message</SelectItem>
+                <SelectItem value="every_turn">Force on every message</SelectItem>
+                <SelectItem value="keywords">Force on keywords</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {watch('knowledgeRetrievalMode') === 'keywords' && (
+            <div className="grid gap-2">
+              <Label htmlFor="knowledgeTriggerKeywords">
+                Trigger keywords{' '}
+                <FieldHelp title="Words that force a knowledge base search">
+                  Comma-separated words or phrases. When a user message contains any of them
+                  (matched whole-word, case-insensitive), the agent must search the knowledge base
+                  before replying. For example: &ldquo;refund, warranty, returns&rdquo;.
+                </FieldHelp>
+              </Label>
+              <Input
+                id="knowledgeTriggerKeywords"
+                placeholder="e.g. refund, warranty, returns"
+                {...register('knowledgeTriggerKeywords')}
+              />
+            </div>
+          )}
+
+          <div className="grid gap-2">
             <Label htmlFor="topicBoundaries">
               Topic boundaries{' '}
               <FieldHelp title="Forbidden topics for output guard">
@@ -1702,6 +1778,11 @@ export function AgentForm({
                       fallbackProviders: fresh.fallbackProviders ?? [],
                       knowledgeAccessMode:
                         (fresh.knowledgeAccessMode as 'full' | 'restricted' | undefined) ?? 'full',
+                      knowledgeRetrievalMode:
+                        (fresh.knowledgeRetrievalMode as
+                          | AgentFormData['knowledgeRetrievalMode']
+                          | undefined) ?? 'model',
+                      knowledgeTriggerKeywords: fresh.knowledgeTriggerKeywords?.join(', ') ?? '',
                       knowledgeTagIds: fresh.grantedTagIds ?? [],
                       knowledgeDocumentIds: fresh.grantedDocumentIds ?? [],
                       topicBoundaries: fresh.topicBoundaries?.join(', ') ?? '',
