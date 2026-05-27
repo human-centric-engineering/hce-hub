@@ -34,7 +34,12 @@ import type {
   ToolCallTrace,
 } from '@/types/orchestration';
 import { CostOperation } from '@/types/orchestration';
-import type { LlmMessage, LlmToolCall, LlmToolDefinition } from '@/lib/orchestration/llm/types';
+import type {
+  LlmMessage,
+  LlmToolCall,
+  LlmToolChoice,
+  LlmToolDefinition,
+} from '@/lib/orchestration/llm/types';
 import { getBreaker } from '@/lib/orchestration/llm/circuit-breaker';
 import { narrowReasoningEffort } from '@/lib/orchestration/llm/model-heuristics';
 import { getModel } from '@/lib/orchestration/llm/model-registry';
@@ -108,6 +113,26 @@ import {
 
 /** Maximum time (ms) a single tool dispatch can run before being timed out. */
 const TOOL_DISPATCH_TIMEOUT_MS = 30_000;
+
+/** Slug of the built-in knowledge-search capability (forced by knowledgeRetrievalMode). */
+const SEARCH_KNOWLEDGE_SLUG = 'search_knowledge_base';
+
+/**
+ * Whole-word, case-insensitive test for the agent's `knowledgeTriggerKeywords`
+ * against the incoming user message. Used by `knowledgeRetrievalMode = 'keywords'`
+ * to decide whether to force a knowledge-base search this turn. Substring matching
+ * is deliberately avoided so "art" does not fire on "start"; regex-special
+ * characters in a keyword are escaped so phrases are matched literally.
+ */
+function matchesKnowledgeTrigger(message: string, keywords: string[]): boolean {
+  if (!message || keywords.length === 0) return false;
+  return keywords.some((kw) => {
+    const term = kw.trim();
+    if (!term) return false;
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\b${escaped}\\b`, 'i').test(message);
+  });
+}
 
 /** Race a promise against a timeout. Returns the timeout error shape on expiry. */
 async function withToolTimeout<T>(
@@ -808,6 +833,26 @@ export class StreamingChatHandler {
         parameters: def.parameters,
       }));
 
+      // Per-agent "force knowledge retrieval" policy. When it fires we pin the
+      // FIRST LLM iteration of this turn to search_knowledge_base (via
+      // toolChoice) so the model grounds its answer instead of deciding on its
+      // own. Later iterations (tool-result follow-ups) are never pinned, so the
+      // model answers freely once it has the search results — this also avoids a
+      // force-search loop. No-op unless the capability is actually enabled this
+      // turn. See .context/orchestration/knowledge.md.
+      const knowledgeSearchEnabled = toolDefinitions.some((t) => t.name === SEARCH_KNOWLEDGE_SLUG);
+      const isFirstUserTurn = !history.some((m) => m.role === 'user');
+      const forcedToolChoice: LlmToolChoice | undefined = !knowledgeSearchEnabled
+        ? undefined
+        : agent.knowledgeRetrievalMode === 'every_turn'
+          ? { name: SEARCH_KNOWLEDGE_SLUG }
+          : agent.knowledgeRetrievalMode === 'first_turn' && isFirstUserTurn
+            ? { name: SEARCH_KNOWLEDGE_SLUG }
+            : agent.knowledgeRetrievalMode === 'keywords' &&
+                matchesKnowledgeTrigger(request.message, agent.knowledgeTriggerKeywords)
+              ? { name: SEARCH_KNOWLEDGE_SLUG }
+              : undefined;
+
       // Admin-only: enrich the input breakdown with tool-definition
       // tokens so the chat UI can attribute scaffolding cost back to
       // capability schemas. Counting the serialised JSON over-estimates
@@ -950,6 +995,8 @@ export class StreamingChatHandler {
             ? { reasoningEffort: narrowedReasoningEffort }
             : {}),
           ...(toolDefinitions.length > 0 ? { tools: toolDefinitions } : {}),
+          // Only pin the forced tool on the first iteration — see forcedToolChoice above.
+          ...(iteration === 1 && forcedToolChoice ? { toolChoice: forcedToolChoice } : {}),
           ...(responseFormat && toolDefinitions.length === 0 ? { responseFormat } : {}),
           ...(request.signal ? { signal: request.signal } : {}),
         };

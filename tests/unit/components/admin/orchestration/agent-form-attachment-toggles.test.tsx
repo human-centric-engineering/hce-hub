@@ -153,6 +153,8 @@ function makeAgent(model: string, provider: string = 'openai') {
     rateLimitRpm: null,
     knowledgeCategories: [],
     knowledgeAccessMode: 'full',
+    knowledgeRetrievalMode: 'model',
+    knowledgeTriggerKeywords: [],
     topicBoundaries: [],
     brandVoiceInstructions: null,
     persona: null,

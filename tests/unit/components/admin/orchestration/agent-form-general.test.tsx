@@ -171,6 +171,8 @@ describe('AgentForm — General tab', () => {
         metadata: {},
         knowledgeCategories: [],
         knowledgeAccessMode: 'full',
+        knowledgeRetrievalMode: 'model',
+        knowledgeTriggerKeywords: [],
         topicBoundaries: [],
         brandVoiceInstructions: null,
         persona: null,
