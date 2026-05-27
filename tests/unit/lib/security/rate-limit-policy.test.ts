@@ -16,16 +16,19 @@ import { findRateLimitRule, RATE_LIMIT_POLICY } from '@/lib/security/rate-limit-
 describe('rate-limit-policy', () => {
   describe('findRateLimitRule — tier resolution', () => {
     it("returns the 'orchestration' tier for orchestration admin paths", () => {
-      // Arrange — orchestration path is the most specific; must match before the broader admin rule
+      // Arrange — orchestration path is the most specific; must match before the broader admin rule.
+      // Phase 4: orchestration has two rules — an api-key variant (skipped when no Authorization
+      // header) and the session-user fallback. Without a Request object, `findRateLimitRule`
+      // can't evaluate skip predicates, so it returns the first match (the api-key rule).
       const pathname = '/api/v1/admin/orchestration/agents';
 
       // Act
       const rule = findRateLimitRule(pathname);
 
-      // Assert — the function selected the orchestration rule, not the generic admin rule
+      // Assert — the function selected an orchestration rule, not the generic admin rule
       expect(rule).not.toBeNull();
       expect(rule?.tier).toBe('orchestration');
-      expect(rule?.key).toBe('session-user');
+      expect(rule?.key).toBe('api-key');
     });
 
     it("returns the 'admin' tier for core admin paths", () => {
@@ -253,25 +256,29 @@ describe('rate-limit-policy', () => {
       // first-match-wins contract explicitly so it can be verified without
       // running path matching. Tiers alone aren't enough to disambiguate (most
       // consumer rules share the 'api' tier) so we also assert the key strategy.
-      expect(RATE_LIMIT_POLICY[0].tier).toBe('orchestration');
-      expect(RATE_LIMIT_POLICY[1].tier).toBe('admin');
-      expect(RATE_LIMIT_POLICY[2].tier).toBe('auth'); // /api/v1/auth/
-      expect(RATE_LIMIT_POLICY[3].tier).toBe('auth'); // /api/auth/ (better-auth routes)
+      // Phase 4: orchestration has two consecutive rules — api-key variant
+      // (skipped when no Authorization Bearer header) and the session-user
+      // fallback. Both target the same `tier: 'orchestration'` cap.
+      expect(RATE_LIMIT_POLICY[0]).toMatchObject({ tier: 'orchestration', key: 'api-key' });
+      expect(RATE_LIMIT_POLICY[1]).toMatchObject({ tier: 'orchestration', key: 'session-user' });
+      expect(RATE_LIMIT_POLICY[2].tier).toBe('admin');
+      expect(RATE_LIMIT_POLICY[3].tier).toBe('auth'); // /api/v1/auth/
+      expect(RATE_LIMIT_POLICY[4].tier).toBe('auth'); // /api/auth/ (better-auth routes)
       // MCP transport — distinct interface, distinct tier, before the api consumer block.
-      expect(RATE_LIMIT_POLICY[4]).toMatchObject({ tier: 'mcp', key: 'api-key' }); // mcp
+      expect(RATE_LIMIT_POLICY[5]).toMatchObject({ tier: 'mcp', key: 'api-key' }); // mcp
       // Consumer-specific rules — same tier ('api') but distinct keying.
-      expect(RATE_LIMIT_POLICY[5]).toMatchObject({ tier: 'api', key: 'api-key' }); // webhooks
-      expect(RATE_LIMIT_POLICY[6]).toMatchObject({ tier: 'api', key: 'embed-token' }); // embed
-      expect(RATE_LIMIT_POLICY[7]).toMatchObject({ tier: 'api', key: 'ip' }); // inbound
-      expect(RATE_LIMIT_POLICY[8]).toMatchObject({ tier: 'api', key: 'ip' }); // contact
+      expect(RATE_LIMIT_POLICY[6]).toMatchObject({ tier: 'api', key: 'api-key' }); // webhooks
+      expect(RATE_LIMIT_POLICY[7]).toMatchObject({ tier: 'api', key: 'embed-token' }); // embed
+      expect(RATE_LIMIT_POLICY[8]).toMatchObject({ tier: 'api', key: 'ip' }); // inbound
+      expect(RATE_LIMIT_POLICY[9]).toMatchObject({ tier: 'api', key: 'ip' }); // contact
       // Catch-all — must remain LAST so the consumer rules above it have a chance to match.
-      expect(RATE_LIMIT_POLICY[9]).toMatchObject({ tier: 'api', key: 'session-user' });
+      expect(RATE_LIMIT_POLICY[10]).toMatchObject({ tier: 'api', key: 'session-user' });
     });
 
-    it('has exactly 10 rules (catches unintended additions or deletions)', () => {
+    it('has exactly 11 rules (catches unintended additions or deletions)', () => {
       // A length change is a signal that the policy changed. This test surfaces
       // that signal without being prescriptive about what was added/removed.
-      expect(RATE_LIMIT_POLICY).toHaveLength(10);
+      expect(RATE_LIMIT_POLICY).toHaveLength(11);
     });
   });
 

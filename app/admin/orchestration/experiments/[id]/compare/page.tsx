@@ -23,7 +23,6 @@ import {
   type JudgeOption,
 } from '@/components/admin/orchestration/experiments/pairwise-verdict-card';
 import { VariantCompareTable } from '@/components/admin/orchestration/experiments/variant-compare-table';
-import { prisma } from '@/lib/db/client';
 import { API } from '@/lib/api/endpoints';
 import { parseApiResponse, serverFetch } from '@/lib/api/server-fetch';
 import { logger } from '@/lib/logging';
@@ -74,16 +73,22 @@ async function loadCompare(id: string): Promise<CompareResponse | null> {
   }
 }
 
+interface GradersResponse {
+  judgeAgents: Array<{ slug: string; name: string }>;
+}
+
 async function loadJudges(): Promise<JudgeOption[]> {
   try {
-    const judges = await prisma.aiAgent.findMany({
-      where: { kind: 'judge', isActive: true },
-      orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
-      select: { slug: true, name: true },
-    });
-    return judges;
+    const res = await serverFetch(API.ADMIN.ORCHESTRATION.EVAL_GRADERS);
+    if (!res.ok) {
+      logger.warn('Experiment compare: judge list fetch failed', { status: res.status });
+      return [];
+    }
+    const parsed = await parseApiResponse<GradersResponse>(res);
+    if (!parsed.success) return [];
+    return parsed.data.judgeAgents.map((j) => ({ slug: j.slug, name: j.name }));
   } catch (err) {
-    logger.warn('Experiment compare: judge list fetch failed', {
+    logger.warn('Experiment compare: judge list fetch threw', {
       error: err instanceof Error ? err.message : String(err),
     });
     return [];

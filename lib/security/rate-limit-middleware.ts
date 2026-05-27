@@ -33,6 +33,7 @@ import {
 } from '@/lib/security/rate-limit';
 import {
   findRateLimitRule,
+  RATE_LIMIT_POLICY,
   type RateLimitKey,
   type RateLimitRule,
 } from '@/lib/security/rate-limit-policy';
@@ -67,9 +68,33 @@ import {
 export async function applyRateLimit(request: NextRequest): Promise<Response | null> {
   if (isBypassEnabled()) return null;
 
-  const rule = findRateLimitRule(request.nextUrl.pathname);
+  // First-match-wins, with fall-through on `skip`. A path with two
+  // consecutive rules (e.g. the orchestration api-key + session-user pair
+  // added in Phase 4) needs the second rule to apply when the first's
+  // `skip` fires. `findRateLimitRule` returns the very first path match,
+  // so we use it for the typical single-rule case and only iterate the
+  // policy directly when that rule's `skip` is true.
+  let rule: RateLimitRule | null = findRateLimitRule(request.nextUrl.pathname);
+  if (rule?.skip?.(request)) {
+    rule = null;
+    const startIndex = RATE_LIMIT_POLICY.findIndex(
+      (r) =>
+        (typeof r.match === 'string' && request.nextUrl.pathname.startsWith(r.match)) ||
+        (r.match instanceof RegExp && r.match.test(request.nextUrl.pathname))
+    );
+    for (let i = startIndex + 1; i < RATE_LIMIT_POLICY.length; i++) {
+      const candidate = RATE_LIMIT_POLICY[i];
+      const pathMatches =
+        typeof candidate.match === 'string'
+          ? request.nextUrl.pathname.startsWith(candidate.match)
+          : candidate.match.test(request.nextUrl.pathname);
+      if (!pathMatches) continue;
+      if (candidate.skip?.(request)) continue;
+      rule = candidate;
+      break;
+    }
+  }
   if (!rule) return null;
-  if (rule.skip && rule.skip(request)) return null;
 
   const limiter: RateLimiter | undefined = RATE_LIMIT_TIERS[rule.tier];
   if (!limiter) {

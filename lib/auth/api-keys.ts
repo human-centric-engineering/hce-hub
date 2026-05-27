@@ -51,7 +51,11 @@ export function validateScopes(scopes: string[]): scopes is ApiKeyScope[] {
 export async function resolveApiKey(
   request: NextRequest
 ): Promise<{ session: AuthSession; scopes: string[]; rateLimitRpm: number | null } | null> {
-  const authHeader = request.headers.get('authorization');
+  // Defensive: tolerate requests without a populated headers map. Test
+  // harnesses sometimes pass a stub `{} as NextRequest`; without the
+  // optional chain we'd throw before the cookie-session path could run,
+  // turning a pre-Phase-4 401/400 into a 500.
+  const authHeader = request.headers?.get('authorization');
   if (!authHeader?.startsWith('Bearer sk_')) return null;
 
   const rawKey = authHeader.slice('Bearer '.length);
