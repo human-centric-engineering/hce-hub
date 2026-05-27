@@ -112,6 +112,8 @@ function makeAgent(
     deletedAt: null,
     fallbackProviders: [],
     knowledgeAccessMode: 'full',
+    knowledgeRetrievalMode: 'model',
+    knowledgeTriggerKeywords: [],
     grantedTagIds: [],
     grantedDocumentIds: [],
     ...overrides,
@@ -328,6 +330,110 @@ describe('AgentForm — Knowledge Access section callbacks', () => {
 
       // Assert: form is still rendered (event was handled without error)
       expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
+    });
+  });
+
+  describe('knowledge retrieval mode select (lines 1629-1665)', () => {
+    it('selecting "Force on every message" sends knowledgeRetrievalMode=every_turn in PATCH', async () => {
+      const { apiClient } = await import('@/lib/api/client');
+      vi.mocked(apiClient.patch).mockResolvedValue({ id: 'agent-1' });
+
+      const user = userEvent.setup();
+      const agent = makeAgent({ knowledgeRetrievalMode: 'model' });
+      render(
+        <AgentForm mode="edit" agent={agent} providers={MOCK_PROVIDERS} models={MOCK_MODELS} />
+      );
+
+      await user.click(screen.getByRole('tab', { name: /instructions/i }));
+
+      // Open the retrieval-mode Select (covers the onValueChange callback at line 1631)
+      const retrievalSelect = screen.getByRole('combobox', { name: /knowledge retrieval/i });
+      await user.click(retrievalSelect);
+      await user.click(await screen.findByRole('option', { name: /force on every message/i }));
+
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+      await waitFor(() => {
+        expect(apiClient.patch).toHaveBeenCalledWith(
+          expect.stringContaining('/agents/agent-1'),
+          expect.objectContaining({
+            body: expect.objectContaining({ knowledgeRetrievalMode: 'every_turn' }),
+          })
+        );
+      });
+    });
+
+    it('choosing "Force on keywords" reveals the trigger-keywords input and splits it into an array', async () => {
+      const { apiClient } = await import('@/lib/api/client');
+      vi.mocked(apiClient.patch).mockResolvedValue({ id: 'agent-1' });
+
+      const user = userEvent.setup();
+      const agent = makeAgent({ knowledgeRetrievalMode: 'model' });
+      render(
+        <AgentForm mode="edit" agent={agent} providers={MOCK_PROVIDERS} models={MOCK_MODELS} />
+      );
+
+      await user.click(screen.getByRole('tab', { name: /instructions/i }));
+
+      // The trigger-keywords input is gated behind the 'keywords' mode (line 1649)
+      expect(screen.queryByRole('textbox', { name: /trigger keywords/i })).not.toBeInTheDocument();
+
+      const retrievalSelect = screen.getByRole('combobox', { name: /knowledge retrieval/i });
+      await user.click(retrievalSelect);
+      await user.click(await screen.findByRole('option', { name: /force on keywords/i }));
+
+      // Conditional input now rendered (covers the register() at line 1662)
+      const keywordsInput = await screen.findByRole('textbox', { name: /trigger keywords/i });
+      await user.type(keywordsInput, 'refund, warranty , returns');
+
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+      await waitFor(() => {
+        expect(apiClient.patch).toHaveBeenCalledWith(
+          expect.stringContaining('/agents/agent-1'),
+          expect.objectContaining({
+            body: expect.objectContaining({
+              knowledgeRetrievalMode: 'keywords',
+              // serializer trims and drops empties (agent-form.tsx lines 441-446)
+              knowledgeTriggerKeywords: ['refund', 'warranty', 'returns'],
+            }),
+          })
+        );
+      });
+    });
+
+    it('hydrates an existing keywords agent and round-trips its trigger words', async () => {
+      const { apiClient } = await import('@/lib/api/client');
+      vi.mocked(apiClient.patch).mockResolvedValue({ id: 'agent-1' });
+
+      const user = userEvent.setup();
+      const agent = makeAgent({
+        knowledgeRetrievalMode: 'keywords',
+        knowledgeTriggerKeywords: ['refund', 'warranty'],
+      });
+      render(
+        <AgentForm mode="edit" agent={agent} providers={MOCK_PROVIDERS} models={MOCK_MODELS} />
+      );
+
+      await user.click(screen.getByRole('tab', { name: /instructions/i }));
+
+      // Existing keyword mode hydrates the joined string into the visible input
+      const keywordsInput = await screen.findByRole('textbox', { name: /trigger keywords/i });
+      expect(keywordsInput).toHaveValue('refund, warranty');
+
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+      await waitFor(() => {
+        expect(apiClient.patch).toHaveBeenCalledWith(
+          expect.stringContaining('/agents/agent-1'),
+          expect.objectContaining({
+            body: expect.objectContaining({
+              knowledgeRetrievalMode: 'keywords',
+              knowledgeTriggerKeywords: ['refund', 'warranty'],
+            }),
+          })
+        );
+      });
     });
   });
 
