@@ -32,7 +32,7 @@ pending → processing → ready
 | `ready`          | Chunks and embeddings persisted; searchable       |
 | `failed`         | Chunking/embedding error; retry via rechunk       |
 
-## 6-Step Setup Process
+## 7-Step Setup Process
 
 ### Step 1: Ensure an embedding-capable model is available
 
@@ -178,7 +178,22 @@ PATCH /api/v1/admin/orchestration/agents/{id}
 
 Categories are set at upload time and cannot be changed after chunking.
 
-### Step 6: Enable search_knowledge_base capability
+### Step 6: Pick a retrieval mode (PR #260)
+
+`AiAgent.knowledgeRetrievalMode` controls when the search runs. Four values:
+
+| Mode         | When retrieval runs                                                                                                                                                      | When to use                                                                            |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `model`      | The LLM decides whether to invoke `search_knowledge_base` as a tool call (default)                                                                                       | Standard chat where the agent should self-direct retrieval                             |
+| `first_turn` | Force one retrieval on the conversation's first user turn                                                                                                                | Onboarding / docs-grounded greeting where context must be primed before the LLM speaks |
+| `every_turn` | Force retrieval on every user turn                                                                                                                                       | Strict citation regimes where every answer must be evidence-cited                      |
+| `keywords`   | Force retrieval **only** when the user message matches any entry in `knowledgeTriggerKeywords` (whole-word, case-insensitive — regex-escaped so phrases match literally) | Cost-sensitive deployments where most messages don't need KB lookup                    |
+
+`knowledgeTriggerKeywords` is a `String[]` column. **Required and non-empty when `knowledgeRetrievalMode = 'keywords'`** — Zod validation refuses an empty array in that mode (PR #260 fix, see `lib/validations/orchestration.ts`).
+
+In the admin agent form's Knowledge tab the mode is a radio group; the keywords field is conditionally shown when `keywords` is selected. Retrievals in any forced mode are surfaced to end users as inline citation pills in chat via the `message-with-citations` component.
+
+### Step 7: Enable search_knowledge_base capability
 
 The `search_knowledge_base` capability is built-in (`isSystem: true`). Bind it to the agent:
 

@@ -279,7 +279,7 @@ Missing env var → `invalid_binding` for the capability path, `ExecutorError('m
 
 ## Built-in Capabilities (do not recreate)
 
-These 12 capabilities ship as `isSystem: true` — bind them to agents, never recreate:
+These 13 capabilities ship as `isSystem: true` — bind them to agents, never recreate:
 
 | Slug                         | Purpose                                                         |
 | ---------------------------- | --------------------------------------------------------------- |
@@ -290,6 +290,7 @@ These 12 capabilities ship as `isSystem: true` — bind them to agents, never re
 | `write_user_memory`          | Per-user persistent memory write                                |
 | `escalate_to_human`          | Human-in-the-loop escalation (helpdesk webhook)                 |
 | `call_external_api`          | Recipe-driven HTTP integration (Postmark, Stripe, Slack, etc.)  |
+| `send_message_to_channel`    | Post a message to a configured channel (Slack/Discord/Teams)    |
 | `run_workflow`               | Chat agent triggers a workflow (with optional in-chat approval) |
 | `upload_to_storage`          | Upload base64 payloads to S3 / Vercel Blob / local              |
 | `apply_audit_changes`        | Apply approved model audit field changes                        |

@@ -45,7 +45,7 @@ lib/orchestration/           ← Platform-agnostic core (NO Next.js imports)
 │   └── built-in/            ← System capabilities (knowledge search, memory, etc.)
 ├── chat/                    ← Streaming handler, context builder, guards
 ├── engine/                  ← Runtime executor, event stream
-│   └── executors/           ← 15 step type executors
+│   └── executors/           ← 19 step type executors
 ├── evaluations/             ← Evaluation session completion
 ├── hooks/                   ← Event hook dispatch, delivery tracking
 ├── knowledge/               ← Document ingestion, chunking, embeddings, search
@@ -254,23 +254,29 @@ Every step carries an optional `description` (≤500 chars, trimmed) that is cap
 
 `guard` runs in three modes: `llm` (model evaluates rules), `regex` (pattern match against `JSON.stringify(ctx.inputData)`), and **`schema`** — Zod-schema validation via `schemaName` looked up in `lib/orchestration/schemas/registry.ts`, with an optional `inputStepId` to validate the named step's output instead of the workflow input. Schema mode is deterministic, zero-LLM-cost, and surfaces full Zod `issues` arrays so a downstream retry can interpolate precise failure paths into the next prompt. The provider-model-audit workflow's `validate_proposals` step is the first adopter.
 
-| Step Type          | Purpose                                    |
-| ------------------ | ------------------------------------------ |
-| `llm_call`         | Generate text from an LLM                  |
-| `tool_call`        | Invoke a registered capability             |
-| `condition`        | Branch based on expression evaluation      |
-| `parallel`         | Execute multiple branches concurrently     |
-| `loop`             | Repeat steps with exit conditions          |
-| `transform`        | Data transformation between steps          |
-| `human_approval`   | Pause for human review and approval        |
-| `agent_call`       | Delegate to another agent                  |
-| `orchestrator`     | Planner LLM decides next steps dynamically |
-| `external_call`    | HTTP request to external service           |
-| `knowledge_search` | Query the knowledge base                   |
-| `code_eval`        | Evaluate expressions                       |
-| `wait`             | Timed delay                                |
-| `notify`           | Send notification/webhook                  |
-| `aggregate`        | Combine results from parallel branches     |
+The canonical list lives in `KNOWN_STEP_TYPES` (`types/orchestration.ts`); registered executors are in `lib/orchestration/engine/executors/`. Nineteen step types ship:
+
+| Step Type           | Purpose                                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `llm_call`          | Single model call against a prompt                                                                          |
+| `tool_call`         | Invoke a registered capability                                                                              |
+| `chain`             | Sequential LLM calls with validation between steps                                                          |
+| `route`             | Classify input and branch to one of several targets                                                         |
+| `parallel`          | Execute multiple branches concurrently with a straggler strategy                                            |
+| `reflect`           | Draft → critique → revise loop bounded by `maxIterations`                                                   |
+| `plan`              | Agent generates its own DAG of sub-steps                                                                    |
+| `human_approval`    | Pause for human review; resumed by approval-queue action                                                    |
+| `rag_retrieve`      | Search the knowledge base; returns top-k chunks                                                             |
+| `guard`             | Safety gate in `llm`, `regex`, or **`schema`** mode (deterministic Zod validation)                          |
+| `evaluate`          | Score one step's output against a rubric                                                                    |
+| `judge_call`        | Drive a configured judge agent inline; gates on `passed: boolean` (`score >= threshold`) — added PR #250    |
+| `external_call`     | HTTP request with optional Bearer / API-key / Basic / HMAC auth and idempotency keys                        |
+| `agent_call`        | Invoke a configured agent with its full tool loop                                                           |
+| `chat_turn`         | Append a turn to a persisted conversation (multi-turn memory in workflows) — added PR #250                  |
+| `send_notification` | Email / webhook delivery                                                                                    |
+| `orchestrator`      | Planner LLM dynamically delegates to other agents over N rounds                                             |
+| `supervisor`        | Independent post-hoc audit by a judge model — emits an evidence-cited verdict over the full execution trace |
+| `report`            | Deterministic Markdown render of the execution trace — no LLM, no opinion                                   |
 
 ### 5.3 Error Strategies
 
@@ -485,6 +491,7 @@ Multi-format document processing pipeline:
 - **Hybrid retrieval (default)**: BM25-flavoured (`ts_rank_cd` over a generated `tsvector` column with a GIN index) blended with pgvector cosine similarity via admin-tunable `vectorWeight` × vector + `bm25Weight` × keyword weights, gated by `searchConfig.hybridEnabled`. Three-segment score breakdown surfaced through the API.
 - **Vector-only mode**: Preserved as the legacy fallback when hybrid is disabled
 - **Agent scoping**: `knowledgeAccessMode` on agent (`full` / `restricted`) combined with `KnowledgeTag` grants and per-document grants restricts which chunks are searchable, resolved per query by `resolveAgentDocumentAccess` with a 60 s LRU cache and invalidated on grant mutations
+- **Retrieval mode** (`AiAgent.knowledgeRetrievalMode`, added May 2026 — PR #260): `model` (LLM-driven tool call — default), `first_turn` (forced on the first user turn of a conversation), `every_turn` (forced on every user turn), or `keywords` (forced when the user message matches any entry in `knowledgeTriggerKeywords`, whole-word case-insensitive). Forced retrievals surface to end users as inline citations in chat via `message-with-citations`. Validation refuses an empty keyword array when the mode is `keywords`.
 - **Search configuration**: Tunable via global settings (vector weight, BM25 weight, result count, hybrid on/off)
 - **Knowledge graph**: Relationship mapping between documents and concepts
 
@@ -529,6 +536,16 @@ Settings, tools browser, resources browser, sessions, audit log, API key managem
 - DB-backed schedule definitions (`AiWorkflowSchedule`) with cron expressions
 - Unified maintenance tick endpoint processes due schedules
 - Schedule ↔ workflow binding
+- **Dev in-process ticker** (PR #259, May 2026): `instrumentation.ts` arms a 60 s `setInterval` calling `runMaintenanceTick()` directly when `NODE_ENV === 'development'`. First fire ~3 s after server startup. Opt-out via `SUNRISE_DISABLE_DEV_TICK=1`. Production deploys still drive the tick via an external cron — unaffected.
+
+### 9.1a Retention Purge (data lifecycle)
+
+The maintenance tick also enforces retention windows on terminal rows via `enforceRetentionPolicies()` in `lib/orchestration/retention.ts` (PR #257, May 2026 — extending earlier conversation/cost-log/audit-log pruning):
+
+- `pruneExecutions()` — terminal `AiWorkflowExecution` (`completed` / `failed` / `cancelled`) past `executionRetentionDays`. Cascade removes steps, dispatches, lease events, per-step cost logs, and inbound-trigger payloads. **Running / pending / paused-for-approval rows are never aged out.**
+- `pruneEvaluationData()` — terminal `AiEvaluationSession` (`completed` / `archived`) and `AiEvaluationRun` (`completed` / `failed` / `cancelled`) past `evaluationRetentionDays`. Cases / logs cascade; experiment-variant links and rescore lineage are `SetNull` so pruning never breaks a retained experiment.
+- `pruneMcpAuditLogs()` — enforces the previously-dead `McpServerConfig.auditRetentionDays` (always-on with a 90-day default).
+- Keep `evaluationRetentionDays ≤ executionRetentionDays` — eval runs JSON-reference the executions they tested, so a longer eval window would leave dangling links. Surfaced as guidance in the Retention card's `FieldHelp`.
 
 ### 9.2 Webhook Subscriptions
 
@@ -635,6 +652,26 @@ Per-log scores persist on `AiEvaluationLog.{faithfulnessScore,groundednessScore,
 ### 12.3 Evaluation API (6 routes)
 
 CRUD for sessions, log retrieval, AI-assisted completion (summary + scoring), re-score on completed sessions, and per-agent evaluation-trend.
+
+### 12.4 Dataset-driven evaluation runs (Phases 1–4, shipped May 2026)
+
+A second evaluation surface alongside conversation-time scoring: queue an `AiEvaluationRun` against an `AiEvaluationDataset` and let a worker drive the subject (agent or workflow), grade each case with a registered grader, and emit pass/fail.
+
+- **Subjects** (PR #250 — Phase 3): polymorphic — an `AiAgent` or an `AiWorkflow`. Workflow subjects load the published version, run the engine, and resolve outputs via `subjectOutputSelector` (`finalReport` / `lastStep` / specific step ID).
+- **Datasets** (PRs #237, #259): created by upload (CSV / JSONL parsers), KB sampling, failure-seed synthesis, or **cold-start "Generate from description"** (Phase 3.6 — 20–1000 char prompt + optional anchor inputs). Cases are editable post-commit; the dataset's `contentHash` rolls and past runs remain pinned because `AiEvaluationRun.datasetContentHash` was snapshotted at queue time.
+- **Graders** (built into a registry):
+  - _Heuristic_ — `exact_match`, `regex`, `tool_was_called`, `contains` (case slug picker now reads agent capabilities, PR #259).
+  - _Model_ — `judge_agent` (single judge agent), `workflow_as_judge` (full workflow as the judge — PR #250).
+  - _Pairwise_ — `pairwise_judge_agent` (PR #250) — first pairwise grader; refused on standalone runs.
+- **Cost** (PR #260 — Phase 3.5b): the cost estimator walks the workflow DAG (`evaluation-cost.ts`) instead of using a flat per-run heuristic, surfaced on the run-create form.
+- **Trajectory diagnostics** (PR #259): per-case dialog shows `Tool calls (N)` (slug + args + success/error + latency) and `Citations (N)` sourced from `subjectMetadata`, closing the "`tool_was_called` scored 0/N — why?" loop.
+- **Pairwise verdicts** (PR #260 — Phase 3.5a): the experiment compare page surfaces side-by-side verdict badges via a new `/experiments/[id]/verdicts` endpoint and `PairwiseVerdictCard`.
+- **CI gate** (PR #260 — Phase 4): `lib/orchestration/evaluations/gate.ts` decides pass/fail from run results; eval-run endpoints accept API-key auth.
+- **In-process dev ticker** (PR #259): `instrumentation.ts` fires the maintenance tick every 60 s in `NODE_ENV=development` so queued runs drain without an external cron; opt-out via `SUNRISE_DISABLE_DEV_TICK=1`.
+- **Three new Ragas-style judge agents** seeded (PR #250): `eval-judge-context-precision`, `eval-judge-context-recall`, `eval-judge-answer-similarity`.
+- **Cost-log tagging**: every per-step `AiCostLog` row carries `{ evaluationRunId, role: 'subject' | 'judge', judgeWorkflowSlug? }` so per-run cost decomposes cleanly.
+
+See [`evaluations.md`](../evaluations.md) for the data model and grader registry.
 
 ---
 

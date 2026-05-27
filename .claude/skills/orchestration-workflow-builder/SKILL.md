@@ -5,7 +5,7 @@ description: |
   pipelines as workflow DAGs — routing requests to different agents, chaining
   LLM calls, adding human approval gates, running parallel branches, integrating
   RAG retrieval, and bolting on post-hoc supervisor audit + deterministic
-  Markdown reporting. Uses 17 step types, template interpolation, error
+  Markdown reporting. Uses 19 step types, template interpolation, error
   strategies, run-time toggles, and budget enforcement. Use when building
   multi-step agent pipelines, adding approval flows, connecting multiple agents
   in a sequence, or adding an honest end-of-workflow audit.
@@ -30,7 +30,7 @@ interface WorkflowStep {
   id: string; // Unique within the workflow
   name: string; // Human-readable label
   description?: string; // Optional ≤500-char operator-facing note
-  type: WorkflowStepType; // One of 17 step types
+  type: WorkflowStepType; // One of 19 step types
   config: Record<string, unknown>; // Type-specific configuration
   nextSteps: ConditionalEdge[]; // Outgoing edges
 }
@@ -41,26 +41,28 @@ interface ConditionalEdge {
 }
 ```
 
-## 17 Step Types
+## 19 Step Types
 
 ### Agent Steps
 
-| Type         | Purpose                              | Key Config                                  |
-| ------------ | ------------------------------------ | ------------------------------------------- |
-| `llm_call`   | Single model call — the basic unit   | `prompt`, `modelOverride`, `temperature`    |
-| `chain`      | Sequential LLM calls with validation | `steps` (sub-steps array)                   |
-| `reflect`    | Draft, critique, revise loop         | `critiquePrompt`, `maxIterations`           |
-| `plan`       | Agent generates its own sub-plan     | `objective`, `maxSubSteps`                  |
-| `agent_call` | Invoke a configured agent            | `agentSlug`, `message`, `maxToolIterations` |
+| Type         | Purpose                                                       | Key Config                                                                   |
+| ------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `llm_call`   | Single model call — the basic unit                            | `prompt`, `modelOverride`, `temperature`                                     |
+| `chain`      | Sequential LLM calls with validation                          | `steps` (sub-steps array)                                                    |
+| `reflect`    | Draft, critique, revise loop                                  | `critiquePrompt`, `maxIterations`                                            |
+| `plan`       | Agent generates its own sub-plan                              | `objective`, `maxSubSteps`                                                   |
+| `agent_call` | Invoke a configured agent                                     | `agentSlug`, `message`, `maxToolIterations`                                  |
+| `chat_turn`  | Append a turn to a persisted conversation (multi-turn memory) | `conversationId`, `agentSlug?`, `message`, `historyLimit`, `persistMessages` |
 
 ### Decision Steps
 
-| Type             | Purpose                                | Key Config                                                                                                                    |
-| ---------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `route`          | Classify input and branch              | `classificationPrompt`, `routes`                                                                                              |
-| `human_approval` | Pause for human review                 | `prompt` (required), `timeoutMinutes`                                                                                         |
-| `guard`          | Safety gate (LLM / regex / **schema**) | `rules` (LLM/regex) **or** `schemaName` (schema), `mode` (`llm`/`regex`/`schema`), `failAction`, `inputStepId?` (schema only) |
-| `evaluate`       | Score output against rubric            | `rubric`, `scaleMin`, `scaleMax`, `threshold`                                                                                 |
+| Type             | Purpose                                                 | Key Config                                                                                                                    |
+| ---------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `route`          | Classify input and branch                               | `classificationPrompt`, `routes`                                                                                              |
+| `human_approval` | Pause for human review                                  | `prompt` (required), `timeoutMinutes`                                                                                         |
+| `guard`          | Safety gate (LLM / regex / **schema**)                  | `rules` (LLM/regex) **or** `schemaName` (schema), `mode` (`llm`/`regex`/`schema`), `failAction`, `inputStepId?` (schema only) |
+| `evaluate`       | Score output against rubric                             | `rubric`, `scaleMin`, `scaleMax`, `threshold`                                                                                 |
+| `judge_call`     | Drive a judge agent inline; route on `passed` (PR #250) | `judgeAgentSlug`, `question`, `answer`, `expectedOutput?`, `threshold?`                                                       |
 
 ### Input Steps
 
@@ -110,13 +112,14 @@ When you scaffold a workflow that includes either step, mention the toggle in th
 
 The four "evaluation-family" step types overlap; pick by **scope** and **lineage**:
 
-| Step         | Scope                  | Lineage                                     | When to reach for it                                                      |
-| ------------ | ---------------------- | ------------------------------------------- | ------------------------------------------------------------------------- |
-| `evaluate`   | One step's output      | Workflow's own model (or `modelOverride`)   | Gate a single step's output (e.g. "is this draft good enough to proceed") |
-| `reflect`    | One draft, in-step     | Workflow's own model                        | Same model self-critiques until convergence (no independent judgment)     |
-| `guard`      | One step's output      | LLM / regex / deterministic Zod schema      | Binary pass/fail rule check before the next step                          |
-| `supervisor` | Entire execution trace | Independent judge model (`JUDGE_MODEL` env) | Honest end-of-workflow audit with evidence-cited weaknesses               |
-| `report`     | Entire execution trace | None (deterministic — no LLM)               | Human-readable structured narration for email / download                  |
+| Step         | Scope                  | Lineage                                     | When to reach for it                                                                                                                  |
+| ------------ | ---------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `evaluate`   | One step's output      | Workflow's own model (or `modelOverride`)   | Gate a single step's output (e.g. "is this draft good enough to proceed")                                                             |
+| `judge_call` | One QA pair (Q + A)    | Named **judge agent** (`judgeAgentSlug`)    | Drive a fully-configured judge agent inline; gates on `passed: boolean` (`score >= threshold`) so downstream `route` can branch on it |
+| `reflect`    | One draft, in-step     | Workflow's own model                        | Same model self-critiques until convergence (no independent judgment)                                                                 |
+| `guard`      | One step's output      | LLM / regex / deterministic Zod schema      | Binary pass/fail rule check before the next step                                                                                      |
+| `supervisor` | Entire execution trace | Independent judge model (`JUDGE_MODEL` env) | Honest end-of-workflow audit with evidence-cited weaknesses                                                                           |
+| `report`     | Entire execution trace | None (deterministic — no LLM)               | Human-readable structured narration for email / download                                                                              |
 
 ### Pick the right `guard` mode
 
@@ -218,14 +221,16 @@ Pure function, no DB. Checks in order:
 
 ### Required config (backend-enforced)
 
-| Step Type        | Required Field                                                            | Error Code                |
-| ---------------- | ------------------------------------------------------------------------- | ------------------------- |
-| `human_approval` | `config.prompt`                                                           | `MISSING_APPROVAL_PROMPT` |
-| `tool_call`      | `config.capabilitySlug`                                                   | `MISSING_CAPABILITY_SLUG` |
-| `guard`          | `config.rules`                                                            | `MISSING_GUARD_RULES`     |
-| `evaluate`       | `config.rubric`                                                           | `MISSING_EVALUATE_RUBRIC` |
-| `external_call`  | `config.url` and one of `bodyTemplate` / `multipart` (mutually exclusive) | `MISSING_EXTERNAL_URL`    |
-| `agent_call`     | `config.agentSlug`                                                        | `MISSING_AGENT_SLUG`      |
+| Step Type        | Required Field                                                            | Error Code                                          |
+| ---------------- | ------------------------------------------------------------------------- | --------------------------------------------------- |
+| `human_approval` | `config.prompt`                                                           | `MISSING_APPROVAL_PROMPT`                           |
+| `tool_call`      | `config.capabilitySlug`                                                   | `MISSING_CAPABILITY_SLUG`                           |
+| `guard`          | `config.rules` (LLM/regex) **or** `config.schemaName` (schema)            | `MISSING_GUARD_RULES` / `MISSING_GUARD_SCHEMA_NAME` |
+| `evaluate`       | `config.rubric`                                                           | `MISSING_EVALUATE_RUBRIC`                           |
+| `external_call`  | `config.url` and one of `bodyTemplate` / `multipart` (mutually exclusive) | `MISSING_EXTERNAL_URL`                              |
+| `agent_call`     | `config.agentSlug`                                                        | `MISSING_AGENT_SLUG`                                |
+
+The newer `judge_call` and `chat_turn` step types validate their config at the Zod-schema layer (route / runtime), not via `validateWorkflow`. `judge_call` requires `judgeAgentSlug`, `question`, `answer` (templated); `chat_turn` requires `conversationId` and `message`. Reading the Zod schemas in `lib/validations/orchestration.ts` is the source of truth for exact shapes.
 
 ### Semantic validator (`semanticValidateWorkflow`)
 

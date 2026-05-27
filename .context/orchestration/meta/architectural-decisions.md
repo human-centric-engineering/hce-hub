@@ -791,6 +791,51 @@ This section covers how an agent actually executes — the structure of a workfl
 
 **Where it lives:** `prisma/schema.prisma` (`AiWorkflowExecution.parentExecutionId`), `app/api/v1/admin/orchestration/executions/[id]/rerun/route.ts`, `lib/orchestration/engine/orchestration-engine.ts` (threads `parentExecutionId` through the engine), `components/admin/orchestration/rerun-execution-dialog.tsx` (version chooser + SSE handoff), `.context/api/orchestration-endpoints.md` (POST /executions/:id/rerun reference).
 
+### 3.18 `judge_call` step type — inline judge agent inside a workflow
+
+**What is it?** A workflow step that drives a configured **judge agent** against a question/answer pair, lifts its score and reasoning, and emits `passed: boolean` (`score >= threshold`) so downstream `route` steps can branch on the verdict. Shipped May 2026 in PR #250 (Phase 3 of dataset-driven evaluations).
+
+**What we chose:** A first-class step type, separate from `evaluate` (single-step rubric scoring), `guard` (binary rule check), and `supervisor` (post-hoc judge over the full trace). Config: `judgeAgentSlug` (required), `question`, `answer` (both template-interpolated), `expectedOutput?`, `threshold?`. Reuses the Phase 1.5 prompt-assembly + JSON-envelope plumbing — extracted into a shared `lib/orchestration/evaluations/judge-driver.ts` so the eval worker and the in-workflow step share one path.
+
+**Alternatives**
+
+| Option                                              | Why not                                                                                                                                                                                                |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Re-use `evaluate` for judge-agent grading           | `evaluate` is single-model, single-rubric, single-step. Driving a fully-configured judge agent — with its system prompt, model, params, and prompt-assembly fragments — needs the agent resolver       |
+| Wrap as a `tool_call` to a `judge_agent` capability | Tool calls don't carry the prompt-template + threshold shape; this would push routing logic ("if score < threshold, branch to remediation") into capability code that doesn't get DAG-level visibility |
+| Use `supervisor` for inline gates                   | `supervisor` is end-of-execution by design (independent judge model, full trace as input). For per-step quality gates the unit of work is the QA pair, not the trace                                   |
+
+**Why this approach**
+
+- Workflows can now express "answer, then judge, then branch on the judge's verdict" as a three-step DAG (`agent_call → judge_call → route`) without the workflow author hand-wiring the JSON envelope.
+- Cost rows are tagged `role: 'judge'` automatically — per-run cost decomposes into subject + judge contributions.
+- The same step type is used inline in production workflows and as the engine for dataset-driven `judge_agent` graders, so the prompt shape stays consistent.
+
+**Where it lives:** `lib/orchestration/engine/executors/judge-call.ts`, `lib/orchestration/evaluations/judge-driver.ts` (shared), `components/admin/orchestration/workflow-builder/block-editors/judge-call-editor.tsx`, `types/orchestration.ts` (`KNOWN_STEP_TYPES`).
+
+### 3.19 `chat_turn` step type — persisted multi-turn conversations inside a workflow
+
+**What is it?** A workflow step that appends one user turn to a persisted `AiConversation`, drives the bound agent's full chat-handler tool loop, and writes the assistant turn back to the conversation. Shipped May 2026 alongside PR #250.
+
+**What we chose:** A dedicated step type rather than overloading `agent_call`. Conversations are first-class persistent objects with their own message history, citation envelopes, and provenance bundle; `agent_call` runs each invocation as a fresh single-turn dispatch with no carry-over. Treating the multi-turn case as its own step type keeps the trace, cost-log, and provenance shapes honest.
+
+**Config:** `conversationId` (required — the conversation to append to), `agentSlug?` (override the conversation's bound agent for this turn), `message` (templated), `historyLimit` (how many prior turns to feed the model), `persistMessages` (off for ephemeral side-conversations).
+
+**Alternatives**
+
+| Option                                            | Why not                                                                                                                                          |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Reuse `agent_call` with a `conversationId` knob   | The two shapes diverge enough — history fetch, message persistence, citation handling — that a single executor would grow a conditional skeleton |
+| Spin a workflow per conversation turn             | Loses the per-turn DAG visibility; the workflow author can't observe the conversation as one cohesive thing                                      |
+| Push conversation handling to a custom capability | Capabilities can't write to the conversation message stream; that's a chat-handler responsibility                                                |
+
+**Why this approach**
+
+- Workflows can now drive bots that hold context — onboarding sequences, multi-step interviews, scheduled follow-ups — without the author wiring the message-persistence machinery by hand.
+- Conversation provenance (per-message version pinning, citation hash snapshots) flows through unchanged because the underlying chat handler is the same one chat-side surfaces use.
+
+**Where it lives:** `lib/orchestration/engine/executors/chat-turn.ts`, `types/orchestration.ts` (`KNOWN_STEP_TYPES`).
+
 ---
 
 ## 4. Resilience and Cost Control
@@ -1186,6 +1231,29 @@ A short primer first: **RAG** (Retrieval-Augmented Generation) means giving the 
 - The provider list is open via the `AiProviderModel` registry — adding a new embedding provider is a registry entry plus a thin adapter, not a core change. (See §1.6 for the dependency-minimalism stance — we don't bundle every embedding vendor.)
 
 **Where it lives:** `lib/orchestration/llm/embedding-models.ts` (registry, dimension compatibility flags), `lib/orchestration/llm/voyage.ts`, `lib/orchestration/llm/openai-compatible.ts`, `prisma/schema.prisma` (`AiKnowledgeChunk.embedding`).
+
+### 5.11 Per-agent knowledge retrieval mode
+
+**What is it?** Until May 2026 every agent retrieved exactly the same way: the LLM decided, mid-tool-loop, whether to call `search_knowledge_base`. That's the right default for "ask the bot anything" surfaces, but it leaves three load-bearing cases ungoverned: (a) the very first user turn where a docs-grounded opener wants context primed before the model speaks, (b) strict citation regimes where every answer must be evidence-cited, and (c) cost-sensitive deployments where most messages don't need a KB lookup at all and the model-decided path burns tokens on the inevitable wrong call.
+
+**What we chose:** A `knowledgeRetrievalMode` enum on `AiAgent` with four values — `model` (default, LLM-driven tool call), `first_turn` (forced on the first user turn of a conversation), `every_turn` (forced on every user turn), `keywords` (forced only when the user message contains any entry in the `knowledgeTriggerKeywords` string array, whole-word case-insensitive with regex-escaping so phrases match literally). Forced retrievals are surfaced to end users as inline citations in chat. The streaming handler enforces the mode; the agent form's Knowledge tab carries the radio group and the conditional keyword editor. Shipped May 2026 in PR #260.
+
+**Alternatives**
+
+| Option                                                                  | Why not                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Push the decision into a workflow with `rag_retrieve` gating the prompt | Workflows are the right vehicle for non-trivial pipelines, but most chat-bound agents are a single agent record with no workflow. The retrieval policy should live on the same row as the agent so a non-engineer admin can pick "every turn" without scaffolding a DAG       |
+| Add a `customConfig` flag instead of a first-class column               | Loses Zod-validated semantics, doesn't surface in version diffs, and the agent-version diff machinery wouldn't catch "the retrieval policy changed" as a meaningful diff. First-class column means it's versioned, audited, and validated alongside `model` and `temperature` |
+| Expose mode-selection to the LLM via the tool description               | The model already has the tool description — the gap is _forcing_ retrieval the model would otherwise skip, or _suppressing_ the call the model would otherwise make. Both directions are out of reach via prompt nudges                                                      |
+
+**Why this approach**
+
+- The default (`model`) is unchanged — existing agents see no behaviour delta after the migration.
+- `keywords` mode lets cost-sensitive deployments cut embedding cost on the messages that obviously don't need a KB pass ("hi", "ok", "thanks") while still firing retrieval on substantive queries — without the LLM ever entering the tool loop.
+- `every_turn` mode is the explicit answer to "we operate in a regulated domain where every answer must be evidence-cited" — the citation guard then enforces what the retrieval mode primed.
+- Validation refuses an empty keyword array when the mode is `keywords` (Zod refine), failing closed at admin save time.
+
+**Where it lives:** `prisma/schema.prisma` (`AiAgent.knowledgeRetrievalMode`, `AiAgent.knowledgeTriggerKeywords`), `lib/orchestration/chat/streaming-handler.ts` (enforcement + whole-word matcher), `lib/orchestration/capabilities/built-in/search-knowledge.ts` (tool description tweak), `lib/orchestration/agents/resolve-effective-prompt.ts` (provenance surface), `lib/validations/orchestration.ts` (Zod refine), `components/admin/orchestration/agent-form.tsx` (Knowledge tab), `components/admin/orchestration/chat/message-with-citations.tsx` (chat surface).
 
 ---
 
