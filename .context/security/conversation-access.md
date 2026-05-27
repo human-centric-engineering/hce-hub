@@ -98,5 +98,5 @@ A `COMPLIANCE_OFFICER` role (separate from `ADMIN`) will be the named exception 
 
 - [Orchestration API endpoints](../api/orchestration-endpoints.md#conversations) — route reference
 - [`adminCanViewConversation`](../../lib/orchestration/access/conversation-access.ts) — authorization helper
-- [`AiConversationShare`](../../prisma/schema.prisma) — schema
+- [`AiConversationShare`](../../prisma/schema/) — schema
 - [PII redaction at the capability layer](./pii-redaction.md) — what's already redacted before any admin (even with consent) sees it

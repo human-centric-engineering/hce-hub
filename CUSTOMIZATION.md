@@ -137,7 +137,9 @@ Two principles keep an upgrade from upstream a clean merge instead of a fight:
 
 **Modifying the schema:**
 
-- Edit `prisma/schema.prisma`
+- Edit the schema in `prisma/schema/` — Sunrise's models are split into domain
+  files there; **put your own app models in `prisma/schema/app.prisma`** to keep
+  them clearly separate from the platform's
 - Add/modify models as needed
 - Create + apply a migration: `npm run db:migrate:dev` (dev) /
   `npm run db:migrate:deploy` (prod / CI)
@@ -152,7 +154,7 @@ Two principles keep an upgrade from upstream a clean merge instead of a fight:
 
 **Adding fields to the User model:**
 
-- Edit the `User` model in `prisma/schema.prisma`
+- Edit the `User` model in `prisma/schema/`
 - Run `npm run db:migrate:dev`
 - Update API types: `types/index.ts` → `PublicUser` interface
 - Update forms if needed: `components/forms/`

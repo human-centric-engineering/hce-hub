@@ -569,7 +569,7 @@ This section covers how an agent actually executes — the structure of a workfl
 - Read and write are separate capabilities, so an agent can be granted read-only memory access.
 - The 50-row read cap prevents unbounded prompt growth on power users.
 
-**Where it lives:** `lib/orchestration/capabilities/built-in/user-memory.ts`, `prisma/schema.prisma` (`AiUserMemory`).
+**Where it lives:** `lib/orchestration/capabilities/built-in/user-memory.ts`, `prisma/schema/` (`AiUserMemory`).
 
 ### 3.9 Workflow templates and dry-run mode
 
@@ -642,7 +642,7 @@ This section covers how an agent actually executes — the structure of a workfl
 - **Migration is non-destructive.** The Prisma migration (`20260516120000_add_deployment_profiles`) adds the new column with a default, then UPDATEs `local_sovereign` rows to `tierRole='worker'` + `deploymentProfiles=['sovereign']`. No rows lost; `tierRole` is a String column (not a Postgres enum), so the narrowing is application-layer only.
 - **Future expansion is structurally cheap.** Adding `edge` or `air_gapped` to `DEPLOYMENT_PROFILES` is an array-value addition, not an enum split.
 
-**Where it lives:** `prisma/schema.prisma` (`deploymentProfiles String[] @default(["hosted"])`), `prisma/migrations/20260516120000_add_deployment_profiles/`, `types/orchestration.ts` (`TIER_ROLES`, `DEPLOYMENT_PROFILES`, `TIER_ROLE_META`, `DEPLOYMENT_PROFILE_META`), `lib/orchestration/model-audit/enums.ts`, `lib/validations/orchestration.ts` (`tierRoleSchema`, `deploymentProfilesSchema`), `lib/orchestration/llm/model-heuristics.ts` (`deriveTierRole` + new `deriveDeploymentProfiles`), `lib/orchestration/llm/provider-selector.ts` (sovereign-aware `private` scoring branch), `lib/orchestration/llm/db-model-adapter.ts` (`mapTierRoleToTier` honours the override), `prisma/seeds/009-provider-models.ts` (three rows reclassified), `prisma/seeds/data/templates/provider-model-audit.ts` (two-axis producer prompts + Rule 10), `components/admin/orchestration/provider-model-form.tsx` (new deployment-profile control). The canonical doc is the matrix reference at `.context/orchestration/provider-selection-matrix.md` plus the audit guide at `.context/admin/orchestration-provider-audit-guide.md`.
+**Where it lives:** `prisma/schema/` (`deploymentProfiles String[] @default(["hosted"])`), `prisma/migrations/20260516120000_add_deployment_profiles/`, `types/orchestration.ts` (`TIER_ROLES`, `DEPLOYMENT_PROFILES`, `TIER_ROLE_META`, `DEPLOYMENT_PROFILE_META`), `lib/orchestration/model-audit/enums.ts`, `lib/validations/orchestration.ts` (`tierRoleSchema`, `deploymentProfilesSchema`), `lib/orchestration/llm/model-heuristics.ts` (`deriveTierRole` + new `deriveDeploymentProfiles`), `lib/orchestration/llm/provider-selector.ts` (sovereign-aware `private` scoring branch), `lib/orchestration/llm/db-model-adapter.ts` (`mapTierRoleToTier` honours the override), `prisma/seeds/009-provider-models.ts` (three rows reclassified), `prisma/seeds/data/templates/provider-model-audit.ts` (two-axis producer prompts + Rule 10), `components/admin/orchestration/provider-model-form.tsx` (new deployment-profile control). The canonical doc is the matrix reference at `.context/orchestration/provider-selection-matrix.md` plus the audit guide at `.context/admin/orchestration-provider-audit-guide.md`.
 
 ### 3.12 Conversation provenance — per-message version pinning + PII redaction
 
@@ -667,7 +667,7 @@ This section covers how an agent actually executes — the structure of a workfl
 - **Registry-time PII enforcement is structurally honest.** A capability author who forgets to set `processesPii` correctly gets a registration-time error rather than a runtime audit miss. Stronger guarantee than the original spec implied.
 - **Composes with §3.10 (workflow-step provenance), not duplicates it.** Two surfaces, one vocabulary — chat turns get per-message version + citation pinning; workflow step outputs get per-claim attribution. A deployment that uses both gets both.
 
-**Where it lives:** `prisma/schema.prisma` (`AiMessage` provenance columns, `AiConversationShare`), `lib/orchestration/trace/render-conversation-markdown.ts` (`renderConversationMarkdown`), `app/api/v1/admin/orchestration/conversations/[id]/provenance/route.ts` + `.../provenance.md/route.ts`, `lib/orchestration/capabilities/base-capability.ts` (`processesPii` + `redactProvenance` hook), `lib/orchestration/capabilities/dispatcher.ts` (registry-time enforcement of the pairing), `lib/security/redact.ts`, `lib/orchestration/access/conversation-access.ts` (`adminCanViewConversation`, `logConversationAccess`), `components/admin/orchestration/conversation-trace-viewer.tsx` (version pills + provenance download), `.context/security/conversation-access.md`, `.context/security/pii-redaction.md`.
+**Where it lives:** `prisma/schema/` (`AiMessage` provenance columns, `AiConversationShare`), `lib/orchestration/trace/render-conversation-markdown.ts` (`renderConversationMarkdown`), `app/api/v1/admin/orchestration/conversations/[id]/provenance/route.ts` + `.../provenance.md/route.ts`, `lib/orchestration/capabilities/base-capability.ts` (`processesPii` + `redactProvenance` hook), `lib/orchestration/capabilities/dispatcher.ts` (registry-time enforcement of the pairing), `lib/security/redact.ts`, `lib/orchestration/access/conversation-access.ts` (`adminCanViewConversation`, `logConversationAccess`), `components/admin/orchestration/conversation-trace-viewer.tsx` (version pills + provenance download), `.context/security/conversation-access.md`, `.context/security/pii-redaction.md`.
 
 ### 3.13 Agent profile inheritance — shared persona / voice / guardrails
 
@@ -692,7 +692,7 @@ This section covers how an agent actually executes — the structure of a workfl
 - **Resolved at dispatch, not at save.** Profile changes propagate without rewriting agent rows. The agent versioning surface stays focused on agent-level changes; profile changes are versioned on the profile.
 - **Audit and version coverage match the agent model.** Profiles ship with the same `isSystem` protection, audit-log coverage, and admin CRUD surface as agents.
 
-**Where it lives:** `prisma/schema.prisma` (`AiAgentProfile` + `AiAgent.profileId` / `*Mode` columns), `lib/orchestration/agents/resolve-effective-prompt.ts` (`resolveEffectivePrompt` + `composeSystemPromptString`), `lib/orchestration/chat/message-builder.ts` (chat surface integration), `lib/orchestration/engine/executors/agent-call.ts` (workflow surface integration), `app/api/v1/admin/orchestration/agent-profiles/` (CRUD), `app/admin/orchestration/agent-profiles/` (admin pages + sidebar), `.context/admin/orchestration-agent-profiles.md`, `.context/orchestration/agent-profiles.md`.
+**Where it lives:** `prisma/schema/` (`AiAgentProfile` + `AiAgent.profileId` / `*Mode` columns), `lib/orchestration/agents/resolve-effective-prompt.ts` (`resolveEffectivePrompt` + `composeSystemPromptString`), `lib/orchestration/chat/message-builder.ts` (chat surface integration), `lib/orchestration/engine/executors/agent-call.ts` (workflow surface integration), `app/api/v1/admin/orchestration/agent-profiles/` (CRUD), `app/admin/orchestration/agent-profiles/` (admin pages + sidebar), `.context/admin/orchestration-agent-profiles.md`, `.context/orchestration/agent-profiles.md`.
 
 ### 3.14 LLM parameter profile + per-agent / per-step `reasoningEffort`
 
@@ -717,7 +717,7 @@ This section covers how an agent actually executes — the structure of a workfl
 - **`requestParams` capture closes the debug loop.** The trace viewer surfaces what went over the wire; admins don't need provider-log access to verify their override.
 - **`paramProfile` as a registry value, not a code branch.** Provider-specific request-shape construction lives on the model row, not in branchy executor code. New profile = new enum value + new request builder; existing executors untouched.
 
-**Where it lives:** `prisma/schema.prisma` (`AiAgent.reasoningEffort`, `AiProviderModel.paramProfile`), `lib/orchestration/llm/types.ts` (`ParamProfile` discriminator + per-profile request shapes), `lib/orchestration/llm/anthropic.ts` / `openai-compatible.ts` (per-profile request builders), `lib/orchestration/llm/model-heuristics.ts` (`paramProfile` resolution), `lib/orchestration/llm/db-model-adapter.ts` (paramProfile honoured on the resolved model), `lib/orchestration/engine/executors/*.ts` (every LLM-bearing executor threads `reasoningEffort` + records `requestParams`), `lib/orchestration/engine/llm-runner.ts` (shared call site that captures `requestParams` onto the telemetry buffer), `lib/validations/orchestration.ts` (`paramProfileSchema`, `reasoningEffort` on agent + step schemas), `.context/orchestration/llm-providers.md`.
+**Where it lives:** `prisma/schema/` (`AiAgent.reasoningEffort`, `AiProviderModel.paramProfile`), `lib/orchestration/llm/types.ts` (`ParamProfile` discriminator + per-profile request shapes), `lib/orchestration/llm/anthropic.ts` / `openai-compatible.ts` (per-profile request builders), `lib/orchestration/llm/model-heuristics.ts` (`paramProfile` resolution), `lib/orchestration/llm/db-model-adapter.ts` (paramProfile honoured on the resolved model), `lib/orchestration/engine/executors/*.ts` (every LLM-bearing executor threads `reasoningEffort` + records `requestParams`), `lib/orchestration/engine/llm-runner.ts` (shared call site that captures `requestParams` onto the telemetry buffer), `lib/validations/orchestration.ts` (`paramProfileSchema`, `reasoningEffort` on agent + step schemas), `.context/orchestration/llm-providers.md`.
 
 ### 3.15 Optional step `description` carried onto every trace entry
 
@@ -789,7 +789,7 @@ This section covers how an agent actually executes — the structure of a workfl
 - **Lineage is a first-class column.** A future "history of reruns" view is a single FK traversal, not a stitching job.
 - **Per-step rerun stays open as a forward path.** The current granule is the whole execution; the more expensive per-step case is documented as a follow-up.
 
-**Where it lives:** `prisma/schema.prisma` (`AiWorkflowExecution.parentExecutionId`), `app/api/v1/admin/orchestration/executions/[id]/rerun/route.ts`, `lib/orchestration/engine/orchestration-engine.ts` (threads `parentExecutionId` through the engine), `components/admin/orchestration/rerun-execution-dialog.tsx` (version chooser + SSE handoff), `.context/api/orchestration-endpoints.md` (POST /executions/:id/rerun reference).
+**Where it lives:** `prisma/schema/` (`AiWorkflowExecution.parentExecutionId`), `app/api/v1/admin/orchestration/executions/[id]/rerun/route.ts`, `lib/orchestration/engine/orchestration-engine.ts` (threads `parentExecutionId` through the engine), `components/admin/orchestration/rerun-execution-dialog.tsx` (version chooser + SSE handoff), `.context/api/orchestration-endpoints.md` (POST /executions/:id/rerun reference).
 
 ### 3.18 `judge_call` step type — inline judge agent inside a workflow
 
@@ -884,7 +884,7 @@ These four decisions are the operational backbone: keeping a working system work
 - Cost-sensitive agents can specify "Anthropic Sonnet, then Haiku, then Mistral Small" — quality first, then cheaper.
 - Compliance-sensitive agents can specify a single private provider with no fallback at all.
 
-**Where it lives:** `lib/orchestration/llm/provider-manager.ts`, agent configuration in `prisma/schema.prisma` (`AiAgent.fallbackProviders`), `.context/orchestration/resilience.md`.
+**Where it lives:** `lib/orchestration/llm/provider-manager.ts`, agent configuration in `prisma/schema/` (`AiAgent.fallbackProviders`), `.context/orchestration/resilience.md`.
 
 ### 4.3 Budget enforcement inside the execution loop
 
@@ -1025,7 +1025,7 @@ A short primer first: **RAG** (Retrieval-Augmented Generation) means giving the 
 - A document, its chunks, and its embeddings are joined in one query without crossing a network boundary.
 - The performance ceiling of `pgvector` is well above the scale most Sunrise deployments need; teams that hit it can add a dedicated index without rearchitecting the application.
 
-**Where it lives:** `lib/orchestration/knowledge/` (ingestion, embedding, search), `prisma/schema.prisma` (`AiKnowledgeChunk`), `.context/orchestration/knowledge.md`.
+**Where it lives:** `lib/orchestration/knowledge/` (ingestion, embedding, search), `prisma/schema/` (`AiKnowledgeChunk`), `.context/orchestration/knowledge.md`.
 
 ### 5.2 Hybrid BM25 + vector search
 
@@ -1047,7 +1047,7 @@ A short primer first: **RAG** (Retrieval-Augmented Generation) means giving the 
 - A three-segment score breakdown is exposed through the API so admins can debug retrieval quality.
 - Weights are tunable in admin settings (`vectorWeight`, `bm25Weight`) without a code change.
 
-**Where it lives:** `lib/orchestration/knowledge/` (search), `prisma/schema.prisma` (`tsvector` generated column on `AiKnowledgeChunk`), `.context/orchestration/knowledge.md`.
+**Where it lives:** `lib/orchestration/knowledge/` (search), `prisma/schema/` (`tsvector` generated column on `AiKnowledgeChunk`), `.context/orchestration/knowledge.md`.
 
 ### 5.3 Multi-format ingestion via parser-per-format
 
@@ -1162,7 +1162,7 @@ A short primer first: **RAG** (Retrieval-Augmented Generation) means giving the 
 
 **History.** Phases 1 and 2 introduced the tag taxonomy and the resolver alongside the legacy `AiAgent.knowledgeCategories` / `AiKnowledgeDocument.category` columns. Phase 6 dropped the legacy columns once every call site routed through the resolver. The backup-bundle schema still accepts the field on the wire (older v1 bundles still ship it) but the importer ignores it on the write side.
 
-**Where it lives:** `lib/orchestration/knowledge/resolveAgentDocumentAccess.ts` (resolver), `lib/orchestration/knowledge/search.ts` (SQL filter), `lib/orchestration/capabilities/built-in/search-knowledge.ts` (chat-time call site), `lib/orchestration/mcp/resources/knowledge-search.ts` (MCP call site), `app/api/v1/admin/orchestration/knowledge/tags/` (tag CRUD), `prisma/schema.prisma` (`KnowledgeTag`, `AiKnowledgeDocumentTag`, `AiAgentKnowledgeTag`, `AiAgentKnowledgeDocument`, `AiAgent.knowledgeAccessMode`), `.context/orchestration/knowledge.md`.
+**Where it lives:** `lib/orchestration/knowledge/resolveAgentDocumentAccess.ts` (resolver), `lib/orchestration/knowledge/search.ts` (SQL filter), `lib/orchestration/capabilities/built-in/search-knowledge.ts` (chat-time call site), `lib/orchestration/mcp/resources/knowledge-search.ts` (MCP call site), `app/api/v1/admin/orchestration/knowledge/tags/` (tag CRUD), `prisma/schema/` (`KnowledgeTag`, `AiKnowledgeDocumentTag`, `AiAgentKnowledgeTag`, `AiAgentKnowledgeDocument`, `AiAgent.knowledgeAccessMode`), `.context/orchestration/knowledge.md`.
 
 ### 5.8 Conversation similarity via message embeddings
 
@@ -1184,7 +1184,7 @@ A short primer first: **RAG** (Retrieval-Augmented Generation) means giving the 
 - A separate table keeps message embeddings independent of knowledge chunks — different access controls, different retention, different lifecycle.
 - Topic clustering, popular-topics analytics, and unanswered-question detection all draw from this index.
 
-**Where it lives:** `lib/orchestration/chat/`, `prisma/schema.prisma` (`AiMessageEmbedding`), `.context/orchestration/analytics.md`.
+**Where it lives:** `lib/orchestration/chat/`, `prisma/schema/` (`AiMessageEmbedding`), `.context/orchestration/analytics.md`.
 
 ### 5.9 Knowledge namespace scope: agent, not team
 
@@ -1206,7 +1206,7 @@ A short primer first: **RAG** (Retrieval-Augmented Generation) means giving the 
 - Multi-tenant deployments are served by separate Docker instances, which is operationally simpler than a built-in namespace boundary.
 - If single-deployment multi-tenancy becomes a customer requirement, the tag model extends naturally — tags already namespace cleanly by slug, and a tenant-id column on `KnowledgeTag` would gate visibility without an incompatible schema change.
 
-**Where it lives:** `lib/orchestration/knowledge/` (resolver + search filter), `prisma/schema.prisma` (`KnowledgeTag`, `AiKnowledgeDocumentTag`, `AiAgentKnowledgeTag`), `.context/orchestration/knowledge.md`. Documented as a deliberate scope choice in `maturity-analysis.md`.
+**Where it lives:** `lib/orchestration/knowledge/` (resolver + search filter), `prisma/schema/` (`KnowledgeTag`, `AiKnowledgeDocumentTag`, `AiAgentKnowledgeTag`), `.context/orchestration/knowledge.md`. Documented as a deliberate scope choice in `maturity-analysis.md`.
 
 ### 5.10 Embedding provider choice and the 1536-dimension ceiling
 
@@ -1230,7 +1230,7 @@ A short primer first: **RAG** (Retrieval-Augmented Generation) means giving the 
 - Customers who need a different ceiling rebuild the column once at deployment time — the rest of the platform doesn't change.
 - The provider list is open via the `AiProviderModel` registry — adding a new embedding provider is a registry entry plus a thin adapter, not a core change. (See §1.6 for the dependency-minimalism stance — we don't bundle every embedding vendor.)
 
-**Where it lives:** `lib/orchestration/llm/embedding-models.ts` (registry, dimension compatibility flags), `lib/orchestration/llm/voyage.ts`, `lib/orchestration/llm/openai-compatible.ts`, `prisma/schema.prisma` (`AiKnowledgeChunk.embedding`).
+**Where it lives:** `lib/orchestration/llm/embedding-models.ts` (registry, dimension compatibility flags), `lib/orchestration/llm/voyage.ts`, `lib/orchestration/llm/openai-compatible.ts`, `prisma/schema/` (`AiKnowledgeChunk.embedding`).
 
 ### 5.11 Per-agent knowledge retrieval mode
 
@@ -1253,7 +1253,7 @@ A short primer first: **RAG** (Retrieval-Augmented Generation) means giving the 
 - `every_turn` mode is the explicit answer to "we operate in a regulated domain where every answer must be evidence-cited" — the citation guard then enforces what the retrieval mode primed.
 - Validation refuses an empty keyword array when the mode is `keywords` (Zod refine), failing closed at admin save time.
 
-**Where it lives:** `prisma/schema.prisma` (`AiAgent.knowledgeRetrievalMode`, `AiAgent.knowledgeTriggerKeywords`), `lib/orchestration/chat/streaming-handler.ts` (enforcement + whole-word matcher), `lib/orchestration/capabilities/built-in/search-knowledge.ts` (tool description tweak), `lib/orchestration/agents/resolve-effective-prompt.ts` (provenance surface), `lib/validations/orchestration.ts` (Zod refine), `components/admin/orchestration/agent-form.tsx` (Knowledge tab), `components/admin/orchestration/chat/message-with-citations.tsx` (chat surface).
+**Where it lives:** `prisma/schema/` (`AiAgent.knowledgeRetrievalMode`, `AiAgent.knowledgeTriggerKeywords`), `lib/orchestration/chat/streaming-handler.ts` (enforcement + whole-word matcher), `lib/orchestration/capabilities/built-in/search-knowledge.ts` (tool description tweak), `lib/orchestration/agents/resolve-effective-prompt.ts` (provenance surface), `lib/validations/orchestration.ts` (Zod refine), `components/admin/orchestration/agent-form.tsx` (Knowledge tab), `components/admin/orchestration/chat/message-with-citations.tsx` (chat surface).
 
 ---
 
@@ -1358,7 +1358,7 @@ This section covers how untrusted input is contained, how authentication works a
 - Operators rotate keys by changing an env var and restarting — no DB migration.
 - The "name not value" pattern lets multiple environments (dev, staging, prod) share the same configuration export with environment-specific secrets.
 
-**Where it lives:** `lib/orchestration/llm/provider-manager.ts` (resolution at runtime), `prisma/schema.prisma` (`AiProviderConfig.apiKeyEnvVar`), `.context/orchestration/llm-providers.md`. Template-based extension to URL-shaped credentials lives in `lib/orchestration/env-template.ts`, wired into `call_external_api`'s `forcedUrl` / `forcedHeaders` and the workflow `external_call` step's `url` / `headers`; documented in `.context/orchestration/external-calls.md` (Env-var templating section).
+**Where it lives:** `lib/orchestration/llm/provider-manager.ts` (resolution at runtime), `prisma/schema/` (`AiProviderConfig.apiKeyEnvVar`), `.context/orchestration/llm-providers.md`. Template-based extension to URL-shaped credentials lives in `lib/orchestration/env-template.ts`, wired into `call_external_api`'s `forcedUrl` / `forcedHeaders` and the workflow `external_call` step's `url` / `headers`; documented in `.context/orchestration/external-calls.md` (Env-var templating section).
 
 ### 6.5 SSRF protection via host allowlist for `external_call`
 
@@ -1504,7 +1504,7 @@ This section covers how untrusted input is contained, how authentication works a
 - The `withAuth` / `withAdminAuth` guard abstraction means swapping authentication libraries later is a contained change; most code touches the guards, not `better-auth` directly.
 - TypeScript-first design fits the project's strict-typing posture (§6.1), and `better-auth` owns its Prisma tables so migrations are part of the same workflow as the rest of the schema.
 
-**Where it lives:** `lib/auth/`, `lib/auth/guards.ts`, `prisma/schema.prisma` (User, Session, Account tables managed by `better-auth`), `.context/auth/`.
+**Where it lives:** `lib/auth/`, `lib/auth/guards.ts`, `prisma/schema/` (User, Session, Account tables managed by `better-auth`), `.context/auth/`.
 
 ---
 
@@ -1533,7 +1533,7 @@ How long-lived state is stored, versioned, and audited.
 - Transactions span agent updates, audit log inserts, and version history rows in one atomic write.
 - Prisma migrations are part of the typed codebase; schema and TypeScript drift can't happen.
 
-**Where it lives:** `prisma/schema.prisma` (the schema), `prisma/migrations/` (versioned migrations), `.context/database/`.
+**Where it lives:** `prisma/schema/` (the schema), `prisma/migrations/` (versioned migrations), `.context/database/`.
 
 ### 7.2 Immutable audit log
 
@@ -1555,7 +1555,7 @@ How long-lived state is stored, versioned, and audited.
 - Before/after diffs let an admin replay or revert a change.
 - The log is filterable by entity type, action, and date range so it stays useful at scale.
 
-**Where it lives:** `lib/orchestration/audit/`, `prisma/schema.prisma` (`AiAdminAuditLog`), `.context/admin/orchestration-audit-log.md`.
+**Where it lives:** `lib/orchestration/audit/`, `prisma/schema/` (`AiAdminAuditLog`), `.context/admin/orchestration-audit-log.md`.
 
 ### 7.3 Versioning for agent configuration (two layers)
 
@@ -1583,7 +1583,7 @@ How long-lived state is stored, versioned, and audited.
 - The full-snapshot `AiAgentVersion` table holds everything an experiment variant needs to reproduce an old agent exactly — instructions plus model, temperature, and capability set.
 - Reverting an instruction change is a one-row update against the inline history; reverting a full configuration is a snapshot restore from `AiAgentVersion`.
 
-**Where it lives:** `prisma/schema.prisma` (`AiAgent.systemInstructionsHistory`, `AiAgentVersion`, `AiExperimentVariant.agentVersionId`), `app/admin/orchestration/agents/` (diff view).
+**Where it lives:** `prisma/schema/` (`AiAgent.systemInstructionsHistory`, `AiAgentVersion`, `AiExperimentVariant.agentVersionId`), `app/admin/orchestration/agents/` (diff view).
 
 ### 7.4 Rolling summary for long conversations
 
@@ -1699,7 +1699,7 @@ How Sunrise reaches the user — directly, embedded into other sites, and across
 - Origins are admin-configurable per-token, so dev / staging / prod can be separate tokens.
 - The browser enforces the CORS check; a misconfigured token simply doesn't work, which is observable in browser dev tools.
 
-**Where it lives:** `prisma/schema.prisma` (`AiAgentEmbedToken`), `app/api/v1/embed/`, `.context/orchestration/embed.md`.
+**Where it lives:** `prisma/schema/` (`AiAgentEmbedToken`), `app/api/v1/embed/`, `.context/orchestration/embed.md`.
 
 ### 8.3 `@/` path alias enforced via ESLint
 
@@ -1797,7 +1797,7 @@ How Sunrise reaches the user — directly, embedded into other sites, and across
 - The widget loader assigns CSS custom properties on the Shadow DOM host (`--sw-primary`, `--sw-surface`, `--sw-text`, `--sw-font`, …) so a single property write cascades through the inline `<style>` block via `var()` — admins paint once, the cascade does the rest.
 - All copy is rendered via `textContent` / `setAttribute('placeholder', …)`. Hex colours are regex-validated; font-family is allowlist-validated to block `{ } ; ( )` so a stored font value cannot escape its CSS declaration. Defence-in-depth at both the schema and DOM-API layers.
 
-**Where it lives:** `prisma/schema.prisma` (`AiAgent.widgetConfig`), `lib/validations/orchestration.ts` (`widgetConfigSchema`, `DEFAULT_WIDGET_CONFIG`, `resolveWidgetConfig`), `app/api/v1/embed/widget-config/route.ts` (public, token-authed), `app/api/v1/admin/orchestration/agents/[id]/widget-config/route.ts` (admin GET/PATCH), `app/api/v1/embed/widget.js/route.ts` (loader + CSS-var assignment), `components/admin/orchestration/agents/widget-appearance-section.tsx` (admin form), `.context/orchestration/embed.md` (Widget customisation section).
+**Where it lives:** `prisma/schema/` (`AiAgent.widgetConfig`), `lib/validations/orchestration.ts` (`widgetConfigSchema`, `DEFAULT_WIDGET_CONFIG`, `resolveWidgetConfig`), `app/api/v1/embed/widget-config/route.ts` (public, token-authed), `app/api/v1/admin/orchestration/agents/[id]/widget-config/route.ts` (admin GET/PATCH), `app/api/v1/embed/widget.js/route.ts` (loader + CSS-var assignment), `components/admin/orchestration/agents/widget-appearance-section.tsx` (admin form), `.context/orchestration/embed.md` (Widget customisation section).
 
 ---
 
@@ -1847,7 +1847,7 @@ How problems are detected, diagnosed, and prevented from reoccurring.
 - Fire-and-forget insertion (Section 2.6) means a logging hiccup doesn't fail the user-facing call.
 - The log feeds the cost breakdown UI, the savings-from-fallback metric, and the budget alerts.
 
-**Where it lives:** `lib/orchestration/llm/` (cost tracking), `prisma/schema.prisma` (`AiCostLog`), `.context/admin/orchestration-costs.md`.
+**Where it lives:** `lib/orchestration/llm/` (cost tracking), `prisma/schema/` (`AiCostLog`), `.context/admin/orchestration-costs.md`.
 
 ### 9.3 DB-backed experiments with traffic splitting
 
@@ -1869,7 +1869,7 @@ How problems are detected, diagnosed, and prevented from reoccurring.
 - The experiment lifecycle is structured: draft, running, completed — with explicit promotion rules.
 - Real-user metrics (engagement, completion, satisfaction) feed the comparison.
 
-**Where it lives:** `lib/orchestration/` (experiment runner), `prisma/schema.prisma` (`AiExperiment`, `AiExperimentVariant`), `.context/orchestration/experiments.md`.
+**Where it lives:** `lib/orchestration/` (experiment runner), `prisma/schema/` (`AiExperiment`, `AiExperimentVariant`), `.context/orchestration/experiments.md`.
 
 ### 9.4 LLM-driven evaluation completion
 
@@ -1891,7 +1891,7 @@ How problems are detected, diagnosed, and prevented from reoccurring.
 - Human annotations stay valuable — they calibrate the rubric and catch LLM-scoring blind spots.
 - Sessions and logs feed back into the analytics surface (`unanswered_questions`, `coverage_gaps`).
 
-**Where it lives:** `lib/orchestration/evaluations/`, `prisma/schema.prisma` (`AiEvaluationSession`, `AiEvaluationLog`), `.context/admin/orchestration-evaluations.md`.
+**Where it lives:** `lib/orchestration/evaluations/`, `prisma/schema/` (`AiEvaluationSession`, `AiEvaluationLog`), `.context/admin/orchestration-evaluations.md`.
 
 ### 9.5 In-product trace viewer over external observability backends
 
@@ -1995,7 +1995,7 @@ These three entries describe places where the current implementation deliberatel
 - **Approval pause + crash recovery share the same primitives.** The lease, dispatch cache, and side table all participate; no separate plumbing for "approval pause" vs "crash recovery."
 - **Single-instance deployment profile stays intact.** No distributed lease coordination; the lease + heartbeat is in-process and good enough for the single-host target.
 
-**Where it lives:** `prisma/schema.prisma` (`AiWorkflowExecution.leaseToken` / `leaseExpiresAt` / `lastHeartbeatAt` / `recoveryAttempts`, `AiWorkflowStepDispatch`, the running-step side table), `lib/orchestration/engine/lease.ts`, `lib/orchestration/engine/dispatch-cache.ts`, `lib/orchestration/engine/execution-reaper.ts` (`sweepOrphans`), `lib/orchestration/engine/orchestration-engine.ts` (claim, heartbeat, side-table write/clear), `.context/orchestration/engine.md` (Recovery model section).
+**Where it lives:** `prisma/schema/` (`AiWorkflowExecution.leaseToken` / `leaseExpiresAt` / `lastHeartbeatAt` / `recoveryAttempts`, `AiWorkflowStepDispatch`, the running-step side table), `lib/orchestration/engine/lease.ts`, `lib/orchestration/engine/dispatch-cache.ts`, `lib/orchestration/engine/execution-reaper.ts` (`sweepOrphans`), `lib/orchestration/engine/orchestration-engine.ts` (claim, heartbeat, side-table write/clear), `.context/orchestration/engine.md` (Recovery model section).
 
 ### 10.4 Maintenance tick: 202 + background-chain with watchdog
 
@@ -2049,7 +2049,7 @@ These three entries describe places where the current implementation deliberatel
 - The cron tick is HTTP-triggered, so any external pinger works. We don't couple the scheduler to one host.
 - `cron-parser` handles every edge case of cron expressions (DST transitions, ranges, step values, list syntax) without us reimplementing it.
 
-**Where it lives:** `lib/orchestration/scheduling/scheduler.ts`, `prisma/schema.prisma` (`AiWorkflowSchedule`), `app/api/v1/admin/orchestration/maintenance/tick/`, `.context/orchestration/scheduling.md`. `cron-parser` v5 in `package.json`.
+**Where it lives:** `lib/orchestration/scheduling/scheduler.ts`, `prisma/schema/` (`AiWorkflowSchedule`), `app/api/v1/admin/orchestration/maintenance/tick/`, `.context/orchestration/scheduling.md`. `cron-parser` v5 in `package.json`.
 
 ---
 

@@ -32,7 +32,7 @@ These change how you write code. Treat as non-negotiable.
 | Components                                       | `components/admin/orchestration/`                                                                       |
 | Types                                            | `types/orchestration.ts`                                                                                |
 | Validation schemas                               | `lib/validations/orchestration.ts`                                                                      |
-| Prisma models                                    | `prisma/schema.prisma` (29 `Ai*` models)                                                                |
+| Prisma models                                    | `prisma/schema/` (29 `Ai*` models)                                                                      |
 | Seeds                                            | `prisma/seeds/data/`                                                                                    |
 | SSE bridge                                       | `lib/api/sse.ts` (`sseResponse()`)                                                                      |
 | Tests                                            | `tests/unit/lib/orchestration/`, `tests/integration/api/v1/admin/orchestration/`                        |

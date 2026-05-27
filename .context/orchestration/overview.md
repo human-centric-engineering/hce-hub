@@ -57,4 +57,4 @@ The full record with alternatives and rationale lives in [`meta/architectural-de
 - `.claude/skills/orchestration-*` — implementation skills (architect, solution builder, capability builder, workflow builder, knowledge builder)
 - `types/orchestration.ts` — shared TypeScript types (`TokenUsage`, `ChatEvent`, `CostSummary`, ...)
 - `lib/validations/orchestration.ts` — Zod schemas for every external boundary
-- `prisma/schema.prisma` — 29 `Ai*` models (agents, workflows, conversations, knowledge, costs, …)
+- `prisma/schema/` — 29 `Ai*` models (agents, workflows, conversations, knowledge, costs, …)

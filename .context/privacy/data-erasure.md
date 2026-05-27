@@ -11,7 +11,7 @@ both delete endpoints route through it.
 | Erase a user (the only way)   | `eraseUser()` — `lib/privacy/erase-user.ts`                           |
 | Self-service deletion         | `DELETE /api/v1/users/me` (confirmation `{ confirmation: "DELETE" }`) |
 | Admin deletes another user    | `DELETE /api/v1/users/[id]` (admin only)                              |
-| What cascades vs. is retained | Per-table `onDelete` in `prisma/schema.prisma`                        |
+| What cascades vs. is retained | Per-table `onDelete` in `prisma/schema/`                              |
 
 ### Anti-Pattern
 
@@ -170,7 +170,7 @@ de-attributed against a real DB — the same proof the core tables get.
 
 ## Erasure Receipt (Accountability)
 
-`DataErasureReceipt` (`prisma/schema.prisma`, migration `add_data_erasure_receipt`)
+`DataErasureReceipt` (`prisma/schema/`, migration `add_data_erasure_receipt`)
 is an **append-only** record proving an erasure happened, without re-introducing
 the subject's PII:
 
