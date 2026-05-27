@@ -59,6 +59,11 @@ const appSections = new Map<string, NavSection>();
  * `title` — re-registering the same title replaces the prior section (safe
  * under HMR / repeated module imports). App sections render after the core
  * sections, in first-registration order.
+ *
+ * Use a `title` distinct from the core sidebar sections ("Overview",
+ * "Management", "AI Orchestration", "System"). The sidebar keys rendered
+ * sections by `title`, and the dedupe here spans app sections only — a title
+ * that collides with a core section yields two siblings with the same React key.
  */
 export function registerNavSection(section: NavSection): void {
   appSections.set(section.title, section);
