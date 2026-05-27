@@ -196,7 +196,7 @@ currently published snapshot survives a round-trip.
 
 ## Critical files
 
-- `prisma/schema.prisma` — `AiWorkflow`, `AiWorkflowVersion`, `AiWorkflowExecution`.
+- `prisma/schema/` — `AiWorkflow`, `AiWorkflowVersion`, `AiWorkflowExecution`.
 - `prisma/migrations/20260506151928_add_workflow_versioning/migration.sql`
 - `lib/orchestration/workflows/version-service.ts`
 - `lib/orchestration/workflows/index.ts`

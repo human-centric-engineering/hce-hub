@@ -471,4 +471,4 @@ npx vitest run tests/unit/lib/orchestration/capabilities
 - [LLM Providers](./llm-providers.md) — the Phase 2a provider abstraction that cost logging piggy-backs on
 - `.claude/docs/agent-orchestration.md` — architectural brief
 - `types/orchestration.ts` — `CostOperation`, `ChatEvent`, `AgentWithCapabilities`
-- `prisma/schema.prisma` — `AiCapability`, `AiAgentCapability`
+- `prisma/schema/` — `AiCapability`, `AiAgentCapability`

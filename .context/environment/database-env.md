@@ -11,7 +11,7 @@ Configuration for PostgreSQL database connection via Prisma ORM.
 - **Validation:** Must be a valid PostgreSQL connection string URL
 - **Used By:**
   - `lib/db/client.ts` - Prisma client initialization
-  - `prisma/schema.prisma` - Database migrations
+  - `prisma/schema/` - Database migrations
 
 ## Examples
 

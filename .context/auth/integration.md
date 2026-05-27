@@ -274,7 +274,7 @@ export const DELETE = withAdminAuth<{ id: string }>(async (request, session, { p
 ### User Roles in Database
 
 ```prisma
-// prisma/schema.prisma
+// prisma/schema/
 enum Role {
   USER
   ADMIN

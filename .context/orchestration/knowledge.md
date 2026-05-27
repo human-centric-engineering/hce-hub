@@ -344,6 +344,6 @@ Chunks are written with `embedding: NULL` when no active embedding provider is c
 - [Capabilities](./capabilities.md) — `search_knowledge_base` and `get_pattern_detail` built-in tools that consume this layer
 - [Streaming Chat](./chat.md) — `buildContext` uses `getPatternDetail` for locked-context injection
 - [Knowledge Base UI](../admin/orchestration-knowledge-ui.md) — admin interface documentation
-- `prisma/schema.prisma` — `AiKnowledgeBase`, `AiKnowledgeDocument`, `AiKnowledgeChunk`, `AiMessageEmbedding` models
+- `prisma/schema/` — `AiKnowledgeBase`, `AiKnowledgeDocument`, `AiKnowledgeChunk`, `AiMessageEmbedding` models
 - `scripts/embeddings-reset.ts` — narrowly-scoped reset script invoked by `npm run embeddings:reset`
 - `lib/validations/orchestration.ts` — `knowledgeSearchSchema`, `listDocumentsQuerySchema`, `confirmDocumentPreviewSchema`

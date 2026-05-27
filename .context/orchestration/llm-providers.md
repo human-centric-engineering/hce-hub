@@ -365,7 +365,7 @@ Anthropic thinking blocks are stripped from response content in both `chat()` an
 
 ## Configuration
 
-`AiProviderConfig` rows (see `prisma/schema.prisma`) drive the provider manager. Fields used here:
+`AiProviderConfig` rows (see `prisma/schema/`) drive the provider manager. Fields used here:
 
 | Field          | Purpose                                                                                                                          |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -452,4 +452,4 @@ See [Provider Selection Matrix](./provider-selection-matrix.md) for the full 6-t
 - [Provider Selection Matrix](./provider-selection-matrix.md) — tier classification, decision heuristic, model CRUD
 - `.claude/docs/agent-orchestration.md` — architectural brief
 - `types/orchestration.ts` — shared types (`CostSummary`, `CostOperation`, `ChatEvent`, ...)
-- `prisma/schema.prisma` — `AiProviderConfig`, `AiAgent`, `AiCostLog`, `AiProviderModel`
+- `prisma/schema/` — `AiProviderConfig`, `AiAgent`, `AiCostLog`, `AiProviderModel`

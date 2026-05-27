@@ -707,4 +707,4 @@ See [Resilience](./resilience.md) for full details. Key points for the chat hand
 - [Resilience](./resilience.md) — circuit breaker, fallback, budget UX, input guard
 - `.claude/docs/agent-orchestration.md` — architectural brief
 - `types/orchestration.ts` — `ChatEvent`, `TokenUsage`, `CostOperation`, `AgentWithCapabilities`
-- `prisma/schema.prisma` — `AiAgent`, `AiConversation`, `AiMessage`
+- `prisma/schema/` — `AiAgent`, `AiConversation`, `AiMessage`

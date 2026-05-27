@@ -1533,4 +1533,4 @@ Implementation: `computeETag()` and `checkConditional()` from `lib/api/etag.ts`.
 - [`../api/sse.md`](../api/sse.md) — `sseResponse` bridge helper contract
 - [`../api/admin-endpoints.md`](../api/admin-endpoints.md) — Other admin API endpoints
 - `lib/validations/orchestration.ts` — All Zod schemas referenced above
-- `prisma/schema.prisma` — `AiAgent`, `AiCapability`, `AiAgentCapability`, `AiConversation`, `AiMessage`, `AiKnowledgeDocument`, `AiKnowledgeChunk` models
+- `prisma/schema/` — `AiAgent`, `AiCapability`, `AiAgentCapability`, `AiConversation`, `AiMessage`, `AiKnowledgeDocument`, `AiKnowledgeChunk` models
