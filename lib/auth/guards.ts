@@ -27,6 +27,7 @@ import { NextRequest } from 'next/server';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth/config';
 import { UnauthorizedError, ForbiddenError, handleAPIError } from '@/lib/api/errors';
+import { resolveApiKey, hasScope } from '@/lib/auth/api-keys';
 
 /**
  * Session type from better-auth (matches AuthSession in utils.ts)
@@ -101,6 +102,20 @@ export function withAuth(handler: (...args: any[]) => Response | Promise<Respons
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return async (...args: any[]): Promise<Response> => {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const [request, context] = args;
+
+      // API-key fallback (Phase 4): if a valid `Authorization: Bearer sk_...`
+      // header resolves to an active key, treat its owner as the session.
+      // The CI eval-gate flow uses this so headless callers don't need a
+      // browser cookie. Any scope is accepted at this layer; per-endpoint
+      // scope enforcement lives in the handler when needed.
+      const apiKey = await resolveApiKey(request as NextRequest);
+      if (apiKey) {
+        if (context !== undefined) return await handler(request, apiKey.session, context);
+        return await handler(request, apiKey.session);
+      }
+
       const requestHeaders = await headers();
       const session = await auth.api.getSession({ headers: requestHeaders });
 
@@ -108,8 +123,6 @@ export function withAuth(handler: (...args: any[]) => Response | Promise<Respons
         throw new UnauthorizedError();
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const [request, context] = args;
       if (context !== undefined) {
         return await handler(request, session, context);
       }
@@ -168,6 +181,24 @@ export function withAdminAuth(handler: (...args: any[]) => Response | Promise<Re
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return async (...args: any[]): Promise<Response> => {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const [request, context] = args;
+
+      // API-key fallback (Phase 4): admin-scoped keys can hit admin
+      // endpoints headlessly. The user behind the key needs neither
+      // `role: 'ADMIN'` nor an active session cookie — the scope is the
+      // capability check. Any key without `admin` scope is rejected
+      // here with 403 rather than falling through to the cookie path
+      // (which would 401 a key-bearing caller and confuse CI).
+      const apiKey = await resolveApiKey(request as NextRequest);
+      if (apiKey) {
+        if (!hasScope(apiKey.scopes, 'admin')) {
+          throw new ForbiddenError('Admin scope required');
+        }
+        if (context !== undefined) return await handler(request, apiKey.session, context);
+        return await handler(request, apiKey.session);
+      }
+
       const requestHeaders = await headers();
       const session = await auth.api.getSession({ headers: requestHeaders });
 
@@ -179,8 +210,6 @@ export function withAdminAuth(handler: (...args: any[]) => Response | Promise<Re
         throw new ForbiddenError('Admin access required');
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const [request, context] = args;
       if (context !== undefined) {
         return await handler(request, session, context);
       }

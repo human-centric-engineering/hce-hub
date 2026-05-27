@@ -12,6 +12,8 @@ import { successResponse } from '@/lib/api/responses';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { getRouteLogger } from '@/lib/api/context';
 import { cuidSchema } from '@/lib/validations/common';
+import { computeGateVerdict } from '@/lib/orchestration/evaluations/gate';
+import type { GateConfig } from '@/lib/validations/orchestration-evaluations';
 
 export const GET = withAdminAuth<{ id: string }>(async (request, session, { params }) => {
   const log = await getRouteLogger(request);
@@ -31,6 +33,17 @@ export const GET = withAdminAuth<{ id: string }>(async (request, session, { para
     },
   });
   if (!run) throw new NotFoundError(`Run ${id} not found`);
-  log.info('Loaded run', { runId: id, status: run.status });
-  return successResponse(run);
+
+  // Phase 4: compute the gate verdict on the fly when both `gateConfig`
+  // and a populated `summary` exist. CI callers read `data.gate.passed`
+  // directly to exit 0 / non-zero.
+  const gate = computeGateVerdict(
+    run.gateConfig as GateConfig | null,
+    run.summary as {
+      stats?: Record<string, { mean?: number | null; passRate?: number | null }>;
+    } | null
+  );
+
+  log.info('Loaded run', { runId: id, status: run.status, gatePassed: gate?.passed });
+  return successResponse({ ...run, gate });
 });

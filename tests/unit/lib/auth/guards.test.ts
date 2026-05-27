@@ -46,9 +46,19 @@ vi.mock('@/lib/auth/config', () => ({
   },
 }));
 
+// Mock API-key resolver (Phase 4 fallback). Defaults to null so existing
+// cookie-session tests behave exactly as before; api-key tests override
+// per-test below.
+vi.mock('@/lib/auth/api-keys', () => ({
+  resolveApiKey: vi.fn().mockResolvedValue(null),
+  hasScope: (scopes: string[], required: string) =>
+    scopes.includes(required) || scopes.includes('admin'),
+}));
+
 // Import mocked modules
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth/config';
+import { resolveApiKey } from '@/lib/auth/api-keys';
 
 /**
  * Test helpers
@@ -789,6 +799,94 @@ describe('withAdminAuth', () => {
       // Assert
       expect(response.status).toBe(200);
       expect(data.data.id).toBe('async-123');
+    });
+  });
+});
+
+/**
+ * Test Suite: API-key fallback (Phase 4)
+ */
+describe('API-key fallback', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(headers).mockResolvedValue(new Headers());
+  });
+
+  function mockApiKey(scopes: string[]): AuthSession {
+    const session = createMockSession('USER', 'apikey-owner-id');
+    vi.mocked(resolveApiKey).mockResolvedValue({
+      session,
+      scopes,
+      rateLimitRpm: null,
+    });
+    return session;
+  }
+
+  describe('withAuth', () => {
+    it('passes the API-key session to the handler without checking the cookie', async () => {
+      const session = mockApiKey(['chat']);
+      const handler = vi.fn(async () => Response.json({ success: true, data: { ok: true } }));
+      const wrapped = withAuth(handler);
+      const res = await wrapped(createRequest());
+      expect(res.status).toBe(200);
+      expect(handler).toHaveBeenCalledWith(expect.anything(), session);
+      // The session-cookie path should not have been consulted.
+      expect(auth.api.getSession).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the cookie path when no API key resolves', async () => {
+      vi.mocked(resolveApiKey).mockResolvedValue(null);
+      const session = createMockSession('USER');
+      vi.mocked(auth.api.getSession).mockResolvedValue(session as never);
+      const handler = vi.fn(async () => Response.json({ success: true, data: null }));
+      const wrapped = withAuth(handler);
+      const res = await wrapped(createRequest());
+      expect(res.status).toBe(200);
+      expect(auth.api.getSession).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('withAdminAuth', () => {
+    it('accepts an API key with admin scope and skips the cookie path', async () => {
+      const session = mockApiKey(['admin']);
+      const handler = vi.fn(async () => Response.json({ success: true, data: { ok: true } }));
+      const wrapped = withAdminAuth(handler);
+      const res = await wrapped(createRequest());
+      expect(res.status).toBe(200);
+      expect(handler).toHaveBeenCalledWith(expect.anything(), session);
+      expect(auth.api.getSession).not.toHaveBeenCalled();
+    });
+
+    it("returns 403 for an API key that doesn't include the admin scope", async () => {
+      mockApiKey(['chat', 'analytics']);
+      const handler = vi.fn();
+      const wrapped = withAdminAuth(handler);
+      const res = await wrapped(createRequest());
+      expect(res.status).toBe(403);
+      expect(handler).not.toHaveBeenCalled();
+      // Must not fall through to the cookie path — that would 401 a key-
+      // bearing CI caller and confuse the diagnostic.
+      expect(auth.api.getSession).not.toHaveBeenCalled();
+    });
+
+    it('falls back to cookie-session admin check when no API key is present', async () => {
+      vi.mocked(resolveApiKey).mockResolvedValue(null);
+      vi.mocked(auth.api.getSession).mockResolvedValue(createMockSession('ADMIN') as never);
+      const handler = vi.fn(async () => Response.json({ success: true, data: null }));
+      const wrapped = withAdminAuth(handler);
+      const res = await wrapped(createRequest());
+      expect(res.status).toBe(200);
+      expect(auth.api.getSession).toHaveBeenCalledOnce();
+    });
+
+    it('returns 401 when neither an API key nor a session cookie resolves', async () => {
+      vi.mocked(resolveApiKey).mockResolvedValue(null);
+      vi.mocked(auth.api.getSession).mockResolvedValue(null);
+      const handler = vi.fn();
+      const wrapped = withAdminAuth(handler);
+      const res = await wrapped(createRequest());
+      expect(res.status).toBe(401);
+      expect(handler).not.toHaveBeenCalled();
     });
   });
 });

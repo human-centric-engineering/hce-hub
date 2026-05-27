@@ -240,6 +240,10 @@ export const POST = withAdminAuth(async (request, session) => {
         body.subjectOutputSelector !== undefined
           ? (body.subjectOutputSelector as Prisma.InputJsonValue)
           : undefined,
+      gateConfig:
+        body.gateConfig !== undefined
+          ? (body.gateConfig as unknown as Prisma.InputJsonValue)
+          : undefined,
       status: 'queued',
       progress: { casesTotal: dataset.caseCount, casesDone: 0, casesFailed: 0 },
     },

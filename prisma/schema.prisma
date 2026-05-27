@@ -1306,6 +1306,11 @@ model AiEvaluationRun {
   // { metricSlugs: string[], stats: { [slug]: { mean, median, p95, passRate, scoredCount } },
   //   judgeProvider, judgeModel, completedAt, note? }
   summary               Json?
+  // Phase 4 (CI gate): per-metric pass/fail thresholds the caller wants
+  // to assert against. Shape: { thresholds: [{ metricSlug, minMean?, minPassRate? }] }.
+  // Worker doesn't touch this; GET /runs/:id computes a `gate` block from
+  // it + `summary.stats` when both are present.
+  gateConfig            Json?
   totalCostUsd          Float?
   // For "Rescore as new run" — copies metrics/judge but fresh result rows.
   parentRunId           String?

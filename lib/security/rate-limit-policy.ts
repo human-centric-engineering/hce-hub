@@ -113,6 +113,18 @@ export const RATE_LIMIT_POLICY: readonly RateLimitRule[] = [
   // Orchestration UI is the chatty admin surface — agents, workflows,
   // knowledge, executions. Looser cap (120/min) to absorb editor traffic
   // where one user action fans out into several list/validate/preview calls.
+  //
+  // Phase 4 (CI eval gate): admin-scoped API keys can hit these endpoints
+  // headlessly. When an `Authorization: Bearer sk_...` header is present we
+  // key on the API key so CI runs from a shared IP don't share a bucket
+  // with cookie sessions on the same host. Without the header we skip this
+  // rule and fall through to the cookie-keyed rule below.
+  {
+    match: /^\/api\/v1\/admin\/orchestration\//,
+    tier: 'orchestration',
+    key: 'api-key',
+    skip: (req) => !/^Bearer\s+sk_/i.test(req.headers.get('authorization') ?? ''),
+  },
   {
     match: /^\/api\/v1\/admin\/orchestration\//,
     tier: 'orchestration',

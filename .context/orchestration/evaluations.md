@@ -301,7 +301,10 @@ code, no "AI flourishes". One grep audits the whole surface.
   `subjectOutputSelector` control.
 - ~~Pairwise graders, RAG-specific Ragas metrics~~ — shipped in Phase 3
   (`pairwise_judge_agent` + three new Ragas judges).
-- No CI gating endpoint yet — Phase 4.
+- CI gating shipped as Phase 4 (minimal): an admin-scoped API key
+  can hit the existing `POST /runs` + `GET /runs/:id` endpoints; the
+  GET response includes a computed `gate: { passed, reasons }` block
+  when the run was created with `gateConfig` (see below).
 
 ## Phase 2 — cost estimator
 
@@ -566,6 +569,109 @@ in Phase 3.5a (see below).
 - A first-class "evaluation workflow" template type. Keep workflows
   generic; let the `judge_call` step + `workflow_as_judge` grader
   compose into eval-shaped workflows organically.
+
+## Phase 4 — minimal CI gate
+
+A CI runner can now fire an evaluation against a known dataset, poll
+the status, and read a pass/fail verdict — all through the existing
+`/runs` endpoints, no parallel surface. Two thin changes make it work:
+
+### API-key fallback in `withAdminAuth`
+
+`lib/auth/guards.ts` now resolves an `Authorization: Bearer sk_...`
+header via the existing `resolveApiKey` helper before falling back to
+the better-auth cookie session. An admin-scoped API key (created via
+the existing admin UI) is sufficient — the underlying user does not
+need `role: 'ADMIN'`. Keys without the `admin` scope receive 403
+rather than falling through to the cookie path (a 401 on a key-
+bearing CI caller would mislead the operator into debugging the
+key itself).
+
+The orchestration rate-limit rule in
+`lib/security/rate-limit-policy.ts` now matches twice: once with
+`key: 'api-key'` (skipped unless an `Authorization: Bearer sk_...`
+header is present) and once with `key: 'session-user'` as the fall-
+through. CI traffic gets a per-key bucket; the admin UI keeps its
+per-user bucket. Cap stays at 120/min for both.
+
+### `gateConfig` on `AiEvaluationRun`
+
+`POST /runs` accepts an optional `gateConfig` body field — a list of
+per-metric thresholds (`{ metricSlug, minMean?, minPassRate? }`) the
+caller wants to assert. The worker doesn't see this column; only
+`GET /runs/:id` reads it, and only after the run has completed
+(`summary.stats` populated).
+
+`GET /runs/:id` now includes a computed `gate: { passed, reasons }`
+block. `reasons` is per-threshold: `{ metricSlug, threshold:
+'mean'|'passRate', got, want, passed }`. The block is `null` when
+either `gateConfig` or `summary.stats` is missing — callers should
+treat that as "verdict not available" rather than a vacuous pass.
+
+A missing `stats[metricSlug]` row fails the threshold (we'd rather
+surface a real failure than silently treat absence as a pass).
+
+### CI usage
+
+```bash
+KEY=sk_...
+BASE=https://your.sunrise.example.com
+
+RUN_ID=$(curl -sS -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "ci-smoke",
+    "subjectKind": "agent",
+    "agentId": "...",
+    "datasetId": "...",
+    "metricConfigs": [{ "slug": "judge_agent", "config": { "agentSlug": "eval-judge-correctness" } }],
+    "gateConfig": {
+      "thresholds": [{ "metricSlug": "judge_agent", "minMean": 0.8 }]
+    }
+  }' \
+  "$BASE/api/v1/admin/orchestration/evaluations/runs" | jq -r .data.id)
+
+until [ "$(curl -sS -H "Authorization: Bearer $KEY" \
+  "$BASE/api/v1/admin/orchestration/evaluations/runs/$RUN_ID" \
+  | jq -r .data.status)" != "queued" ] && \
+      [ "$(curl -sS -H "Authorization: Bearer $KEY" \
+  "$BASE/api/v1/admin/orchestration/evaluations/runs/$RUN_ID" \
+  | jq -r .data.status)" != "running" ]; do
+  sleep 5
+done
+
+curl -sS -H "Authorization: Bearer $KEY" \
+  "$BASE/api/v1/admin/orchestration/evaluations/runs/$RUN_ID" \
+  | jq -e '.data.gate.passed == true'
+```
+
+The final `jq -e` exits non-zero when `gate.passed` is false (or
+missing), giving CI a clean fail-the-build signal.
+
+### What's NOT included
+
+- A dedicated `/runs/from-ci` endpoint. The existing POST is enough;
+  duplicating the create flow would split admin and CI surfaces for
+  no benefit.
+- Server-side polling helpers or webhook notification. CI does the
+  polling — the run status + maintenance tick cadence (~60s) makes
+  this trivial.
+- Per-environment thresholds. The threshold list is bundled with the
+  run config at submit time; the caller manages variation across
+  branches / staging / prod.
+
+### Critical files
+
+| Concern             | Path                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| Auth fallback       | `lib/auth/guards.ts` (`withAuth`, `withAdminAuth`)                                 |
+| Rate-limit policy   | `lib/security/rate-limit-policy.ts` (split orchestration rule)                     |
+| Schema              | `prisma/schema.prisma` (`AiEvaluationRun.gateConfig`)                              |
+| Migration           | `prisma/migrations/20260527073409_add_evaluation_run_gate_config/`                 |
+| Zod                 | `lib/validations/orchestration-evaluations.ts` (`gateConfigSchema`)                |
+| Verdict computation | `lib/orchestration/evaluations/gate.ts` (`computeGateVerdict`)                     |
+| Run POST            | `app/api/v1/admin/orchestration/evaluations/runs/route.ts` (persists `gateConfig`) |
+| Run GET             | `app/api/v1/admin/orchestration/evaluations/runs/[id]/route.ts` (emits `gate`)     |
 
 ## Phase 3.5b — workflow-aware cost estimator
 
