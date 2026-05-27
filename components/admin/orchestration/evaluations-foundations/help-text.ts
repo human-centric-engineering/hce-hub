@@ -1,5 +1,5 @@
 /**
- * Central UI copy for the Phase 1 dataset-driven evaluation surfaces.
+ * Central UI copy for the dataset-driven evaluation surfaces.
  *
  * Every `<FieldHelp>` body and every newcomer-facing explainer lives
  * here so the tone (plain English, concrete actions, no AI flourishes)
@@ -115,7 +115,7 @@ export const runHelp = {
     'Optional notes — what changed in the subject since the last run, what you expect to see, any caveats.',
 
   subjectKind:
-    'What you are evaluating. **Agent** runs the dataset through one agent like a real user would. **Workflow** subjects land in Phase 3 — the schema is wired but the run-creation form is agent-only for now.',
+    'What you are evaluating. **Agent** runs the dataset through one agent like a real user would. **Workflow** runs each case through a published, active workflow.',
 
   subjectAgent: 'The agent the dataset will be fired at. Each case becomes one chat turn.',
 

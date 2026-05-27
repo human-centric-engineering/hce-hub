@@ -2,7 +2,7 @@
  * /admin/orchestration/evaluations/datasets/:id
  *
  * Read-only dataset detail. Shows metadata + first 50 cases for preview.
- * (Edits land in a follow-up; Phase 1 keeps the surface minimal.)
+ * (Editing cases lands in a follow-up; this surface is intentionally minimal.)
  */
 
 import type { Metadata } from 'next';

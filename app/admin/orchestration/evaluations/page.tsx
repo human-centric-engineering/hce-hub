@@ -120,9 +120,6 @@ export default async function TestingPage() {
         >
           Batch runs
         </Link>
-        <span className="text-muted-foreground text-xs">
-          (dataset-driven evaluations — Phase 1)
-        </span>
       </div>
 
       <TestingTabs

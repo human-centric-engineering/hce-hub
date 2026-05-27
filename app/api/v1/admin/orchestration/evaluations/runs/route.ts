@@ -7,8 +7,9 @@
  *
  * POST /api/v1/admin/orchestration/evaluations/runs
  *   Queue a new run. Validates: dataset ownership + content hash
- *   capture, subject ownership + Phase 1 agent-only gate, every
- *   referenced grader exists, every reference-required grader is paired
+ *   capture, subject validation (chat agent, or active workflow with a
+ *   published version), every referenced grader exists, every
+ *   reference-required grader is paired
  *   with a dataset that has expectedOutput on every case.
  *   The worker drains it on the next maintenance tick.
  */
