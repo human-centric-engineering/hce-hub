@@ -29,6 +29,8 @@ export async function exportOrchestrationConfig(): Promise<BackupPayload> {
         isActive: true,
         metadata: true,
         knowledgeAccessMode: true,
+        knowledgeRetrievalMode: true,
+        knowledgeTriggerKeywords: true,
         topicBoundaries: true,
         brandVoiceInstructions: true,
         rateLimitRpm: true,
@@ -140,12 +142,17 @@ export async function exportOrchestrationConfig(): Promise<BackupPayload> {
   // `grantedTags`/`grantedDocuments` are include-shaped (join rows with one
   // nested entity each) — flatten them before serialising.
   const flattenedAgents = agents.map((a) => {
-    const { grantedTags, grantedDocuments, knowledgeAccessMode, ...rest } = a;
+    const { grantedTags, grantedDocuments, knowledgeAccessMode, knowledgeRetrievalMode, ...rest } =
+      a;
+    const retrievalModes = ['model', 'first_turn', 'every_turn', 'keywords'] as const;
     return {
       ...rest,
-      // The DB column is `String`; coerce to the strict enum the backup schema wants.
+      // The DB columns are `String`; coerce to the strict enums the backup schema wants.
       knowledgeAccessMode:
         knowledgeAccessMode === 'restricted' ? ('restricted' as const) : ('full' as const),
+      knowledgeRetrievalMode: (retrievalModes as readonly string[]).includes(knowledgeRetrievalMode)
+        ? (knowledgeRetrievalMode as (typeof retrievalModes)[number])
+        : ('model' as const),
       // `knowledgeCategories` was dropped from the DB in Phase 6 but the
       // backup schema keeps the field on the wire for older importers
       // that still read it. Always emit empty.

@@ -119,6 +119,8 @@ export async function importOrchestrationConfig(
             isActive: agent.isActive,
             metadata: (agent.metadata as Prisma.InputJsonValue) ?? Prisma.JsonNull,
             knowledgeAccessMode: agent.knowledgeAccessMode,
+            knowledgeRetrievalMode: agent.knowledgeRetrievalMode,
+            knowledgeTriggerKeywords: agent.knowledgeTriggerKeywords,
             topicBoundaries: agent.topicBoundaries,
             brandVoiceInstructions: agent.brandVoiceInstructions,
             rateLimitRpm: agent.rateLimitRpm,

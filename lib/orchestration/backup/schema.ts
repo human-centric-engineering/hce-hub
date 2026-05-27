@@ -47,6 +47,15 @@ const agentBackupSchema = z.object({
    * populated and the new fields are absent.
    */
   knowledgeAccessMode: z.enum(['full', 'restricted']).optional().default('full'),
+  /**
+   * Per-agent force-retrieval policy. Optional with defaults so older backups
+   * (which omit these) import as the unchanged `'model'` / empty behaviour.
+   */
+  knowledgeRetrievalMode: z
+    .enum(['model', 'first_turn', 'every_turn', 'keywords'])
+    .optional()
+    .default('model'),
+  knowledgeTriggerKeywords: z.array(z.string()).optional().default([]),
   grantedTagSlugs: z.array(z.string()).optional().default([]),
   /**
    * Document grants are keyed by `AiKnowledgeDocument.fileHash` — content-derived
