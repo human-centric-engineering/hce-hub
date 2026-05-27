@@ -193,8 +193,9 @@ Common bindings:
 2. **Upload documents** — `POST /api/v1/admin/orchestration/knowledge/documents` (multipart/form-data with `file` and optional `category`). Supported formats: Markdown, text, **CSV (row-atomic)**, EPUB, DOCX, and PDF. PDFs use a two-step flow: `previewDocument()` → admin review → `confirmPreview()`.
 3. **Generate embeddings** — `POST /api/v1/admin/orchestration/knowledge/embed` (embeddings are NOT auto-generated on upload). Check status: `GET /api/v1/admin/orchestration/knowledge/embedding-status`.
 4. **Scope to agents** — `PATCH /api/v1/admin/orchestration/agents/{id}` with `knowledgeCategories: ["category1", "category2"]`. Empty array = agent sees all categories.
-5. **Bind capability** — bind the built-in `search_knowledge_base` capability to the agent (Step 4 process).
-6. **Sanity-check the corpus** — admin Knowledge → **Visualize** tab renders structure, embedded-graph, and UMAP projection views. Useful for spotting mis-categorised uploads before they pollute retrieval.
+5. **Pick a retrieval mode** — `AiAgent.knowledgeRetrievalMode` (PR #260) is one of `model` (the LLM decides whether to call `search_knowledge_base` as a tool — default), `first_turn` (always retrieve on the first message of a conversation), `every_turn` (retrieve on every user turn), or `keywords` (retrieve only when the user message matches any entry in `knowledgeTriggerKeywords` — required and non-empty when this mode is set). Picked in the agent form's Knowledge tab; surfaced as inline citations in chat via `message-with-citations`.
+6. **Bind capability** — bind the built-in `search_knowledge_base` capability to the agent (Step 4 process).
+7. **Sanity-check the corpus** — admin Knowledge → **Visualize** tab renders structure, embedded-graph, and UMAP projection views. Useful for spotting mis-categorised uploads before they pollute retrieval.
 
 Use `/orchestration-knowledge-builder` for detailed chunking configuration (structural / semantic / CSV), hybrid-search tuning (`bm25Weight`, not `keywordWeight`), and gotchas.
 
@@ -203,7 +204,7 @@ Use `/orchestration-knowledge-builder` for detailed chunking configuration (stru
 Simple solutions (single agent chat) don't need a workflow. For multi-step processing:
 
 1. **Select a template** — 12 built-in templates in `prisma/seeds/data/templates/` (`customer-support`, `content-pipeline`, `research-agent`, `cited-knowledge-advisor`, `scheduled-source-monitor`, `provider-model-audit`, etc.). Start from the closest one.
-2. **Define the DAG** — `WorkflowDefinition` has `entryStepId`, `errorStrategy`, and `steps[]`. Each step has `id`, `name`, `type` (15 types available), `config`, and `nextSteps[]` (edges). Key step types: `llm_call`, `route`, `human_approval`, `tool_call`, `rag_retrieve`, `parallel`, `reflect`, `agent_call`, `orchestrator`.
+2. **Define the DAG** — `WorkflowDefinition` has `entryStepId`, `errorStrategy`, and `steps[]`. Each step has `id`, `name`, `type` (19 types available), `config`, and `nextSteps[]` (edges). Key step types: `llm_call`, `route`, `human_approval`, `tool_call`, `rag_retrieve`, `parallel`, `reflect`, `agent_call`, `chat_turn`, `orchestrator`, `judge_call`, `supervisor`, `report`.
 3. **Configure error handling** — per-step `errorStrategy`: `retry` (transient failures), `fallback` (alternative path), `skip` (non-critical), `fail` (critical). Set `budgetLimitUsd` for cost caps (80% warning, 100% stop).
 4. **Validate** — `validateWorkflow()` checks DAG structure (cycles, orphans, required config). `semanticValidateWorkflow()` checks DB references (model, capability, agent slugs exist).
 5. **Create** v1 atomically via API (`POST` creates the workflow row and v1 in one transaction; `patternsUsed` is an `Int[]` of pattern numbers):
