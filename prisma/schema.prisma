@@ -205,6 +205,14 @@ model AiAgent {
   maxCostPerTurnUsd         Float?
   metadata                  Json?
   knowledgeAccessMode       String   @default("full") // "full" = unrestricted KB access (default — preserves prior behaviour). "restricted" = effective doc set is (granted docs) ∪ (docs in any granted tag) ∪ (docs with scope = 'system').
+  // When the chat handler forces a search_knowledge_base call (toolChoice) on the
+  // first LLM iteration of a turn. "model" = unchanged (LLM decides); "first_turn" =
+  // force on the opening user turn only; "every_turn" = force every user turn;
+  // "keywords" = force when the user message matches any knowledgeTriggerKeywords entry.
+  // No-op if the agent doesn't have search_knowledge_base enabled. See
+  // lib/orchestration/chat/streaming-handler.ts.
+  knowledgeRetrievalMode    String   @default("model") // model|first_turn|every_turn|keywords
+  knowledgeTriggerKeywords  String[] @default([]) // trigger terms for knowledgeRetrievalMode = "keywords"
   topicBoundaries           String[] @default([]) // forbidden topic keywords/phrases for output guard
   // Inheritable system-prompt sections — see lib/orchestration/agents/resolve-effective-prompt.ts
   // Null/empty agent text => inherit from the linked AiAgentProfile (if any).
