@@ -178,6 +178,42 @@ Currently `search_knowledge_base` is the only citation-producing capability; the
 
 Citations are attached only to the **terminal** assistant message (the one that contains the `[N]` markers). Interim tool-call turns do not carry citations because the LLM has not yet produced grounded text.
 
+### Retrieval is tool-driven, not prompt injection
+
+A common misconception: that knowledge is "injected into the prompt when relevant." It is not. Chat-time knowledge use is **purely agentic** — the model decides whether to call `search_knowledge_base`, and the retrieved chunks come back to it as a **`tool`-role message** on the next turn, the same way any function-call result does:
+
+```ts
+// streaming-handler.ts — after dispatching the tool, the result is appended
+// to the message array and the LLM is re-invoked with it on the next turn:
+messages = [
+  ...messages,
+  { role: 'assistant', content: assistantText, toolCalls: [tc] }, // the model's search request
+  { role: 'tool', content: JSON.stringify(augmentedResult), toolCallId: tc.id }, // ← chunks the model now reads
+];
+```
+
+Consequences worth internalising:
+
+- **The LLM does see the full chunk text** (plus the injected `[N]` markers) — that is what lets it write a grounded answer and cite sources.
+- **Nothing relevant is auto-pasted into the system prompt.** A turn where the model never calls the tool uses _none_ of the knowledge base, no matter how relevant a document might have been. `knowledgeAccessMode` (`full` / `restricted`) only gates _which_ documents the tool may search — it does not trigger retrieval.
+- **Retrieval can be _forced_, but it is still tool-based.** A per-agent `knowledgeRetrievalMode` (`model` / `first_turn` / `every_turn` / `keywords` — see [knowledge.md](./knowledge.md#when-the-agent-searches-retrieval-policy)) can pin `toolChoice: { name: 'search_knowledge_base' }` on the first LLM iteration so the model _must_ search. The results still arrive as a `tool` message, not as a prompt block — forcing changes _whether_ the search happens, not _how_ the chunks reach the model.
+- **One genuine injection exists, and it is not general KB search.** When a request carries `contextType: 'pattern'` + `contextId` (the Learning Lab advisor viewing a specific pattern), `buildContext` pastes that one entity's detail in as a locked system message. That is request-scoped, entity-specific context — distinct from `search_knowledge_base` over the whole corpus — and it does not produce `[N]` citations.
+- Workflows can do explicit RAG via the `rag_retrieve` step, but that too is manual interpolation into a downstream step's prompt, not automatic injection.
+
+### Sources panel: retrieved vs used, and match score
+
+Admin chat surfaces (Learning Lab advisor/quiz, the agent test tab, the trace viewer, the eval runner) render the `Citation[]` envelope as a collapsible **Sources** panel (`CitationsList` in `components/admin/orchestration/chat/message-with-citations.tsx`). The panel distinguishes three things, each with an honest, bounded meaning:
+
+| Signal          | Where                                                                            | What it means                                                                                                   | Limit                                                                                                                            |
+| --------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Retrieved**   | every row in the list; toggle count `Sources (N retrieved)`                      | the chunk was returned by the search and handed to the model                                                    | retrieval ≠ usage                                                                                                                |
+| **Match score** | `NN% match` per row + `best match NN%` on the toggle                             | `finalScore ?? similarity` as a clamped percent — how closely the chunk matched the query                       | cosine scores aren't calibrated across embedding models; compare _relative_ to each other, not against a fixed threshold         |
+| **Used**        | `Used` badge on a row; uncited rows dimmed; toggle reads `Sources (X used of Y)` | the model cited the chunk via `[N]` in its answer (`getCitedMarkers` intersects body markers with the envelope) | a lower bound — the model may have leaned on a chunk without citing it, and there is no per-token attribution to prove otherwise |
+
+The panel also carries a one-line caption restating the tool-driven mechanism so operators reading a single turn understand why a turn with no tool call shows no sources.
+
+**Why no "did it actually shape the answer" score here.** Beyond citations there is no deterministic attribution. The two proxies — an LLM groundedness/faithfulness judge (see [evaluation metrics](./evaluation-metrics.md)) and on/off ablation via the [experiments](./experiments.md) framework — live in the evaluation surfaces, not live chat, because both add cost/latency or require a second run. The live panel deliberately surfaces only what is observable for free: _was the tool called, did it find anything relevant (match score), and what did the model explicitly cite (used)._
+
 ## Inline trace annotations (admin only)
 
 Internal admin chat surfaces — the Learning Lab pattern advisor and quiz, the agent test tab on the agent edit form, the evaluation runner — display _why_ a response was produced: which capabilities the model invoked, with what arguments, at what latency, and whether each call succeeded. The diagnostic strip renders under each assistant bubble (small grey text, collapsible to per-tool cards) and is also rehydrated post-hoc by the conversation trace viewer.

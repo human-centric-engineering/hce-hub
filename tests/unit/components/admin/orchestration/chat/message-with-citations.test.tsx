@@ -11,7 +11,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { MessageWithCitations } from '@/components/admin/orchestration/chat/message-with-citations';
+import {
+  CitationsList,
+  MessageWithCitations,
+  formatSourcesLabel,
+  getCitedMarkers,
+  relevancePercent,
+  topRelevancePercent,
+} from '@/components/admin/orchestration/chat/message-with-citations';
 import type { Citation } from '@/types/orchestration';
 
 function makeCitation(overrides: Partial<Citation> = {}): Citation {
@@ -60,8 +67,8 @@ describe('MessageWithCitations', () => {
     ];
     render(<MessageWithCitations content="Foo [1] [2]" citations={citations} />);
     // Sources panel is collapsed by default — expand it to inspect rows.
-    expect(screen.getByText('Sources (2)')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /sources \(2\)/i }));
+    expect(screen.getByText('Sources (2 used of 2)')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /sources \(2 used of 2\)/i }));
     expect(screen.getByText('Tenancy Guide')).toBeInTheDocument();
     expect(screen.getByText('Renters Reform Act')).toBeInTheDocument();
     expect(screen.getByText(/Notice must give two months/)).toBeInTheDocument();
@@ -84,14 +91,14 @@ describe('MessageWithCitations', () => {
       }),
     ];
     render(<MessageWithCitations content="See [1]" citations={citations} />);
-    await user.click(screen.getByRole('button', { name: /sources \(1\)/i }));
+    await user.click(screen.getByRole('button', { name: /sources \(1 used of 1\)/i }));
     expect(screen.getByText('ReAct')).toBeInTheDocument();
   });
 
   it('toggles the sources panel when the heading button is clicked', async () => {
     const user = userEvent.setup();
     render(<MessageWithCitations content="See [1]" citations={[makeCitation()]} />);
-    const toggle = screen.getByRole('button', { name: /sources \(1\)/i });
+    const toggle = screen.getByRole('button', { name: /sources \(1 used of 1\)/i });
     // Panel starts collapsed — the body of the message is the primary
     // content; sources expand on demand.
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -105,7 +112,7 @@ describe('MessageWithCitations', () => {
     const user = userEvent.setup();
     const citations = [makeCitation({ section: null })];
     render(<MessageWithCitations content="See [1]" citations={citations} />);
-    await user.click(screen.getByRole('button', { name: /sources \(1\)/i }));
+    await user.click(screen.getByRole('button', { name: /sources \(1 used of 1\)/i }));
     const list = screen.getByRole('list');
     expect(within(list).queryByText(/·/)).not.toBeInTheDocument();
   });
@@ -113,7 +120,7 @@ describe('MessageWithCitations', () => {
   it('reveals a collapsed sources panel when a valid marker is clicked', async () => {
     const user = userEvent.setup();
     render(<MessageWithCitations content="See [1]" citations={[makeCitation({ marker: 1 })]} />);
-    const toggle = screen.getByRole('button', { name: /sources \(1\)/i });
+    const toggle = screen.getByRole('button', { name: /sources \(1 used of 1\)/i });
     // Panel is collapsed by default; clicking a citation marker should
     // expand it so the target row is visible.
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -159,7 +166,7 @@ describe('MessageWithCitations', () => {
     const user = userEvent.setup();
     const citations = [makeCitation({ excerpt: '' })];
     render(<MessageWithCitations content="See [1]" citations={citations} />);
-    await user.click(screen.getByRole('button', { name: /sources \(1\)/i }));
+    await user.click(screen.getByRole('button', { name: /sources \(1 used of 1\)/i }));
     // The list item still renders the document name, but no excerpt <p>.
     expect(screen.getByText('Tenancy Guide')).toBeInTheDocument();
     expect(screen.queryByText(/deposit must be protected/)).not.toBeInTheDocument();
@@ -211,5 +218,107 @@ describe('MessageWithCitations', () => {
 
     await user.click(screen.getByLabelText('Citation 1'));
     expect(onCitationClick).toHaveBeenCalledOnce();
+  });
+});
+
+describe('getCitedMarkers', () => {
+  it('returns only the markers cited in the body that have a matching citation', () => {
+    const valid = new Set([1, 2, 3]);
+    expect(getCitedMarkers('Uses [1] and [3] here.', valid)).toEqual(new Set([1, 3]));
+  });
+
+  it('excludes bracketed numbers with no matching citation (possible hallucination)', () => {
+    const valid = new Set([1, 2]);
+    expect(getCitedMarkers('Cites [1] and [9].', valid)).toEqual(new Set([1]));
+  });
+
+  it('returns an empty set when the body cites nothing', () => {
+    expect(getCitedMarkers('No markers here.', new Set([1, 2]))).toEqual(new Set());
+  });
+
+  it('returns an empty set when there are no valid markers', () => {
+    expect(getCitedMarkers('See [1].', new Set())).toEqual(new Set());
+  });
+
+  it('counts a repeated marker once', () => {
+    expect(getCitedMarkers('[1] then [1] again.', new Set([1]))).toEqual(new Set([1]));
+  });
+});
+
+describe('formatSourcesLabel', () => {
+  it('reports "X used of Y" when at least one source was cited', () => {
+    expect(formatSourcesLabel(7, 2)).toBe('Sources (2 used of 7)');
+  });
+
+  it('reports only the retrieved count when nothing was cited', () => {
+    expect(formatSourcesLabel(7, 0)).toBe('Sources (7 retrieved)');
+  });
+});
+
+describe('relevancePercent / topRelevancePercent', () => {
+  it('renders the cosine similarity as a clamped integer percent', () => {
+    expect(relevancePercent(makeCitation({ similarity: 0.912 }))).toBe(91);
+  });
+
+  it('prefers the hybrid blended score over raw similarity when present', () => {
+    expect(relevancePercent(makeCitation({ similarity: 0.5, finalScore: 0.83 }))).toBe(83);
+  });
+
+  it('clamps an out-of-range cosine value into [0, 100]', () => {
+    expect(relevancePercent(makeCitation({ similarity: 1.4 }))).toBe(100);
+    expect(relevancePercent(makeCitation({ similarity: -0.2 }))).toBe(0);
+  });
+
+  it('returns the highest match across sources, or null when there are none', () => {
+    const citations = [
+      makeCitation({ marker: 1, similarity: 0.4 }),
+      makeCitation({ marker: 2, similarity: 0.87 }),
+    ];
+    expect(topRelevancePercent(citations)).toBe(87);
+    expect(topRelevancePercent([])).toBeNull();
+  });
+});
+
+describe('CitationsList usage + relevance', () => {
+  it('badges cited sources, dims uncited ones, and renders the explainer caption', () => {
+    const citations = [
+      makeCitation({ marker: 1, documentName: 'Used Doc' }),
+      makeCitation({ marker: 2, chunkId: 'c2', documentName: 'Unused Doc' }),
+    ];
+    render(<CitationsList citations={citations} citedMarkers={new Set([1])} />);
+
+    // The cited source gets a "Used" badge; the uncited one does not.
+    expect(screen.getByText('Used')).toBeInTheDocument();
+
+    const items = screen.getAllByRole('listitem');
+    const usedItem = items.find((li) => li.id === 'citation-1')!;
+    const unusedItem = items.find((li) => li.id === 'citation-2')!;
+    expect(usedItem.className).not.toContain('opacity-60');
+    expect(unusedItem.className).toContain('opacity-60');
+
+    // The explainer caption spells out the agentic (non-injected) mechanism
+    // and the "Used" clause when usage info is present.
+    expect(screen.getByText(/passed to the model as tool results/i)).toBeInTheDocument();
+    expect(screen.getByText(/“Used” marks the ones the model cited/i)).toBeInTheDocument();
+  });
+
+  it('shows a per-source match score for every source', () => {
+    const citations = [
+      makeCitation({ marker: 1, similarity: 0.91 }),
+      makeCitation({ marker: 2, chunkId: 'c2', similarity: 0.42 }),
+    ];
+    render(<CitationsList citations={citations} citedMarkers={new Set([1])} />);
+    expect(screen.getByText('91% match')).toBeInTheDocument();
+    expect(screen.getByText('42% match')).toBeInTheDocument();
+  });
+
+  it('always renders the mechanism caption but omits the "Used" clause without usage info', () => {
+    const citations = [makeCitation({ marker: 1 })];
+    render(<CitationsList citations={citations} />);
+
+    expect(screen.queryByText('Used')).not.toBeInTheDocument();
+    expect(screen.getByText(/passed to the model as tool results/i)).toBeInTheDocument();
+    expect(screen.queryByText(/“Used” marks the ones the model cited/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('listitem').className).not.toContain('opacity-60');
   });
 });

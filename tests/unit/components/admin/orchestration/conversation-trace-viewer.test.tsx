@@ -349,8 +349,8 @@ describe('ConversationTraceViewer', () => {
       // Marker link and the heading button are visible without expansion;
       // the source row contents only render after the user opens the panel.
       expect(screen.getByLabelText('Citation 1')).toHaveAttribute('href', '#citation-1');
-      expect(screen.getByText('Sources (1)')).toBeInTheDocument();
-      await user.click(screen.getByRole('button', { name: /sources \(1\)/i }));
+      expect(screen.getByText('Sources (1 used of 1)')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /sources \(1 used of 1\)/i }));
       expect(screen.getByText('Tenancy Guide')).toBeInTheDocument();
       expect(screen.getByText(/within 30 days of receipt/)).toBeInTheDocument();
     });

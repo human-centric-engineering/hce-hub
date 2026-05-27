@@ -64,6 +64,61 @@ interface Props {
 const CITE_OPEN = '';
 const CITE_CLOSE = '';
 const CITE_SOURCE_RE = /\[(\d+)\]/g;
+
+/**
+ * Scan a message body for `[N]` citation markers and return the subset
+ * that have a matching citation. This is "used" in the operator sense:
+ * a source the model actually referenced in its answer, as opposed to
+ * one that was merely retrieved and offered to the model. Markers with
+ * no matching citation (possible hallucinations) are excluded.
+ *
+ * Exported so the live chat meta strip and the inline citations panel
+ * share one definition of "cited".
+ */
+export function getCitedMarkers(content: string, validMarkers: Set<number>): Set<number> {
+  const cited = new Set<number>();
+  if (!content || validMarkers.size === 0) return cited;
+  CITE_SOURCE_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = CITE_SOURCE_RE.exec(content))) {
+    const n = Number.parseInt(match[1], 10);
+    if (validMarkers.has(n)) cited.add(n);
+  }
+  return cited;
+}
+
+/**
+ * Toggle label for the sources panel. When the model cited at least one
+ * source we lead with how many of the retrieved set it actually used
+ * ("2 used of 7"); when it cited none we just report the retrieved count
+ * ("7 retrieved"). Shared so the live chat and inline panel read alike.
+ */
+export function formatSourcesLabel(retrievedCount: number, usedCount: number): string {
+  if (usedCount > 0) return `Sources (${usedCount} used of ${retrievedCount})`;
+  return `Sources (${retrievedCount} retrieved)`;
+}
+
+/**
+ * The relevance score for a citation as an integer percent. Uses the
+ * hybrid-search blended score when present, otherwise the raw cosine
+ * similarity — both are the value the search ranked on. Clamped to
+ * [0, 100] so an out-of-range cosine value can't render nonsense.
+ *
+ * This is *retrieval* relevance — how closely the chunk matched the
+ * query — not a claim that the model used the chunk. It lets an operator
+ * judge whether the knowledge base actually had anything on-topic to
+ * offer the model.
+ */
+export function relevancePercent(c: Citation): number {
+  const score = c.finalScore ?? c.similarity;
+  return Math.max(0, Math.min(100, Math.round(score * 100)));
+}
+
+/** Highest relevance among the retrieved sources, or null if none. */
+export function topRelevancePercent(citations: Citation[]): number | null {
+  if (citations.length === 0) return null;
+  return Math.max(...citations.map(relevancePercent));
+}
 const CITE_SENTINEL_RE = /(\d+)/g;
 
 // Minimal styling for markdown blocks. We intentionally avoid `prose`
@@ -110,6 +165,7 @@ export function MessageWithCitations({
   // unconditionally would falsely flag any prose that happens to contain
   // bracketed digits (e.g. "see paragraph [5]") as hallucinated.
   const validMarkers = hasCitations ? new Set(citations.map((c) => c.marker)) : null;
+  const citedMarkers = validMarkers ? getCitedMarkers(content, validMarkers) : undefined;
   const encoded = hasCitations
     ? content.replace(CITE_SOURCE_RE, (_, n) => `${CITE_OPEN}${n}${CITE_CLOSE}`)
     : content;
@@ -150,6 +206,7 @@ export function MessageWithCitations({
       {hasCitations && panelMode === 'inline' && (
         <CitationsPanel
           citations={citations}
+          citedMarkers={citedMarkers}
           open={showSources}
           onToggle={() => setShowSources((v) => !v)}
         />
@@ -163,37 +220,79 @@ export function MessageWithCitations({
  * that already own the toggle (e.g. the live chat's unified meta strip)
  * so the list slots in next to other expanded panels.
  */
-export function CitationsList({ citations }: { citations: Citation[] }): React.ReactElement {
+export function CitationsList({
+  citations,
+  citedMarkers,
+}: {
+  citations: Citation[];
+  /**
+   * Markers the model actually cited in its answer (see
+   * {@link getCitedMarkers}). When provided, cited sources get a "Used"
+   * badge and uncited ones are dimmed so an operator can tell at a glance
+   * which retrieved chunks the answer leaned on. When omitted, every
+   * source renders at equal weight (unchanged behaviour).
+   */
+  citedMarkers?: Set<number>;
+}): React.ReactElement {
+  const hasUsage = citedMarkers !== undefined;
   return (
-    <ol className="mt-2 space-y-2 text-xs">
-      {citations.map((c) => (
-        <li
-          key={c.marker}
-          id={`citation-${c.marker}`}
-          className="border-border/40 bg-muted/40 rounded border p-2"
-        >
-          <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span className="text-primary bg-primary/10 inline-flex h-4 min-w-4 items-center justify-center rounded-sm px-1 text-[11px] leading-none font-medium">
-              {c.marker}
-            </span>
-            <span className="text-foreground text-[11px] font-medium">
-              {c.documentName ?? c.patternName ?? 'Untitled source'}
-            </span>
-            {c.section && <span className="text-muted-foreground text-[11px]">· {c.section}</span>}
-          </header>
-          {c.excerpt && (
-            <div
+    <>
+      <ol className="mt-2 space-y-2 text-xs">
+        {citations.map((c) => {
+          const used = citedMarkers?.has(c.marker) ?? false;
+          return (
+            <li
+              key={c.marker}
+              id={`citation-${c.marker}`}
               className={cn(
-                MARKDOWN_BLOCK_CLASSES,
-                'text-muted-foreground mt-1 text-[11px] leading-snug'
+                'border-border/40 bg-muted/40 rounded border p-2',
+                hasUsage && !used && 'opacity-60'
               )}
             >
-              <Markdown>{c.excerpt}</Markdown>
-            </div>
-          )}
-        </li>
-      ))}
-    </ol>
+              <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="text-primary bg-primary/10 inline-flex h-4 min-w-4 items-center justify-center rounded-sm px-1 text-[11px] leading-none font-medium">
+                  {c.marker}
+                </span>
+                <span className="text-foreground text-[11px] font-medium">
+                  {c.documentName ?? c.patternName ?? 'Untitled source'}
+                </span>
+                {c.section && (
+                  <span className="text-muted-foreground text-[11px]">· {c.section}</span>
+                )}
+                <span
+                  className="text-muted-foreground ml-auto text-[11px] tabular-nums"
+                  title="How closely this chunk matched the search query (knowledge-base similarity score). Higher means a closer match — it does not by itself mean the model used the chunk."
+                >
+                  {relevancePercent(c)}% match
+                </span>
+                {used && (
+                  <span className="bg-primary/10 text-primary inline-flex items-center rounded-sm px-1 text-[10px] leading-none font-medium uppercase">
+                    Used
+                  </span>
+                )}
+              </header>
+              {c.excerpt && (
+                <div
+                  className={cn(
+                    MARKDOWN_BLOCK_CLASSES,
+                    'text-muted-foreground mt-1 text-[11px] leading-snug'
+                  )}
+                >
+                  <Markdown>{c.excerpt}</Markdown>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <p className="text-muted-foreground mt-2 text-[11px] leading-snug">
+        Retrieved by similarity search when the agent ran the knowledge-base tool, then passed to
+        the model as tool results — knowledge is not inserted into the prompt automatically, so a
+        turn with no tool call uses none of it. The match score is how closely each chunk matched
+        the query.
+        {hasUsage && ' “Used” marks the ones the model cited in its answer with [N].'}
+      </p>
+    </>
   );
 }
 
@@ -269,11 +368,18 @@ function splitCitations(
 
 interface CitationsPanelProps {
   citations: Citation[];
+  citedMarkers?: Set<number>;
   open: boolean;
   onToggle: () => void;
 }
 
-function CitationsPanel({ citations, open, onToggle }: CitationsPanelProps): React.ReactElement {
+function CitationsPanel({
+  citations,
+  citedMarkers,
+  open,
+  onToggle,
+}: CitationsPanelProps): React.ReactElement {
+  const topMatch = topRelevancePercent(citations);
   return (
     <aside className="border-border/60 mt-2 border-t pt-2">
       <button
@@ -287,9 +393,17 @@ function CitationsPanel({ citations, open, onToggle }: CitationsPanelProps): Rea
         ) : (
           <ChevronRight className="h-3 w-3" aria-hidden="true" />
         )}
-        Sources ({citations.length})
+        <span>{formatSourcesLabel(citations.length, citedMarkers?.size ?? 0)}</span>
+        {topMatch !== null && (
+          <span
+            className="opacity-80"
+            title="Highest knowledge-base match score among these sources"
+          >
+            · best match {topMatch}%
+          </span>
+        )}
       </button>
-      {open && <CitationsList citations={citations} />}
+      {open && <CitationsList citations={citations} citedMarkers={citedMarkers} />}
     </aside>
   );
 }

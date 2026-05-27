@@ -61,6 +61,9 @@ import { ThinkingIndicator } from '@/components/admin/orchestration/chat/thinkin
 import {
   CitationsList,
   MessageWithCitations,
+  formatSourcesLabel,
+  getCitedMarkers,
+  topRelevancePercent,
 } from '@/components/admin/orchestration/chat/message-with-citations';
 import {
   ToolCallsList,
@@ -359,6 +362,11 @@ function AssistantMetaStrip({
   showInlineTrace,
 }: AssistantMetaStripProps): React.ReactElement | null {
   const hasCitations = !!message.citations && message.citations.length > 0;
+  // Which retrieved sources the answer actually cited (`[N]` in the body).
+  // Drives the "X used of Y" label and the per-source "Used" badge / dim.
+  const citedMarkers = hasCitations
+    ? getCitedMarkers(message.content, new Set(message.citations!.map((c) => c.marker)))
+    : undefined;
   const hasToolCalls = showInlineTrace && !!message.toolCalls && message.toolCalls.length > 0;
   const hasInputBreakdown = showInlineTrace && !!message.inputBreakdown;
   const hasSideEffectModels =
@@ -393,7 +401,15 @@ function AssistantMetaStrip({
               ) : (
                 <ChevronRight className="h-3 w-3" aria-hidden="true" />
               )}
-              Sources ({message.citations!.length})
+              <span>{formatSourcesLabel(message.citations!.length, citedMarkers?.size ?? 0)}</span>
+              {topRelevancePercent(message.citations!) !== null && (
+                <span
+                  className="opacity-80"
+                  title="Highest knowledge-base match score among these sources"
+                >
+                  · best match {topRelevancePercent(message.citations!)}%
+                </span>
+              )}
             </button>
           )}
           {hasToolCalls && toolSummary && (
@@ -454,7 +470,9 @@ function AssistantMetaStrip({
           ))}
       </div>
 
-      {expanded === 'sources' && hasCitations && <CitationsList citations={message.citations!} />}
+      {expanded === 'sources' && hasCitations && (
+        <CitationsList citations={message.citations!} citedMarkers={citedMarkers} />
+      )}
       {expanded === 'tools' && hasToolCalls && (
         <ToolCallsList toolCalls={message.toolCalls!} id="message-trace-details" />
       )}

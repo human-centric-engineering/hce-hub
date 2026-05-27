@@ -402,9 +402,9 @@ describe('ChatInterface', () => {
     // collapsed) sources list.
     await waitFor(() => {
       expect(screen.getByLabelText('Citation 1')).toBeInTheDocument();
-      expect(screen.getByText('Sources (1)')).toBeInTheDocument();
+      expect(screen.getByText('Sources (1 used of 1)')).toBeInTheDocument();
     });
-    await user.click(screen.getByRole('button', { name: /sources \(1\)/i }));
+    await user.click(screen.getByRole('button', { name: /sources \(1 used of 1\)/i }));
     expect(screen.getByText('Tenancy Guide')).toBeInTheDocument();
   });
 
