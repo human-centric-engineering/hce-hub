@@ -953,10 +953,11 @@ export function CapabilityForm({
                 </Label>
                 <Textarea
                   id="fnDesc"
-                  rows={2}
+                  rows={4}
                   value={fnDescription}
                   onChange={(e) => setFnDescription(e.target.value)}
                   placeholder="Search the help docs knowledge base and return matching articles."
+                  className="min-h-20 resize-y"
                 />
               </div>
 
