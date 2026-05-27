@@ -1703,6 +1703,12 @@ model AiExperiment {
   // run route uses [judge_agent: eval-judge-relevance] as a sensible
   // default when both fields are null on a draft.
   metricConfigs Json?
+  // Phase 3.5a: stored pairwise verdict tally from the
+  // /experiments/:id/verdicts endpoint. Shape: PairwiseVerdictSummary
+  // in `types/orchestration.ts`. One blob per experiment — rerunning
+  // verdicts overwrites with the new judge + timestamp. Null when no
+  // verdict has been computed yet.
+  pairwiseVerdict Json?
   // Erasure: SetNull-retained (de-attributed) when the creator is erased.
   createdBy     String?
   createdAt     DateTime @default(now())

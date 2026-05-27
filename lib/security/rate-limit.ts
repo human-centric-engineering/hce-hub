@@ -401,6 +401,21 @@ export const synthesisLimiter = createRateLimiter({
 });
 
 /**
+ * Pairwise verdict runs (admin) — 5 calls per minute per user ID.
+ *
+ * Each call drives a judge agent across up to 100 dataset case pairs
+ * (one LLM call per pair). That's an order of magnitude heavier than
+ * `synthesisLimiter`'s single-call workload, so the cap is tighter.
+ * The orchestration tier (120/min) already applies via the middleware;
+ * this is the per-flow sub-cap layered on top.
+ */
+export const pairwiseVerdictLimiter = createRateLimiter({
+  interval: SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_INTERVAL,
+  maxRequests: 5,
+  uniqueTokenPerInterval: SECURITY_CONSTANTS.RATE_LIMIT.MAX_UNIQUE_TOKENS,
+});
+
+/**
  * Rate limiter for admin bulk-export endpoints (e.g. conversation export).
  * Limit: 10 requests per minute per user.
  *

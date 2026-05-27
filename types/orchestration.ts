@@ -1918,6 +1918,56 @@ export const DEPLOYMENT_PROFILE_META: Record<
   },
 };
 
+// ---------------------------------------------------------------------------
+// Pairwise verdict (Phase 3.5a)
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-case pairwise verdict row, persisted as part of the experiment-level
+ * `pairwiseVerdict` blob.
+ */
+export interface PairwiseVerdictCase {
+  /** Position of the dataset case (stable across edits — the join key). */
+  casePosition: number;
+  /** Judge's forced-choice verdict. */
+  verdict: 'A' | 'B' | 'tie';
+  /** One-sentence reasoning the judge returned. */
+  reasoning: string;
+  /**
+   * Set when the case was skipped (one variant missing a result, or the
+   * judge agent errored). Verdict is then 'tie' by convention.
+   */
+  error?: string;
+}
+
+/**
+ * Stored on `AiExperiment.pairwiseVerdict`. Written by the
+ * `/experiments/:id/verdicts` endpoint after running `pairwise_judge_agent`
+ * across both variants' per-case outputs. Single-blob storage — rerunning
+ * overwrites with a new judge slug + timestamp.
+ */
+export interface PairwiseVerdictSummary {
+  /** Slug of the judge agent (kind='judge') the verdict was run with. */
+  judgeAgentSlug: string;
+  /** Variant whose outputs are labelled 'A' in the per-case verdicts. */
+  variantAId: string;
+  /** Variant whose outputs are labelled 'B' in the per-case verdicts. */
+  variantBId: string;
+  /** ISO timestamp of when the verdict was last computed. */
+  computedAt: string;
+  /** Number of (A, B) case pairs the judge actually scored. */
+  casesScored: number;
+  /**
+   * Number of case pairs that were skipped — either variant missing a
+   * result, or the judge errored and we defaulted the verdict to 'tie'.
+   */
+  casesFailed: number;
+  /** Aggregate tally — sums to `casesScored`. */
+  counts: { A: number; B: number; tie: number };
+  /** Per-case detail, sorted by ascending `casePosition`. */
+  perCase: PairwiseVerdictCase[];
+}
+
 // Re-export Prisma model types for convenience
 export type {
   AiAgent,

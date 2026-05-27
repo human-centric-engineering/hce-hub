@@ -258,6 +258,8 @@ export const API = {
         '/api/v1/admin/orchestration/evaluations/datasets/generate-from-description/commit',
       experimentCompareById: (id: string): string =>
         `/api/v1/admin/orchestration/experiments/${id}/compare`,
+      experimentVerdictsById: (id: string): string =>
+        `/api/v1/admin/orchestration/experiments/${id}/verdicts`,
       EVAL_RUNS: '/api/v1/admin/orchestration/evaluations/runs',
       EVAL_RUN_ESTIMATE: '/api/v1/admin/orchestration/evaluations/runs/estimate',
       evalRunById: (id: string): string => `/api/v1/admin/orchestration/evaluations/runs/${id}`,

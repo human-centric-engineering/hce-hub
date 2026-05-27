@@ -16,6 +16,7 @@ import { prisma } from '@/lib/db/client';
 import { successResponse } from '@/lib/api/responses';
 import { NotFoundError } from '@/lib/api/errors';
 import { getRouteLogger } from '@/lib/api/context';
+import type { PairwiseVerdictSummary } from '@/types/orchestration';
 
 type Params = { id: string };
 
@@ -36,6 +37,17 @@ export interface ExperimentCompareResponse {
   experimentName: string;
   variants: VariantCompareRow[];
   metricSlugs: string[];
+  /**
+   * Phase 3.5a: number of dataset cases on the experiment's shared
+   * dataset. Used by the compare view to gate the "Run verdict" action
+   * behind the 100-case cap.
+   */
+  caseCount: number | null;
+  /**
+   * Phase 3.5a: stored pairwise verdict tally (or null when none has
+   * been computed yet). Written by `POST /experiments/:id/verdicts`.
+   */
+  pairwiseVerdict: PairwiseVerdictSummary | null;
 }
 
 function readRawScores(summary: Record<string, unknown> | null): RawScores {
@@ -73,6 +85,7 @@ export const GET = withAdminAuth<Params>(async (request, session, { params }) =>
           },
         },
       },
+      dataset: { select: { caseCount: true } },
       creator: { select: { id: true } },
     },
   });
@@ -112,6 +125,8 @@ export const GET = withAdminAuth<Params>(async (request, session, { params }) =>
     experimentName: experiment.name,
     variants,
     metricSlugs: Array.from(allMetricSlugs).sort(),
+    caseCount: experiment.dataset?.caseCount ?? null,
+    pairwiseVerdict: (experiment.pairwiseVerdict as PairwiseVerdictSummary | null) ?? null,
   };
   return successResponse(payload);
 });

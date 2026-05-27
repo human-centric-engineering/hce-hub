@@ -18,10 +18,16 @@ import { ChevronLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  PairwiseVerdictCard,
+  type JudgeOption,
+} from '@/components/admin/orchestration/experiments/pairwise-verdict-card';
 import { VariantCompareTable } from '@/components/admin/orchestration/experiments/variant-compare-table';
+import { prisma } from '@/lib/db/client';
 import { API } from '@/lib/api/endpoints';
 import { parseApiResponse, serverFetch } from '@/lib/api/server-fetch';
 import { logger } from '@/lib/logging';
+import type { PairwiseVerdictSummary } from '@/types/orchestration';
 
 export const metadata: Metadata = {
   title: 'Compare variants · AI Orchestration',
@@ -45,6 +51,8 @@ interface CompareResponse {
   experimentName: string;
   variants: VariantRow[];
   metricSlugs: string[];
+  caseCount: number | null;
+  pairwiseVerdict: PairwiseVerdictSummary | null;
 }
 
 async function loadCompare(id: string): Promise<CompareResponse | null> {
@@ -66,12 +74,28 @@ async function loadCompare(id: string): Promise<CompareResponse | null> {
   }
 }
 
+async function loadJudges(): Promise<JudgeOption[]> {
+  try {
+    const judges = await prisma.aiAgent.findMany({
+      where: { kind: 'judge', isActive: true },
+      orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
+      select: { slug: true, name: true },
+    });
+    return judges;
+  } catch (err) {
+    logger.warn('Experiment compare: judge list fetch failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
+}
+
 export default async function ExperimentComparePage({
   params,
 }: PageProps): Promise<React.ReactElement> {
   const { id } = await params;
 
-  const data = await loadCompare(id);
+  const [data, judges] = await Promise.all([loadCompare(id), loadJudges()]);
   if (!data) notFound();
 
   const noRunsYet = data.variants.every((v) => v.evaluationRunId === null);
@@ -120,6 +144,18 @@ export default async function ExperimentComparePage({
               </CardContent>
             </Card>
           ) : null}
+          <PairwiseVerdictCard
+            experimentId={id}
+            verdict={data.pairwiseVerdict}
+            judges={judges}
+            variants={data.variants.map((v) => ({
+              variantId: v.variantId,
+              label: v.label,
+              evaluationRunId: v.evaluationRunId,
+              runStatus: v.runStatus,
+            }))}
+            caseCount={data.caseCount}
+          />
           <VariantCompareTable variants={data.variants} metricSlugs={data.metricSlugs} />
         </>
       )}

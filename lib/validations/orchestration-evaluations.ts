@@ -314,3 +314,29 @@ export type GenerateFromDescriptionPreviewInput = z.infer<
 export type GenerateFromDescriptionCommitInput = z.infer<
   typeof generateFromDescriptionCommitSchema
 >;
+
+// ---------------------------------------------------------------------------
+// Pairwise verdicts (Phase 3.5a)
+// ---------------------------------------------------------------------------
+
+/**
+ * Body for POST /experiments/:id/verdicts. The endpoint loads both
+ * variants' per-case `AiEvaluationCaseResult` rows, joins them by
+ * `casePosition`, and invokes the `pairwise_judge_agent` grader once per
+ * pair. Result is persisted on `AiExperiment.pairwiseVerdict`.
+ *
+ * `variantAId` / `variantBId` MUST belong to the experiment in the URL
+ * (route handler enforces ownership + membership) and MUST be distinct.
+ */
+export const runPairwiseVerdictSchema = z
+  .object({
+    judgeAgentSlug: z.string().min(1).max(120),
+    variantAId: z.string().min(1),
+    variantBId: z.string().min(1),
+  })
+  .strict()
+  .refine((v) => v.variantAId !== v.variantBId, {
+    message: 'variantAId and variantBId must be different',
+  });
+
+export type RunPairwiseVerdictInput = z.infer<typeof runPairwiseVerdictSchema>;

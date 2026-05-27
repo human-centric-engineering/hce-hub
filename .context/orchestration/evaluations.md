@@ -553,9 +553,8 @@ candidate answers side-by-side and parses
 chat-layer or parse errors so downstream consumers always see a
 usable shape. Standalone runs refuse pairwise metrics — they need
 two side-by-side outputs, which only the experiment compare flow
-supplies. The endpoint that runs pairwise verdicts across an
-experiment's variants (with a compare-view verdict badge) is a
-Phase 3.5 follow-up; the grader is callable programmatically today.
+supplies. The endpoint that surfaces verdicts in the admin UI ships
+in Phase 3.5a (see below).
 
 ### What's NOT included
 
@@ -570,6 +569,82 @@ Phase 3.5 follow-up; the grader is callable programmatically today.
 - A workflow-aware cost estimator. The form suppresses the cost
   banner for workflow subjects; the per-step token mix needs to be
   unioned across the workflow's defined steps. Phase 3.5.
+
+## Phase 3.5a — pairwise verdicts endpoint + compare badge
+
+The `pairwise_judge_agent` grader (Phase 3) is now driven through a
+dedicated admin endpoint and surfaced on the compare view, completing
+the half-shipped pairwise flow.
+
+### Endpoint
+
+`POST /api/v1/admin/orchestration/experiments/:id/verdicts`
+
+- Body: `{ judgeAgentSlug, variantAId, variantBId }`. Variants must
+  belong to the experiment and have a completed `AiEvaluationRun`.
+- Loads both variants' per-case `AiEvaluationCaseResult` rows and joins
+  them by `casePosition`. Drives `pairwiseJudgeAgentGrader` once per
+  pair, tallies `{ A, B, tie }` verdicts, persists a
+  `PairwiseVerdictSummary` blob on `AiExperiment.pairwiseVerdict`.
+- Synchronous, hard-capped at 100 dataset cases — the 409 response
+  recommends a smaller dataset. Above the cap the cost + latency of
+  100 + judge LLM calls outweighs the inline UX value; promote to a
+  queued worker if real datasets blow past the cap.
+- Sub-cap: `pairwiseVerdictLimiter` at 5/min/session-user
+  (`lib/security/rate-limit.ts`). Each call drives up to 100 LLM
+  invocations, so the cap is tighter than the `orchestration` section
+  tier's 120/min.
+- Grader errors (LLM stream failure, malformed JSON) get folded into
+  `casesFailed` rather than polluting the tally — the grader's
+  prefixed reasoning string is the signal.
+- Unpaired positions (one variant missing a result for that case)
+  are recorded in `perCase` with an `error` string and counted in
+  `casesFailed`; the grader is not invoked for them.
+
+### Compare-view card
+
+The compare page (`/admin/orchestration/experiments/:id/compare`)
+now renders a **Pairwise verdict** card between the
+"still queued" banner and the per-metric variant grid. The card
+shows the stored tally (A wins / B wins / Ties / Failed) when one
+exists, plus a **Run verdict / Re-run verdict** button that opens a
+dialog with a judge picker + variant A/B selectors (defaults to
+control + first challenger, judges pulled directly from
+`AiAgent where kind='judge' AND isActive`).
+
+The button is disabled below the threshold of two completed runs,
+above the 100-case cap, or when the experiment has no dataset — the
+empty-state copy explains which condition tripped.
+
+### What's NOT included
+
+- A queued/asynchronous path for >100-case experiments. The 100-cap
+  is a deliberate constraint to keep the endpoint synchronous + the
+  UX legible; we'd revisit if anyone actually wants pairwise tallies
+  on bigger datasets.
+- A history of past verdicts. Re-running overwrites the prior
+  `pairwiseVerdict` blob with the new judge slug + timestamp. The
+  cost rows (tagged `role: 'judge'` on `AiCostLog`) retain the audit
+  trail.
+- Pairwise stats (e.g. binomial test on the tally counts) on the
+  compare page. The Welch + Cohen's d badges on the per-metric grid
+  already serve the "is this difference real?" question; pairwise
+  verdicts answer "which one would a judge prefer?".
+
+### Critical files
+
+| Concern                | Path                                                                        |
+| ---------------------- | --------------------------------------------------------------------------- |
+| Schema                 | `prisma/schema.prisma` (`AiExperiment.pairwiseVerdict`)                     |
+| Migration              | `prisma/migrations/20260527071146_add_experiment_pairwise_verdict/`         |
+| Type                   | `types/orchestration.ts` (`PairwiseVerdictSummary`, `PairwiseVerdictCase`)  |
+| Endpoint               | `app/api/v1/admin/orchestration/experiments/[id]/verdicts/route.ts`         |
+| Compare GET (extended) | `app/api/v1/admin/orchestration/experiments/[id]/compare/route.ts`          |
+| Zod schema             | `lib/validations/orchestration-evaluations.ts` (`runPairwiseVerdictSchema`) |
+| Sub-limiter            | `lib/security/rate-limit.ts` (`pairwiseVerdictLimiter`)                     |
+| Grader (reuse)         | `lib/orchestration/evaluations/graders/pairwise/judge-agent.ts`             |
+| Compare page           | `app/admin/orchestration/experiments/[id]/compare/page.tsx`                 |
+| Verdict card           | `components/admin/orchestration/experiments/pairwise-verdict-card.tsx`      |
 
 ## Phase 3.6 — dataset creation UX
 
