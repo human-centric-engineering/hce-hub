@@ -42,15 +42,19 @@ const CAPABILITY_DEFINITIONS = [
   {
     slug: 'search_knowledge_base',
     name: 'Search Knowledge Base',
+    // NOTE: keep this description in sync with the code constant in
+    // lib/orchestration/capabilities/built-in/search-knowledge.ts. The runtime
+    // tool definition the LLM sees is read from AiCapability.functionDefinition
+    // (this seeded row), not the code constant — see registry.ts#getCapabilityDefinitions.
     description:
-      'Semantic search over the agentic patterns knowledge base. Returns the top matching chunks ranked by cosine similarity with optional keyword boost.',
+      'Semantic search over the knowledge base. Call this whenever the user’s message touches a topic the knowledge base may cover — prefer searching over answering from memory when you are not certain. Returns the top matching chunks ranked by cosine similarity (with optional BM25-flavoured keyword scoring in hybrid mode). Each result carries a numeric `marker` field — when you ground a claim in a result, cite it inline using that marker in square brackets, e.g. "the deposit must be protected within 30 days [1]". A separate citations panel renders the source for each marker, so the user can verify the claim.',
     category: 'knowledge',
     executionType: 'internal',
     executionHandler: 'SearchKnowledgeCapability',
     functionDefinition: {
       name: 'search_knowledge_base',
       description:
-        'Semantic search over the agentic patterns knowledge base. Returns the top matching chunks ranked by cosine similarity with optional keyword boost.',
+        'Semantic search over the knowledge base. Call this whenever the user’s message touches a topic the knowledge base may cover — prefer searching over answering from memory when you are not certain. Returns the top matching chunks ranked by cosine similarity (with optional BM25-flavoured keyword scoring in hybrid mode). Each result carries a numeric `marker` field — when you ground a claim in a result, cite it inline using that marker in square brackets, e.g. "the deposit must be protected within 30 days [1]". A separate citations panel renders the source for each marker, so the user can verify the claim.',
       parameters: {
         type: 'object',
         properties: {
@@ -65,6 +69,12 @@ const CAPABILITY_DEFINITIONS = [
             description: 'Optional filter to a single pattern number (1–999).',
             minimum: 1,
             maximum: 999,
+          },
+          document_id: {
+            type: 'string',
+            format: 'uuid',
+            description:
+              'Optional filter to search within a single uploaded document. Use when the user wants results scoped to a specific file they uploaded.',
           },
         },
         required: ['query'],
@@ -216,7 +226,18 @@ const unit: SeedUnit = {
     for (const def of CAPABILITY_DEFINITIONS) {
       const capability = await prisma.aiCapability.upsert({
         where: { slug: def.slug },
-        update: { isSystem: true },
+        // System capabilities are seed-owned: re-apply the definition fields so an
+        // edited seed propagates to environments where the row already exists. We
+        // intentionally do NOT touch `isActive` — that stays an operator choice.
+        update: {
+          isSystem: true,
+          name: def.name,
+          description: def.description,
+          category: def.category,
+          functionDefinition: def.functionDefinition,
+          executionType: def.executionType,
+          executionHandler: def.executionHandler,
+        },
         create: {
           name: def.name,
           slug: def.slug,

@@ -67,10 +67,13 @@ export class SearchKnowledgeCapability extends BaseCapability<Args, Data> {
   // capability's trace beyond what's already on the message content.
   readonly processesPii = false;
 
+  // NOTE: the runtime tool definition the LLM sees is read from the DB
+  // (AiCapability.functionDefinition, seeded by prisma/seeds/005-pattern-advisor.ts),
+  // not this constant — keep the two descriptions in sync.
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'search_knowledge_base',
     description:
-      'Semantic search over the knowledge base. Returns the top matching chunks ranked by cosine similarity (with optional BM25-flavoured keyword scoring in hybrid mode). Each result carries a numeric `marker` field — when you ground a claim in a result, cite it inline using that marker in square brackets, e.g. "the deposit must be protected within 30 days [1]". A separate citations panel renders the source for each marker, so the user can verify the claim.',
+      'Semantic search over the knowledge base. Call this whenever the user’s message touches a topic the knowledge base may cover — prefer searching over answering from memory when you are not certain. Returns the top matching chunks ranked by cosine similarity (with optional BM25-flavoured keyword scoring in hybrid mode). Each result carries a numeric `marker` field — when you ground a claim in a result, cite it inline using that marker in square brackets, e.g. "the deposit must be protected within 30 days [1]". A separate citations panel renders the source for each marker, so the user can verify the claim.',
     parameters: {
       type: 'object',
       properties: {
