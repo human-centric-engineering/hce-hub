@@ -444,37 +444,42 @@ function AffectedAgentsPopover({
     );
   }
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 hover:underline"
-        >
-          {count} agent{count === 1 ? '' : 's'} affected →
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-72 p-0" align="start">
-        <div className="border-b px-3 py-2">
-          <p className="text-sm font-medium">
-            {count} agent{count === 1 ? '' : 's'} affected
-          </p>
-        </div>
-        <ul className="max-h-64 overflow-y-auto py-1">
-          {affectedAgents.map((agent) => (
-            <li key={agent.id}>
-              <Link
-                href={`/admin/orchestration/agents/${agent.id}`}
-                className="hover:bg-muted flex items-center gap-2 px-3 py-1.5 text-sm transition-colors"
-              >
-                <span className="truncate">{agent.name}</span>
-                <span className="text-muted-foreground ml-auto shrink-0 font-mono text-xs">
-                  {agent.slug}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </PopoverContent>
-    </Popover>
+    // Wrap in a block-level div so the Popover trigger doesn't sit
+    // inline next to the sibling Lift-quarantine button (the trigger is
+    // a <button>, which is inline-block by default).
+    <div>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 hover:underline"
+          >
+            {count} agent{count === 1 ? '' : 's'} affected →
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-72 p-0" align="start">
+          <div className="border-b px-3 py-2">
+            <p className="text-sm font-medium">
+              {count} agent{count === 1 ? '' : 's'} affected
+            </p>
+          </div>
+          <ul className="max-h-64 overflow-y-auto py-1">
+            {affectedAgents.map((agent) => (
+              <li key={agent.id}>
+                <Link
+                  href={`/admin/orchestration/agents/${agent.id}`}
+                  className="hover:bg-muted flex items-center gap-2 px-3 py-1.5 text-sm transition-colors"
+                >
+                  <span className="truncate">{agent.name}</span>
+                  <span className="text-muted-foreground ml-auto shrink-0 font-mono text-xs">
+                    {agent.slug}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
