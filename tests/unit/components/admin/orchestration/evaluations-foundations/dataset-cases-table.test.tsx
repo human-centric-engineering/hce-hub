@@ -197,6 +197,48 @@ describe('DatasetCasesTable', () => {
     expect(screen.getByText(/Edit case 0/)).toBeInTheDocument();
   });
 
+  it('closes the dialog without firing fetch when Save is clicked with no changes', async () => {
+    // The handler builds a `patch` object from only the fields that changed.
+    // If neither input nor expectedOutput differs from the row's current
+    // values, the patch is empty and the dialog closes without a network call.
+    // This protects against burning a request (and bumping the contentHash)
+    // for a no-op edit.
+    const fetchMock = mockFetchSuccess();
+    const user = userEvent.setup();
+    render(<DatasetCasesTable datasetId={DATASET_ID} initialCases={buildRows()} />);
+    await user.click(screen.getByRole('button', { name: /Edit case 0/i }));
+    await screen.findByText(/Edit case 0/);
+
+    // Don't touch input or expectedOutput — both stay at their initial values.
+    await user.click(screen.getByRole('button', { name: /^Save$/ }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Edit case 0/)).not.toBeInTheDocument();
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a network error inline when fetch rejects', async () => {
+    // catch-block coverage on line 157: when the fetch promise rejects
+    // (e.g. offline / DNS failure / aborted), the error message must be
+    // surfaced in the dialog rather than silently swallowed.
+    const fetchMock = vi.fn().mockRejectedValue(new Error('Network unreachable'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    render(<DatasetCasesTable datasetId={DATASET_ID} initialCases={buildRows()} />);
+    await user.click(screen.getByRole('button', { name: /Edit case 0/i }));
+
+    const inputArea = document.getElementById('edit-input') as HTMLTextAreaElement;
+    await user.clear(inputArea);
+    await user.type(inputArea, 'new');
+    await user.click(screen.getByRole('button', { name: /^Save$/ }));
+
+    expect(await screen.findByText(/Network unreachable/)).toBeInTheDocument();
+    // Dialog stays open so the user can retry.
+    expect(screen.getByText(/Edit case 0/)).toBeInTheDocument();
+  });
+
   it('updates local state + calls router.refresh on successful save', async () => {
     mockFetchSuccess();
     const user = userEvent.setup();
