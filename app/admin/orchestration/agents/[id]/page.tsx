@@ -13,14 +13,12 @@ import {
 } from '@/components/admin/orchestration/agents/quarantined-capabilities-banner';
 import { API } from '@/lib/api/endpoints';
 import { parseApiResponse, serverFetch } from '@/lib/api/server-fetch';
-import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import {
   getAgentModels,
   getEffectiveAgentDefaults,
   getProviders,
 } from '@/lib/orchestration/prefetch-helpers';
-import { resolveQuarantineState } from '@/lib/orchestration/capabilities/dispatcher';
 import type { AiAgent } from '@/types/prisma';
 
 export async function generateMetadata({
@@ -76,9 +74,9 @@ async function getAgentProfiles(): Promise<AgentProfileSummary[]> {
 }
 
 /**
- * Quarantined capabilities the agent is currently bound to. Reuses the
- * dispatcher's `resolveQuarantineState` so the expiry rule (a past
- * `quarantineUntil` = treat as active) lives in exactly one place.
+ * Quarantined capabilities the agent is currently bound to. Calls the
+ * admin API; the route applies read-time auto-expiry via the shared
+ * `resolveQuarantineState` so the rule lives in exactly one place.
  *
  * Returns [] on any failure — the banner is informational and must not
  * block the page render.
@@ -87,45 +85,10 @@ async function getQuarantinedCapabilitiesForAgent(
   agentId: string
 ): Promise<QuarantinedCapabilityForAgent[]> {
   try {
-    const bindings = await prisma.aiAgentCapability.findMany({
-      where: {
-        agentId,
-        isEnabled: true,
-        capability: { quarantineState: { not: 'active' } },
-      },
-      include: {
-        capability: {
-          select: {
-            id: true,
-            slug: true,
-            name: true,
-            quarantineState: true,
-            quarantineReason: true,
-            quarantineUntil: true,
-          },
-        },
-      },
-    });
-
-    const items: QuarantinedCapabilityForAgent[] = [];
-    for (const b of bindings) {
-      const effective = resolveQuarantineState({
-        quarantineState:
-          (b.capability.quarantineState as 'active' | 'quarantined-soft' | 'quarantined-hard') ??
-          'active',
-        quarantineUntil: b.capability.quarantineUntil,
-      });
-      if (effective === 'active') continue;
-      items.push({
-        capabilityId: b.capability.id,
-        capabilitySlug: b.capability.slug,
-        capabilityName: b.capability.name,
-        mode: effective,
-        reason: b.capability.quarantineReason,
-        expiresAt: b.capability.quarantineUntil ? b.capability.quarantineUntil.toISOString() : null,
-      });
-    }
-    return items;
+    const res = await serverFetch(API.ADMIN.ORCHESTRATION.agentQuarantinedCapabilities(agentId));
+    if (!res.ok) return [];
+    const body = await parseApiResponse<{ items: QuarantinedCapabilityForAgent[] }>(res);
+    return body.success ? body.data.items : [];
   } catch (err) {
     logger.error('edit agent page: quarantined-capabilities fetch failed', err, { agentId });
     return [];

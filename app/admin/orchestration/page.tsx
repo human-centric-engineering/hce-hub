@@ -20,10 +20,8 @@ import {
 } from '@/components/admin/orchestration/top-capabilities-panel';
 import { API } from '@/lib/api/endpoints';
 import { parseApiResponse, serverFetch } from '@/lib/api/server-fetch';
-import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import type { BudgetAlert, CostSummary } from '@/lib/orchestration/llm/cost-reports';
-import { resolveQuarantineState } from '@/lib/orchestration/capabilities/dispatcher';
 import { getSetupState } from '@/lib/orchestration/setup-state';
 import type { ModelInfo } from '@/lib/orchestration/llm/types';
 
@@ -115,41 +113,16 @@ async function getDashboardStats(): Promise<DashboardStats | null> {
 }
 
 /**
- * Capabilities currently in effective quarantine (auto-expiry honoured).
- * Returns [] on any failure — the panel is informational, never blocks
- * the dashboard.
+ * Capabilities currently in effective quarantine (auto-expiry handled
+ * by the API route). Returns [] on any failure — the panel is
+ * informational, never blocks the dashboard.
  */
 async function getActiveQuarantines(): Promise<ActiveQuarantineRow[]> {
   try {
-    const rows = await prisma.aiCapability.findMany({
-      where: { quarantineState: { not: 'active' } },
-      select: {
-        id: true,
-        slug: true,
-        name: true,
-        quarantineState: true,
-        quarantineReason: true,
-        quarantineUntil: true,
-      },
-    });
-    const out: ActiveQuarantineRow[] = [];
-    for (const r of rows) {
-      const effective = resolveQuarantineState({
-        quarantineState:
-          (r.quarantineState as 'active' | 'quarantined-soft' | 'quarantined-hard') ?? 'active',
-        quarantineUntil: r.quarantineUntil,
-      });
-      if (effective === 'active') continue;
-      out.push({
-        id: r.id,
-        slug: r.slug,
-        name: r.name,
-        mode: effective,
-        reason: r.quarantineReason,
-        expiresAt: r.quarantineUntil ? r.quarantineUntil.toISOString() : null,
-      });
-    }
-    return out;
+    const res = await serverFetch(API.ADMIN.ORCHESTRATION.OBSERVABILITY_ACTIVE_QUARANTINES);
+    if (!res.ok) return [];
+    const body = await parseApiResponse<{ items: ActiveQuarantineRow[] }>(res);
+    return body.success ? body.data.items : [];
   } catch (err) {
     logger.error('orchestration dashboard: failed to load active quarantines', err);
     return [];

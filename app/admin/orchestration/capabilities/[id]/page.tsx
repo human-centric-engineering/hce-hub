@@ -10,7 +10,6 @@ import { CapabilityQuarantineCard } from '@/components/admin/orchestration/capab
 import { CapabilityStatsPanel } from '@/components/admin/orchestration/capability-stats-panel';
 import { API } from '@/lib/api/endpoints';
 import { parseApiResponse, serverFetch } from '@/lib/api/server-fetch';
-import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import type { AiCapability } from '@/types/prisma';
 
@@ -22,33 +21,23 @@ interface QuarantineAttribution {
 }
 
 /**
- * Fetch the most recent `capability.quarantine` audit row for this
- * capability so the QuarantineCard can render "Quarantined N ago by X".
+ * Fetch quarantine audit attribution via the admin API. The endpoint
+ * short-circuits to `{ attribution: null }` when the capability is
+ * active, so the page doesn't need its own guard.
  *
- * Returns null when the capability has never been quarantined, when the
- * stored state is 'active' (no point pulling the row), or when the
- * query fails — the card simply omits attribution rather than blocking.
+ * Returns null on any failure — the card omits attribution rather than
+ * blocking the page render.
  */
 async function getQuarantineAttribution(
-  capabilityId: string,
-  storedState: string | null | undefined
+  capabilityId: string
 ): Promise<QuarantineAttribution | null> {
-  if (storedState === 'active' || !storedState) return null;
   try {
-    const row = await prisma.aiAdminAuditLog.findFirst({
-      where: {
-        entityType: 'capability',
-        entityId: capabilityId,
-        action: 'capability.quarantine',
-      },
-      orderBy: { createdAt: 'desc' },
-      include: { user: { select: { name: true, email: true } } },
-    });
-    if (!row) return null;
-    return {
-      at: row.createdAt.toISOString(),
-      actorName: row.user?.name ?? row.user?.email ?? null,
-    };
+    const res = await serverFetch(
+      API.ADMIN.ORCHESTRATION.capabilityQuarantineAttribution(capabilityId)
+    );
+    if (!res.ok) return null;
+    const body = await parseApiResponse<{ attribution: QuarantineAttribution | null }>(res);
+    return body.success ? body.data.attribution : null;
   } catch (err) {
     logger.error('edit capability page: quarantine attribution fetch failed', err, {
       capabilityId,
@@ -117,9 +106,31 @@ export default async function EditCapabilityPage({ params }: { params: Promise<{
 
   if (!capability) notFound();
 
-  // Audit attribution depends on capability.quarantineState — fetched
-  // after we know the row exists. Skipped entirely when not quarantined.
-  const quarantineAttribution = await getQuarantineAttribution(id, capability.quarantineState);
+  // Audit attribution endpoint short-circuits to null when active, so
+  // we just fetch unconditionally.
+  const quarantineAttribution = await getQuarantineAttribution(id);
+
+  const quarantineState = (capability.quarantineState ?? 'active') as
+    | 'active'
+    | 'quarantined-soft'
+    | 'quarantined-hard';
+  const isQuarantined = quarantineState !== 'active';
+
+  const quarantineCard = (
+    <CapabilityQuarantineCard
+      capabilityId={id}
+      capabilityName={capability.name}
+      state={{
+        quarantineState,
+        quarantineReason: capability.quarantineReason ?? null,
+        quarantineUntil: capability.quarantineUntil
+          ? new Date(capability.quarantineUntil).toISOString()
+          : null,
+      }}
+      attribution={quarantineAttribution}
+      affectedAgents={usedBy.map((a) => ({ id: a.id, name: a.name, slug: a.slug }))}
+    />
+  );
 
   return (
     <div className="space-y-6">
@@ -137,22 +148,7 @@ export default async function EditCapabilityPage({ params }: { params: Promise<{
 
       <CapabilityStatsPanel capabilityId={id} />
 
-      <CapabilityQuarantineCard
-        capabilityId={id}
-        capabilityName={capability.name}
-        state={{
-          quarantineState: (capability.quarantineState ?? 'active') as
-            | 'active'
-            | 'quarantined-soft'
-            | 'quarantined-hard',
-          quarantineReason: capability.quarantineReason ?? null,
-          quarantineUntil: capability.quarantineUntil
-            ? new Date(capability.quarantineUntil).toISOString()
-            : null,
-        }}
-        attribution={quarantineAttribution}
-        affectedAgents={usedBy.map((a) => ({ id: a.id, name: a.name, slug: a.slug }))}
-      />
+      {isQuarantined && quarantineCard}
 
       <CapabilityForm
         mode="edit"
@@ -160,6 +156,8 @@ export default async function EditCapabilityPage({ params }: { params: Promise<{
         usedBy={usedBy}
         availableCategories={availableCategories}
       />
+
+      {!isQuarantined && quarantineCard}
     </div>
   );
 }
