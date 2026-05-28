@@ -16,12 +16,23 @@ import { logger } from '@/lib/logging';
 export function touchAgentLastActive(agentId: string | null | undefined, at?: Date): void {
   if (!agentId) return;
   const lastActiveAt = at ?? new Date();
-  void prisma.aiAgent
-    .update({ where: { id: agentId }, data: { lastActiveAt } })
-    .catch((err: unknown) => {
-      logger.debug('touchAgentLastActive failed (non-fatal)', {
-        agentId,
-        error: err instanceof Error ? err.message : String(err),
+  try {
+    void prisma.aiAgent
+      .update({ where: { id: agentId }, data: { lastActiveAt } })
+      .catch((err: unknown) => {
+        logger.debug('touchAgentLastActive failed (non-fatal)', {
+          agentId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
+  } catch (err) {
+    // Defends against synchronous throws (e.g. tests with an incomplete
+    // prisma mock where `prisma.aiAgent` is undefined). Production never
+    // hits this branch — it's belt-and-braces because the helper's
+    // contract is "never throws".
+    logger.debug('touchAgentLastActive sync failure (non-fatal)', {
+      agentId,
+      error: err instanceof Error ? err.message : String(err),
     });
+  }
 }

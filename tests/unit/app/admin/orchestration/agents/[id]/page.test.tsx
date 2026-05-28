@@ -119,6 +119,8 @@ function createMockAgent(overrides: Partial<AiAgent> = {}): AiAgent {
     createdBy: 'user-456',
     createdAt: new Date('2025-01-01'),
     updatedAt: new Date('2025-01-15'),
+    deletedAt: null,
+    lastActiveAt: null,
     ...overrides,
   } as AiAgent;
 }

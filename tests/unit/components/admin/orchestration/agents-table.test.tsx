@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { AgentsTable } from '@/components/admin/orchestration/agents-table';
@@ -774,7 +774,12 @@ describe('AgentsTable', () => {
       ];
       render(<AgentsTable initialAgents={agents} initialMeta={{ ...MOCK_META, total: 1 }} />);
 
-      expect(screen.getByText('System')).toBeInTheDocument();
+      // "System" appears twice on the page now — the scope segmented
+      // control has a "System" tab and the row carries a "System" badge.
+      // Scope to the agent's row to assert the badge specifically.
+      const row = screen.getByText('System Agent').closest('tr');
+      expect(row).not.toBeNull();
+      expect(within(row!).getByText('System')).toBeInTheDocument();
     });
 
     it('hides Delete option from dropdown for system agents', async () => {

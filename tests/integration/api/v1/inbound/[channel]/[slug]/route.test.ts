@@ -77,6 +77,12 @@ vi.mock('@/lib/db/client', () => ({
       create: vi.fn(),
       update: vi.fn(),
     },
+    // `touchAgentLastActive` (called by `resolveConversation`) fires a
+    // fire-and-forget `aiAgent.update`. Stubbed so the synchronous
+    // property access doesn't throw inside the resolver flow.
+    aiAgent: {
+      update: vi.fn().mockResolvedValue({}),
+    },
   },
 }));
 

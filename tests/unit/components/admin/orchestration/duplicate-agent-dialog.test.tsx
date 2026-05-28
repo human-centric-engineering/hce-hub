@@ -72,6 +72,7 @@ function makeAgent(overrides: Partial<AiAgent> = {}): AiAgent {
     systemInstructionsHistory: [],
     metadata: {},
     deletedAt: null,
+    lastActiveAt: null,
     ...overrides,
   } as AiAgent;
 }
