@@ -7,14 +7,20 @@ import {
   EvaluationTrendChart,
   type EvaluationTrendPoint,
 } from '@/components/admin/orchestration/evaluation-trend-chart';
+import {
+  QuarantinedCapabilitiesBanner,
+  type QuarantinedCapabilityForAgent,
+} from '@/components/admin/orchestration/agents/quarantined-capabilities-banner';
 import { API } from '@/lib/api/endpoints';
 import { parseApiResponse, serverFetch } from '@/lib/api/server-fetch';
+import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import {
   getAgentModels,
   getEffectiveAgentDefaults,
   getProviders,
 } from '@/lib/orchestration/prefetch-helpers';
+import { resolveQuarantineState } from '@/lib/orchestration/capabilities/dispatcher';
 import type { AiAgent } from '@/types/prisma';
 
 export async function generateMetadata({
@@ -69,6 +75,63 @@ async function getAgentProfiles(): Promise<AgentProfileSummary[]> {
   }
 }
 
+/**
+ * Quarantined capabilities the agent is currently bound to. Reuses the
+ * dispatcher's `resolveQuarantineState` so the expiry rule (a past
+ * `quarantineUntil` = treat as active) lives in exactly one place.
+ *
+ * Returns [] on any failure — the banner is informational and must not
+ * block the page render.
+ */
+async function getQuarantinedCapabilitiesForAgent(
+  agentId: string
+): Promise<QuarantinedCapabilityForAgent[]> {
+  try {
+    const bindings = await prisma.aiAgentCapability.findMany({
+      where: {
+        agentId,
+        isEnabled: true,
+        capability: { quarantineState: { not: 'active' } },
+      },
+      include: {
+        capability: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            quarantineState: true,
+            quarantineReason: true,
+            quarantineUntil: true,
+          },
+        },
+      },
+    });
+
+    const items: QuarantinedCapabilityForAgent[] = [];
+    for (const b of bindings) {
+      const effective = resolveQuarantineState({
+        quarantineState:
+          (b.capability.quarantineState as 'active' | 'quarantined-soft' | 'quarantined-hard') ??
+          'active',
+        quarantineUntil: b.capability.quarantineUntil,
+      });
+      if (effective === 'active') continue;
+      items.push({
+        capabilityId: b.capability.id,
+        capabilitySlug: b.capability.slug,
+        capabilityName: b.capability.name,
+        mode: effective,
+        reason: b.capability.quarantineReason,
+        expiresAt: b.capability.quarantineUntil ? b.capability.quarantineUntil.toISOString() : null,
+      });
+    }
+    return items;
+  } catch (err) {
+    logger.error('edit agent page: quarantined-capabilities fetch failed', err, { agentId });
+    return [];
+  }
+}
+
 async function getEvaluationTrend(id: string): Promise<EvaluationTrendPoint[]> {
   try {
     const res = await serverFetch(API.ADMIN.ORCHESTRATION.agentEvaluationTrend(id));
@@ -84,12 +147,13 @@ async function getEvaluationTrend(id: string): Promise<EvaluationTrendPoint[]> {
 
 export default async function EditAgentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [agent, providers, models, trend, profiles] = await Promise.all([
+  const [agent, providers, models, trend, profiles, quarantinedCapabilities] = await Promise.all([
     getAgent(id),
     getProviders(),
     getAgentModels(),
     getEvaluationTrend(id),
     getAgentProfiles(),
+    getQuarantinedCapabilitiesForAgent(id),
   ]);
 
   if (!agent) notFound();
@@ -112,6 +176,8 @@ export default async function EditAgentPage({ params }: { params: Promise<{ id: 
         {' / '}
         <span>{agent.name}</span>
       </nav>
+
+      <QuarantinedCapabilitiesBanner items={quarantinedCapabilities} />
 
       <EvaluationTrendChart points={trend} />
 
