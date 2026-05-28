@@ -79,6 +79,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -112,6 +113,7 @@ export interface AgentsTableProps {
 
 type SortField = 'createdAt' | 'name' | 'lastActiveAt' | 'chats' | 'spend';
 type ProfileOption = { id: string; name: string; isSystem: boolean };
+type KindTab = 'all' | 'app' | 'system';
 const PROFILE_FILTER_ALL = '__all__';
 const PROFILE_FILTER_UNASSIGNED = 'none';
 
@@ -125,6 +127,7 @@ export function AgentsTable({ initialAgents, initialMeta }: AgentsTableProps) {
   // an explicit sort that overrides the default.
   const [sortField, setSortField] = useState<SortField | 'default'>('default');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [kindTab, setKindTab] = useLocalStorage<KindTab>('agents-table-kind-tab', 'all');
   const [profileFilter, setProfileFilter] = useState<string>(PROFILE_FILTER_ALL);
   const [profiles, setProfiles] = useState<ProfileOption[]>([]);
   const [groupByProfile, setGroupByProfile] = useLocalStorage(
@@ -186,6 +189,7 @@ export function AgentsTable({ initialAgents, initialMeta }: AgentsTableProps) {
         sortField?: SortField | 'default';
         sortOrder?: 'asc' | 'desc';
         profileFilter?: string;
+        kindTab?: KindTab;
       }
     ) => {
       setIsLoading(true);
@@ -194,6 +198,7 @@ export function AgentsTable({ initialAgents, initialMeta }: AgentsTableProps) {
         const searchValue = overrides?.search !== undefined ? overrides.search : search;
         const profileValue =
           overrides?.profileFilter !== undefined ? overrides.profileFilter : profileFilter;
+        const kindValue = overrides?.kindTab !== undefined ? overrides.kindTab : kindTab;
         const params = new URLSearchParams({
           page: String(page),
           limit: String(meta.limit),
@@ -202,6 +207,10 @@ export function AgentsTable({ initialAgents, initialMeta }: AgentsTableProps) {
         if (profileValue && profileValue !== PROFILE_FILTER_ALL) {
           params.set('profileId', profileValue);
         }
+        // App tab = bespoke (`isSystem=false`); System tab = `isSystem=true`;
+        // All tab omits the filter so both classes appear.
+        if (kindValue === 'app') params.set('isSystem', 'false');
+        else if (kindValue === 'system') params.set('isSystem', 'true');
 
         const res = await fetch(`${API.ADMIN.ORCHESTRATION.AGENTS}?${params.toString()}`, {
           credentials: 'same-origin',
@@ -259,7 +268,7 @@ export function AgentsTable({ initialAgents, initialMeta }: AgentsTableProps) {
         setIsLoading(false);
       }
     },
-    [meta.limit, search, sortField, sortOrder, profileFilter]
+    [meta.limit, search, sortField, sortOrder, profileFilter, kindTab]
   );
 
   const handleSearch = useCallback(
@@ -290,6 +299,15 @@ export function AgentsTable({ initialAgents, initialMeta }: AgentsTableProps) {
       void fetchAgents(1, { profileFilter: value });
     },
     [fetchAgents]
+  );
+
+  const handleKindTabChange = useCallback(
+    (value: string) => {
+      const next: KindTab = value === 'app' || value === 'system' ? value : 'all';
+      setKindTab(next);
+      void fetchAgents(1, { kindTab: next });
+    },
+    [fetchAgents, setKindTab]
   );
 
   const toggleBucket = useCallback(
@@ -681,6 +699,24 @@ export function AgentsTable({ initialAgents, initialMeta }: AgentsTableProps) {
 
   return (
     <div className="space-y-4">
+      {/* Kind tabs — App = bespoke, System = platform-managed, All = both. */}
+      <Tabs value={kindTab} onValueChange={handleKindTabChange}>
+        <TabsList>
+          <Tip label="Both bespoke and system agents">
+            <TabsTrigger value="all">All</TabsTrigger>
+          </Tip>
+          <Tip label="Bespoke agents you have created or imported">
+            <TabsTrigger value="app">App</TabsTrigger>
+          </Tip>
+          <Tip label="System agents managed by the platform — cannot be deleted or deactivated">
+            <TabsTrigger value="system">
+              <Shield className="mr-1 h-3 w-3" aria-hidden="true" />
+              System
+            </TabsTrigger>
+          </Tip>
+        </TabsList>
+      </Tabs>
+
       {/* Header / toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-1 flex-wrap items-center gap-2">
