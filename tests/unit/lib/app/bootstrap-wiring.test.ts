@@ -93,6 +93,36 @@ describe('rate-limit auto-wire (lib/app/rate-limit.ts → middleware realm)', ()
     // Assert — no app rules registered → identity return (no allocation, no extra rule)
     expect(getEffectiveRateLimitPolicy()).toBe(RATE_LIMIT_POLICY);
   });
+
+  it('annotates and re-throws when registerAppRateLimits throws at module load', async () => {
+    // Without the try/catch, a misconfigured registration in lib/app/rate-limit.ts
+    // (e.g. a matcher that shadows a protected path) propagates out of the
+    // middleware module → `proxy.ts` fails to load → every request 500s with
+    // a generic stack that does NOT name lib/app/rate-limit.ts. The wrap MUST
+    // (a) log a structured pointer to that file, AND (b) re-throw — swallowing
+    // would let the misconfiguration ship silently, defeating fail-fast.
+    vi.resetModules();
+    const errorSpy = vi.fn();
+    vi.doMock('@/lib/logging', () => ({
+      logger: { info: vi.fn(), warn: vi.fn(), error: errorSpy, debug: vi.fn() },
+    }));
+    vi.doMock('@/lib/app/rate-limit', () => ({
+      registerAppRateLimits: (): void => {
+        throw new Error('boom — simulated fork misconfiguration');
+      },
+    }));
+
+    // Act + Assert — importing the middleware re-throws
+    await expect(import('@/lib/security/rate-limit-middleware')).rejects.toThrow(
+      /boom — simulated fork misconfiguration/
+    );
+    // ...and the diagnostic log named the offending file before re-throwing.
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [message, context] = errorSpy.mock.calls[0];
+    expect(message).toMatch(/lib\/app\/rate-limit\.ts/);
+    expect((context as { error: string }).error).toMatch(/simulated fork misconfiguration/);
+    expect((context as { hint?: string }).hint).toMatch(/lib\/app\/rate-limit\.ts/);
+  });
 });
 
 describe('capability auto-wire (lib/app/capabilities.ts → server realm)', () => {

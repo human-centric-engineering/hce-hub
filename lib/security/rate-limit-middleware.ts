@@ -48,7 +48,23 @@ import { registerAppRateLimits } from '@/lib/app/rate-limit';
 // consumer rather than a single shared bootstrap.) Default is a no-op; if a
 // fork's registration throws — e.g. a rule that would shadow a protected
 // surface — it aborts boot, which is the intended fail-fast.
-registerAppRateLimits();
+//
+// The try/catch wraps the call to annotate the failure with a pointer to the
+// offending file before re-throwing. Without it, the throw propagates out of
+// this module's top level → `proxy.ts` fails to load → every API request
+// returns a generic 500 with a stack that does NOT name `lib/app/rate-limit.ts`,
+// making the debugging trail hard to follow. We MUST re-throw — fail-fast is
+// the intended behaviour for a misconfigured rate-limit registration; logging
+// and continuing would let the misconfiguration ship.
+try {
+  registerAppRateLimits();
+} catch (error) {
+  logger.error('Failed to register app rate limits from lib/app/rate-limit.ts', {
+    error: error instanceof Error ? error.message : String(error),
+    hint: 'A throw at module load aborts the middleware bundle. Check lib/app/rate-limit.ts for a registerRateLimitRule/registerRateLimitTier call that violates the registration contract (e.g. a matcher that shadows a Sunrise-protected path, or a tier name that collides with a built-in).',
+  });
+  throw error;
+}
 
 /**
  * Apply the rate-limit policy to an incoming request.

@@ -539,8 +539,20 @@ export function registerRateLimitTier(name: string, limiter: RateLimiter): void 
         'Choose an app-specific tier name.'
     );
   }
-  if (tierRegistry.has(name)) {
-    throw new Error(`registerRateLimitTier: tier "${name}" is already registered.`);
+  // Idempotent when the SAME limiter instance is re-registered. Next.js HMR
+  // re-evaluates the middleware module on file changes, which re-runs
+  // `registerAppRateLimits()` — without this, a second registration would
+  // throw "already registered" and 500 the dev server until a full restart.
+  // A DIFFERENT limiter for the same name is still a genuine duplicate (a
+  // fork pushing two distinct buckets under one tier) and throws.
+  const existing = tierRegistry.get(name);
+  if (existing !== undefined) {
+    if (existing === limiter) return;
+    throw new Error(
+      `registerRateLimitTier: tier "${name}" is already registered with a different limiter ` +
+        'instance. Re-registration is only idempotent for the same limiter reference; supplying a ' +
+        'second limiter would silently keep one bucket and discard the other.'
+    );
   }
   tierRegistry.set(name, limiter);
 }

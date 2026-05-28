@@ -359,6 +359,15 @@ export function registerRateLimitRule(rule: RateLimitRule): void {
       );
     }
   }
+  // Dedupe by reference — Next.js HMR re-evaluates the middleware module on
+  // file changes and re-runs `registerAppRateLimits()`. Without this, every
+  // hot-reload would append another copy of the same rule, growing the policy
+  // iteration on every request (functionally idempotent thanks to first-match-
+  // wins, but unbounded growth). A reference check is enough for HMR-of-
+  // middleware-only; if the fork edits `lib/app/rate-limit.ts` itself, the
+  // rule literal is a fresh reference and a duplicate would slip through —
+  // accepted, since changing your registrations should restart the dev server.
+  if (appRules.includes(rule)) return;
   appRules.push(rule);
 }
 

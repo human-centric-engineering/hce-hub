@@ -122,6 +122,30 @@ describe('registerRateLimitTier / resolveRateLimitTier', () => {
     expect(() => registerRateLimitTier('constructor', limiter)).not.toThrow();
     expect(resolveRateLimitTier('constructor')).toBe(limiter);
   });
+
+  it('is idempotent when the SAME limiter instance is re-registered (HMR-safe)', () => {
+    // Next.js HMR re-evaluates the middleware module → re-runs
+    // `registerAppRateLimits()` → re-registers tiers. With the same limiter
+    // reference (which is what an unchanged `lib/app/rate-limit.ts` produces),
+    // the call must be a no-op rather than throwing "already registered".
+    const limiter = makeLimiter(7);
+    registerRateLimitTier('billing', limiter);
+    expect(() => registerRateLimitTier('billing', limiter)).not.toThrow();
+    // ...and the same limiter is still what resolves.
+    expect(resolveRateLimitTier('billing')).toBe(limiter);
+  });
+
+  it('still throws when re-registering with a DIFFERENT limiter instance', () => {
+    // Idempotence is by reference identity, not by name. A second distinct
+    // limiter under the same name is a genuine duplicate that would silently
+    // discard one bucket — keep the throw to surface it.
+    const first = makeLimiter(7);
+    const second = makeLimiter(7); // same config, different instance
+    registerRateLimitTier('billing', first);
+    expect(() => registerRateLimitTier('billing', second)).toThrow(/different limiter/i);
+    // The first registration wins; the second never replaces it.
+    expect(resolveRateLimitTier('billing')).toBe(first);
+  });
 });
 
 // ─── Rule registry — security guard ──────────────────────────────────────────
@@ -216,6 +240,46 @@ describe('getEffectiveRateLimitPolicy — insertion position', () => {
     registerRateLimitRule({ match: /^\/api\/v1\/billing\//, tier: 'api', key: 'session-user' });
     const eff = getEffectiveRateLimitPolicy();
     expect(eff[eff.length - 1]).toBe(CATCH_ALL_RULE);
+  });
+
+  it('dedupes by reference — re-registering the SAME rule does not double the policy', () => {
+    // Next.js HMR re-evaluates the middleware module on file changes and
+    // re-runs `registerAppRateLimits()`. Without the dedup, every hot-reload
+    // would append another copy of the rule and grow the per-request
+    // iteration unboundedly. Reference equality covers the common case
+    // (middleware re-evaluation, unchanged app file → same rule literal).
+    const rule: RateLimitRule = {
+      match: /^\/api\/v1\/billing\//,
+      tier: 'api',
+      key: 'session-user',
+    };
+    registerRateLimitRule(rule);
+    const lengthAfterFirst = getEffectiveRateLimitPolicy().length;
+    registerRateLimitRule(rule);
+    registerRateLimitRule(rule);
+    expect(getEffectiveRateLimitPolicy().length).toBe(lengthAfterFirst);
+  });
+
+  it('does NOT dedupe structurally — distinct rule objects with same shape both register', () => {
+    // The dedup is intentionally by reference, not by content. A fork editing
+    // `lib/app/rate-limit.ts` itself produces a fresh rule literal on
+    // re-evaluation; that case still grows the list (accepted — changing
+    // your registrations is a "restart the dev server" situation). The
+    // test documents this so the behaviour isn't silently tightened later.
+    const ruleA: RateLimitRule = {
+      match: /^\/api\/v1\/billing\//,
+      tier: 'api',
+      key: 'session-user',
+    };
+    const ruleB: RateLimitRule = {
+      match: /^\/api\/v1\/billing\//,
+      tier: 'api',
+      key: 'session-user',
+    };
+    registerRateLimitRule(ruleA);
+    const baselineLength = getEffectiveRateLimitPolicy().length;
+    registerRateLimitRule(ruleB);
+    expect(getEffectiveRateLimitPolicy().length).toBe(baselineLength + 1);
   });
 });
 
