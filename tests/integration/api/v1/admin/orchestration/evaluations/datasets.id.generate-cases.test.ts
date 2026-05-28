@@ -193,6 +193,46 @@ describe('POST /generate-cases (preview) — happy path', () => {
   });
 });
 
+describe('POST /generate-cases/commit — auth', () => {
+  it('returns 401 when unauthenticated', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
+    const res = await CommitPOST(
+      makeRequest({ cases: [{ input: 'q', expectedOutput: 'a' }] }, '/commit'),
+      ctx()
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin (USER role)', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER'));
+    const res = await CommitPOST(
+      makeRequest({ cases: [{ input: 'q', expectedOutput: 'a' }] }, '/commit'),
+      ctx()
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('POST /generate-cases/commit — CUID validation', () => {
+  beforeEach(() => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+  });
+
+  it('returns 400 when the dataset id param is not a valid CUID', async () => {
+    const badCtx = { params: Promise.resolve({ id: 'not-a-cuid' }) };
+    const res = await CommitPOST(
+      makeRequest({ cases: [{ input: 'q', expectedOutput: 'a' }] }, '/commit'),
+      badCtx
+    );
+    const body = await parseJson<{ success: boolean; error: { code: string } }>(res);
+    // Route validates id before touching the DB — dataset must never be queried.
+    expect(res.status).toBe(400);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(vi.mocked(prisma.aiDataset.findFirst)).not.toHaveBeenCalled();
+  });
+});
+
 describe('POST /generate-cases/commit — happy path + guardrails', () => {
   beforeEach(() => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());

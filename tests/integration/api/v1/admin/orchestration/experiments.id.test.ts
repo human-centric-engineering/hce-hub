@@ -291,6 +291,100 @@ describe('PATCH /api/v1/admin/orchestration/experiments/:id', () => {
     expect(response.status).toBe(400);
     expect(vi.mocked(prisma.aiExperiment.update)).not.toHaveBeenCalled();
   });
+
+  it('updates description only when name and status are absent', async () => {
+    // Catches a regression where the conditional spread `...(body.description !== undefined)`
+    // is accidentally removed, silently discarding description-only updates.
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiExperiment.update).mockResolvedValue(
+      makeExperiment({ description: 'Updated description' }) as never
+    );
+
+    const response = await PATCH(
+      makePatchRequest({ description: 'Updated description' }),
+      makeContext()
+    );
+
+    expect(response.status).toBe(200);
+    expect(vi.mocked(prisma.aiExperiment.update)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ description: 'Updated description' }),
+      })
+    );
+    // name and status must NOT appear in the update data when not supplied
+    expect(vi.mocked(prisma.aiExperiment.update)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.not.objectContaining({ name: expect.anything() }),
+      })
+    );
+  });
+
+  it('passes description: null to Prisma to explicitly clear the field', async () => {
+    // Catches a regression where the nullish-coalescing operator or optional-chaining
+    // strips null before it reaches the DB, leaving the old description in place.
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiExperiment.update).mockResolvedValue(
+      makeExperiment({ description: null }) as never
+    );
+
+    const response = await PATCH(makePatchRequest({ description: null }), makeContext());
+
+    expect(response.status).toBe(200);
+    expect(vi.mocked(prisma.aiExperiment.update)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ description: null }),
+      })
+    );
+  });
+
+  it('spreads name, description and status together when all three are provided', async () => {
+    // Catches a regression where the conditional-spread logic for one field
+    // clobbers or skips the others when multiple fields are patched at once.
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiExperiment.update).mockResolvedValue(
+      makeExperiment({ name: 'New Name', description: 'New desc', status: 'completed' }) as never
+    );
+
+    const response = await PATCH(
+      makePatchRequest({ name: 'New Name', description: 'New desc', status: 'completed' }),
+      makeContext()
+    );
+
+    expect(response.status).toBe(200);
+    expect(vi.mocked(prisma.aiExperiment.update)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          name: 'New Name',
+          description: 'New desc',
+          status: 'completed',
+        }),
+      })
+    );
+  });
+
+  it('returns 400 when the existing experiment has an unrecognised status (ALLOWED_TRANSITIONS fallback)', async () => {
+    // Exercises the `ALLOWED_TRANSITIONS[existing.status] ?? []` fallback for an
+    // unknown status value (e.g. a row migrated to a legacy/custom status string).
+    // The empty-array fallback means NO transition is allowed, so any target status
+    // must produce a 400. If the `?? []` guard is removed the access returns
+    // `undefined` and `undefined.includes(...)` throws a 500 instead.
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiExperiment.findUnique).mockResolvedValue(
+      makeExperiment({ status: 'archived' }) as never
+    );
+
+    const response = await PATCH(makePatchRequest({ status: 'completed' }), makeContext());
+
+    expect(response.status).toBe(400);
+    const data = await parseJson<{ success: boolean; error: { code: string; message: string } }>(
+      response
+    );
+    expect(data.success).toBe(false);
+    expect(data.error.code).toBe('VALIDATION_ERROR');
+    // Message must name both the source and target to help operators diagnose
+    expect(data.error.message).toContain('archived');
+    expect(vi.mocked(prisma.aiExperiment.update)).not.toHaveBeenCalled();
+  });
 });
 
 describe('DELETE /api/v1/admin/orchestration/experiments/:id', () => {
@@ -306,6 +400,17 @@ describe('DELETE /api/v1/admin/orchestration/experiments/:id', () => {
     const response = await DELETE(makeDeleteRequest(), makeContext());
 
     expect(response.status).toBe(401);
+  });
+
+  it('returns 403 when authenticated as non-admin', async () => {
+    // Catches a regression where the withAdminAuth guard is accidentally
+    // replaced with withAuth, allowing any authenticated user to delete experiments.
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER'));
+
+    const response = await DELETE(makeDeleteRequest(), makeContext());
+
+    expect(response.status).toBe(403);
+    expect(vi.mocked(prisma.aiExperiment.delete)).not.toHaveBeenCalled();
   });
 
   it('returns 404 when experiment not found', async () => {

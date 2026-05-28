@@ -33,6 +33,9 @@ vi.mock('@/lib/db/client', () => ({
       count: vi.fn(),
       create: vi.fn(),
     },
+    aiDataset: {
+      findFirst: vi.fn(),
+    },
   },
 }));
 
@@ -172,6 +175,19 @@ describe('GET /api/v1/admin/orchestration/experiments', () => {
         })
       );
     });
+
+    it('passes agentId filter to Prisma WHERE clause', async () => {
+      // Catches a regression where the agentId branch in buildWhere is dropped.
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+
+      await GET(makeGetRequest({ agentId: 'agent-42' }));
+
+      expect(vi.mocked(prisma.aiExperiment.findMany)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ agentId: 'agent-42' }),
+        })
+      );
+    });
   });
 });
 
@@ -297,6 +313,126 @@ describe('POST /api/v1/admin/orchestration/experiments', () => {
           }),
         })
       );
+    });
+
+    it('stores description when provided', async () => {
+      // Catches a regression where the description field is silently dropped from
+      // the create data even when the caller supplies it.
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(prisma.aiExperiment.create).mockResolvedValue(
+        makeExperiment({ description: 'Hypothesis: more context improves recall' }) as never
+      );
+
+      await POST(
+        makePostRequest({ ...VALID_BODY, description: 'Hypothesis: more context improves recall' })
+      );
+
+      expect(vi.mocked(prisma.aiExperiment.create)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            description: 'Hypothesis: more context improves recall',
+          }),
+        })
+      );
+    });
+
+    it('stores agentVersionId on variants when provided', async () => {
+      // Catches a regression where agentVersionId is stripped from variant create data.
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      const experimentWithVersions = makeExperiment({
+        variants: [
+          { id: 'v1', label: 'Control', agentVersionId: 'ver-1', evaluationSession: null },
+          { id: 'v2', label: 'Variant A', agentVersionId: null, evaluationSession: null },
+        ],
+      });
+      vi.mocked(prisma.aiExperiment.create).mockResolvedValue(experimentWithVersions as never);
+
+      const bodyWithVersionId = {
+        ...VALID_BODY,
+        variants: [{ label: 'Control', agentVersionId: 'ver-1' }, { label: 'Variant A' }],
+      };
+      await POST(makePostRequest(bodyWithVersionId));
+
+      expect(vi.mocked(prisma.aiExperiment.create)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            variants: {
+              create: expect.arrayContaining([
+                expect.objectContaining({ label: 'Control', agentVersionId: 'ver-1' }),
+              ]),
+            },
+          }),
+        })
+      );
+    });
+  });
+
+  describe('Dataset-driven creation', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('returns 201 when datasetId is provided with metricConfigs and dataset is owned by caller', async () => {
+      // Catches a regression where the dataset ownership check is bypassed and
+      // aiDataset.findFirst is called without the userId filter.
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue({ id: 'ds-1' } as never);
+      vi.mocked(prisma.aiExperiment.create).mockResolvedValue(makeExperiment() as never);
+
+      const body = {
+        ...VALID_BODY,
+        datasetId: 'ds-1',
+        metricConfigs: [{ slug: 'faithfulness' }],
+      };
+      const response = await POST(makePostRequest(body));
+
+      expect(response.status).toBe(201);
+      // Verify the ownership filter was applied: userId must equal the session user
+      expect(vi.mocked(prisma.aiDataset.findFirst)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'ds-1', userId: ADMIN_ID }),
+        })
+      );
+    });
+
+    it('returns 404 when datasetId points to a dataset owned by a different user', async () => {
+      // Catches a regression where findFirst returns null (cross-user or missing)
+      // but the handler proceeds instead of throwing NotFoundError.
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(prisma.aiDataset.findFirst).mockResolvedValue(null);
+
+      const body = {
+        ...VALID_BODY,
+        datasetId: 'ds-foreign',
+        metricConfigs: [{ slug: 'faithfulness' }],
+      };
+      const response = await POST(makePostRequest(body));
+
+      expect(response.status).toBe(404);
+      const data = await parseJson<{ success: boolean; error: { code: string } }>(response);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('NOT_FOUND');
+      // create must NOT be called when the dataset check fails
+      expect(vi.mocked(prisma.aiExperiment.create)).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when datasetId is provided but metricConfigs is absent', async () => {
+      // Exercises the Zod .refine() that enforces "metricConfigs is required when
+      // datasetId is set". If the refine is ever removed or misplaced, experiment
+      // creation would silently skip metric scoring setup.
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+
+      const body = {
+        ...VALID_BODY,
+        datasetId: 'ds-1',
+        // metricConfigs intentionally absent
+      };
+      const response = await POST(makePostRequest(body));
+
+      expect(response.status).toBe(400);
+      const data = await parseJson<{ success: boolean; error: { code: string } }>(response);
+      expect(data.success).toBe(false);
+      expect(data.error.code).toBe('VALIDATION_ERROR');
     });
   });
 });

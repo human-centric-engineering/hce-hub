@@ -26,7 +26,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
-import { mockAdminUser } from '@/tests/helpers/auth';
+import {
+  mockAdminUser,
+  mockAuthenticatedUser,
+  mockUnauthenticatedUser,
+} from '@/tests/helpers/auth';
 
 // ─── Mock dependencies (must precede route imports) ──────────────────────────
 
@@ -85,6 +89,22 @@ beforeEach(() => {
   vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
 });
 
+// ─── /agents/:id/quarantined-capabilities — auth ─────────────────────────────
+
+describe('GET /agents/:id/quarantined-capabilities — auth', () => {
+  it('returns 401 when unauthenticated', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
+    const res = await GET_AGENT_QUARANTINED(makeGetRequest(), makeParams(AGENT_ID));
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when authenticated as USER (not admin)', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER'));
+    const res = await GET_AGENT_QUARANTINED(makeGetRequest(), makeParams(AGENT_ID));
+    expect(res.status).toBe(403);
+  });
+});
+
 // ─── /agents/:id/quarantined-capabilities ────────────────────────────────────
 
 describe('GET /agents/:id/quarantined-capabilities', () => {
@@ -126,6 +146,47 @@ describe('GET /agents/:id/quarantined-capabilities', () => {
         capabilityName: 'Stripe Charge',
         mode: 'quarantined-soft',
         reason: 'Vendor outage',
+        expiresAt: null,
+      },
+    ]);
+  });
+
+  it('returns 400 when the id param is not a valid CUID', async () => {
+    const res = await GET_AGENT_QUARANTINED(makeGetRequest(), makeParams('not-a-cuid'));
+    const body = await res.json();
+    // Route validates id before touching the DB — agent should never be queried.
+    expect(res.status).toBe(400);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(mockAgentFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('maps a quarantined-hard binding with null expiry to mode and expiresAt: null', async () => {
+    mockAgentFindUnique.mockResolvedValue({ id: AGENT_ID });
+    mockBindingFindMany.mockResolvedValue([
+      {
+        capability: {
+          id: 'cap-hard',
+          slug: 'risky_tool',
+          name: 'Risky Tool',
+          quarantineState: 'quarantined-hard',
+          quarantineReason: 'Security audit',
+          quarantineUntil: null, // indefinite hard quarantine
+        },
+      },
+    ]);
+    const res = await GET_AGENT_QUARANTINED(makeGetRequest(), makeParams(AGENT_ID));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    // Route maps the raw DB column to the response shape — verify mode is
+    // 'quarantined-hard' and expiresAt is null (not stringified).
+    expect(body.data.items).toEqual([
+      {
+        capabilityId: 'cap-hard',
+        capabilitySlug: 'risky_tool',
+        capabilityName: 'Risky Tool',
+        mode: 'quarantined-hard',
+        reason: 'Security audit',
         expiresAt: null,
       },
     ]);
@@ -243,6 +304,22 @@ describe('GET /capabilities/:id/quarantine-attribution', () => {
   });
 });
 
+// ─── /observability/active-quarantines — auth ────────────────────────────────
+
+describe('GET /observability/active-quarantines — auth', () => {
+  it('returns 401 when unauthenticated', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
+    const res = await GET_ACTIVE_QUARANTINES(makeGetRequest());
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin (USER role)', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser('USER'));
+    const res = await GET_ACTIVE_QUARANTINES(makeGetRequest());
+    expect(res.status).toBe(403);
+  });
+});
+
 // ─── /observability/active-quarantines ───────────────────────────────────────
 
 describe('GET /observability/active-quarantines', () => {
@@ -276,6 +353,34 @@ describe('GET /observability/active-quarantines', () => {
         mode: 'quarantined-soft',
         reason: 'vendor 5xx',
         expiresAt: expiry.toISOString(),
+      },
+    ]);
+  });
+
+  it('returns expiresAt: null for indefinite hard quarantine (quarantineUntil is null)', async () => {
+    mockCapFindMany.mockResolvedValue([
+      {
+        id: 'cap-2',
+        slug: 'dangerous_op',
+        name: 'Dangerous Op',
+        quarantineState: 'quarantined-hard',
+        quarantineReason: 'Permanent block',
+        quarantineUntil: null, // indefinite — the null branch in the ternary
+      },
+    ]);
+    const res = await GET_ACTIVE_QUARANTINES(makeGetRequest());
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    // Route maps the ternary r.quarantineUntil ? ... : null — verify null is
+    // passed through (not stringified or omitted).
+    expect(body.data.items).toEqual([
+      {
+        id: 'cap-2',
+        slug: 'dangerous_op',
+        name: 'Dangerous Op',
+        mode: 'quarantined-hard',
+        reason: 'Permanent block',
+        expiresAt: null,
       },
     ]);
   });
