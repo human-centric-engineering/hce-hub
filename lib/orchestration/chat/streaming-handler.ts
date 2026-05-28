@@ -51,6 +51,7 @@ import {
 } from '@/lib/orchestration/llm/provider-manager';
 import { resolveAgentProviderAndModel } from '@/lib/orchestration/llm/agent-resolver';
 import { resolveEffectivePrompt } from '@/lib/orchestration/agents/resolve-effective-prompt';
+import { touchAgentLastActive } from '@/lib/orchestration/agents/touch-last-active';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
 import { calculateCost, checkBudget, logCost } from '@/lib/orchestration/llm/cost-tracker';
 import { resolveMaxCostPerTurn } from '@/lib/orchestration/llm/cost-caps';
@@ -2196,6 +2197,7 @@ export class StreamingChatHandler {
     if (request.contextId !== undefined) data.contextId = request.contextId;
 
     const conversation = await prisma.aiConversation.create({ data });
+    touchAgentLastActive(agent.id, conversation.createdAt);
     emitHookEvent('conversation.started', {
       conversationId: conversation.id,
       agentId: agent.id,

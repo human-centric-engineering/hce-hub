@@ -144,6 +144,7 @@ function makeSystemSeededAgent(): AiAgent {
     retentionDays: null,
     visibility: 'internal',
     deletedAt: null,
+    lastActiveAt: null,
     fallbackProviders: [],
     enableVoiceInput: false,
     enableImageInput: false,

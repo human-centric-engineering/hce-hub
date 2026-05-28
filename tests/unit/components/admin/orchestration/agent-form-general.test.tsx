@@ -190,6 +190,7 @@ describe('AgentForm — General tab', () => {
         retentionDays: null,
         visibility: 'internal',
         deletedAt: null,
+        lastActiveAt: null,
         fallbackProviders: [],
         widgetConfig: null,
         enableVoiceInput: false,
