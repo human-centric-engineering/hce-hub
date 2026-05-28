@@ -79,7 +79,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -114,6 +113,11 @@ export interface AgentsTableProps {
 type SortField = 'createdAt' | 'name' | 'lastActiveAt' | 'chats' | 'spend';
 type ProfileOption = { id: string; name: string; isSystem: boolean };
 type KindTab = 'all' | 'app' | 'system';
+const KIND_TAB_OPTIONS: { value: KindTab; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'system', label: 'System' },
+  { value: 'app', label: 'App' },
+];
 const PROFILE_FILTER_ALL = '__all__';
 const PROFILE_FILTER_UNASSIGNED = 'none';
 
@@ -302,8 +306,7 @@ export function AgentsTable({ initialAgents, initialMeta }: AgentsTableProps) {
   );
 
   const handleKindTabChange = useCallback(
-    (value: string) => {
-      const next: KindTab = value === 'app' || value === 'system' ? value : 'all';
+    (next: KindTab) => {
       setKindTab(next);
       void fetchAgents(1, { kindTab: next });
     },
@@ -699,23 +702,29 @@ export function AgentsTable({ initialAgents, initialMeta }: AgentsTableProps) {
 
   return (
     <div className="space-y-4">
-      {/* Kind tabs — App = bespoke, System = platform-managed, All = both. */}
-      <Tabs value={kindTab} onValueChange={handleKindTabChange}>
-        <TabsList>
-          <Tip label="Both bespoke and system agents">
-            <TabsTrigger value="all">All</TabsTrigger>
-          </Tip>
-          <Tip label="Bespoke agents you have created or imported">
-            <TabsTrigger value="app">App</TabsTrigger>
-          </Tip>
-          <Tip label="System agents managed by the platform — cannot be deleted or deactivated">
-            <TabsTrigger value="system">
-              <Shield className="mr-1 h-3 w-3" aria-hidden="true" />
-              System
-            </TabsTrigger>
-          </Tip>
-        </TabsList>
-      </Tabs>
+      {/* Scope selector — All = both, System = platform-managed, App =
+          bespoke. Matches the segmented-control pattern used by the
+          knowledge base scope filter. */}
+      <div className="flex items-center gap-3">
+        <span className="text-muted-foreground text-xs font-medium">Scope</span>
+        <div className="bg-muted inline-flex items-center rounded-lg p-1">
+          {KIND_TAB_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => handleKindTabChange(opt.value)}
+              aria-pressed={kindTab === opt.value}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                kindTab === opt.value
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Header / toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
