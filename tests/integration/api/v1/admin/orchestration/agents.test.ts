@@ -321,16 +321,24 @@ describe('GET /api/v1/admin/orchestration/agents', () => {
   });
 
   describe('Ordering', () => {
-    it('lists bespoke agents before system agents (isSystem asc, then createdAt desc)', async () => {
+    it('orders by [isSystem asc, lastActiveAt desc nulls last, createdAt desc]', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
       vi.mocked(prisma.aiAgent.findMany).mockResolvedValue([]);
       vi.mocked(prisma.aiAgent.count).mockResolvedValue(0);
 
       await GET(makeGetRequest({}));
 
+      // Bespoke agents first (`isSystem asc`), then most recently active
+      // within each bucket (`lastActiveAt desc nulls last`), then
+      // createdAt desc as the final tiebreaker. See the agents list
+      // route comment for the rationale.
       expect(vi.mocked(prisma.aiAgent.findMany)).toHaveBeenCalledWith(
         expect.objectContaining({
-          orderBy: [{ isSystem: 'asc' }, { createdAt: 'desc' }],
+          orderBy: [
+            { isSystem: 'asc' },
+            { lastActiveAt: { sort: 'desc', nulls: 'last' } },
+            { createdAt: 'desc' },
+          ],
         })
       );
     });

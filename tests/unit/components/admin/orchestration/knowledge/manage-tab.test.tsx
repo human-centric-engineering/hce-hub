@@ -537,10 +537,10 @@ describe('ManageTab', () => {
     });
   });
 
-  it('renders a tag-count chip in the Tags column when the document has tags', async () => {
-    // The column shows a count rather than every tag inline — a doc with many
-    // tags would otherwise overflow the row. Clicking the chip opens the
-    // chunks modal where the operator edits the actual tag list.
+  it('renders one chip per tag (up to 3) in the Tags column', async () => {
+    // Tag names render as individual chips so operators see the actual
+    // taxonomy at a glance — not just a count. Clicking any chip (or the
+    // cluster) opens the tags editor.
     const docWithTags = makeDocument({
       id: 'doc-tag',
       name: 'Sales Playbook',
@@ -553,12 +553,39 @@ describe('ManageTab', () => {
 
     render(<ManageTab documents={[docWithTags]} onRefresh={vi.fn()} />);
 
-    expect(screen.getByText('3 tags')).toBeInTheDocument();
+    expect(screen.getByText('Sales')).toBeInTheDocument();
+    expect(screen.getByText('Pricing')).toBeInTheDocument();
+    expect(screen.getByText('Q4')).toBeInTheDocument();
     // Tooltip carries the full list so it stays discoverable from the row.
     expect(screen.getByLabelText(/Edit 3 tags on Sales Playbook/i)).toBeInTheDocument();
   });
 
-  it('uses singular "1 tag" when the document has exactly one tag', async () => {
+  it('renders a "+N more" overflow chip when a document has more than 3 tags', async () => {
+    const docMany = makeDocument({
+      id: 'doc-many',
+      name: 'Many Tags',
+      tags: [
+        { id: 't1', slug: 'a', name: 'Alpha' },
+        { id: 't2', slug: 'b', name: 'Bravo' },
+        { id: 't3', slug: 'c', name: 'Charlie' },
+        { id: 't4', slug: 'd', name: 'Delta' },
+        { id: 't5', slug: 'e', name: 'Echo' },
+      ],
+    });
+
+    render(<ManageTab documents={[docMany]} onRefresh={vi.fn()} />);
+
+    // First three chips render by name; the rest collapse into a +N more
+    // overflow chip so the row doesn't overflow horizontally.
+    expect(screen.getByText('Alpha')).toBeInTheDocument();
+    expect(screen.getByText('Bravo')).toBeInTheDocument();
+    expect(screen.getByText('Charlie')).toBeInTheDocument();
+    expect(screen.queryByText('Delta')).not.toBeInTheDocument();
+    expect(screen.queryByText('Echo')).not.toBeInTheDocument();
+    expect(screen.getByText('+2 more')).toBeInTheDocument();
+  });
+
+  it('renders the single tag name when a document has exactly one tag', async () => {
     const docOneTag = makeDocument({
       id: 'doc-one',
       name: 'Single',
@@ -567,7 +594,9 @@ describe('ManageTab', () => {
 
     render(<ManageTab documents={[docOneTag]} onRefresh={vi.fn()} />);
 
-    expect(screen.getByText('1 tag')).toBeInTheDocument();
+    expect(screen.getByText('Sales')).toBeInTheDocument();
+    // No overflow chip for a single tag.
+    expect(screen.queryByText(/\+\d+ more/)).not.toBeInTheDocument();
   });
 
   it('renders a "+ Add" affordance in the Tags column when a document has no tags', async () => {
@@ -1145,6 +1174,80 @@ describe('ManageTab', () => {
       render(<ManageTab documents={[docLow]} onRefresh={vi.fn()} />);
 
       expect(screen.getByText('70%')).toBeInTheDocument();
+    });
+  });
+
+  // ── Toolbar: search + status filter ────────────────────────────────────────
+  describe('search and status filter', () => {
+    function listFetchUrls(): string[] {
+      return mockFetch.mock.calls
+        .map((c) => (typeof c[0] === 'string' ? c[0] : ''))
+        .filter((u) => u.includes('/knowledge/documents'));
+    }
+
+    it('renders the search input and the status filter dropdown', () => {
+      render(<ManageTab documents={[]} onRefresh={vi.fn()} />);
+      expect(screen.getByPlaceholderText(/search by name or filename/i)).toBeInTheDocument();
+      expect(screen.getByRole('combobox', { name: /filter by status/i })).toBeInTheDocument();
+    });
+
+    it('debounces the search input and fires a documents fetch with q=', async () => {
+      const user = userEvent.setup();
+      render(<ManageTab documents={[]} onRefresh={vi.fn()} />);
+      mockFetch.mockClear();
+
+      await user.type(screen.getByPlaceholderText(/search by name or filename/i), 'hello');
+
+      // 300ms debounce — wait until the fetch fires.
+      await waitFor(
+        () => {
+          expect(listFetchUrls().some((u) => u.includes('q=hello'))).toBe(true);
+        },
+        { timeout: 1500 }
+      );
+    });
+
+    it('refetches when the scope prop changes from undefined to a value', async () => {
+      const { rerender } = render(<ManageTab documents={[]} onRefresh={vi.fn()} />);
+      mockFetch.mockClear();
+
+      rerender(<ManageTab documents={[]} onRefresh={vi.fn()} scope="system" />);
+
+      await waitFor(() => {
+        expect(listFetchUrls().some((u) => u.includes('scope=system'))).toBe(true);
+      });
+    });
+  });
+
+  // ── Pagination footer ──────────────────────────────────────────────────────
+  describe('pagination', () => {
+    it('does not render pagination when there is only one page of results', () => {
+      render(
+        <ManageTab documents={[makeDocument({ id: 'd1', name: 'Solo' })]} onRefresh={vi.fn()} />
+      );
+      expect(screen.queryByRole('button', { name: /next/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /previous/i })).not.toBeInTheDocument();
+    });
+
+    it('renders Previous/Next when the server reports more than one page', async () => {
+      // Seed with a single doc, then have the API reply with paginated meta
+      // claiming there are 50 docs across 2 pages.
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            data: [makeDocument({ id: 'd1', name: 'Doc 1' })],
+            meta: { page: 1, limit: 25, total: 50, totalPages: 2 },
+          }),
+      });
+      render(<ManageTab documents={[]} onRefresh={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /previous/i })).toBeInTheDocument();
+        expect(screen.getByText(/Page 1 of 2/)).toBeInTheDocument();
+      });
     });
   });
 });

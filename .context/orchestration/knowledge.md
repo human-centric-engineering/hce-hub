@@ -323,6 +323,15 @@ Chunks are written with `embedding: NULL` when no active embedding provider is c
 
 **UI pairing:** See [Knowledge Base UI — Seed & Embed](../admin/orchestration-knowledge-ui.md#seed--embed-two-step-flow) for the two-step "Load patterns → Generate embeddings" flow that consumes these endpoints.
 
+## Per-document agent access
+
+Two surfaces expose which agents can search which document — kept in sync so an operator can audit the access set from either direction:
+
+- **`agentCount` field on `GET /knowledge/documents`** — server-aggregated count of active agents that resolve to access for each row, computed via a single raw-SQL `UNION` over the four access paths (full-mode agents, restricted + direct grant, restricted + shared-tag grant, restricted + `scope = 'system'`). Powers the admin documents table's `Uses` column.
+- **`GET /knowledge/documents/:id/agents`** — returns the full list of those agents with the path(s) granting access (`{ kind: 'full' | 'direct' | 'tag' | 'system' }`, plus `tagId`/`tagName`/`tagSlug` on tag paths). Sorted alphabetically by agent name. One agent can appear with multiple paths so the operator can spot redundant grants.
+
+Both surfaces mirror the runtime resolver in `lib/orchestration/knowledge/resolveAgentDocumentAccess.ts` and exclude inactive / soft-deleted agents. The list-endpoint count and the per-document modal results must always agree — both share the same access-path semantics.
+
 ## Anti-Patterns
 
 **Don't** bypass `documentManager` for uploads — it owns the chunk/embedding write ordering. Direct `prisma.aiKnowledgeDocument.create` skips the chunker entirely and leaves an unsearchable document.

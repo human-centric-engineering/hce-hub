@@ -28,6 +28,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
+import { touchAgentLastActive } from '@/lib/orchestration/agents/touch-last-active';
 import { detectStopIntent } from '@/lib/orchestration/inbound/stop-keywords';
 import type { ConversationChannel } from '@/lib/orchestration/inbound/types';
 
@@ -104,6 +105,7 @@ export async function resolveConversation(
         },
         select: { id: true },
       });
+      touchAgentLastActive(args.agentId);
       return {
         conversationId: created.id,
         wasCreated: true,
@@ -137,6 +139,7 @@ export async function resolveConversation(
     where: { id: existing.id },
     data: updates,
   });
+  touchAgentLastActive(args.agentId);
 
   if (optOutStateChanged) {
     try {

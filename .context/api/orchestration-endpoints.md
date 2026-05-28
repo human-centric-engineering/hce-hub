@@ -84,6 +84,7 @@ Validation schemas for every request body / query live in `lib/validations/orche
 | `/knowledge/documents`                    | GET, POST          | List / upload document (multipart)                                                                                                                                                                                         | 3.3     |
 | `/knowledge/documents/:id`                | GET, DELETE        | Read / delete document                                                                                                                                                                                                     | 3.3     |
 | `/knowledge/documents/:id/rechunk`        | POST               | Rechunk + re-embed                                                                                                                                                                                                         | 3.3     |
+| `/knowledge/documents/:id/agents`         | GET                | List active agents that can search this document, with access paths (full / direct / tag / system)                                                                                                                         | —       |
 | `/knowledge/seed`                         | POST               | Seed chunks (no embeddings) for design patterns                                                                                                                                                                            | 3.3     |
 | `/knowledge/embed`                        | POST               | Generate embeddings for unembedded chunks                                                                                                                                                                                  | 3.3     |
 | `/knowledge/documents/:id/retry`          | POST               | Retry failed document ingestion                                                                                                                                                                                            | 5.1     |
@@ -194,9 +195,11 @@ The rest are admin-global: every admin sees the same data.
 
 ### `GET /agents`
 
-List agents (paginated). Query: `page`, `limit`, `isActive`, `provider`, `q`. `q` is a case-insensitive `OR` across `name` / `slug` / `description`.
+List agents (paginated). Query: `page`, `limit`, `isActive`, `provider`, `isSystem`, `kind` (`chat` | `judge`), `q`, `profileId`. `q` is a case-insensitive `OR` across `name` / `slug` / `description`. `profileId` accepts a CUID (filter to one profile) or the literal `none` (filter to `profileId IS NULL`); absence = no profile filter. The admin agents list page uses `isSystem` to back its All / App / System scope segmented control.
 
-Each item includes enriched fields inline: `_count: { capabilities, conversations }` and `_budget: { withinBudget, spent, limit, remaining, globalCapExceeded? } | null`. Budget is batch-computed via a single `groupBy` aggregate — no per-row queries. Types: `AiAgentListItem` in `types/orchestration.ts`.
+Ordered by `[isSystem asc, lastActiveAt desc nulls last, createdAt desc]` — bespoke agents first, then most recently active inside each bucket, with `createdAt` as the final tiebreaker for never-used agents. `lastActiveAt` is bumped by `touchAgentLastActive` whenever a conversation is created/updated for the agent or a cost log is written against it.
+
+Each item includes enriched fields inline: `_count: { capabilities, conversations }`, `_budget: { withinBudget, spent, limit, remaining, globalCapExceeded? } | null`, and `profile: { id, name, slug, isSystem } | null` (the joined `AiAgentProfile` the agent inherits from, when one is set). Budget is batch-computed via a single `groupBy` aggregate — no per-row queries. Types: `AiAgentListItem` in `types/orchestration.ts`.
 
 ### `POST /agents`
 
@@ -761,7 +764,22 @@ Returns every chunk tagged with the given design pattern number, in source order
 
 ### `GET /knowledge/documents`
 
-Paginated document list. Query: `page`, `limit`, `status`, `category`, `q` (`listDocumentsQuerySchema`).
+Paginated document list. Query: `page`, `limit`, `status`, `scope` (`system` | `app` | `agent`), `q` (`listDocumentsQuerySchema`). `q` is a case-insensitive `OR` across `name` and `fileName`. The Knowledge manage tab drives all four query params from its toolbar (search box, status select, pagination, parent scope segmented control).
+
+Each row carries `tags: Array<{ id, slug, name }>` (the document's applied taxonomy), `distinctKeywordCount` (BM25 keyword count rolled up across chunks), and `agentCount` — the count of active agents that can search this document. `agentCount` is computed via a single raw-SQL `UNION` over the four access paths (full-mode agents, restricted-mode + direct grant, restricted-mode + shared-tag grant, restricted-mode + `scope = 'system'`) and matches the per-document agent list at `/knowledge/documents/:id/agents`.
+
+### `GET /knowledge/documents/:id/agents`
+
+List active agents that can search a specific document, with the path granting access. Mirrors the runtime resolver in `lib/orchestration/knowledge/resolveAgentDocumentAccess.ts`:
+
+| Path                                       | When                                                                  |
+| ------------------------------------------ | --------------------------------------------------------------------- |
+| `{ kind: 'full' }`                         | Agent has `knowledgeAccessMode = 'full'` (sees every document)        |
+| `{ kind: 'direct' }`                       | Restricted agent with a direct doc grant (`AiAgentKnowledgeDocument`) |
+| `{ kind: 'tag', tagId, tagName, tagSlug }` | Restricted agent granted a tag that this document also carries        |
+| `{ kind: 'system' }`                       | Restricted agent + `document.scope = 'system'`                        |
+
+One agent can have multiple paths; the response surfaces all of them so the operator can spot redundant grants. Inactive / soft-deleted agents are excluded. Sorted alphabetically by agent name. Response: `{ agents: DocumentAgentRow[], documentScope: string }`. Used by the Knowledge → Manage tab's "Uses" column modal (`DocumentAgentsModal`).
 
 ### `POST /knowledge/documents`
 

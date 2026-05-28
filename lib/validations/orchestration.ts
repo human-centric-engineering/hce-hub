@@ -439,6 +439,12 @@ export const listAgentsQuerySchema = paginationQuerySchema.extend({
    * picker passes `kind=judge` to populate the judge dropdown.
    */
   kind: z.enum(['chat', 'judge']).optional(),
+  /**
+   * Filter by agent profile. `'none'` returns only agents with no profile
+   * assigned (`profileId IS NULL`); a CUID returns only agents linked to
+   * that profile. Absence = no filter (all agents regardless of profile).
+   */
+  profileId: z.union([cuidSchema, z.literal('none')]).optional(),
 });
 
 /**

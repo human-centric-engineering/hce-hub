@@ -26,7 +26,7 @@ export const GET = withAdminAuth(async (request, _session) => {
   const log = await getRouteLogger(request);
 
   const { searchParams } = new URL(request.url);
-  const { page, limit, isActive, provider, isSystem, q, kind } = validateQueryParams(
+  const { page, limit, isActive, provider, isSystem, q, kind, profileId } = validateQueryParams(
     searchParams,
     listAgentsQuerySchema
   );
@@ -50,6 +50,9 @@ export const GET = withAdminAuth(async (request, _session) => {
   where.deletedAt = null;
   if (provider) where.provider = provider;
   if (isSystem !== undefined) where.isSystem = isSystem;
+  if (profileId !== undefined) {
+    where.profileId = profileId === 'none' ? null : profileId;
+  }
   if (q) {
     where.OR = [
       { name: { contains: q, mode: 'insensitive' } },
@@ -61,15 +64,26 @@ export const GET = withAdminAuth(async (request, _session) => {
   const [rawAgents, total] = await Promise.all([
     prisma.aiAgent.findMany({
       where,
-      // Bespoke (user-created) agents first, then system agents. `false`
-      // sorts before `true` in Postgres ascending order, so `isSystem:
-      // 'asc'` puts non-system rows at the top.
-      orderBy: [{ isSystem: 'asc' }, { createdAt: 'desc' }],
+      // Default "natural importance" sort:
+      //   1. Bespoke before system — `false < true` in Postgres asc,
+      //      so `isSystem: 'asc'` puts user-created rows on top.
+      //   2. Most recently active first — `lastActiveAt desc` with nulls
+      //      last so never-used agents settle at the bottom of each
+      //      bucket. Bumped by `touchAgentLastActive` on conversation
+      //      create/update and cost-log writes.
+      //   3. Recently created as the final tiebreaker (covers never-
+      //      used agents).
+      orderBy: [
+        { isSystem: 'asc' },
+        { lastActiveAt: { sort: 'desc', nulls: 'last' } },
+        { createdAt: 'desc' },
+      ],
       skip,
       take: limit,
       include: {
         _count: { select: { capabilities: true, conversations: true } },
         creator: { select: { name: true } },
+        profile: { select: { id: true, name: true, slug: true, isSystem: true } },
       },
     }),
     prisma.aiAgent.count({ where }),

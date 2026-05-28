@@ -16,20 +16,43 @@ All three are async server components using `serverFetch()` + `parseApiResponse(
 
 **Table:** `components/admin/orchestration/agents-table.tsx` (client island, modelled on `components/admin/user-table.tsx`).
 
+**Toolbar:**
+
+- **Scope segmented control** — pill toggle styled like the knowledge base scope picker. Three options: `All` (default, no filter), `System` (sends `isSystem=true`), `App` (sends `isSystem=false`). Choice persists per-user via `useLocalStorage` under `agents-table-kind-tab`.
+- **Search input** — debounced 300ms, hits the `q` query param. Searches name / slug / description.
+- **Profile filter dropdown** — populated from `/agent-profiles` on mount. Options: `All profiles` (default), `Unassigned` (sends `profileId=none`), then one row per profile (with a Shield icon prefix for system profiles).
+- **Group by profile toggle** — `<Layers>`-iconed button. When active, the current page's rows bucket by `profile?.id ?? '__unassigned__'` into collapsible sections (Unassigned sinks to the bottom). Toggle state persists under `agents-table-group-by-profile`; per-bucket collapse state under `agents-table-collapsed-buckets`. Grouping is purely a visual reframe — pagination still applies to the underlying page.
+
 Columns:
 
-| Column    | Source                              | Notes                                                                       |
-| --------- | ----------------------------------- | --------------------------------------------------------------------------- |
-| ☐ select  | Local `Set<string>` state           | Clears on page change / refetch                                             |
-| Name      | `agent.name`                        | Sort header. Links to edit page. Visibility badge inline. Description below |
-| Tools     | `agent._count.capabilities`         | Inline from list API. Links to edit page when > 0                           |
-| Chats     | `agent._count.conversations`        | Inline from list API                                                        |
-| Model     | `agent.provider` + `agent.model`    | Combined: `provider / model`                                                |
-| Budget    | `agent.monthlyBudgetUsd`            | `—` when `null`                                                             |
-| Spend MTD | `agent._budget.spent`               | Inline from list API (batch `groupBy`). `—` when no budget                  |
-| Created   | `agent.createdAt`                   | Relative time (`3d ago`). Creator name in tooltip via `agent.creator`       |
-| Status    | `agent.isActive`                    | `<Switch>` — optimistic PATCH, reverts on failure                           |
-| ⋯ Actions | Dropdown: Edit · Duplicate · Delete |                                                                             |
+| Column      | Source                              | Notes                                                                                                  |
+| ----------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| ☐ select    | Local `Set<string>` state           | Clears on page change / refetch                                                                        |
+| Name        | `agent.name`                        | **Sortable** (page-local). Links to edit page. Visibility badge inline. Description below              |
+| Profile     | `agent.profile`                     | Badge linking to the profile detail page. Shield icon for system profiles. `—` for unassigned.         |
+| Tools       | `agent._count.capabilities`         | Inline from list API. Links to edit page when > 0                                                      |
+| Chats       | `agent._count.conversations`        | **Sortable** (page-local)                                                                              |
+| Model       | `agent.provider` + `agent.model`    | Combined: `provider / model`                                                                           |
+| Budget      | `agent.monthlyBudgetUsd`            | `—` when `null`                                                                                        |
+| Spend MTD   | `agent._budget.spent`               | **Sortable** (page-local). Inline from list API (batch `groupBy`). `—` when no budget                  |
+| Last active | `agent.lastActiveAt`                | **Sortable** (page-local). Relative time (`2h ago`). Absolute timestamp in tooltip. `Never` when null. |
+| Created     | `agent.createdAt`                   | **Sortable** (page-local). Relative time (`3d ago`). Creator name in tooltip via `agent.creator`       |
+| Status      | `agent.isActive`                    | `<Switch>` — optimistic PATCH, reverts on failure                                                      |
+| ⋯ Actions   | Dropdown: Edit · Duplicate · Delete |                                                                                                        |
+
+### Default sort vs explicit sort
+
+The server returns rows in **natural-importance order**: `[isSystem asc, lastActiveAt desc nulls last, createdAt desc]`. The default UI sort field is `'default'` — the client renders rows exactly as the API delivered them.
+
+Clicking any sortable column header switches the field away from `'default'` and the table runs a single-pass client-side re-sort that **preserves the bespoke-first split** (system agents stay below bespoke agents regardless of which column was clicked). The "Sort this page by …" tooltip wording flags that the sort applies only to the current page — pagination is server-driven, not re-sorted.
+
+`agent.lastActiveAt` is bumped in three places (`touch-last-active.ts` helper):
+
+- `lib/orchestration/llm/cost-tracker.ts` — after a cost-log row is written for the agent.
+- `lib/orchestration/chat/streaming-handler.ts` — when a new conversation is created.
+- `lib/orchestration/inbound/conversation-resolver.ts` — on inbound conversation create/update.
+
+The helper is fire-and-forget and swallows both async rejections and synchronous throws — a missed bump just means the agent ranks slightly lower on the next load.
 
 ### Name cell enrichments
 

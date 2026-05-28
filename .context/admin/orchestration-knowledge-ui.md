@@ -30,7 +30,21 @@ The server page fetches documents from `GET /api/v1/admin/orchestration/knowledg
 
 ### Document list
 
-Table with columns: name (clickable → chunks viewer), tag count chip (clickable → tags modal), status badge, chunk count, **coverage**, created date, actions. The tag chip shows `N tag(s)` when any are applied and a `+ Add` affordance when none are; both open the document's tags modal. The Coverage column shows the post-chunking text-capture percentage from `document.metadata.coverage.coveragePct`. Green (≥ 95%) indicates all parsed text was captured; amber indicates content was likely dropped. Older documents without a coverage metric show `—`; rechunking computes it. Status badge colors:
+Table with columns: name (clickable → chunks viewer), tags (one chip per tag, up to 3 then `+N more`), status badge, chunk count, **coverage**, **uses** (agent-count link → access modal), created date, actions.
+
+**Toolbar:**
+
+- **Search input** — debounced 300ms, sends `q` (case-insensitive `OR` across `name` + `fileName`).
+- **Status filter** — dropdown: `All statuses` (default) · `Ready` · `Processing` · `Pending` · `Needs review` · `Failed`. Maps to the API `status` enum.
+- **Scope** — flows in from the parent `KnowledgeView` segmented control (`All` / `System` / `App`) and gets passed as the `scope` query param. The Manage tab no longer filters client-side.
+
+**Pagination** — Previous / Next footer with "Page X of Y" and "Showing N to M of T" summary, rendered only when the result set spans more than one page. Default page limit: 25. All toolbar changes reset to page 1.
+
+**Tags column** — renders up to **3 tag chips** by name; if the document has more, a `+N more` outline chip closes out the cluster. The whole cluster is a single click target that opens the tags editor; the full comma-separated tag list is in the tooltip. Documents with no tags show a `+ Add` affordance.
+
+**Uses column** — server-aggregated `agentCount` from the list endpoint (single UNION query — no per-row fetches). The number is a clickable chip that opens `<DocumentAgentsModal>`, which calls `GET /knowledge/documents/:id/agents` and lists every active agent that can search the document along with the path granting access (full / direct / tag / system).
+
+The Coverage column shows the post-chunking text-capture percentage from `document.metadata.coverage.coveragePct`. Green (≥ 95%) indicates all parsed text was captured; amber indicates content was likely dropped. Older documents without a coverage metric show `—`; rechunking computes it. Status badge colors:
 
 | Status           | Badge variant | Label        |
 | ---------------- | ------------- | ------------ |

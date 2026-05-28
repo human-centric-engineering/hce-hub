@@ -21,6 +21,7 @@ import type { AiCostLog, Prisma } from '@/types/prisma';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { getAvailableModels, getModel } from '@/lib/orchestration/llm/model-registry';
+import { touchAgentLastActive } from '@/lib/orchestration/agents/touch-last-active';
 import type { AgentCostSummary, CostOperation, LocalSavingsResult } from '@/types/orchestration';
 import type { ModelInfo } from '@/lib/orchestration/llm/types';
 
@@ -329,6 +330,7 @@ export async function logCost(params: LogCostParams): Promise<AiCostLog | null> 
 
   try {
     const row = await prisma.aiCostLog.create({ data });
+    touchAgentLastActive(params.agentId, row.createdAt);
     logger.debug('Cost logged', {
       agentId: params.agentId,
       model: params.model,

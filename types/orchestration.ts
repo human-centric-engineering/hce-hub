@@ -1277,6 +1277,7 @@ export type AiAgentListItem = AiAgent & {
   _count: { capabilities: number; conversations: number };
   _budget: BudgetSummary | null;
   creator?: { name: string | null };
+  profile: { id: string; name: string; slug: string; isSystem: boolean } | null;
 };
 
 /** Enriched workflow row returned by the list endpoint. */
@@ -1371,6 +1372,16 @@ export type KnowledgeDocumentListItem = AiKnowledgeDocument & {
    * keywords and offers post-upload enrichment.
    */
   distinctKeywordCount?: number;
+  /**
+   * Number of active agents that can search this document. Mirrors the
+   * resolver in `lib/orchestration/knowledge/resolveAgentDocumentAccess.ts`:
+   * full-mode agents always count, restricted agents count when they have
+   * a direct grant, share a tag with the document, or the document is
+   * `scope = 'system'`. Drives the "Uses" column on the admin documents
+   * table; clicking opens a modal listing each agent and the path that
+   * grants access.
+   */
+  agentCount?: number;
 };
 
 /** Evaluation session with logs */

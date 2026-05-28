@@ -173,6 +173,7 @@ function makeAgent(model: string, provider: string = 'openai') {
     enableImageInput: false,
     enableDocumentInput: false,
     deletedAt: null,
+    lastActiveAt: null,
     isSystem: false,
     kind: 'chat',
     createdBy: 'u',
