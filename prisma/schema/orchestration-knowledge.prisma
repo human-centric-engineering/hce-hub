@@ -16,6 +16,21 @@ model AiKnowledgeBase {
 }
 
 // Source documents uploaded to the knowledge base
+//
+// ⚠️ PRISMA-SCHEMA DRIFT WARNING ⚠️
+// A partial unique index `idx_knowledge_doc_file_hash_ready` on `fileHash`
+// WHERE `status = 'ready'` is managed via raw SQL — Prisma cannot model
+// partial indexes. The plain `@@index([fileHash])` below is a separate
+// (non-unique, non-partial) index; both coexist in the deployed DB.
+//
+// `npx prisma migrate dev` will emit DROP statements for the partial unique
+// on schema-diff runs. Always inspect generated migration SQL and remove
+// any line touching `idx_knowledge_doc_file_hash_ready` before applying —
+// dropping it would silently allow duplicate `(fileHash, status='ready')`
+// rows, defeating the dedupe contract.
+//
+// Source of truth: prisma/migrations/00000000000000_baseline/migration.sql
+// (originally added by 20260410120000_dedupe_ready_knowledge_documents).
 model AiKnowledgeDocument {
   id              String   @id @default(cuid())
   knowledgeBaseId String
