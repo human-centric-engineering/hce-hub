@@ -3,6 +3,7 @@ import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { getOAuthState, APIError } from 'better-auth/api';
 import { prisma } from '@/lib/db/client';
+import { SYSTEM_USER_EMAIL } from '@/lib/auth/constants';
 import { env } from '@/lib/env';
 import { sendEmail } from '@/lib/email/send';
 import { validateEmailConfig } from '@/lib/email/client';
@@ -116,6 +117,37 @@ export async function userCreateBeforeHook(
       }
       // Log but don't block for other errors (e.g., getOAuthState fails)
       logger.error('Error checking OAuth invitation in before hook', error);
+    }
+  }
+
+  // First-human-is-admin bootstrap.
+  //
+  // On a fresh database the first real person to sign up — by email/password OR
+  // OAuth — is promoted to ADMIN. This gives self-hosters a working admin
+  // bootstrap with zero default credentials (the Ghost/GitLab/Sentry pattern).
+  //
+  // The seeded SYSTEM config-owner (SYSTEM_USER_EMAIL, role ADMIN, no login) is
+  // excluded from the count so it does not count as a "real" user — otherwise
+  // the first human would never be promoted on a seeded database.
+  //
+  // The seeded system user is inserted via a direct Prisma upsert, not through
+  // better-auth, so this hook never fires for it.
+  //
+  // Concurrency: two simultaneous first-signups could both read a count of 0 and
+  // both be promoted. This window only exists on a brand-new, operator-controlled
+  // database and yielding two admins there is benign — matching how the same
+  // pattern behaves in Ghost/GitLab/Sentry. We accept it rather than add a
+  // bootstrap-lock table.
+  if (user.email !== SYSTEM_USER_EMAIL) {
+    const existingHumanCount = await prisma.user.count({
+      where: { email: { not: SYSTEM_USER_EMAIL } },
+    });
+
+    if (existingHumanCount === 0) {
+      logger.info('First user on a fresh database — assigning ADMIN role', {
+        email: user.email,
+      });
+      return { data: { ...user, role: 'ADMIN' } };
     }
   }
 

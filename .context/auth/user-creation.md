@@ -37,6 +37,34 @@ Sunrise supports three user creation patterns: **self-signup** (email/password o
 5. **Verification email sent** (if enabled in production)
 6. User verifies email (production) or logs in directly (development)
 
+### First-admin bootstrap
+
+Sunrise ships **no default login credentials**. The first real account created on
+a fresh database — via email/password **or** OAuth — is automatically promoted to
+`ADMIN` by `userCreateBeforeHook` (`lib/auth/config.ts`). Every subsequent account
+is a regular `USER`. This is the Ghost/GitLab/Sentry bootstrap pattern.
+
+The seeded `system@sunrise.local` config-owner (`prisma/seeds/001-system-owner.ts`,
+role `ADMIN`, no credential `Account`, cannot log in) is **excluded** from the
+"is this the first user?" check, so seeding the orchestration config does not
+consume the first-admin slot:
+
+```typescript
+// lib/auth/config.ts — userCreateBeforeHook (simplified)
+if (user.email !== SYSTEM_USER_EMAIL) {
+  const existingHumanCount = await prisma.user.count({
+    where: { email: { not: SYSTEM_USER_EMAIL } },
+  });
+  if (existingHumanCount === 0) {
+    return { data: { ...user, role: 'ADMIN' } }; // first human → admin
+  }
+}
+```
+
+> **Concurrency:** two simultaneous first-signups could both read a count of 0 and
+> both be promoted. This window only exists on a brand-new, operator-controlled
+> database, so two admins there is benign and accepted (no bootstrap-lock table).
+
 ### Implementation
 
 **Client-side (Web UI):**

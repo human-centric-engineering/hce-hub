@@ -16,10 +16,25 @@ release process.
 
 ## [Unreleased]
 
-_No entries yet._ Append public-surface changes here as PRs land (see
-[`VERSIONING.md`](./VERSIONING.md#public-surface-contract-tight-definition)
-for what counts and `CLAUDE.md` for the in-repo rule). Internal refactors,
-tests, docs, and chores deliberately do **not** belong here.
+### Changed
+
+- **Auth bootstrap — first account on a fresh database becomes `ADMIN`.**
+  `userCreateBeforeHook` (`lib/auth/config.ts`) now promotes the first real
+  account created on an empty database (email/password **or** OAuth) to the
+  `ADMIN` role; every subsequent account is a regular `USER`. The seed unit
+  formerly at `prisma/seeds/001-test-users.ts` is renamed to
+  `prisma/seeds/001-system-owner.ts` and now provisions a single non-login
+  `system@sunrise.local` config-owner (role `ADMIN`, no credential) instead of
+  the login-able `admin@example.com` / `test@example.com` users. New export:
+  `SYSTEM_USER_EMAIL` from `lib/auth/constants.ts`.
+
+### Security
+
+- **Removed the documented-but-nonfunctional default seed credentials.** The
+  README previously advertised `admin@example.com` / `test@example.com` with
+  `password123`, but the seed never created the better-auth credential records,
+  so those logins never worked. Sunrise now ships **zero default login
+  credentials**; admin access is bootstrapped by the first-signup rule above.
 
 ---
 

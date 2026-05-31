@@ -105,7 +105,7 @@ const unit: SeedUnit = {
       // 004-builtin-templates would have failed first if there were no admin,
       // so the only way to land here is a hand-deleted user row. Bail loudly
       // rather than silently no-op.
-      throw new Error('No admin user found — ensure 001-test-users runs first.');
+      throw new Error('No admin user found — ensure 001-system-owner runs first.');
     }
     const createdBy = admin.id;
 

@@ -162,7 +162,7 @@ const unit: SeedUnit = {
       select: { id: true },
     });
     if (!admin) {
-      throw new Error('No admin user found — ensure 001-test-users runs first.');
+      throw new Error('No admin user found — ensure 001-system-owner runs first.');
     }
     const createdBy = admin.id;
 

@@ -50,7 +50,7 @@ Source: `prisma/runner.ts`
 2. For each file:
    - Dynamic-imports the file to read the exported `SeedUnit`.
    - Computes sha256 of the seed file's source, then appends the contents of any files declared in `hashInputs` (in declared order) before finalising the hash. This lets a unit that wraps external data (e.g. a JSON file) re-run when that data changes.
-   - Looks up `SeedHistory` by `name` (= the path **relative to `prisma/seeds/`** sans `.ts`). Top-level files keep their bare slug (`001-test-users`); a nested file keys as `app-foo/001-init`, so same-numbered seeds in different directories don't collide.
+   - Looks up `SeedHistory` by `name` (= the path **relative to `prisma/seeds/`** sans `.ts`). Top-level files keep their bare slug (`001-system-owner`); a nested file keys as `app-foo/001-init`, so same-numbered seeds in different directories don't collide.
    - If stored `contentHash` matches → skip, log `⏭`.
    - Otherwise → invokes `SeedUnit.run({ prisma, logger })`, upserts `SeedHistory` with new hash and `durationMs`.
 3. Errors from a unit propagate and exit non-zero. Successful earlier units remain in `SeedHistory`, so a re-run resumes at the failing unit.
@@ -87,14 +87,14 @@ export default unit;
 
 **Idempotent.** Every write is an `upsert` (or equivalent). `update: {}` is the common idiom — re-seeding never overwrites admin edits. `createMany` is not safe unless you pair it with `skipDuplicates: true` and a unique constraint.
 
-**Self-contained.** Look up dependencies from the DB, don't pass them between units. For admin ownership:
+**Self-contained.** Look up dependencies from the DB, don't pass them between units. For admin ownership — `001-system-owner` seeds a non-login `system@sunrise.local` user (role `ADMIN`, no credential) precisely so config-owning seeds always find an `ADMIN`:
 
 ```typescript
 const admin = await prisma.user.findFirst({
   where: { role: 'ADMIN' },
   select: { id: true },
 });
-if (!admin) throw new Error('No admin user found — ensure 001-test-users runs first.');
+if (!admin) throw new Error('No admin user found — ensure 001-system-owner runs first.');
 ```
 
 **Use the context.** The runner injects `prisma` and `logger`. Do **not** import `prisma` from `@/lib/db/client` or instantiate your own — use the ones passed to `run()`.
