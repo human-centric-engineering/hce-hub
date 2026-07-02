@@ -157,6 +157,7 @@ interface ExecutionContext {
   workflowId: string;
   userId: string;
   inputData: Record<string, unknown>;
+  scope?: Record<string, string>; // free-form scope carrier — see below
   stepOutputs: Record<string, unknown>; // keyed by step.id
   variables: Record<string, unknown>; // planner scratchpad
   totalTokensUsed: number;
@@ -167,6 +168,10 @@ interface ExecutionContext {
   stepTelemetry?: LlmTelemetryEntry[]; // see "LLM telemetry capture" below
 }
 ```
+
+**Scope carrier.** `scope` mirrors `CapabilityContext.scope` — an optional, free-form string map the engine forwards verbatim into the `CapabilityContext` for every capability dispatch: the `tool_call` executor and the `agent_call` tool-use loop (and therefore `orchestrator`, which delegates through `agent_call`), so a capability can refuse to run outside its intended scope. Set it via `ExecuteOptions.scope`; the engine persists it on `AiWorkflowExecution.scope` so it survives crash-resume (the resume path reads it back, validated by `workflowScopeSchema`, and rethreads it — a malformed payload is dropped and the run continues unscoped). Core names no keys and no built-in capability reads it; `NULL`/unset leaves behaviour unchanged.
+
+Scope flows through the whole execution graph: `OrchestrationEngine.execute` (fresh-run) and crash-resume carry it, the **rerun** endpoint inherits the original run's scope, and the `run_workflow` capability inherits the parent's scope into a sub-workflow — so a capability at any depth sees the run's scope. What core does **not** do is _populate_ scope from an external caller: the scheduler and the inbound/webhook trigger routes create execution rows without a scope, exactly like the admin execute route. Stamping a scope onto those entry points (e.g. a fork's webhook adapter deriving a `projectId`) is caller/population work, not part of the carrier itself — the row already supports a persisted `scope`, so a populated value flows without further engine changes.
 
 Executors receive a **frozen snapshot** (via `snapshotContext()`) so they cannot silently mutate totals or sibling outputs. They return a `StepResult { output, tokensUsed, costUsd, nextStepIds?, skipped?, skipError? }`; the engine merges that back into the live context via `mergeStepResult()` and checkpoints. When `skipped` is true (set by the `skip` error strategy), the engine records a `'skipped'` trace entry and `skipError` carries the sanitised error message for SSE event emission.
 
