@@ -327,11 +327,26 @@ export async function POST(
     settingsDefault: orgSettings?.defaultMaxCostPerExecutionUsd ?? null,
   });
 
-  // Stamp the trigger's static scope onto the run so capabilities inside it
-  // enforce it. Validated on read (drop-to-unscoped on malformed). Payload-
-  // derived (dynamic) scope for a channel is a separate seam and would merge
-  // in here from `normalised`.
+  // Resolve the run's scope from two sources, both run through the shared
+  // validate-on-read guard (drop-to-unscoped + warn on malformed):
+  //   - `trigger.scope`   — operator-configured static scope (higher trust).
+  //   - `normalised.scope` — adapter-derived from the verified payload (lower
+  //     trust: adapters aren't trusted to return well-formed data). Tagged
+  //     `source: 'adapter'` so a dropped-scope warning is attributable.
+  // Shallow-merge with the static scope last so the operator's config wins on
+  // key conflicts — an adapter may fill in keys the operator didn't pin, but
+  // cannot override one they did.
   const triggerScope = resolvePersistedScope(trigger.scope, { triggerId: trigger.id });
+  const adapterScope = resolvePersistedScope(normalised.scope, {
+    triggerId: trigger.id,
+    channel,
+    slug,
+    source: 'adapter',
+  });
+  const scope =
+    adapterScope !== undefined || triggerScope !== undefined
+      ? { ...adapterScope, ...triggerScope }
+      : undefined;
 
   let executionId: string;
   try {
@@ -346,7 +361,7 @@ export async function POST(
         triggerSource,
         triggerExternalId: externalId,
         dedupKey,
-        ...(triggerScope ? { scope: triggerScope } : {}),
+        ...(scope ? { scope } : {}),
         ...(effectiveBudgetLimitUsd !== undefined
           ? { budgetLimitUsd: effectiveBudgetLimitUsd }
           : {}),
