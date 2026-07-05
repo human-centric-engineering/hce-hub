@@ -196,9 +196,9 @@ Every step + LLM call + capability dispatch is wrapped in an OTEL span via the h
 
 See [`tracing.md`](tracing.md) for the full guide — span tree, attribute reference, sampling, bootstrap recipes (Datadog / Honeycomb / Tempo / Langfuse), span-status semantics, and anti-patterns.
 
-Template interpolation (`{{input}}`, `{{input.key}}`, `{{previous.output}}`, `{{<stepId>.output}}`) is applied inside `llm-runner.ts` and reads from the snapshot — so any step that ran earlier in the walk is addressable by id.
+Template interpolation (`{{input}}`, `{{input.key}}`, `{{previous.output}}`, `{{<stepId>.output}}`, `{{vars.<path>}}`, `{{trigger.<path>}}`) is applied inside `llm-runner.ts` and reads from the snapshot — so any step that ran earlier in the walk is addressable by id. `{{trigger.<path>}}` reads an inbound-triggered run's data — the verified adapter payload at `inputData.trigger`, falling back to the resolved envelope at `inputData.triggerMeta` (channel, conversationId, …). So `{{trigger.text}}` reads the payload and `{{trigger.conversationId}}` the envelope (the payload never carries the conversation id). Empty for non-inbound runs, and it works inside `{{#if …}}` conditionals too.
 
-**Template limitations:** Interpolation supports one level of property access (`{{input.key}}`) but not deeper paths (`{{input.key.nested}}`). For nested data, flatten in an intermediate step or use an LLM step to extract the needed value. Interpolated values have no per-value size limit — very large objects will be serialised in full and sent to the LLM provider, relying on the provider's token limit to reject oversized prompts. The workflow execution body is capped at 256 KB for `inputData` to prevent oversized payloads.
+**Template limitations:** `{{input.key}}` supports one level of property access, not deeper paths (`{{input.key.nested}}`) — for nested `input` data, flatten in an intermediate step or use an LLM step to extract the value. (`{{vars.<path>}}` and `{{trigger.<path>}}` **do** walk dotted paths.) Interpolated values have no per-value size limit — very large objects will be serialised in full and sent to the LLM provider, relying on the provider's token limit to reject oversized prompts. The workflow execution body is capped at 256 KB for `inputData` to prevent oversized payloads.
 
 ## Executor registry
 
