@@ -1,4 +1,22 @@
-# Sunrise - build production apps faster
+# HCE Hub
+
+HCE Venture Studio's AI-native internal ops platform — the studio's projects,
+features, tasks, and per-project sidekick agents in one place, reachable from web
+chat, MCP (Claude Code), and workflows.
+
+> ### 🍴 A fork of Sunrise
+>
+> HCE Hub is a **leaf-app fork** of the [Sunrise](https://github.com/human-centric-engineering/sunrise)
+> platform, forked at Sunrise **v0.6.0**. It builds on Sunrise through the
+> designed extension seams (the `/app` tier) and pulls Sunrise releases via the
+> `upstream` remote — it does **not** modify platform-owned files. The rest of
+> this README is Sunrise's platform documentation; HCE Hub's own docs live in
+> [`.context/app/`](./.context/app/README.md). **If you're building on Sunrise
+> yourself, start from Sunrise, not this repo.**
+
+---
+
+## The Sunrise platform
 
 A production-ready Next.js 16 starter template designed for rapid application development with AI assistance — now with a complete AI agent orchestration layer baked in.
 
