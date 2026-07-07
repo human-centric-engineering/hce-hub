@@ -1,7 +1,7 @@
 {
-  "name": "sunrise",
-  "version": "0.6.0",
-  "description": "A production-ready Next.js starter template designed for rapid application development with AI assistance.",
+  "name": "hce-hub",
+  "version": "0.1.0",
+  "description": "HCE Venture Studio's AI-native internal ops platform — a fork of Sunrise.",
   "private": true,
   "scripts": {
     "dev": "next dev",
