@@ -46,3 +46,10 @@ coverage
 # Per-developer local Claude Code settings (gitignored, written by the CLI).
 # Format is owned by the tool, so Prettier should not gate `npm run validate` on it.
 .claude/settings.local.json
+
+# HCE Hub (app) planning tree — fork-owned docs + design-handoff reference.
+# The design handoff bundles prototype .jsx/.css/.html (their own standalone
+# style, not production code) and the planning markdown uses column-aligned
+# Obsidian tables/wikilinks that Prettier collapses. It's authoring material with
+# no build impact, so Prettier should not gate `npm run validate` on it.
+.context/app/planning/
