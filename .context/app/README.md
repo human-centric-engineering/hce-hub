@@ -39,7 +39,10 @@ merge.
 except `.context/app/`, plus the SQL of any Sunrise migration. If you must change
 platform behaviour and no seam exists, keep the edit minimal (a one-line "keep
 mine" is a cheap merge; a rewritten platform file is not) and file a follow-up to
-add the seam upstream.
+add the seam upstream. **Every such edit gets a row in
+[`platform-divergences.md`](./platform-divergences.md)** — the ledger of carried
+platform-file edits (and any fork-first upstream asks), so they're reconciled at
+merge time rather than rediscovered.
 
 ## The seams HCE Hub builds on
 
