@@ -94,11 +94,12 @@ describe('lib/app/ bootstrap defaults are no-ops', () => {
     expect(initAppKnowledgeAccessContributors()).toBeUndefined();
   });
 
-  it('the ESLint config seam is an empty array by default', () => {
-    // A stray flat-config block here would silently apply lint rules to every
-    // fork (the root eslint.config.mjs spreads this array last). Forks fill it;
-    // vanilla Sunrise ships it empty. The root spread itself is exercised by
-    // every `npm run lint` run.
-    expect(appEslintConfig).toEqual([]);
+  it('the ESLint config seam carries exactly the fork planning-tree ignore', () => {
+    // HCE Hub (fork) intentionally fills this seam — vanilla Sunrise ships `[]`.
+    // The single global-ignores block excludes the app planning tree, whose
+    // design-handoff prototype .jsx trips `eslint .`. Asserting the EXACT array
+    // preserves the original guard: any stray *additional* flat-config block
+    // (e.g. a real lint rule) still fails here. See lib/app/eslint.config.mjs.
+    expect(appEslintConfig).toEqual([{ ignores: ['.context/app/planning/**'] }]);
   });
 });
