@@ -30,12 +30,20 @@ afterEach(() => {
 });
 
 describe('PublicFooter', () => {
-  it('renders the platform default nav, legal links, and copyright', async () => {
+  // Fork divergence: HCE Hub is auth-only and empties the marketing footer nav
+  // (lib/app/public-nav.ts → `footerNavItems: []`), so the Home/About/Contact
+  // cluster is gone — this adapts Sunrise's "renders the platform default nav"
+  // case, whose premise the curation falsifies. The legal cluster is left at the
+  // platform default (`footerLegalItems: null`), so Privacy/Terms, the copyright,
+  // and the always-on Cookie Preferences control are all unchanged.
+  // See .context/app/platform-divergences.md.
+  it('renders no marketing footer nav (fork auth-only) but keeps legal links + copyright', async () => {
     vi.resetModules();
     const { PublicFooter } = await import('@/components/layouts/public-footer');
     render(React.createElement(PublicFooter));
 
-    expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute('href', '/about');
+    expect(screen.queryByRole('link', { name: 'About' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Home' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
       'href',
       '/privacy'
