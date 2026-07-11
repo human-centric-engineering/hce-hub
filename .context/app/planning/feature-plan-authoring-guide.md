@@ -1,7 +1,7 @@
 ---
 status: draft
 opened: 2026-07-10
-convention_version: 1
+convention_version: 2
 operationalizes: plan-authoring-guide.md (the feature tier), v1-requirements.md (§4, §5)
 sibling: plan-authoring-guide.md
 distilled_from: expert-led-apps/planning-retro.md §B
@@ -53,6 +53,7 @@ Every feature plan opens by reconciling the (possibly stale) spec against the **
 Indicative task bullets are a sketch. Promotion is where you commit to real PR shapes — right-size in both directions, and mark the seams a task is likely to split along at build.
 
 - **Sizing self-check — fold commit-sized slivers up.** If a task's only real content is scaffolding + one small file, fold it into its dependent task and size by real changed surface ([[planning-retro]] B1).
+- **Don't split tiny-by-purity — the size gate precedes the split list.** A conceptual seam (platform-owned vs fork-owned, pure vs impure) is a *reviewability* nicety, not a sizing reason. Before applying any split candidate below, confirm **both** resulting pieces would be real PRs; when they're each commit-sized, keep them one PR and note the seam in the PR description. Heuristic: a feature whose *entire* remaining work is **<~150 lines across ≤2 files is one task**, even across two concerns. (This is the inverse of *a separable second concern* below, which fires only when that concern is **heavy** — and a caveat on the *purity boundary* candidate, which only earns a split when each half is substantial.) ([[planning-retro]] HB1)
 - **Split candidates (flag at promotion, re-check at build):**
   - **Purity boundary** — a task joining a *pure transform* with an *LLM/IO call* ("mask **+** extract") splits at that line; ship the pure half first, let the impure half consume it ([[planning-retro]] B16).
   - **Endpoint + consuming UI** — usually two PRs: the API is a self-contained, testable, security-relevant slice; the UI mounts on its reviewed contract ([[planning-retro]] B25).
@@ -178,6 +179,7 @@ chains; `smoke:*` for real-DB fidelity. Pure tests import the specific module, n
 A living draft — bump `convention_version` and add a dated note when it changes; promote `status: draft → convention` once it has authored a real build (the Hub is the first test). When the Hub is built, §§1–7 become the sidekick's feature-planning behaviour and §8 the [[building-on-sunrise]] rules (see *Where this lives*).
 
 **Convention history**
+- v2 (2026-07-11) — added the §2 "don't split tiny-by-purity" size gate (a conceptual seam isn't a sizing reason; both pieces must be real PRs before a split applies). First lesson from executing the **HCE Hub** plan ([[planning-retro]] HB1, f-fork over-decomposition).
 - v1 (2026-07-10) — initial draft, distilled from [[planning-retro]] §B (Daybreak, built feature-by-feature). Created as the second tier alongside [[plan-authoring-guide]] v2.
 
 ## References
