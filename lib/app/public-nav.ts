@@ -26,12 +26,19 @@
  */
 import type { PublicNavItem } from '@/lib/public-nav/types';
 
-/** Header nav. `null` = platform default; a non-null array replaces it. */
-export const publicNavItems: PublicNavItem[] | null = null;
+// HCE Hub is an internal, auth-only app — the public (`(public)`) chrome renders
+// only on the retained legal pages (/privacy, /terms, /contact) for signed-out
+// visitors. There is no marketing site, so the marketing nav clusters are emptied
+// (`[]` replaces the Home/About/Contact defaults wholesale). The legal cluster is
+// left at the platform default (`null` → Privacy/Terms), and the Cookie
+// Preferences control renders regardless. See f-fork t-1.
 
-/** Footer link cluster. `null` = platform default; a non-null array replaces it. */
-export const footerNavItems: PublicNavItem[] | null = null;
+/** Header nav — emptied: no marketing navigation on an auth-only app. */
+export const publicNavItems: PublicNavItem[] | null = [];
 
-/** Footer legal cluster. `null` = platform default; a non-null array replaces it.
- * The Cookie Preferences control renders regardless. */
+/** Footer link cluster — emptied for the same reason. */
+export const footerNavItems: PublicNavItem[] | null = [];
+
+/** Footer legal cluster. `null` = platform default (Privacy/Terms); a non-null
+ * array replaces it. The Cookie Preferences control renders regardless. */
 export const footerLegalItems: PublicNavItem[] | null = null;

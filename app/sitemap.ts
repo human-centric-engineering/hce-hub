@@ -13,10 +13,11 @@ import type { MetadataRoute } from 'next';
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
-  // Public pages - add new public pages here
+  // Public pages - add new public pages here.
+  // HCE Hub (fork) is auth-only: the marketing landing (`''`, now a redirect to
+  // the app) and `/about` (deleted) are not public content, so only the retained
+  // legal + contact pages are listed. See .context/app/platform-divergences.md.
   const publicPages = [
-    { path: '', priority: 1.0, changeFrequency: 'weekly' as const },
-    { path: '/about', priority: 0.8, changeFrequency: 'monthly' as const },
     { path: '/contact', priority: 0.8, changeFrequency: 'monthly' as const },
     { path: '/privacy', priority: 0.3, changeFrequency: 'yearly' as const },
     { path: '/terms', priority: 0.3, changeFrequency: 'yearly' as const },

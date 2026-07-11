@@ -23,16 +23,19 @@ afterEach(() => {
 });
 
 describe('PublicNav', () => {
-  it('renders the platform default links when no override is set', async () => {
+  // Fork divergence: HCE Hub is auth-only and empties the marketing header nav
+  // (lib/app/public-nav.ts → `publicNavItems: []`), so the real seam renders NO
+  // links — this replaces Sunrise's "renders the platform default links when no
+  // override is set" case, whose premise the curation falsifies. The null→default
+  // fallback is now vanilla-only and covered upstream. The override-replacement
+  // and exact-active-state cases below still exercise the resolver via mocks.
+  // See .context/app/platform-divergences.md.
+  it("renders the fork's curated (empty) header nav — no marketing links", async () => {
     vi.resetModules();
     const { PublicNav } = await import('@/components/layouts/public-nav');
     render(React.createElement(PublicNav));
 
-    expect(screen.getByRole('link', { name: /home/i })).toHaveAttribute('href', '/');
-    expect(screen.getByRole('link', { name: /about/i })).toHaveAttribute('href', '/about');
-    expect(screen.getByRole('link', { name: /contact/i })).toHaveAttribute('href', '/contact');
-    // Home is the active page (pathname '/').
-    expect(screen.getByRole('link', { name: /home/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('link')).toBeNull();
   });
 
   it('replaces the default wholesale with a non-null override list', async () => {

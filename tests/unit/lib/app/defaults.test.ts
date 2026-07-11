@@ -64,11 +64,16 @@ describe('lib/app/ bootstrap defaults are no-ops', () => {
     expect(getRegisteredNavSections()).toHaveLength(0);
   });
 
-  it('public-nav overrides are all null by default (= use platform defaults)', () => {
-    // A stray non-null list here would silently replace the marketing nav for
-    // every install (issue #347 ships these unset).
-    expect(publicNavItems).toBeNull();
-    expect(footerNavItems).toBeNull();
+  it('public-nav marketing clusters are emptied; the legal cluster keeps the platform default', () => {
+    // Fork divergence: HCE Hub is auth-only, so the header + footer marketing nav
+    // are emptied (`[]` replaces the Home/About/Contact defaults wholesale). This
+    // adapts Sunrise's "all null by default" case, whose premise the curation
+    // falsifies. The legal cluster is left null → platform Privacy/Terms, and the
+    // Cookie Preferences control renders regardless. Component-level proof is in
+    // public-{nav,footer}.test.tsx. See lib/app/public-nav.ts (f-fork t-1) and
+    // .context/app/platform-divergences.md.
+    expect(publicNavItems).toEqual([]);
+    expect(footerNavItems).toEqual([]);
     expect(footerLegalItems).toBeNull();
   });
 
