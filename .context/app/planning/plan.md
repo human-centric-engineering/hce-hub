@@ -96,7 +96,7 @@ A flat list in rough dependency order (most-ready first). Order is *emergent fro
 | 01 | `f-fork` | Simon (**shipped**) | — | 2 | Fork + brand + auth-only shell + strip public surfaces |
 | 02 | `f-theme` | TBD | f-fork | 3 | HCE Hub base theme (tokens, fonts, dark mode) |
 | 03 | `f-data-model` | Simon (**shipped**) | f-fork | ~1 (built as 3) | Prisma app models + scaffolding + migrations |
-| 04 | `f-access` | TBD | f-data-model | 3 | Project-membership access control |
+| 04 | `f-access` | Simon (in flight) | f-data-model | ~1 | Project-membership access control |
 | 05 | `f-project-admin` | TBD | f-access | 4 | Project + member CRUD (in Sunrise admin shell) |
 | 06 | `f-shell` | TBD | f-theme, f-access | 5 | Module-composable app shell (nav, 3-col layout) |
 | 07 | `f-hub-capabilities` | TBD | f-data-model, f-access | 5 | Hub tools (next/claim/create/backlog/help-wanted) + MCP |
@@ -151,7 +151,7 @@ The Hub data model in `prisma/schema/app.prisma`, plus the additive futures scaf
 *Done when:* migrations apply clean on a fresh DB; drift-check green; a user erasure via `eraseUser()` cascades/nulls Hub rows correctly; gates green. *Shipped (2026-07-13):* Project (#13), Task (#16), futures (#17) domains; **no erasure hooks** — the hand-FK `ON DELETE` (fired by `eraseUser()`'s `tx.user.delete()`) is the GDPR mechanism, proven by `app:smoke:erasure`; the indicative 5-bullet sketch above was built as 3 PRs and should have been ~1 ([[f-data-model]] decisions log; [[planning-retro]] HB3).
 
 ### 04 · `f-access` — project-membership access control
-*Owner:* TBD · *Depends on:* f-data-model · *~3 PRs*
+*Owner:* Simon · *Status:* in flight · *Depends on:* f-data-model · *~1 PR (HB3 — sized down from indicative 3)* · *Detailed plan:* [[f-access]]
 
 Per-project visibility and contribution rights: a user only sees/acts on projects they're a member of. (Cross-ref: [[v1-requirements#3. Human-centric principles (binding)|§3]], [[v1-requirements#14. Open implementation questions for the Sunrise-side conversation|§14 Q3]]; [[CUSTOMIZATION|building-on-sunrise]] §4 protected-routes, §6 self-guard.)
 
