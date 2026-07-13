@@ -63,4 +63,18 @@ export function registerAppDriftProbes(): void {
     table: 'app_feature',
     probe: constraintExists('app_feature_ownerUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // Task domain (t-2): task.claimedByUserId retains the task; a task_claim IS
+  // the user's participation and cascades.
+  registerAppDriftProbe({
+    name: 'app_task_claimedByUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_task',
+    probe: constraintExists('app_task_claimedByUserId_fkey', 'ON DELETE SET NULL'),
+  });
+  registerAppDriftProbe({
+    name: 'app_task_claim_userId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_task_claim',
+    probe: constraintExists('app_task_claim_userId_fkey', 'ON DELETE CASCADE'),
+  });
 }

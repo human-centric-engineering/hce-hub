@@ -3,11 +3,13 @@
  *
  * Fork-owned companion to Sunrise's `scripts/smoke/erasure.ts`. Proves the
  * DB-enforced GDPR behavior of the Hub's hand-written satellite FKs → core
- * `user` (f-data-model t-1), which mocked unit tests cannot: `eraseUser()`'s
+ * `user` (f-data-model t-1 + t-2), which mocked unit tests cannot: `eraseUser()`'s
  * `tx.user.delete()` fires the FK `ON DELETE` actions, so —
  *   - `app_project.leadUserId`   → SET NULL (project retained, lead de-attributed)
  *   - `app_feature.ownerUserId`  → SET NULL (feature retained, owner de-attributed)
+ *   - `app_task.claimedByUserId` → SET NULL (task retained, claimant de-attributed)
  *   - `app_project_member`       → CASCADE  (the user's membership is removed)
+ *   - `app_task_claim`           → CASCADE  (the user's claim history is removed)
  *
  * The FK *contract* (constraint + action) is guarded continuously by
  * `npm run db:drift-check` (CI + /pre-pr); this smoke is the functional
@@ -49,6 +51,7 @@ async function main(): Promise<void> {
   let userId: string | null = null;
   let projectId: string | null = null;
   let featureId: string | null = null;
+  let taskId: string | null = null;
 
   try {
     const user = await prisma.user.create({
@@ -56,8 +59,10 @@ async function main(): Promise<void> {
     });
     userId = user.id;
 
-    // The user leads a project, owns a feature in it, and is a member — the
-    // three Hub → user references, one per ON DELETE action under test.
+    // The user leads a project, owns a feature in it, is a member, claims a task
+    // in it, and has a claim-history row — every Hub → user reference, one per
+    // ON DELETE action under test (SET NULL: lead/owner/task claimant · CASCADE:
+    // membership/claim).
     const project = await prisma.project.create({
       data: { name: `${PREFIX} project`, hostPlatform: 'sunrise', leadUserId: user.id },
     });
@@ -71,6 +76,18 @@ async function main(): Promise<void> {
     await prisma.projectMember.create({
       data: { projectId: project.id, userId: user.id, role: 'lead' },
     });
+
+    const task = await prisma.task.create({
+      data: {
+        featureId: feature.id,
+        title: `${PREFIX} task`,
+        status: 'claimed',
+        claimedByUserId: user.id,
+      },
+    });
+    taskId = task.id;
+
+    await prisma.taskClaim.create({ data: { taskId: task.id, userId: user.id } });
 
     // Erase.
     await eraseUser({
@@ -95,9 +112,19 @@ async function main(): Promise<void> {
       'project membership cascade-deleted (CASCADE)'
     );
 
+    const taskAfter = await prisma.task.findUnique({ where: { id: task.id } });
+    check(taskAfter !== null, 'task retained');
+    check(taskAfter?.claimedByUserId === null, 'task.claimedByUserId nulled (SET NULL)');
+
+    check(
+      (await prisma.taskClaim.count({ where: { taskId: task.id } })) === 0,
+      'task claim cascade-deleted (CASCADE)'
+    );
+
     console.log('\n✓ app:smoke:erasure passed');
   } finally {
-    // Self-clean by tracked id (feature before project; member already gone).
+    // Self-clean by tracked id (task/feature before project; member+claim gone).
+    if (taskId) await prisma.task.deleteMany({ where: { id: taskId } }).catch(() => undefined);
     if (featureId)
       await prisma.feature.deleteMany({ where: { id: featureId } }).catch(() => undefined);
     if (projectId)
