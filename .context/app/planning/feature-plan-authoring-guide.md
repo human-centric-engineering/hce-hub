@@ -1,7 +1,7 @@
 ---
 status: draft
 opened: 2026-07-10
-convention_version: 2
+convention_version: 3
 operationalizes: plan-authoring-guide.md (the feature tier), v1-requirements.md (§4, §5)
 sibling: plan-authoring-guide.md
 distilled_from: expert-led-apps/planning-retro.md §B
@@ -67,6 +67,7 @@ The Done-when is a checklist the builder and reviewer share — make completion 
 
 - **Gates before the PR opens.** Each task's Done-when lists `/pre-pr`, `/security-review`, then `/code-review` (green) as completion criteria — run *before* opening the PR ([[planning-retro]] B4).
 - **Standing repo steps belong in Done-when, not rediscovered.** A recurring platform step (e.g. stripping the spurious pgvector/tsvector `DROP INDEX` from a generated migration, then drift-checking) is a known certainty — list it, don't relearn it per feature ([[planning-retro]] B13).
+- **Filling a `lib/app/*` seam with a content/effect default → list the platform default-test adaptation in Done-when.** When a task fills a fork-owned seam that carries a *content-or-effect* default (a non-null list, a config array, a registry/probe set — not a return-void hook like `initApp`), it **will** break a Sunrise-owned "ships-empty/default" test, and that edit needs a `platform-divergences.md` row. List both as Done-when lines up front; grep `tests/**` for the seam's export at promotion to find the assertion. Don't let it surface as a late CI failure ([[planning-retro]] HB2).
 - **Cross-repo deliverables are *this* feature's Done-when, not someone else's job.** If the feature builds a fork-first seam, "file the upstream issue carrying the fork-build learnings" and "add the seam-ledger row" are its own completing acts (§8) ([[planning-retro]] B7/B14).
 
 ## 4 · State data-layer correctness as requirements, not an ORM call
@@ -179,6 +180,7 @@ chains; `smoke:*` for real-DB fidelity. Pure tests import the specific module, n
 A living draft — bump `convention_version` and add a dated note when it changes; promote `status: draft → convention` once it has authored a real build (the Hub is the first test). When the Hub is built, §§1–7 become the sidekick's feature-planning behaviour and §8 the [[building-on-sunrise]] rules (see *Where this lives*).
 
 **Convention history**
+- v3 (2026-07-13) — added the §3 standing step: filling a content/effect `lib/app/*` seam breaks a Sunrise default test — list the adaptation + ledger row in Done-when ([[planning-retro]] HB2, f-fork/f-data-model, confirmed 4× across 3 seams).
 - v2 (2026-07-11) — added the §2 "don't split tiny-by-purity" size gate (a conceptual seam isn't a sizing reason; both pieces must be real PRs before a split applies). First lesson from executing the **HCE Hub** plan ([[planning-retro]] HB1, f-fork over-decomposition).
 - v1 (2026-07-10) — initial draft, distilled from [[planning-retro]] §B (Daybreak, built feature-by-feature). Created as the second tier alongside [[plan-authoring-guide]] v2.
 
