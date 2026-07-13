@@ -123,6 +123,33 @@ both levels; each is filed at its primary home with a cross-reference. Mark an e
 
 ## §B — Feature-plan authoring
 
+> **Provenance.** Entries `B1`–`B30` below are from executing the **Daybreak** plan.
+> Entries prefixed **`HB`** are from executing the **HCE Hub** plan (this fork) — the
+> first real test of these conventions, as [[feature-plan-authoring-guide]] anticipated.
+
+### HB1 · Don't split a feature into tasks by conceptual seam when each piece is commit-sized — size by changed surface (HCE Hub · f-fork)
+
+- **Discovery.** `f-fork` shipped as **three sub-PR-sized units**: identity (PR #4), the
+  auth-only strip (#6), and brand (t-2). t-1 was already small; t-2's *entire* real content
+  was a styled "H" mark + one env value — commit-sized. The tell in hindsight: during t-1's
+  reconciliation the plan **split brand out as a "purely fork-owned t-2"** to keep t-1's
+  platform-touching edits clean — _adding_ granularity by conceptual purity rather than
+  folding the sliver up ([B1]). The owner flagged it at review ("felt like a very small PR").
+- **Impact.** Three review cycles + three board round-trips for ~1–2 PRs of real content.
+  And because a task can't be folded *backward* once its sibling merges, t-2 couldn't be
+  combined with t-1 — it had to be handled as a close-out, converting a mis-size into extra
+  ceremony rather than a clean merge.
+- **Feedback.** At promotion, after applying [B1] (fold commit-sized slivers up), apply a
+  **second cut**: _do not split tasks by conceptual seam_ — platform-owned vs fork-owned,
+  pure vs impure — _when the resulting pieces are each commit-sized._ That purity is a
+  reviewability nicety, not a sizing reason; note the seam boundary in the PR description
+  instead of spending a whole PR on it. Heuristic: a feature whose **entire remaining work is
+  <~150 lines across ≤2 files is one task**, even when it spans two concerns. The inverse of
+  [B23] (shed a separable concern only when it's *heavy*): here the second concern was
+  featherweight, so it should have stayed folded in. _Status: **folded-in** —
+  [[feature-plan-authoring-guide]] §2 now carries the "don't split tiny-by-purity" size gate
+  (convention v2)._
+
 ### B1 · Sizing self-check when promoting tasks: fold commit-sized slivers
 
 - **Discovery.** `f-bootstrap.md` promoted t-1 as its own task, but t-1 turned out

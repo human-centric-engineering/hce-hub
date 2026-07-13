@@ -93,7 +93,7 @@ A flat list in rough dependency order (most-ready first). Order is *emergent fro
 
 | # | Feature | Owner | Depends on | ~PRs | Capability |
 |---|---|---|---|---|---|
-| 01 | `f-fork` | Simon (in flight) | — | 2 | Fork + brand + auth-only shell + strip public surfaces |
+| 01 | `f-fork` | Simon (**shipped**) | — | 2 | Fork + brand + auth-only shell + strip public surfaces |
 | 02 | `f-theme` | TBD | f-fork | 3 | HCE Hub base theme (tokens, fonts, dark mode) |
 | 03 | `f-data-model` | TBD | f-fork | 5 | Prisma app models + scaffolding + migrations |
 | 04 | `f-access` | TBD | f-data-model | 3 | Project-membership access control |
@@ -114,7 +114,7 @@ A flat list in rough dependency order (most-ready first). Order is *emergent fro
 ---
 
 ### 01 · `f-fork` — fork + brand + auth-only shell
-*Owner:* Simon · *Status:* in flight · *Depends on:* — · *~2 PRs* · *Detailed plan:* [[f-fork]]
+*Owner:* Simon · *Status:* **shipped** · *Depends on:* — · *~2 PRs* · *Detailed plan:* [[f-fork]]
 
 The fork's home: an internal-only, auth-only Sunrise app rebranded to HCE Hub, with the stock public surfaces stripped. (Cross-ref: [[v1-requirements#13.1 Hub UI — user-facing working surface|§13.1]] public-surface stripping; [[CUSTOMIZATION|building-on-sunrise]] §2/§6/§10.)
 
@@ -133,8 +133,9 @@ The base HCE Hub theme replacing default Sunrise styling across public/auth/prot
 - **t** — **Reconcile the theme seam** (watch-item A): decide sync-safe placement — redefine `app/globals.css` `@theme`/`.dark` tokens in place ("keep-mine") vs. a fork-owned CSS layer imported after. Then land the light ("warm") token set (`--bg`, `--ink`, clay `--accent`, muted semantic status colours) mapped onto Sunrise's shadcn tokens.
 - **t** — Dark ("dim") theme (`.theme-dim`, warm-dark not blue-black) + fonts: Inter Tight (400/450/500/600) + JetBrains Mono via Sunrise's font pipeline; the mono/sans metadata-vs-content pairing; radius/shadow/motion tokens (border-not-shadow separation, no celebratory motion — §13.5).
 - **t** — Apply the theme to the auth pages + protected chrome + shared shadcn primitives (Button/Badge/Avatar/Sheet/Tabs/Select/Switch/Tooltip) so the Hub reads as a *sibling* to Sunrise admin (§13.5); status-pill + help-wanted + collision visual language as reusable tokens.
+- **t** — **HCE "H" brand-mark** (`components/brand/brand-mark.tsx`), **deferred here from `f-fork`**: the design handoff's 26px ink square with "H" — a themed element that needs this feature's `--ink`/radius tokens, so it lands with the theme rather than as a pre-theme placeholder. Keep `BRAND.name` as the `alt`/`aria-label`. (Header already reads "HCE Hub" as text from `f-fork`; this is the visual upgrade.)
 
-*Done when:* public/auth/protected pages render in the HCE Hub theme (warm + dim); fonts load; shadcn primitives restyled to the token set; gates green. *Note:* this ships the theme *foundation*; per-screen styling lands with each UI feature.
+*Done when:* public/auth/protected pages render in the HCE Hub theme (warm + dim); fonts load; shadcn primitives restyled to the token set; the "H" brand-mark renders in the header/footer; gates green. *Note:* this ships the theme *foundation*; per-screen styling lands with each UI feature.
 
 ### 03 · `f-data-model` — Prisma models + scaffolding
 *Owner:* TBD · *Depends on:* f-fork · *~5 PRs*
@@ -346,6 +347,7 @@ Append-only, newest first.
 
 Append-only, newest first.
 
+- **2026-07-11 — `f-fork` SHIPPED (auth-only shell + brand identity).** t-1 (PR #6, `feat(f-fork): auth-only shell`) stripped the marketing surface (landing → `/dashboard` redirect, About deleted, marketing nav emptied, sitemap trimmed) and kept the legal pages; embed/chat left dormant. Close-out (this PR) set the committed `.env.example` brand (`NEXT_PUBLIC_APP_NAME="HCE Hub"`, `NEXT_PUBLIC_LEGAL_NAME="All Too Human Ltd"`). The styled "H" brand-mark was **deferred to `f-theme`** (needs theme tokens). Six platform-file edits ledgered in [[platform-divergences]]. **Lesson:** f-fork was over-decomposed into sub-PR-sized tasks — see [[planning-retro]] §B (first Hub retro entry). Unblocks `f-theme` and `f-data-model`.
 - **2026-07-07 — `f-fork` identity sub-task (PR #4, `chore: HCE Hub fork branding`).** `package.json` (`name: hce-hub`, `version: 0.1.0`), `NEXT_PUBLIC_APP_NAME`, the `CLAUDE.md` fork banner, `README.md`, and `.context/app/README.md`. No platform-owned files changed. This is the identity slice of `f-fork` t-1; the feature itself is `in flight` (Simon) — remaining work is the auth-only strip + brand mark ([[f-fork]]).
 
 ---
