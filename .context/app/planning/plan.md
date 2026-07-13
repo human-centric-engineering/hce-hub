@@ -95,7 +95,7 @@ A flat list in rough dependency order (most-ready first). Order is *emergent fro
 |---|---|---|---|---|---|
 | 01 | `f-fork` | Simon (**shipped**) | — | 2 | Fork + brand + auth-only shell + strip public surfaces |
 | 02 | `f-theme` | TBD | f-fork | 3 | HCE Hub base theme (tokens, fonts, dark mode) |
-| 03 | `f-data-model` | TBD | f-fork | 5 | Prisma app models + scaffolding + migrations |
+| 03 | `f-data-model` | Simon (in flight) | f-fork | 3 | Prisma app models + scaffolding + migrations |
 | 04 | `f-access` | TBD | f-data-model | 3 | Project-membership access control |
 | 05 | `f-project-admin` | TBD | f-access | 4 | Project + member CRUD (in Sunrise admin shell) |
 | 06 | `f-shell` | TBD | f-theme, f-access | 5 | Module-composable app shell (nav, 3-col layout) |
@@ -138,7 +138,7 @@ The base HCE Hub theme replacing default Sunrise styling across public/auth/prot
 *Done when:* public/auth/protected pages render in the HCE Hub theme (warm + dim); fonts load; shadcn primitives restyled to the token set; the "H" brand-mark renders in the header/footer; gates green. *Note:* this ships the theme *foundation*; per-screen styling lands with each UI feature.
 
 ### 03 · `f-data-model` — Prisma models + scaffolding
-*Owner:* TBD · *Depends on:* f-fork · *~5 PRs*
+*Owner:* Simon · *Status:* in flight · *Depends on:* f-fork · *~3 PRs* · *Detailed plan:* [[f-data-model]]
 
 The Hub data model in `prisma/schema/app.prisma`, plus the additive futures scaffolding. (Cross-ref: [[v1-requirements#10. Initial data model sketch|§10]]; [[CUSTOMIZATION|building-on-sunrise]] §5 satellite-FK pattern.)
 
