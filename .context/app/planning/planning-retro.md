@@ -127,6 +127,12 @@ both levels; each is filed at its primary home with a cross-reference. Mark an e
 > Entries prefixed **`HB`** are from executing the **HCE Hub** plan (this fork) — the
 > first real test of these conventions, as [[feature-plan-authoring-guide]] anticipated.
 
+### HB2 · Filling a `lib/app/*` seam breaks a Sunrise "ships-empty" default test — make adapting it a Done-when line (HCE Hub · f-fork, f-data-model)
+
+- **Discovery.** Three features running now, four hits: filling the **eslint** seam and the **public-nav** seam (`f-fork`) and the **db-drift** seam (`f-data-model` t-1) each falsified a Sunrise-owned "scaffold ships empty / uses the default" assertion — `defaults.test.ts` (twice), `public-nav.test.tsx`, `public-footer.test.tsx`, `drift-probes.test.ts`. Every one surfaced as a **full-suite failure in CI/pre-pr AFTER** the feature work looked finished.
+- **Impact.** Each was a re-run + a reactive test edit + a [[platform-divergences]] row, discovered late instead of planned. The pattern is now systematic, not incidental. (Only **content/effect** default assertions break — a non-null list, a config array, a probe set; **return-void** seams like `initApp` / `initAppCapabilities` survive a fill untouched.)
+- **Feedback.** When a task fills a `lib/app/*` seam that carries a *content-or-effect* default, the feature plan must **list "adapt the seam's Sunrise default test + add a `platform-divergences.md` row" as an explicit Done-when line** — a standing step like [B13]'s migration strip, not a surprise. At promotion, grep `tests/**` for the seam's export to find the assertion. _Status: **folded-in** — [[feature-plan-authoring-guide]] §3 (convention v3)._
+
 ### HB1 · Don't split a feature into tasks by conceptual seam when each piece is commit-sized — size by changed surface (HCE Hub · f-fork)
 
 - **Discovery.** `f-fork` shipped as **three sub-PR-sized units**: identity (PR #4), the
