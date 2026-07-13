@@ -38,6 +38,29 @@
  *
  * Full guide: CUSTOMIZATION.md §5 · .context/database/prisma-unmodelled-objects.md
  */
+import { registerAppDriftProbe, constraintExists } from '@/lib/db/drift-probes';
+
 export function registerAppDriftProbes(): void {
-  // No app drift probes by default.
+  // Hand-written satellite FKs → core "user" (f-data-model). Prisma can't see
+  // them (no `@relation` on User), so a future `migrate dev` could silently drop
+  // one — and each FK's `ON DELETE` action IS the GDPR erasure mechanism (fired
+  // by eraseUser()'s tx.user.delete()). Pin the constraint AND its action.
+  registerAppDriftProbe({
+    name: 'app_project_leadUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_project',
+    probe: constraintExists('app_project_leadUserId_fkey', 'ON DELETE SET NULL'),
+  });
+  registerAppDriftProbe({
+    name: 'app_project_member_userId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_project_member',
+    probe: constraintExists('app_project_member_userId_fkey', 'ON DELETE CASCADE'),
+  });
+  registerAppDriftProbe({
+    name: 'app_feature_ownerUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_feature',
+    probe: constraintExists('app_feature_ownerUserId_fkey', 'ON DELETE SET NULL'),
+  });
 }
