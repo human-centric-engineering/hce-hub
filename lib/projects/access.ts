@@ -47,7 +47,9 @@ export interface ProjectAccessResult {
   basis: ProjectAccessBasis | null;
 }
 
-const DENY: ProjectAccessResult = { ok: false, basis: null };
+// Frozen: this sentinel is returned by reference from every denial, so a caller
+// mutating a result must not be able to poison future denials (a 404→403 leak).
+const DENY: ProjectAccessResult = Object.freeze({ ok: false, basis: null });
 
 /** Only an `admin` need requires the `lead` role; `view`/`contribute` don't. */
 function needsLead(need: ProjectAccessNeed): boolean {
