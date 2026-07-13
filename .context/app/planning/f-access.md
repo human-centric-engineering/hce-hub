@@ -1,0 +1,63 @@
+---
+name: f-access
+feature: 04 / f-access
+status: in flight        # not started | in flight | blocked | shipped
+owner: Simon
+opened: 2026-07-13
+plan: .context/app/planning/plan.md
+spec: .context/app/planning/v1-requirements.md
+---
+
+# f-access — project-membership access control
+
+*Feature 04 on [[plan]]. Binding design: [[v1-requirements#3. Human-centric principles (binding)|§3]] (per-project visibility/contribution), [[v1-requirements#14. Open implementation questions for the Sunrise-side conversation|§14 Q3]]; [[CUSTOMIZATION|building-on-sunrise]] §4 (protected-routes seam), §6 (auth-only self-guard). Depends on [[f-data-model]] (the `ProjectMember` table).*
+
+## Intent
+
+The **authorization layer** for the Hub: a user sees and acts on only the projects they're a member of. This feature ships the **one funnel** every project-scoped read/write, page, and capability must route through — `canAccessProject` + a small set of membership-scoped query primitives — plus the edge route-gate for the Hub's authenticated project surface. It has **no UI and no consuming route of its own** (the callers are `f-project-admin`, `f-projects`, `f-hub-capabilities`, the sidekick); its whole job is to make membership the *only* way project data is reached, so authz can't be re-implemented ad hoc downstream (that's how enumeration/leak bugs happen). Centralising it here is the security point.
+
+## Reconciliation with current repo reality   (required — done first)
+
+Verified against `main` after f-data-model shipped, 2026-07-13 (recon over `lib/auth`, `lib/api/errors.ts`, `proxy.ts`, `lib/orchestration/access`, `app/api/v1/**`). Each finding is a decision.
+
+- **`withAuth`/`withAdminAuth` authenticate only — no per-resource authz — and carry an API-key fallback.** `lib/auth/guards.ts` resolves a session (or an `Authorization: Bearer sk_…` key's owner) and 401s if absent; it does **not** know about resources. → **Decision:** membership is checked **inside** the handler/loader on top of `withAuth`, never as a new guard variant. Because the API-key path resolves to the key owner's `session.user.id`, the membership check applies **uniformly** to cookie and key callers — **no special-casing** (a scoped MCP key only reaches the projects its owner is a member of, for free).
+- **404-not-403 is the house ownership-scoping convention, with an ideal template.** Simple owner-scoping is inline `findFirst({ where: { id, userId } })` → `throw new NotFoundError` (e.g. `app/api/v1/chat/conversations/[id]/route.ts`). The richer "owner OR shared" case has a **structured-result helper**, `adminCanViewConversation` (`lib/orchestration/access/conversation-access.ts`): returns `{ ok, basis, ownerId }`, and **`DENY` is returned identically whether the resource is absent or access is denied** — "leaking the owner's identity on a denied access would be a user-enumeration vector" — so the route translates *both* to a generic 404. → **Decision:** `canAccessProject` **mirrors this shape** — `{ ok: boolean; basis: 'lead' | 'member' | null }`, deny ≡ not-found; callers throw `NotFoundError` (never `ForbiddenError`) for a non-member. `read_only` basis reserved (f-access ships `lead`/`member` only — the [[f-data-model]] `ProjectRole` enum already reserves `read_only`).
+- **Membership source = the `ProjectMember` row (`@@unique([projectId, userId])`), not `Project.leadUserId`.** [[f-data-model]] gives `ProjectMember(role: lead|member)` and a denormalized `Project.leadUserId`. → **Decision:** access is "a `ProjectMember` row exists for `(userId, projectId)`"; its `role` is the basis. `leadUserId` is a **convenience pointer, not an access source** — the invariant "a project's lead also has a `role='lead'` member row" is established by `f-project-admin`'s create path (the erasure smoke already models it). `canAccessProject` consults **only** `ProjectMember` (one `findUnique` on the composite key). *Flag for `f-project-admin`:* enforce the lead-has-member-row invariant at project creation.
+- **Pages get the session via `getServerSession()` + `clearInvalidSession()`, not `requireAuth()`.** The house protected-page pattern (`app/(protected)/dashboard/page.tsx`) is `const s = await getServerSession(); if (!s) clearInvalidSession('/…')`. `requireAuth()`/`requireRole()` exist but throw a plain `Error` and are **unused** by pages. → **Decision:** f-access adds **no pages**, so this is *guidance carried to the consumer features* (documented in the module + the plan's §06/§08 note), not code here. f-access provides the loaders those pages call.
+- **The edge gate merges `appProtectedRoutes` by `startsWith`.** `proxy.ts` does `[...CORE_PROTECTED_ROUTES, ...appProtectedRoutes(normalised, '/'-prefixed only)]` and redirects signed-out requests whose path `startsWith` a prefix to `/login?callbackUrl=…`; `isAuthenticated` is a cheap cookie-presence check (validity is re-checked in-page/in-route — defence in depth). → **Decision:** register **`/projects`** (the Hub's authenticated project surface root that `f-shell`/`f-projects` will mount) in `lib/app/protected-routes.ts` now. **Defer other prefixes to the feature that creates the page** (`/brief` → `f-morning-brief`) — registering a prefix for a non-existent page is harmless but dead config; `/projects` is the one concrete section worth gating early so no signed-out leak is possible the moment a page lands.
+- **Fill breaks a Sunrise "ships-empty" default test (HB2 — standing step).** `appProtectedRoutes` ships `[]`; `tests/unit/lib/app/defaults.test.ts` asserts it. → **Standing Done-when:** adapt that assertion to `['/projects']` (a *stray* prefix still fails the guard) + add a [[platform-divergences]] row. Grep `tests/**` for `appProtectedRoutes` at build.
+- **Module home = `lib/projects/access.ts`** (mirrors `lib/orchestration/access/conversation-access.ts`; `import { prisma } from '@/lib/db/client'`; named query functions, no separate `queries/` convention). → **Decision:** `lib/projects/access.ts`. *Considered:* `lib/access/` (too generic — this is project membership) and `lib/hub/` (extra namespace with no collision pressure — Sunrise won't ship `lib/projects/`). Trivially movable if a collision ever appears; flag if so.
+
+**Tier / seam hypotheses (confirmed):** pure leaf-app. Fills the fork-owned `lib/app/protected-routes.ts` seam; adds a fork-owned `lib/projects/` domain module. **Zero core→fork seams, zero upstream asks.** One platform-file touch — the HB2 default-test adaptation — gets a `platform-divergences.md` row (the seam fill itself is a designed fork use, not a divergence).
+
+## Promoted tasks
+
+**Sizing (applying the value-separability gate — [[feature-plan-authoring-guide]] §2 / [[planning-retro]] HB3):** the plan sketched **3** tasks (route gate · predicate · scoped queries). Promoted to **1**. They are **one cohesive, security-dense authz surface**: the scoped query helpers *are* the predicate's consumers, sharing one member/non-member/lead test matrix, and the route-gate is a ~1-line seam-fill with no independent review value. There is **no** value in splitting — no different review surface (it's all membership authz), no parallelism (one author, one module), no integration checkpoint (all unconsumed until later features). It **reviews best whole** — you want the predicate and every query that enforces it in one diff. This is exactly the HB3 lesson from [[f-data-model]] applied *forward*: one cohesive PR, not three by-concept slices.
+
+| ID  | Task | Files | Deps | Done-when | Status | PR |
+|-----|------|-------|------|-----------|--------|----|
+| t-1 | **The membership authz layer.** `lib/projects/access.ts`: `canAccessProject(userId, projectId, need?)` → `{ ok, basis: 'lead'\|'member'\|null }` (one `ProjectMember` `findUnique` on `@@unique([projectId,userId])`; deny ≡ not-found; `need` maps to role — `'view'`/`'contribute'` = any member, `'admin'` = lead), plus the **funnel primitives** every consumer must use: `listAccessibleProjects(userId)` (only member projects), `getAccessibleProject(userId, projectId)` (or throw `NotFoundError`), and a membership-filter for feature/task reads (`accessibleProjectIds(userId)` the downstream `where` clauses build on). Register `/projects` in `lib/app/protected-routes.ts`. | `lib/projects/access.ts`, `lib/projects/index.ts`, `lib/app/protected-routes.ts`, `tests/unit/lib/projects/access.test.ts`, `tests/unit/lib/app/defaults.test.ts` (adapt), `.context/app/platform-divergences.md` | f-data-model | member sees only their projects; **non-member gets deny-≡-404** (never 403) on `getAccessibleProject`; lead resolves `basis:'lead'` and passes `'admin'`; a project the user has no row for is indistinguishable from a non-existent one; `/projects` gives an edge redirect-to-login when signed out; `appProtectedRoutes` default test adapted + ledger row (HB2); gates green | backlog | — |
+
+*Standing steps in the Done-when:* adapt the `appProtectedRoutes` default-empty test + `platform-divergences.md` row (HB2); vitest strategy below (no live DB); then `/pre-pr` → `/security-review` → `/code-review` before the PR opens (`gh pr create --repo human-centric-engineering/hce-hub`).
+
+## Test strategy
+
+Authz correctness is **vitest-shaped** here (pure query logic over mocked prisma — no referential/DB behaviour to prove, unlike f-data-model's FK erasure). [[planning-retro]] B9: mock `@/lib/db/client`; assert the `where` shapes and the mapped result.
+- **The load-bearing test is the access matrix**: `canAccessProject` and each funnel primitive over **{ lead · member · non-member · unknown-project }** → **{ ok+basis · deny≡404 }**. Explicitly assert **non-member and unknown-project are indistinguishable** (the anti-enumeration property — the whole reason for the shape). Assert `listAccessibleProjects` returns *only* member rows and `accessibleProjectIds` scopes correctly.
+- **Guard-level:** a test that a `withAuth` handler wrapping `getAccessibleProject` returns 404 (not 403) for a non-member — proving the funnel composes with the existing guard (thin; mock the session).
+- **HB2:** adapt `defaults.test.ts`'s `appProtectedRoutes` case to `['/projects']`.
+- **No smoke** — no DB-referential effect to prove end-to-end (contrast f-data-model's `app:smoke:erasure`); the matrix over mocked prisma is the real assertion.
+
+## Open questions
+
+- **Resolved inline:** result shape → mirror `adminCanViewConversation` `{ ok, basis }` (deny≡404); membership source → `ProjectMember` row (not `leadUserId`); module → `lib/projects/access.ts`; route registration → `/projects` now, defer `/brief` to `f-morning-brief`; `read_only` → reserved, not shipped; `need` granularity → coarse `view`/`contribute`/`admin` for v1 (roles are `lead`/`member`).
+- **Needs the owner:** none — every choice has a defensible default from the recon + the disciplines ([[planning-retro]] B20). *(If you'd prefer a `lib/hub/` namespace or want `/brief` registered here too, both are trivial swaps — say so.)*
+
+## Upstream follow-ups / seam ledger
+
+**None.** Pure leaf-app authz through a fork-owned domain module + the fork-owned `protected-routes.ts` seam. No core→fork seam, no upstream issue. The one platform-file touch (the HB2 `defaults.test.ts` adaptation) is a `platform-divergences.md` row, consistent with the eslint/public-nav/db-drift seam fills.
+
+## Decisions log   (append-only, newest first)
+
+- **2026-07-13 — Sized to 1 PR (from the plan's 3) via the value-separability gate.** One cohesive authz module + a trivial route seam-fill + one shared test matrix; no review/parallelism/integration value in splitting. Applies [[planning-retro]] HB3 forward from [[f-data-model]].
+- **2026-07-13 — `canAccessProject` mirrors `adminCanViewConversation`: `{ ok, basis }`, deny ≡ not-found.** The house anti-enumeration convention; callers throw `NotFoundError`, never `ForbiddenError`. Membership = a `ProjectMember` row; `leadUserId` is not an independent access source.
