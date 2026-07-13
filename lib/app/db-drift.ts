@@ -77,4 +77,13 @@ export function registerAppDriftProbes(): void {
     table: 'app_task_claim',
     probe: constraintExists('app_task_claim_userId_fkey', 'ON DELETE CASCADE'),
   });
+  // Futures scaffolding (t-3): the sole Hub→user edge — a directive is retained
+  // shared work, so its declarer reference nulls on erasure. (Sprint is
+  // user-agnostic; Phase/Feature.phaseId are intra-Hub.)
+  registerAppDriftProbe({
+    name: 'app_focus_directive_declaredByUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_focus_directive',
+    probe: constraintExists('app_focus_directive_declaredByUserId_fkey', 'ON DELETE SET NULL'),
+  });
 }

@@ -87,8 +87,10 @@ model Project {
   sidekickAgentId String? // set by f-sidekick (Sunrise AiAgent); no FK
   createdAt       DateTime      @default(now())
 
-  members  ProjectMember[]
-  features Feature[]
+  members         ProjectMember[]
+  features        Feature[]
+  phases          Phase[]
+  focusDirectives FocusDirective[]
 
   @@index([leadUserId])
   @@map("app_project")
@@ -116,15 +118,18 @@ model Feature {
   ownerUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the feature)
   status      FeatureStatus @default(planning)
   helpWanted  Boolean       @default(false)
+  phaseId     String? // intra-Hub FK → app_phase · ON DELETE SET NULL (futures scaffolding, t-3)
   createdAt   DateTime      @default(now())
 
   project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase        Phase?              @relation(fields: [phaseId], references: [id], onDelete: SetNull)
   dependencies FeatureDependency[] @relation("FeatureDependencies") // edges where this feature depends on another
   dependents   FeatureDependency[] @relation("FeatureDependents") // edges where another feature depends on this
   tasks        Task[]
 
   @@index([projectId])
   @@index([ownerUserId])
+  @@index([phaseId])
   @@map("app_feature")
 }
 
@@ -215,4 +220,97 @@ model TaskClaim {
   @@index([taskId])
   @@index([userId])
   @@map("app_task_claim")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Futures scaffolding — f-data-model · t-3. Additive, UNCONSUMED in v1: no UI,
+// no capability, no recommendation logic reads these yet. They exist so v1.x
+// (sprint-aligned prioritisation, conversational focus directives, phase views)
+// lands without a data-model migration (v1-requirements §10; [[futures]]).
+// Same fork conventions: `app_*`-mapped, the only hand-written satellite FK →
+// core `"user"` is FocusDirective.declaredByUserId (drift-probed); every other
+// edge is intra-Hub Prisma `@relation`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The three focus layers compose: Phase = release-band (organisational,
+// persistent), Sprint = week-of-work (org-wide, temporal), FocusDirective =
+// in-conversation push (project-scoped, temporal). All three will feed
+// `next-task` in v1.x.
+
+enum SprintStatus {
+  upcoming
+  active
+  complete
+}
+
+enum FocusDirectiveStatus {
+  active
+  expired
+  superseded
+}
+
+enum PhaseStatus {
+  upcoming
+  active
+  complete
+  parked // structured ideas pool — visible, browseable, hidden from active views
+}
+
+// Org-wide sprint (not project-scoped, per §10). `planMarkdown` ingests an
+// existing markdown sprint plan.
+model Sprint {
+  id           String       @id @default(cuid())
+  name         String
+  startDate    DateTime
+  endDate      DateTime
+  status       SprintStatus @default(upcoming)
+  planMarkdown String?      @db.Text
+  createdAt    DateTime     @default(now())
+
+  directives FocusDirective[]
+
+  @@map("app_sprint")
+}
+
+// A time-bounded priority directive ("push toward Friday demo", "hold pending
+// external"), scoped to a project and optionally a sprint.
+model FocusDirective {
+  id               String               @id @default(cuid())
+  projectId        String
+  sprintId         String? // intra-Hub FK → app_sprint · ON DELETE SET NULL (directive outlives the sprint)
+  declaredByUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the directive, drop the declarer)
+  intent           String
+  declaredAt       DateTime             @default(now())
+  deadline         DateTime?
+  reason           String? // for hold states — "until Angus gets back to us"
+  status           FocusDirectiveStatus @default(active)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprint  Sprint? @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([sprintId])
+  @@index([declaredByUserId])
+  @@map("app_focus_directive")
+}
+
+// The epic layer above Feature: a release boundary or a `parked` future-work
+// pool. Coarse and organisational — does NOT gate feature ordering or
+// dependency (exploratory-ordering holds at the feature level).
+model Phase {
+  id          String      @id @default(cuid())
+  projectId   String
+  ordinal     Int // display order within the project
+  name        String
+  description String?     @db.Text
+  status      PhaseStatus @default(upcoming)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime    @default(now())
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  features Feature[] // Feature.phaseId · ON DELETE SET NULL (phase membership is optional)
+
+  @@index([projectId])
+  @@map("app_phase")
 }
