@@ -1,0 +1,139 @@
+/**
+ * Project membership authorization.
+ *
+ * Single source of truth for "can this user reach this project?". Every
+ * project-scoped read/write, page loader, and Hub capability gates through
+ * `canAccessProject` / the funnel helpers here rather than hand-rolling a
+ * membership check — an ad-hoc check is how enumeration and data-leak bugs get
+ * in. (f-access, feature 04.)
+ *
+ * The rule: a user can access a project iff they have a `ProjectMember` row for
+ * it. That row's `role` is the basis (`lead` | `member`). `Project.leadUserId`
+ * is a denormalized pointer, NOT an access source — the "a project's lead also
+ * has a `role='lead'` member row" invariant is established at project creation
+ * (f-project-admin); membership is decided here from `ProjectMember` alone.
+ *
+ * Mirrors `lib/orchestration/access/conversation-access.ts`: a structured
+ * result where **a non-member is reported identically to a non-existent
+ * project** (`basis: null`) so callers translate both to a generic **404, never
+ * 403** — distinguishing "not yours" from "doesn't exist" is a project-
+ * enumeration vector. A member who lacks the *role* a `need` requires is a
+ * different case: they can already see the project, so that is a legitimate
+ * 403 (`basis` set, `ok` false). See `.context/app/planning/f-access.md`.
+ */
+
+import type { Project } from '@prisma/client';
+import { prisma } from '@/lib/db/client';
+import { NotFoundError, ForbiddenError } from '@/lib/api/errors';
+
+/** A member's role on a project — the basis on which access is granted. */
+export type ProjectAccessBasis = 'lead' | 'member';
+
+/**
+ * The capability level a caller needs. v1 roles are coarse: any member may
+ * `view`/`contribute`; only the lead may `admin`. (`read_only` is reserved in
+ * the `ProjectRole` enum for a later access tier and is not issued here.)
+ */
+export type ProjectAccessNeed = 'view' | 'contribute' | 'admin';
+
+export interface ProjectAccessResult {
+  /** True when the caller is a member AND satisfies `need`. */
+  ok: boolean;
+  /**
+   * The caller's role if they are a member of the project (regardless of
+   * whether `need` is met), else `null`. `basis === null` ⟺ not a member —
+   * indistinguishable from a project that does not exist, by design.
+   */
+  basis: ProjectAccessBasis | null;
+}
+
+const DENY: ProjectAccessResult = { ok: false, basis: null };
+
+/** Only an `admin` need requires the `lead` role; `view`/`contribute` don't. */
+function needsLead(need: ProjectAccessNeed): boolean {
+  return need === 'admin';
+}
+
+/**
+ * Resolve whether `userId` may act on `projectId` at the given `need`, and why.
+ *
+ * One indexed query (the `@@unique([projectId, userId])` composite). Returns
+ * `{ ok: false, basis: null }` for both a non-member and a missing project —
+ * deliberately indistinguishable (see file header).
+ */
+export async function canAccessProject(
+  userId: string,
+  projectId: string,
+  need: ProjectAccessNeed = 'view'
+): Promise<ProjectAccessResult> {
+  const membership = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId, userId } },
+    select: { role: true },
+  });
+
+  if (!membership) return DENY; // not a member ≡ project does not exist (to this caller)
+
+  return { ok: !needsLead(need) || membership.role === 'lead', basis: membership.role };
+}
+
+/**
+ * Throw the correct error when `userId` may not act on `projectId` at `need`;
+ * return silently when they may. The guard every project-scoped route/loader
+ * runs before touching the resource.
+ *
+ * - non-member (or missing project) → `NotFoundError` (404, hides existence)
+ * - member lacking the required role → `ForbiddenError` (403; they can see it)
+ */
+export async function requireProjectAccess(
+  userId: string,
+  projectId: string,
+  need: ProjectAccessNeed = 'view'
+): Promise<void> {
+  const { ok, basis } = await canAccessProject(userId, projectId, need);
+  if (basis === null) throw new NotFoundError(`Project ${projectId} not found`);
+  if (!ok) throw new ForbiddenError('Insufficient project role');
+}
+
+/**
+ * Load a single project the caller may access, or throw (404 for a non-member /
+ * missing project, 403 for an under-privileged member). The safe "get one
+ * project" primitive — access is decided by `canAccessProject`, so the rule
+ * lives in exactly one place.
+ */
+export async function getAccessibleProject(
+  userId: string,
+  projectId: string,
+  need: ProjectAccessNeed = 'view'
+): Promise<Project> {
+  await requireProjectAccess(userId, projectId, need);
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  // Access was just granted; a null here means it was deleted in between — 404.
+  if (!project) throw new NotFoundError(`Project ${projectId} not found`);
+  return project;
+}
+
+/**
+ * The projects `userId` is a member of, newest first. The membership-scoped
+ * list every "my projects" surface uses — never `prisma.project.findMany()`
+ * unfiltered.
+ */
+export async function listAccessibleProjects(userId: string): Promise<Project[]> {
+  return prisma.project.findMany({
+    where: { members: { some: { userId } } },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+/**
+ * The ids of the projects `userId` may access — the scoping primitive that
+ * feature/task/other project-child queries build their `where` on
+ * (`where: { projectId: { in: await accessibleProjectIds(userId) } }`), so
+ * membership is enforced without a per-row round-trip.
+ */
+export async function accessibleProjectIds(userId: string): Promise<string[]> {
+  const rows = await prisma.projectMember.findMany({
+    where: { userId },
+    select: { projectId: true },
+  });
+  return rows.map((r) => r.projectId);
+}
