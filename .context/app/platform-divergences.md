@@ -42,16 +42,21 @@ the next upstream merge.
 | 6   | `tests/unit/components/layouts/public-nav.test.tsx`    | Adapted the "renders the platform default links when no override is set" case to assert the fork's curated **empty** header nav.                                                                                                                                                    | Curating the fork-owned seam (`lib/app/public-nav.ts` → `publicNavItems: []`) falsifies the test's "no override" premise — the same seam-vs-default-test coupling as row 1.                                                                                                                                                                                   | Keep-mine on that one case; the override-replacement / active-state cases are unaffected.                                                                                       | `worth-noting` — same DX note as row 1 (fork-fills-seam vs default-asserting platform test).                                                                                                                                                                                                |
 | 7   | `tests/unit/components/layouts/public-footer.test.tsx` | Adapted the default-nav case: assert the marketing footer nav is gone while legal links + copyright + Cookie Preferences remain.                                                                                                                                                    | `footerNavItems: []` in the fork seam removes the Home/About/Contact cluster; the legal cluster is left at the platform default.                                                                                                                                                                                                                              | Keep-mine on that one case; the wholesale-replacement and always-on-consent cases are unaffected.                                                                               | `worth-noting` — same DX note as row 1.                                                                                                                                                                                                                                                     |
 
-## Upstream asks (fork-first seams)
+## Upstream asks
 
-Fork-carried generic seams added _into_ a core file, awaiting an upstream issue + landing
-(the `[[upstream-asks]]` concept from the feature-plan guide §8). Each row: seam file ·
-upstream issue · owning feature · delete-when-it-lands action · status.
+Requests filed against Sunrise from fork experience — **fork-first seams** (a generic seam
+carried _into_ a core file, awaiting an upstream issue + landing — the `[[upstream-asks]]`
+concept from the feature-plan guide §8) **and** other clarifications the fork surfaced (docs,
+structure).
 
-_None yet._ The v1 plan's tier analysis found **zero core→fork seams / zero upstream
-gating** — the Hub builds entirely through existing fork-owned `lib/app/*` seams. If a
-feature surfaces a genuine core-seam gap at build (the two watch-items — theme sync-seam,
-per-project agent provisioning — _might_), record it here and make filing the issue that
+| Issue                                                                          | Kind             | Raised by      | Ask                                                                                                                                                                                                                     | Status                                                                                                                                                                  |
+| ------------------------------------------------------------------------------ | ---------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [sunrise#429](https://github.com/human-centric-engineering/sunrise/issues/429) | docs / structure | `f-data-model` | Fork docs imply `prisma/schema/app.prisma` is fork-reserved, but it ships platform models. Clarify it's shared **or** move Sunrise's app-tier models to a platform-owned file (migration-free) so it's genuinely empty. | **open** — HCE Hub works around it (models coexist, `app_*`-prefixed); our docs corrected to say "shared". Adopt on landing if resolution (B) makes `app.prisma` empty. |
+
+**No fork-first seams yet.** The v1 plan's tier analysis found **zero core→fork seams / zero
+upstream gating** — the Hub builds entirely through existing fork-owned `lib/app/*` seams. If
+a feature surfaces a genuine core-seam gap at build (the two watch-items — theme sync-seam,
+per-project agent provisioning — _might_), add a row here and make filing the issue that
 feature's own Done-when.
 
 ---

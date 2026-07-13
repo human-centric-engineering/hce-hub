@@ -33,8 +33,12 @@
 >   `admin-nav.ts`, `public-nav.ts`, `protected-routes.ts`,
 >   `knowledge-access-contributors.ts`, `rate-limit.ts`, `db-drift.ts`, …).
 >   Register into Sunrise's seams **from here**, driven by `initApp()`.
-> - `prisma/schema/app.prisma` (your models) + `app_…` migrations touching only
->   `app_*` tables
+> - `prisma/schema/app.prisma` — a **shared** app-domain schema file (Sunrise
+>   ships its own app-tier models here too: `ContactSubmission`, `FeatureFlag`,
+>   `AuthBootstrap`), so add HCE Hub models **alongside** them, `app_*`-prefixed
+>   to namespace; `app_…` migrations touching only `app_*` tables. (Sunrise
+>   [#429](https://github.com/human-centric-engineering/sunrise/issues/429)
+>   tracks making this contract explicit upstream.)
 > - **`.context/app/`** — HCE Hub's own documentation tree (Sunrise never creates
 >   it → never conflicts)
 > - `app/brand-theme.css`, and HCE Hub identity: `package.json`, `README.md`,
