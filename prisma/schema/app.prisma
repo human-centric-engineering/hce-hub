@@ -43,3 +43,101 @@ model AuthBootstrap {
 
   @@map("auth_bootstrap")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HCE Hub — Project Coordination (Module 1). Fork-owned app models.
+//
+// Tables are `app_*`-prefixed to namespace against Sunrise's own app-domain
+// models in this shared file (.context/app/README.md; sunrise#429). References
+// to the core `User` table are plain-scalar columns with HAND-WRITTEN FK
+// constraints in the migration — never a Prisma `@relation` on `User`, which
+// would need a field *on* User (CUSTOMIZATION §5). Each hand-FK is drift-probed
+// in lib/app/db-drift.ts (Prisma can't see it, so a future `migrate dev` could
+// silently drop it). Intra-Hub relations use ordinary `@relation`.
+// Feature 03 · f-data-model · t-1 (Project domain).
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ProjectStatus {
+  planning
+  active
+  archived
+}
+
+enum ProjectRole {
+  lead
+  member
+  // `read_only` reserved for a later access tier (f-access) — added when used.
+}
+
+enum FeatureStatus {
+  planning
+  in_flight
+  blocked
+  shipped
+}
+
+model Project {
+  id              String        @id @default(cuid())
+  name            String
+  hostPlatform    String // e.g. "sunrise"; other platforms are stubbed (§7)
+  status          ProjectStatus @default(planning)
+  repoUrls        String[]      @default([])
+  leadUserId      String? // hand-FK → "user" · ON DELETE SET NULL (retain the project)
+  knowledgeTagId  String? // set by f-project-admin (Sunrise KnowledgeTag); no FK
+  sidekickAgentId String? // set by f-sidekick (Sunrise AiAgent); no FK
+  createdAt       DateTime      @default(now())
+
+  members  ProjectMember[]
+  features Feature[]
+
+  @@index([leadUserId])
+  @@map("app_project")
+}
+
+model ProjectMember {
+  id        String      @id @default(cuid())
+  projectId String
+  userId    String // hand-FK → "user" · ON DELETE CASCADE (membership is the user's)
+  role      ProjectRole @default(member)
+  addedAt   DateTime    @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId]) // one membership per user per project
+  @@index([userId])
+  @@map("app_project_member")
+}
+
+model Feature {
+  id          String        @id @default(cuid())
+  projectId   String
+  title       String
+  description String?       @db.Text
+  ownerUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the feature)
+  status      FeatureStatus @default(planning)
+  helpWanted  Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+
+  project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dependencies FeatureDependency[] @relation("FeatureDependencies") // edges where this feature depends on another
+  dependents   FeatureDependency[] @relation("FeatureDependents") // edges where another feature depends on this
+
+  @@index([projectId])
+  @@index([ownerUserId])
+  @@map("app_feature")
+}
+
+// A directed edge: `feature` depends on `dependsOn`. Both sides cascade so an
+// edge disappears when either endpoint feature is deleted.
+model FeatureDependency {
+  id                 String @id @default(cuid())
+  featureId          String
+  dependsOnFeatureId String
+
+  feature   Feature @relation("FeatureDependencies", fields: [featureId], references: [id], onDelete: Cascade)
+  dependsOn Feature @relation("FeatureDependents", fields: [dependsOnFeatureId], references: [id], onDelete: Cascade)
+
+  @@unique([featureId, dependsOnFeatureId]) // no duplicate edges
+  @@index([dependsOnFeatureId])
+  @@map("app_feature_dependency")
+}

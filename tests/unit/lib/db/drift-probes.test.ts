@@ -199,8 +199,18 @@ describe('mergeDriftProbes', () => {
 });
 
 describe('shipped lib/app/db-drift.ts scaffold', () => {
-  it('registers zero probes by default (Sunrise ships the scaffold empty)', () => {
+  it("registers the fork's satellite-FK → user probes (HCE Hub, f-data-model)", () => {
+    // Fork divergence: HCE Hub fills this scaffold with one drift probe per
+    // hand-written FK → core `user` (f-data-model). This adapts Sunrise's
+    // "registers zero probes by default" case, whose premise the fill falsifies
+    // (same seam-vs-default-test coupling as the eslint/public-nav seams).
+    // Asserting the exact set preserves the guard — a stray probe still fails.
+    // See lib/app/db-drift.ts · .context/app/platform-divergences.md.
     registerAppDriftProbes();
-    expect(getAppDriftProbes()).toEqual([]);
+    expect(getAppDriftProbes().map((p) => p.name)).toEqual([
+      'app_project_leadUserId_fkey (hand-written FK → user)',
+      'app_project_member_userId_fkey (hand-written FK → user)',
+      'app_feature_ownerUserId_fkey (hand-written FK → user)',
+    ]);
   });
 });
