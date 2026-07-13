@@ -47,10 +47,13 @@ stop two owners starting the same feature.
      Classify each seam live/dormant and confirm the feature's tier/upstream hypotheses
      _from behaviour_ (guide §1, §8).
    - **A promoted-tasks table** — `t-N`, files-likely-to-touch, deps, **Done-when**, status,
-     PR. Run the **sizing self-check**: a task whose only real content is scaffolding + one
-     small file is a _commit_, not a PR — fold it into its dependent task. Mark the split
-     candidates (endpoint + consuming UI; pure transform + LLM/IO; "reuse existing X") to
-     re-check at build (guide §2).
+     PR. **Size by separability of *value*, not line count** (guide §2, [[planning-retro]] HB3):
+     a task earns its own PR only if splitting adds a different review surface, a parallelism
+     opportunity, or an integration checkpoint. Homogeneous/sequential/same-file work that's
+     unconsumed until the set is complete (e.g. a multi-model schema) is **one PR even when
+     large** — default to fewer, cohesive PRs. Then run the **sliver self-check** (fold a
+     scaffolding-only commit into its dependent) and mark the split candidates (endpoint +
+     consuming UI; pure transform + LLM/IO; "reuse existing X") to re-check at build.
    - **Per-task "Done when"** that lists the gates as completion criteria, plus any standing
      repo step this feature is known to need (e.g. a hand-written FK's drift probe +
      erasure hook; stripping a spurious generated-migration `DROP INDEX`) (guide §3–4).
@@ -100,8 +103,12 @@ A **task is one PR** (~200–600 lines; cohesive, reviewable). For each:
 4. **Fix confirmed findings as a transparent follow-up commit** (don't force-push over the
    reviewed commit — the review's effect should be visible in history). Document findings you
    accept or refute, and why.
-5. **The owner merges.** When the PR merges, flip its row on the board to `done #<PR>`. Do
-   **not** track an "in-PR" status — one transition, nothing to forget.
+5. **The owner merges.** A task PR is **pure code** — do **not** open a per-task docs/close-out
+   PR to flip its board row (that overhead buys no coordination once the feature is claimed to one
+   dev). The row flip to `done #<PR>`, decisions, and any cross-cutting carries are **batched into
+   the single feature close-out PR** (§3). Do **not** track an "in-PR" status — one transition,
+   nothing to forget. (The only feature-level docs PRs are the **claim** and the **close-out** —
+   [[planning-retro]] A7.)
 
 Every task inherits the repo rules in [`CLAUDE.md`](../../CLAUDE.md) and
 [`CUSTOMIZATION.md`](../../CUSTOMIZATION.md): `logger` not `console`; the `@/` alias, never
