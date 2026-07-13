@@ -21,4 +21,12 @@
  * Boundary-clean: a plain string array (no imports), safe to import at the
  * proxy runtime.
  */
-export const appProtectedRoutes: string[] = [];
+export const appProtectedRoutes: string[] = [
+  // The Hub's authenticated project surface (f-access). `f-shell`/`f-projects`
+  // mount pages under here; registering it now gives the edge redirect-to-login
+  // so no signed-out request ever reaches a project route. Per-resource
+  // membership authz is separate — see `lib/projects/access.ts`. Other Hub
+  // sections register their own prefix with the feature that adds them (e.g.
+  // `/brief` → f-morning-brief).
+  '/projects',
+];
