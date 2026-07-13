@@ -99,7 +99,7 @@ A flat list in rough dependency order (most-ready first). Order is *emergent fro
 | 04 | `f-access` | Simon (**shipped**) | f-data-model | ~1 | Project-membership access control |
 | 05 | `f-project-admin` | TBD | f-access | 4 | Project + member CRUD (in Sunrise admin shell) |
 | 06 | `f-shell` | TBD | f-theme, f-access | 5 | Module-composable app shell (nav, 3-col layout) |
-| 07 | `f-hub-capabilities` | TBD | f-data-model, f-access | 5 | Hub tools (next/claim/create/backlog/help-wanted) + MCP |
+| 07 | `f-hub-capabilities` | Simon (in flight) | f-data-model, f-access | 3 | Hub tools (next/claim/create/backlog/help-wanted) + MCP |
 | 08 | `f-projects` | TBD | f-shell, f-project-admin | 3 | Projects list + project view scaffold |
 | 09 | `f-plan-view` | TBD | f-projects, f-hub-capabilities | 4 | Feature-level Plan view (topological ordering) |
 | 10 | `f-board-view` | TBD | f-projects, f-hub-capabilities | 4 | Board (Kanban) — lanes, column routing, collisions |
@@ -188,7 +188,7 @@ The biggest greenfield piece: the Hub's three-column shell and module-composable
 *Done when:* the shell renders with Projects live and other modules visibly stubbed; sidekick column toggles; breadcrumbs + ⌘K trigger present; adding a second module needs no shell refactor (demonstrated with a throwaway stub in tests); gates green.
 
 ### 07 · `f-hub-capabilities` — Hub tools + MCP exposure
-*Owner:* TBD · *Depends on:* f-data-model, f-access · *~5 PRs*
+*Owner:* Simon · *Status:* in flight · *Depends on:* f-data-model, f-access · *~3 PRs (HB3 — read+pipeline · write+validator · claim+collision)* · *Detailed plan:* [[f-hub-capabilities]]*
 
 The Hub's read/write operations as Sunrise capabilities — the shared engine the UI, the sidekick, and Claude Code (via MCP) all call. (Cross-ref: [[v1-requirements#11. Hub-specific capabilities (registered tools)|§11]], [[v1-requirements#5. The PR is the natural unit|§5]], [[v1-requirements#14. Open implementation questions for the Sunrise-side conversation|§14 Q4/Q6]]; `.context/orchestration/capabilities.md`, `mcp.md`.)
 
