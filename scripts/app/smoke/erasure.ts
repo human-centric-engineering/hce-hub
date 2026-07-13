@@ -3,13 +3,14 @@
  *
  * Fork-owned companion to Sunrise's `scripts/smoke/erasure.ts`. Proves the
  * DB-enforced GDPR behavior of the Hub's hand-written satellite FKs → core
- * `user` (f-data-model t-1 + t-2), which mocked unit tests cannot: `eraseUser()`'s
- * `tx.user.delete()` fires the FK `ON DELETE` actions, so —
- *   - `app_project.leadUserId`   → SET NULL (project retained, lead de-attributed)
- *   - `app_feature.ownerUserId`  → SET NULL (feature retained, owner de-attributed)
- *   - `app_task.claimedByUserId` → SET NULL (task retained, claimant de-attributed)
- *   - `app_project_member`       → CASCADE  (the user's membership is removed)
- *   - `app_task_claim`           → CASCADE  (the user's claim history is removed)
+ * `user` (f-data-model t-1 + t-2 + t-3), which mocked unit tests cannot:
+ * `eraseUser()`'s `tx.user.delete()` fires the FK `ON DELETE` actions, so —
+ *   - `app_project.leadUserId`             → SET NULL (project retained)
+ *   - `app_feature.ownerUserId`            → SET NULL (feature retained)
+ *   - `app_task.claimedByUserId`           → SET NULL (task retained)
+ *   - `app_focus_directive.declaredByUserId` → SET NULL (directive retained)
+ *   - `app_project_member`                 → CASCADE  (membership removed)
+ *   - `app_task_claim`                     → CASCADE  (claim history removed)
  *
  * The FK *contract* (constraint + action) is guarded continuously by
  * `npm run db:drift-check` (CI + /pre-pr); this smoke is the functional
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
   let projectId: string | null = null;
   let featureId: string | null = null;
   let taskId: string | null = null;
+  let directiveId: string | null = null;
 
   try {
     const user = await prisma.user.create({
@@ -89,6 +91,12 @@ async function main(): Promise<void> {
 
     await prisma.taskClaim.create({ data: { taskId: task.id, userId: user.id } });
 
+    // ...and declares a focus directive on the project (t-3 futures scaffolding).
+    const directive = await prisma.focusDirective.create({
+      data: { projectId: project.id, declaredByUserId: user.id, intent: `${PREFIX} intent` },
+    });
+    directiveId = directive.id;
+
     // Erase.
     await eraseUser({
       userId: user.id,
@@ -121,9 +129,18 @@ async function main(): Promise<void> {
       'task claim cascade-deleted (CASCADE)'
     );
 
+    const directiveAfter = await prisma.focusDirective.findUnique({ where: { id: directive.id } });
+    check(directiveAfter !== null, 'focus directive retained');
+    check(
+      directiveAfter?.declaredByUserId === null,
+      'focus directive.declaredByUserId nulled (SET NULL)'
+    );
+
     console.log('\n✓ app:smoke:erasure passed');
   } finally {
-    // Self-clean by tracked id (task/feature before project; member+claim gone).
+    // Self-clean by tracked id (directive/task/feature before project; member+claim gone).
+    if (directiveId)
+      await prisma.focusDirective.deleteMany({ where: { id: directiveId } }).catch(() => undefined);
     if (taskId) await prisma.task.deleteMany({ where: { id: taskId } }).catch(() => undefined);
     if (featureId)
       await prisma.feature.deleteMany({ where: { id: featureId } }).catch(() => undefined);
