@@ -119,6 +119,12 @@ both levels; each is filed at its primary home with a cross-reference. Mark an e
   record) and [[building-a-feature]] step 1. _Status: folded-in for plan.md + building-a-feature.md;
   open for the Hub's plan-authoring instructions._
 
+### A7 · Only feature-level docs PRs (claim + close-out) — task PRs are pure code; no per-task close-out PR
+
+- **Discovery.** `f-data-model` t-1 spawned **two** extra docs PRs after its code PR (#13): one carrying a `/code-review` finding to another feature (#14), one closing out t-1's board bookkeeping (#15). The owner corrected the model: *"We don't need task close-out PRs, only feature close-out PRs. It's unnecessary overhead. The claim and close-out PRs for features are to minimise the risk of multiple devs working on the same feature at the same time. Once a feature is claimed the same dev works on all tasks within it."*
+- **Impact.** Per-task docs PRs multiply ceremony for no coordination gain — the claim/close-out PRs exist to signal *feature* ownership (stop two devs colliding on one feature); once claimed, one dev owns every task, so intra-feature board updates coordinate nothing and don't need their own PR.
+- **Feedback.** The working model has exactly **two** feature-level docs PRs: the **claim** PR (Owner + `in flight` + `<feature>.md`, before task work — [A6]) and the **close-out** PR (feature → `shipped` + *all* deferred board bookkeeping batched: every `t-N` row → `done`, the work-completed entry, decisions-log entries, and cross-cutting carries — [B28]). **Each task is one pure-code PR**; its board row is flipped at feature close-out, **not** in a per-task docs PR. Cross-ref [A5] (no in-PR status), [A6] (claim-first), [[building-a-feature]] §3 (close-out). _Status: **folded-in** — [[building-a-feature]] step 5 + §3; open for the Hub's plan-authoring instructions._
+
 ---
 
 ## §B — Feature-plan authoring
@@ -126,6 +132,12 @@ both levels; each is filed at its primary home with a cross-reference. Mark an e
 > **Provenance.** Entries `B1`–`B30` below are from executing the **Daybreak** plan.
 > Entries prefixed **`HB`** are from executing the **HCE Hub** plan (this fork) — the
 > first real test of these conventions, as [[feature-plan-authoring-guide]] anticipated.
+
+### HB3 · Size by separability of value, not line count — homogeneous, sequential, unconsumed-until-complete work is one PR even when large (HCE Hub · f-data-model)
+
+- **Discovery.** `f-data-model` shipped as **three** task PRs — Project domain (#13), Task domain (#16), futures scaffolding (#17). The owner flagged all three as too small: *"each felt too small for a PR … it could arguably all have been done in one PR."* This is the **second** over-decomposition flag (HB1 was `f-fork`). The three tasks were the *same mechanical recipe* three times (add `app_*` models → hand-strip the `migrate dev` spurious drops → add drift probes → extend the erasure smoke → extend the probe test), all pure schema, **sequential** (t-2/t-3 both depend on t-1), **same file** (`app.prisma` + one migration + `db-drift.ts`), one author, no parallelism, and **unconsumed until the whole model exists** (shipping t-1 alone delivered nothing usable).
+- **Impact.** 3× the ceremony — pre-pr, security-review, code-review, db:reset-consent, PR bodies — for one cohesive unit, with the 2nd and 3rd reviews adding almost no insight the 1st didn't. Worse for *review quality*: a schema is most reviewable **whole** (you can't see Task↔Project or the full cascade/erasure topology until every model is in one diff). The gate that greenlit the split — [[feature-plan-authoring-guide]] §2's old *"<~150 lines = one task"* line — was the wrong heuristic: it weighed size and "distinct domain," missing that the split added no review, parallelism, or integration value.
+- **Feedback.** The size gate is **separability of value, not line count.** A task earns its own PR only when splitting *adds* a different review surface, a parallelism opportunity, or an integration checkpoint (land it, see it work, then build on it). Homogeneous/sequential/same-file/unconsumed-until-complete work → **one PR, even a large one**; line count is a weak signal (a cohesive 600-line schema reviews fine whole). Balance against grab-bag PRs, but **default to fewer, cohesive** PRs. Generalises [[#HB1 · Don't split a feature into tasks by conceptual seam when each piece is commit-sized — size by changed surface (HCE Hub · f-fork)|HB1]] from "don't split *tiny*-by-purity" to "don't split *cohesive-mechanical* work at all." _Status: **folded-in** — [[feature-plan-authoring-guide]] §2 (the line-count heuristic replaced by the value-separability gate); the old <150-line rule struck._
 
 ### HB2 · Filling a `lib/app/*` seam breaks a Sunrise "ships-empty" default test — make adapting it a Done-when line (HCE Hub · f-fork, f-data-model)
 

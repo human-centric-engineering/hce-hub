@@ -14,7 +14,7 @@ epic: v1
 
 ## How to read this — the working model
 
-- **Task = one PR.** A cohesive, reviewable change that merges in one sitting (~200–600 lines). Not a commit — commits sit below this plan's resolution.
+- **Task = one PR.** A cohesive, reviewable change that merges in one sitting — sized by *separability of value*, not line count (a cohesive multi-model schema is one PR even when large; [[planning-retro]] HB3). Not a commit — commits sit below this plan's resolution.
 - **Feature = the unit of ownership.** One owner, a coherent capability, ~2–5 tasks, explicit `depends on` edges. The atom you claim and advance. Features are a *flat list*; order emerges from dependencies.
 - **Phase = an epic.** Coarse, organisational, non-gating. **This whole build is one epic: `v1`.** Later work (the futures modules, dynamic-focus consumers, bidirectional Sunrise flows) is carried as **parked** phases.
 - **Intent over prescription.** Each feature captures *what/why*; the binding *how* lives in [[v1-requirements]] and the Sunrise `.context/*` docs, cross-referenced per feature. Implementation choices are made at build time by the owner + Claude, via a [[feature-plan-authoring-guide|feature plan]].
@@ -95,7 +95,7 @@ A flat list in rough dependency order (most-ready first). Order is *emergent fro
 |---|---|---|---|---|---|
 | 01 | `f-fork` | Simon (**shipped**) | — | 2 | Fork + brand + auth-only shell + strip public surfaces |
 | 02 | `f-theme` | TBD | f-fork | 3 | HCE Hub base theme (tokens, fonts, dark mode) |
-| 03 | `f-data-model` | Simon (in flight) | f-fork | 3 | Prisma app models + scaffolding + migrations |
+| 03 | `f-data-model` | Simon (**shipped**) | f-fork | ~1 (built as 3) | Prisma app models + scaffolding + migrations |
 | 04 | `f-access` | TBD | f-data-model | 3 | Project-membership access control |
 | 05 | `f-project-admin` | TBD | f-access | 4 | Project + member CRUD (in Sunrise admin shell) |
 | 06 | `f-shell` | TBD | f-theme, f-access | 5 | Module-composable app shell (nav, 3-col layout) |
@@ -138,7 +138,7 @@ The base HCE Hub theme replacing default Sunrise styling across public/auth/prot
 *Done when:* public/auth/protected pages render in the HCE Hub theme (warm + dim); fonts load; shadcn primitives restyled to the token set; the "H" brand-mark renders in the header/footer; gates green. *Note:* this ships the theme *foundation*; per-screen styling lands with each UI feature.
 
 ### 03 · `f-data-model` — Prisma models + scaffolding
-*Owner:* Simon · *Status:* in flight · *Depends on:* f-fork · *~3 PRs* · *Detailed plan:* [[f-data-model]]
+*Owner:* Simon · *Status:* **shipped** · *Depends on:* f-fork · *shipped as 3 PRs (#13, #16, #17) — should have been ~1 (HB3)* · *Detailed plan:* [[f-data-model]]
 
 The Hub data model in `prisma/schema/app.prisma`, plus the additive futures scaffolding. (Cross-ref: [[v1-requirements#10. Initial data model sketch|§10]]; [[CUSTOMIZATION|building-on-sunrise]] §5 satellite-FK pattern.)
 
@@ -148,7 +148,7 @@ The Hub data model in `prisma/schema/app.prisma`, plus the additive futures scaf
 - **t** — Futures scaffolding (additive, unconsumed in v1): `Sprint`, `FocusDirective` ([[futures#Dynamic focus and prioritisation|dynamic focus]]).
 - **t** — Futures scaffolding: `Phase` + nullable `Feature.phaseId` ([[futures#Coarse work grouping — Phases / Epics|coarse grouping]]). No UI/capability consumes these in v1 — schema-only, so v1.x lands without a migration.
 
-*Done when:* migrations apply clean on a fresh DB; drift-check + erasure hooks green; a `prisma.user.delete()` cascades/erases Hub rows correctly; gates green. *Split note:* the boot-time correctness care (idempotent, safe-on-empty) applies to any seed; see [[feature-plan-authoring-guide]] §4.
+*Done when:* migrations apply clean on a fresh DB; drift-check green; a user erasure via `eraseUser()` cascades/nulls Hub rows correctly; gates green. *Shipped (2026-07-13):* Project (#13), Task (#16), futures (#17) domains; **no erasure hooks** — the hand-FK `ON DELETE` (fired by `eraseUser()`'s `tx.user.delete()`) is the GDPR mechanism, proven by `app:smoke:erasure`; the indicative 5-bullet sketch above was built as 3 PRs and should have been ~1 ([[f-data-model]] decisions log; [[planning-retro]] HB3).
 
 ### 04 · `f-access` — project-membership access control
 *Owner:* TBD · *Depends on:* f-data-model · *~3 PRs*
@@ -230,6 +230,8 @@ What's in flight now, by person — with soft, ambient collision treatment. (Cro
 
 - **t** — Grid + sticky header; columns `Owner | Available | Claimed | In PR | Merged | Backlog` (equal widths); count chips + subtitles.
 - **t** — `effectiveStatus()` column routing: an `available` task with unmerged deps routes to **Backlog** (Available = genuinely pullable); unclaimed tasks route into their **feature owner's** lane (ownership stays visible; anyone can still claim — pull-not-push).
+- **[carried-in — `f-data-model` t-2 `/code-review`]** **`effectiveStatus()` must treat a `claimed` task whose `claimedByUserId` is NULL as not-actually-claimed** (route it back to Available/owner lane, not the Claimed column). After a user erasure the DB leaves `status='claimed'` with `claimedByUserId=NULL` (SET NULL retains the task, drops the claimant) — the stored enum lags reality, so effective-status must reconcile the two or an orphaned task sticks in Claimed and is never re-pullable. (Found building [[f-data-model]] t-2; recorded in its decisions log.)
+- **[carried-in — `f-data-model` t-3 `/code-review`]** **Render every nullable Hub→`user` reference gracefully — never deref it.** `leadUserId`, `ownerUserId`, `claimedByUserId`, `declaredByUserId` are all nullable *from creation* **and** go NULL on erasure (SET NULL). Board lanes, owner avatars, claimer meta, and any directive surface must show a null ref as "unassigned / former member" — a `user.name` on a null ref NPEs a whole view. Applies to every read surface (`f-plan-view`, `f-board-view`, `f-task-sheet`, `f-morning-brief`), not just the Board. (Found building [[f-data-model]] t-3; recorded in its decisions log.)
 - **t** — Swim lanes by person (avatar + role + owned-feature chips); task card (title, mono ref, claimer/collision/PR meta; `is-mine` clay left border; filenames *off* the card).
 - **t** — Soft collision treatment: subtle marker + slow pulse from `TaskClaim` overlap; help-wanted features flagged — never a hard lock/alarm (§5, §13.5).
 
@@ -325,10 +327,10 @@ Carried per the Hub's `parked` status — kept out of the active view, not lost.
 Follows the [[plan-authoring-guide]] (overall) and [[feature-plan-authoring-guide]] (per-feature). In brief:
 
 - **Status vocabulary.** Features: `not started | in flight | blocked | shipped`. Tasks (promoted): `backlog | available | claimed → done` — **no in-PR state**; flip to `done` on merge.
-- **Task = one PR** (~200–600 lines), not a commit. The `t` bullets above are **indicative** — a sizing aid, reshaped on promotion.
-- **Definition of done includes the gates** (`/pre-pr`, `/security-review`, then `/code-review`) run **before** opening the PR.
-- **Claim-first as a standalone docs PR** — with two builders (Simon + John), set Owner + `in flight` and write the feature's `<feature>.md` plan, push as a docs-only PR *before* task work, so the board is a real coordination surface.
-- **Cross-cutting deferrals get a live home** on this board at close-out, not buried in a shipped feature's doc.
+- **Task = one PR, sized by separability of *value* — not line count.** A task earns its own PR only if splitting adds a different review surface, a parallelism opportunity, or an integration checkpoint. Homogeneous/sequential/same-file work that's unconsumed until the set is complete (a multi-model schema) is **one PR even when large** — default to **fewer, cohesive** PRs (line count is a weak signal; [[planning-retro]] HB3). The `t` bullets above are **indicative** — reshaped on promotion.
+- **Definition of done includes the gates** run in order: **commit → `/pre-pr` → `/security-review` → push → open PR → `/code-review`** — the first three *before* the PR opens.
+- **Exactly two feature-level docs PRs — claim and close-out.** **Claim-first docs PR** (Owner + `in flight` + `<feature>.md`, before task work) and **feature close-out docs PR** are the coordination signals that stop two builders (Simon + John) colliding on one feature. **Task PRs are pure code — no per-task close-out/docs PR** ([[planning-retro]] A7); once a feature is claimed, one dev owns every task in it.
+- **Close-out batches all board bookkeeping** — every `t-N` row → `done`, the work-completed entry, decisions, and **cross-cutting deferrals get a live home** on this board (not buried in a shipped feature's doc) — in the one close-out PR.
 - Every task inherits the repo rules ([[CUSTOMIZATION|building-on-sunrise]] + Sunrise `CLAUDE.md`): `@/` alias, Zod-validate external input, satellite tables (never edit `User`), drift-probe hand-FKs, `lib/app/**` boundary, `app:*` script namespace.
 
 ---
@@ -337,6 +339,7 @@ Follows the [[plan-authoring-guide]] (overall) and [[feature-plan-authoring-guid
 
 Append-only, newest first.
 
+- **2026-07-13 — Sizing + PR-flow conventions corrected (owner feedback, 2nd over-decomposition flag).** (1) The task size gate is **separability of value, not line count** — combine homogeneous/sequential/unconsumed-until-complete work into one PR even when large; the old "~200–600 lines / <150-line" heuristics were the wrong cut ([[planning-retro]] HB3; [[feature-plan-authoring-guide]] §2). (2) **Only feature-level docs PRs exist (claim + close-out)**; task PRs are pure code and their bookkeeping batches into the feature close-out — no per-task close-out PR ([[planning-retro]] A7; [[building-a-feature]] step 5 + §3).
 - **2026-07-10 — Sidekick topology: one agent per project.** Sunrise's knowledge-access-contributor seam is keyed per agent (cached per agent); with no `AiKnowledgeCategory` primitive, per-project RAG isolation is cleanest as one restricted `AiAgent` per project, seeded on project creation and scoped to the project's `KnowledgeTag`. Hub-wide sidekick is an additive later variant.
 - **2026-07-10 — No `AiKnowledgeCategory`; project RAG is tag-based.** Verified against Sunrise `main`. Replace §10's `Project.knowledgeCategoryId` with `Project.knowledgeTagId` + `Project.sidekickAgentId`; scope via `KnowledgeTag` + the `knowledge-access-contributors` seam.
 - **2026-07-10 — Pure leaf fork; zero upstream gating.** The Hub builds entirely through existing fork-owned `lib/app/*` seams — no core→fork seam, no Sunrise PR blocks the fork (contrast Daybreak's `f-seams`). Two build-time watch-items (theme sync-seam, per-project agent provisioning) *could* surface a small upstream ask but are hypothesised not to gate.
@@ -348,6 +351,7 @@ Append-only, newest first.
 
 Append-only, newest first.
 
+- **2026-07-13 — `f-data-model` SHIPPED (PRs #13, #16, #17).** The whole Hub coordination + futures data model: Project/ProjectMember/Feature/FeatureDependency (#13), Task/TaskDependency/TaskClaim (#16), Sprint/FocusDirective/Phase + nullable `Feature.phaseId` (#17) — all `app_*` tables. Six hand-written satellite FKs → `"user"` with per-FK drift probes pinning the `ON DELETE` action (15 probes green); GDPR erasure is the FK `ON DELETE` (no hooks), proven end-to-end by `app:smoke:erasure`. The B13 spurious-`DROP` footgun fired every migration — the third one additionally tried to drop all five prior satellite FKs (the `--create-only` + drift-probe guard caught it). Three `/code-review` findings carried to the live board: dependency acyclicity → `f-hub-capabilities` §07; claimed/NULL-claimant + null-user-render → `f-board-view` §10. **Sizing lesson (HB3):** built as 3 PRs, should have been ~1 — homogeneous, sequential, unconsumed-until-complete schema is one PR ([[feature-plan-authoring-guide]] §2 size gate refined; the per-task close-out PRs #14/#15 were also over-overhead — [[planning-retro]] A7). **Unblocks `f-access` and `f-hub-capabilities`.**
 - **2026-07-13 — `f-data-model` t-1 done (PR #13, Project-domain schema).** `Project` / `ProjectMember` / `Feature` / `FeatureDependency` (`app_*` tables) + enums; hand-written satellite FKs → `"user"` (lead/owner SET NULL, member CASCADE) with per-FK drift probes pinning the `ON DELETE` action; `app:smoke:erasure` proves the GDPR cascade end-to-end. The B13 spurious-`DROP INDEX` footgun fired and was stripped (pgvector/tsvector indexes verified surviving). `/code-review` finding (dependency self-loops/cycles) carried to `f-hub-capabilities` (PR #14). `f-data-model` stays **in flight** — t-2 (Task domain) + t-3 (futures) remain. `drift-probes.test.ts` adapted (ledger row 8). Unblocks nothing new yet (f-access waits on the whole feature).
 - **2026-07-11 — `f-fork` SHIPPED (auth-only shell + brand identity).** t-1 (PR #6, `feat(f-fork): auth-only shell`) stripped the marketing surface (landing → `/dashboard` redirect, About deleted, marketing nav emptied, sitemap trimmed) and kept the legal pages; embed/chat left dormant. Close-out (this PR) set the committed `.env.example` brand (`NEXT_PUBLIC_APP_NAME="HCE Hub"`, `NEXT_PUBLIC_LEGAL_NAME="All Too Human Ltd"`). The styled "H" brand-mark was **deferred to `f-theme`** (needs theme tokens). Six platform-file edits ledgered in [[platform-divergences]]. **Lesson:** f-fork was over-decomposed into sub-PR-sized tasks — see [[planning-retro]] §B (first Hub retro entry). Unblocks `f-theme` and `f-data-model`.
 - **2026-07-07 — `f-fork` identity sub-task (PR #4, `chore: HCE Hub fork branding`).** `package.json` (`name: hce-hub`, `version: 0.1.0`), `NEXT_PUBLIC_APP_NAME`, the `CLAUDE.md` fork banner, `README.md`, and `.context/app/README.md`. No platform-owned files changed. This is the identity slice of `f-fork` t-1; the feature itself is `in flight` (Simon) — remaining work is the auth-only strip + brand mark ([[f-fork]]).
