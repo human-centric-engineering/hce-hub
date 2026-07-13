@@ -121,6 +121,7 @@ model Feature {
   project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   dependencies FeatureDependency[] @relation("FeatureDependencies") // edges where this feature depends on another
   dependents   FeatureDependency[] @relation("FeatureDependents") // edges where another feature depends on this
+  tasks        Task[]
 
   @@index([projectId])
   @@index([ownerUserId])
@@ -140,4 +141,78 @@ model FeatureDependency {
   @@unique([featureId, dependsOnFeatureId]) // no duplicate edges
   @@index([dependsOnFeatureId])
   @@map("app_feature_dependency")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task domain — f-data-model · t-2. Same fork conventions as the block above:
+// `app_*`-mapped tables, hand-written satellite FKs → core `"user"` (never a
+// `@relation` on User), each drift-probed in lib/app/db-drift.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The persisted task lifecycle. This is the *data* enum; the effective board
+// status (e.g. surfacing a stale claim as "available") is computed later by
+// f-board-view (v1-requirements §5) — it is not a stored value here.
+enum TaskStatus {
+  backlog
+  available
+  claimed
+  in_pr
+  merged
+}
+
+model Task {
+  id              String     @id @default(cuid())
+  featureId       String
+  title           String
+  description     String?    @db.Text
+  status          TaskStatus @default(backlog)
+  filesScope      String[]   @default([]) // paths/globs a claim expects to touch — soft-collision hint
+  claimedByUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the task, drop the claimant)
+  prUrl           String?
+  createdAt       DateTime   @default(now())
+
+  feature      Feature          @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  dependencies TaskDependency[] @relation("TaskDependencies") // edges where this task depends on another
+  dependents   TaskDependency[] @relation("TaskDependents") // edges where another task depends on this
+  claims       TaskClaim[]
+
+  @@index([featureId])
+  @@index([claimedByUserId])
+  @@map("app_task")
+}
+
+// A directed edge: `task` depends on `dependsOn`. Both sides cascade so an edge
+// disappears when either endpoint task is deleted. Like FeatureDependency,
+// `@@unique` blocks only duplicate edges — self-loop / cycle acyclicity is a
+// write-path concern, enforced when edges gain a writer in f-hub-capabilities
+// (plan §07), not in the schema.
+model TaskDependency {
+  id              String @id @default(cuid())
+  taskId          String
+  dependsOnTaskId String
+
+  task      Task @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOn Task @relation("TaskDependents", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, dependsOnTaskId]) // no duplicate edges
+  @@index([dependsOnTaskId])
+  @@map("app_task_dependency")
+}
+
+// Append-only claim history for soft-collision detection: a row per (user
+// claims task) event, closed by `releasedAt`. Multiple rows per (task, user)
+// are expected over time, so there is no uniqueness — collisions are surfaced
+// by the app, not blocked by the DB.
+model TaskClaim {
+  id         String    @id @default(cuid())
+  taskId     String
+  userId     String // hand-FK → "user" · ON DELETE CASCADE (the claim is the user's)
+  claimedAt  DateTime  @default(now())
+  releasedAt DateTime?
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([userId])
+  @@map("app_task_claim")
 }

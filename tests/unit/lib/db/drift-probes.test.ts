@@ -211,6 +211,8 @@ describe('shipped lib/app/db-drift.ts scaffold', () => {
       'app_project_leadUserId_fkey (hand-written FK → user)',
       'app_project_member_userId_fkey (hand-written FK → user)',
       'app_feature_ownerUserId_fkey (hand-written FK → user)',
+      'app_task_claimedByUserId_fkey (hand-written FK → user)',
+      'app_task_claim_userId_fkey (hand-written FK → user)',
     ]);
   });
 });
