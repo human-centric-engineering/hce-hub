@@ -5,6 +5,8 @@
  * Used by the useUrlTabs hook and SettingsTabs component.
  */
 
+import { BRAND } from '@/lib/brand';
+
 export const SETTINGS_TABS = {
   PROFILE: 'profile',
   SECURITY: 'security',
@@ -26,8 +28,8 @@ export const DEFAULT_SETTINGS_TAB: SettingsTab = SETTINGS_TABS.PROFILE;
  * Used by useUrlTabs to update document.title on tab change
  */
 export const SETTINGS_TAB_TITLES: Record<SettingsTab, string> = {
-  [SETTINGS_TABS.PROFILE]: 'Profile - Settings - Sunrise',
-  [SETTINGS_TABS.SECURITY]: 'Security - Settings - Sunrise',
-  [SETTINGS_TABS.NOTIFICATIONS]: 'Notifications - Settings - Sunrise',
-  [SETTINGS_TABS.ACCOUNT]: 'Account - Settings - Sunrise',
+  [SETTINGS_TABS.PROFILE]: `Profile - Settings - ${BRAND.name}`,
+  [SETTINGS_TABS.SECURITY]: `Security - Settings - ${BRAND.name}`,
+  [SETTINGS_TABS.NOTIFICATIONS]: `Notifications - Settings - ${BRAND.name}`,
+  [SETTINGS_TABS.ACCOUNT]: `Account - Settings - ${BRAND.name}`,
 };

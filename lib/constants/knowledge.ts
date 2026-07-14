@@ -5,6 +5,8 @@
  * Used by the useTrackedUrlTabs hook and KnowledgeView component.
  */
 
+import { BRAND } from '@/lib/brand';
+
 export const KNOWLEDGE_TABS = {
   MANAGE: 'manage',
   TAGS: 'tags',
@@ -27,9 +29,9 @@ export const DEFAULT_KNOWLEDGE_TAB: KnowledgeTab = KNOWLEDGE_TABS.MANAGE;
  * Used by useTrackedUrlTabs to update document.title on tab change
  */
 export const KNOWLEDGE_TAB_TITLES: Record<KnowledgeTab, string> = {
-  [KNOWLEDGE_TABS.MANAGE]: 'Manage - Knowledge Base - Sunrise',
-  [KNOWLEDGE_TABS.TAGS]: 'Tags - Knowledge Base - Sunrise',
-  [KNOWLEDGE_TABS.EXPLORE]: 'Explore - Knowledge Base - Sunrise',
-  [KNOWLEDGE_TABS.VISUALIZE]: 'Visualize - Knowledge Base - Sunrise',
-  [KNOWLEDGE_TABS.ERRORS]: 'Errors - Knowledge Base - Sunrise',
+  [KNOWLEDGE_TABS.MANAGE]: `Manage - Knowledge Base - ${BRAND.name}`,
+  [KNOWLEDGE_TABS.TAGS]: `Tags - Knowledge Base - ${BRAND.name}`,
+  [KNOWLEDGE_TABS.EXPLORE]: `Explore - Knowledge Base - ${BRAND.name}`,
+  [KNOWLEDGE_TABS.VISUALIZE]: `Visualize - Knowledge Base - ${BRAND.name}`,
+  [KNOWLEDGE_TABS.ERRORS]: `Errors - Knowledge Base - ${BRAND.name}`,
 };
