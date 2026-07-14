@@ -53,12 +53,17 @@ export default function HubError({
 
     void checkSession();
 
+    // Log + report ONCE on mount. `isSessionExpired` is deliberately NOT a dep and
+    // NOT in the tracked extra: it is set by the async checkSession() above, so
+    // depending on it would re-fire this effect (a duplicate log + Sentry event)
+    // once expiry resolves — the Sunrise platform boundaries carry that bug
+    // (sunrise#433); this is the corrected reference pattern.
     trackError(error, {
       tags: { boundary: 'hub', errorType: 'boundary' },
-      extra: { digest: error.digest, isSessionExpired: isSessionExpired.toString() },
+      extra: { digest: error.digest },
       level: ErrorSeverity.Error,
     });
-  }, [error, isSessionExpired]);
+  }, [error]);
 
   // Session expired — show login prompt
   if (isSessionExpired) {
