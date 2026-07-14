@@ -76,8 +76,8 @@ export class AddBacklogCapability extends BaseCapability<Args, Data> {
 
     const access = await resolveFeatureAccess(userId, args.featureId, 'member');
     if (!access.ok) {
-      // 'member' mode never returns 'forbidden' (any member passes); a denial is
-      // always a non-member → not_found. Handle both defensively regardless.
+      // 'member' mode denies only with `not_found` (any member passes; there is
+      // no owner/role check to produce `forbidden`), so map directly.
       return this.error(`Feature ${args.featureId} not found.`, 'not_found');
     }
 
