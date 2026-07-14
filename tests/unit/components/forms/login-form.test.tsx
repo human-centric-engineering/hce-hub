@@ -296,7 +296,7 @@ describe('components/forms/login-form', () => {
       });
     });
 
-    it('should redirect to dashboard on successful login', async () => {
+    it('should redirect to the Hub home on successful login', async () => {
       // Arrange
       const user = userEvent.setup();
       const { authClient } = await import('@/lib/auth/client');
@@ -323,7 +323,7 @@ describe('components/forms/login-form', () => {
 
       // Assert
       await waitFor(() => {
-        expect(mockRouter.push).toHaveBeenCalledWith('/dashboard');
+        expect(mockRouter.push).toHaveBeenCalledWith('/');
       });
     });
 
