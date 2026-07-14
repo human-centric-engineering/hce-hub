@@ -245,7 +245,7 @@ describe('proxy (project root)', () => {
   });
 
   describe('Auth routes — authenticated users', () => {
-    it('redirects to /dashboard when accessing /login with the HTTP cookie', async () => {
+    it('redirects to the Hub home (/) when accessing /login with the HTTP cookie', async () => {
       const request = createMockRequest('/login', {
         cookies: { 'better-auth.session_token': 'valid-token' },
       });
@@ -253,11 +253,11 @@ describe('proxy (project root)', () => {
       const response = await proxy(request);
 
       expect(response.status).toBe(307);
-      expect(response.headers.get('location')).toContain('/dashboard');
+      expect(response.headers.get('location')).toMatch(/\/$/); // HCE Hub: Hub home, not /dashboard (f-shell)
       expect(response.headers.get('x-request-id')).toBe('test-request-id-123');
     });
 
-    it('redirects to /dashboard when accessing /signup with the HTTPS cookie', async () => {
+    it('redirects to the Hub home (/) when accessing /signup with the HTTPS cookie', async () => {
       const request = createMockRequest('/signup', {
         cookies: { '__Secure-better-auth.session_token': 'valid-secure-token' },
       });
@@ -265,10 +265,10 @@ describe('proxy (project root)', () => {
       const response = await proxy(request);
 
       expect(response.status).toBe(307);
-      expect(response.headers.get('location')).toContain('/dashboard');
+      expect(response.headers.get('location')).toMatch(/\/$/); // HCE Hub: Hub home, not /dashboard (f-shell)
     });
 
-    it('redirects to /dashboard when accessing /reset-password with a session', async () => {
+    it('redirects to the Hub home (/) when accessing /reset-password with a session', async () => {
       const request = createMockRequest('/reset-password', {
         cookies: { '__Secure-better-auth.session_token': 'valid-token' },
       });
@@ -276,7 +276,7 @@ describe('proxy (project root)', () => {
       const response = await proxy(request);
 
       expect(response.status).toBe(307);
-      expect(response.headers.get('location')).toContain('/dashboard');
+      expect(response.headers.get('location')).toMatch(/\/$/); // HCE Hub: Hub home, not /dashboard (f-shell)
     });
   });
 

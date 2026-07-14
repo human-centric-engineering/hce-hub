@@ -34,7 +34,7 @@ import { OAuthButtons } from '@/components/forms/oauth-buttons';
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'), '/dashboard');
+  const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'), '/'); // HCE Hub: land on the Hub home, not /dashboard (f-shell)
   const { track, identify } = useAnalytics();
 
   const [isLoading, setIsLoading] = useState(false);

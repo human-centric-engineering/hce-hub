@@ -247,8 +247,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse | Respon
   }
 
   // Redirect authenticated users away from auth pages
+  // HCE Hub: land on the Hub home (/), not /dashboard (f-shell).
   if (isAuthRoute && authenticated) {
-    const redirectResponse = NextResponse.redirect(new URL('/dashboard', request.url));
+    const redirectResponse = NextResponse.redirect(new URL('/', request.url));
     redirectResponse.headers.set('x-request-id', requestId);
     return setVisitorCookie(redirectResponse);
   }
