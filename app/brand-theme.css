@@ -1,58 +1,199 @@
-/* app/brand-theme.css
+/* app/brand-theme.css — HCE Hub base theme (f-theme, feature 02)
  *
- * Fork-owned per-surface theming. SHIPS EMPTY — vanilla Sunrise is byte-for-byte
- * unchanged: with no overrides here, every surface inherits app/globals.css's
- * `@theme` defaults. A fork fills this file to repaint one surface (e.g. its
- * consumer-facing pages) while leaving others (e.g. `/admin`) on the platform
- * defaults, including future upstream palette tweaks. No platform layout or page
- * is ever edited — that's the whole point of the seam.
+ * Fork-owned per-surface theming. This file fills the Sunrise `data-surface`
+ * seam (upstream #355) with HCE Hub's warm, low-chroma palette + type system,
+ * scoped to the `consumer` surface only. `/admin` is left on the Sunrise
+ * defaults so the Hub reads as a *sibling* to Sunrise admin (v1-requirements
+ * §13.5). No platform file is edited: `app/globals.css` is untouched, so
+ * upstream palette tweaks still flow through every token we don't override.
  *
- * Imported once in app/layout.tsx AFTER globals.css. Keep these selectors
- * UNLAYERED (no `@layer`): Tailwind 4 emits its `@theme` tokens inside a layer at
- * `:root`, so an unlayered selector here beats them by layer order, and a
- * descendant subtree pin beats the `<html>`-level scope by specificity.
+ * SELECTORS ARE UNLAYERED on purpose. Tailwind 4 emits its `@theme` tokens at
+ * `:root` inside a layer; unlayered rules here beat them by layer order. The
+ * dark scope is the COMPOUND form `[data-surface='consumer'].dark` because both
+ * `data-surface` and `.dark` sit on `<html>` (the theme-toggle script + the
+ * proxy set them on the same element). See:
+ *   - .context/ui/surface-theming.md  (the seam + its six design constraints)
+ *   - .context/app/theme.md            (this token layer's reference)
+ *   - .context/app/planning/f-theme.md (the build plan + decisions)
  *
- * MECHANISM
- *   proxy.ts classifies each request via `classifySurface(pathname)` and sets the
- *   `x-surface` request header; the root layout puts it on `<html data-surface>`;
- *   `<SurfaceSync>` keeps that attribute correct across client-side navigation.
- *   Because the marker is on `<html>`, body-portaled overlays (Radix dialog /
- *   dropdown / popover / toast, the cookie-consent modal) inherit it too — they
- *   mount at document.body, outside any route-group subtree, which is exactly why
- *   the marker must live at the root and not on a `(group)/layout.tsx`.
- *
- * The two surfaces vanilla Sunrise classifies are `admin` and `consumer`
- * (see lib/app/surface.ts — the policy seam). Redeclare only the tokens you
- * change; everything else inherits, so upstream palette changes flow through the
- * tokens you didn't touch.
- *
- * --------------------------------------------------------------------------
- * EXAMPLE (commented out — uncomment and adjust to brand a surface). Note the
- * TWO dark-mode selector FORMS; they are NOT interchangeable (see the docs):
- *
- *   [data-surface='consumer'] {                 // light, on <html>
- *     --color-primary: #0a1a3a;
- *     --color-background: #fbf6ec;
- *     --color-foreground: #16213d;
- *   }
- *   [data-surface='consumer'].dark {            // dark: `.dark` is on the SAME
- *     --color-primary: #ffc73a;                 // element (<html>) -> COMPOUND
- *     --color-background: #0a1a3a;
- *     --color-foreground: #f2eede;
- *   }
- *
- * For a surface PINNED on a descendant element (a wrapper that sets its own
- * `data-surface`), the dark scope is a DESCENDANT selector instead, because the
- * pin sits below `<html>.dark`:
- *
- *   .dark [data-surface='canvas'] { --color-background: #0a0a0a; ... }
- *
- * And because a pin only re-tokenises its own subtree, an ANCESTOR that frames it
- * (e.g. a `<main>`) still shows the parent surface's background; paint it with
- * `:has()`:
- *
- *   main:has([data-surface='canvas']) { background-color: #ffffff; }
- *
- * See .context/ui/surface-theming.md for all six design constraints.
- * --------------------------------------------------------------------------
- */
+ * Design source of truth: the design handoff `styles.css` token set.
+ * ------------------------------------------------------------------------- */
+
+/* ── Self-hosted fonts (CSP `font-src 'self'` — no external Google Fonts) ──── */
+/* Inter Tight ships as a variable file: one face covers the whole weight axis,
+ * so the design's 450 ("body-ish emphasis") resolves without a static cut. */
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/InterTight.woff2') format('woff2');
+}
+/* JetBrains Mono — the design uses 400 (refs/body), 500 (pills/labels),
+ * 600 (the brand "H"); vendored as static cuts. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-SemiBold.woff2') format('woff2');
+}
+
+/* ── Consumer surface · light ("warm") ────────────────────────────────────── */
+[data-surface='consumer'] {
+  /* (a) shadcn semantic tokens remapped → warm palette. Every shadcn primitive
+   *     (Button/Badge/Tabs/Sheet/Select/Switch/Tooltip/…) restyles for free by
+   *     CSS-var inheritance — no component edits. */
+  --color-background: #faf8f3; /* warm paper */
+  --color-foreground: #1a1a1a; /* ink */
+  --color-card: #ffffff;
+  --color-card-foreground: #1a1a1a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1a1a1a;
+  --color-primary: #1a1a1a; /* ink-primary button (design: ink bg / paper text) */
+  --color-primary-foreground: #faf8f3;
+  --color-secondary: #f3f0e8; /* sunken */
+  --color-secondary-foreground: #1a1a1a;
+  --color-muted: #f3f0e8;
+  --color-muted-foreground: #6e6b62; /* ink-mute */
+  --color-accent: #efebe0; /* shadcn `accent` = muted hover fill (NOT clay) */
+  --color-accent-foreground: #1a1a1a;
+  --color-border: #e6e1d3; /* line */
+  --color-input: #e6e1d3;
+  --color-ring: #c45a3e; /* clay — the one sparing brand accent, on focus rings */
+  --color-destructive: #8a4a4a; /* muted brick, never traffic-light red (§13.5) */
+  --color-destructive-foreground: #faf8f3;
+
+  /* (b) Hub-native tokens — no shadcn slot; Hub components consume these directly. */
+  --bg: #faf8f3;
+  --bg-elev: #ffffff;
+  --bg-sunken: #f3f0e8;
+  --bg-tint: #efebe0;
+
+  --ink: #1a1a1a;
+  --ink-soft: #3a3a38;
+  --ink-mute: #6e6b62;
+  --ink-faint: #a09c91;
+  --ink-ghost: #c8c4b8;
+
+  --line: #e6e1d3;
+  --line-soft: #efebe0;
+  --line-strong: #d4cfc0;
+
+  --accent: #c45a3e; /* clay — ownership left-border, help-wanted, sidekick. Sparingly. */
+  --accent-soft: #e9c8bc;
+  --accent-bg: #f6e6df;
+  --accent-ink: #8a3d29;
+
+  --signal-merged: #5d7a5b; /* sage */
+  --signal-merged-bg: #e7eddf;
+  --signal-pr: #7a6a3d; /* tobacco */
+  --signal-pr-bg: #efe6cf;
+  --signal-claimed: #4a5d7a; /* slate-blue */
+  --signal-claimed-bg: #dee5ef;
+  --signal-blocked: #8a4a4a; /* brick */
+  --signal-blocked-bg: #efdedc;
+  --signal-available: #3a3a38;
+  --signal-available-bg: #ebe6d8;
+  --signal-backlog: #6e6b62;
+  --signal-backlog-bg: #ece8de;
+
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  --shadow-sm: 0 1px 0 rgba(26, 26, 26, 0.04), 0 1px 2px rgba(26, 26, 26, 0.04);
+  --shadow: 0 1px 0 rgba(26, 26, 26, 0.05), 0 4px 14px rgba(26, 26, 26, 0.06);
+  --shadow-lg: 0 2px 0 rgba(26, 26, 26, 0.06), 0 16px 40px rgba(26, 26, 26, 0.1);
+
+  --font-ui: 'Inter Tight', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  --font-display: 'Inter Tight', system-ui, sans-serif;
+
+  --duration-fast: 120ms;
+  --duration: 200ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Apply the UI font across the consumer surface. Targets `body` so it beats
+ * globals.css's own `body` rule by specificity; the mono/sans pairing is core
+ * to the feel (metadata mono, content sans) — mono is applied per-component via
+ * `var(--font-mono)`. */
+[data-surface='consumer'] body {
+  font-family: var(--font-ui);
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+}
+
+/* ── Consumer surface · dark ("dim") — warm-dark, not blue-black ───────────── */
+[data-surface='consumer'].dark {
+  --color-background: #1a1916;
+  --color-foreground: #e8e6e1;
+  --color-card: #211f1a;
+  --color-card-foreground: #e8e6e1;
+  --color-popover: #211f1a;
+  --color-popover-foreground: #e8e6e1;
+  --color-primary: #e8e6e1; /* dim: primary = light ink on dark bg */
+  --color-primary-foreground: #1a1916;
+  --color-secondary: #15140f;
+  --color-secondary-foreground: #e8e6e1;
+  --color-muted: #15140f;
+  --color-muted-foreground: #8a857a;
+  --color-accent: #25221c;
+  --color-accent-foreground: #e8e6e1;
+  --color-border: #2c2a23;
+  --color-input: #2c2a23;
+  --color-ring: #d4715a;
+  --color-destructive: #c08a8a;
+  --color-destructive-foreground: #1a1916;
+
+  --bg: #1a1916;
+  --bg-elev: #211f1a;
+  --bg-sunken: #15140f;
+  --bg-tint: #25221c;
+
+  --ink: #e8e6e1;
+  --ink-soft: #c8c4b8;
+  --ink-mute: #8a857a;
+  --ink-faint: #5a564d;
+  --ink-ghost: #3a382f;
+
+  --line: #2c2a23;
+  --line-soft: #25221c;
+  --line-strong: #3a382f;
+
+  --accent: #d4715a;
+  --accent-soft: #5a3a2d;
+  --accent-bg: #2c211c;
+  --accent-ink: #e9b8a8;
+
+  --signal-merged: #8aa68a;
+  --signal-merged-bg: #232a22;
+  --signal-pr: #b8a47a;
+  --signal-pr-bg: #2a2418;
+  --signal-claimed: #8a9bb4;
+  --signal-claimed-bg: #1f242d;
+  --signal-blocked: #c08a8a;
+  --signal-blocked-bg: #2a1f1f;
+  --signal-available: #d8d4c8;
+  --signal-available-bg: #25221c;
+  --signal-backlog: #8a857a;
+  --signal-backlog-bg: #25221c;
+
+  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.3);
+  --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 2px 0 rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.5);
+}
