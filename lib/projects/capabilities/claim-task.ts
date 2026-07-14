@@ -87,32 +87,36 @@ export class ClaimTaskCapability extends BaseCapability<Args, Data> {
     }
 
     // Other open claims in the project whose files overlap the ones this task
-    // declares — the soft file-collision signal.
-    const otherOpenClaims = await prisma.taskClaim.findMany({
-      where: {
-        releasedAt: null,
-        userId: { not: userId },
-        taskId: { not: task.taskId },
-        task: { feature: { projectId: task.projectId } },
-      },
-      select: {
-        userId: true,
-        claimedAt: true,
-        task: { select: { id: true, title: true, filesScope: true } },
-      },
-    });
-    warnings.push(
-      ...detectFileOverlapWarnings(
-        task.filesScope,
-        otherOpenClaims.map((c) => ({
-          userId: c.userId,
-          claimedAt: c.claimedAt,
-          taskId: c.task.id,
-          taskTitle: c.task.title,
-          filesScope: c.task.filesScope,
-        }))
-      )
-    );
+    // declares — the soft file-collision signal. Skipped entirely when this task
+    // declares no file scope (nothing could overlap), avoiding a project-wide
+    // claims query on the common scope-less path.
+    if (task.filesScope.length > 0) {
+      const otherOpenClaims = await prisma.taskClaim.findMany({
+        where: {
+          releasedAt: null,
+          userId: { not: userId },
+          taskId: { not: task.taskId },
+          task: { feature: { projectId: task.projectId } },
+        },
+        select: {
+          userId: true,
+          claimedAt: true,
+          task: { select: { id: true, title: true, filesScope: true } },
+        },
+      });
+      warnings.push(
+        ...detectFileOverlapWarnings(
+          task.filesScope,
+          otherOpenClaims.map((c) => ({
+            userId: c.userId,
+            claimedAt: c.claimedAt,
+            taskId: c.task.id,
+            taskTitle: c.task.title,
+            filesScope: c.task.filesScope,
+          }))
+        )
+      );
+    }
 
     const releasedAt = new Date();
     await executeTransaction(async (tx) => {
