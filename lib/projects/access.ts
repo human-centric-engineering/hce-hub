@@ -22,7 +22,7 @@
  * 403 (`basis` set, `ok` false). See `.context/app/planning/f-access.md`.
  */
 
-import type { Project } from '@prisma/client';
+import type { Project, TaskStatus } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { NotFoundError, ForbiddenError } from '@/lib/api/errors';
 
@@ -191,6 +191,54 @@ export async function resolveFeatureAccess(
       projectId: feature.projectId,
       ownerUserId: feature.ownerUserId,
       helpWanted: feature.helpWanted,
+      basis,
+    },
+  };
+}
+
+/** A task's claim-relevant fields + the caller's role, once access is granted. */
+export interface TaskAccess {
+  taskId: string;
+  projectId: string;
+  status: TaskStatus;
+  claimedByUserId: string | null;
+  filesScope: string[];
+  basis: ProjectAccessBasis;
+}
+
+export type TaskAccessResult = { ok: true; task: TaskAccess } | { ok: false; reason: 'not_found' };
+
+/**
+ * Resolve whether `userId` may act on `taskId` (claim it) and load the task's
+ * claim-relevant fields. **Any project member may claim** — claiming is the
+ * collaborative pull action (§5, pull-not-push), so there is no owner tier here;
+ * the only denial is `not_found` (missing task, or one in a project the caller
+ * can't see — indistinguishable, no enumeration).
+ */
+export async function resolveTaskAccess(userId: string, taskId: string): Promise<TaskAccessResult> {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      status: true,
+      claimedByUserId: true,
+      filesScope: true,
+      feature: { select: { projectId: true } },
+    },
+  });
+  if (!task) return { ok: false, reason: 'not_found' };
+
+  const { basis } = await canAccessProject(userId, task.feature.projectId);
+  if (basis === null) return { ok: false, reason: 'not_found' }; // non-member ≡ task does not exist
+
+  return {
+    ok: true,
+    task: {
+      taskId: task.id,
+      projectId: task.feature.projectId,
+      status: task.status,
+      claimedByUserId: task.claimedByUserId,
+      filesScope: task.filesScope,
       basis,
     },
   };

@@ -24,6 +24,9 @@ vi.mock('@/lib/db/client', () => ({
     feature: {
       findUnique: vi.fn(),
     },
+    task: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -35,6 +38,7 @@ const {
   listAccessibleProjects,
   accessibleProjectIds,
   resolveFeatureAccess,
+  resolveTaskAccess,
 } = await import('@/lib/projects/access');
 const { NotFoundError, ForbiddenError } = await import('@/lib/api/errors');
 
@@ -43,6 +47,7 @@ const memberFindMany = prisma.projectMember.findMany as ReturnType<typeof vi.fn>
 const projectFindUnique = prisma.project.findUnique as ReturnType<typeof vi.fn>;
 const projectFindMany = prisma.project.findMany as ReturnType<typeof vi.fn>;
 const featureFindUnique = prisma.feature.findUnique as ReturnType<typeof vi.fn>;
+const taskFindUnique = prisma.task.findUnique as ReturnType<typeof vi.fn>;
 
 const USER = 'user-1';
 const PROJECT = 'project-1';
@@ -244,5 +249,48 @@ describe('resolveFeatureAccess', () => {
     memberFindUnique.mockResolvedValue({ role: 'lead' });
     const r = await resolveFeatureAccess(USER, FEATURE, 'owner');
     expect(r.ok).toBe(true);
+  });
+});
+
+describe('resolveTaskAccess', () => {
+  const TASK = 'task-1';
+  const taskRow = {
+    id: TASK,
+    status: 'available',
+    claimedByUserId: null,
+    filesScope: ['api/'],
+    feature: { projectId: PROJECT },
+  };
+
+  it('grants any member and returns the task claim-relevant fields', async () => {
+    taskFindUnique.mockResolvedValue(taskRow);
+    memberFindUnique.mockResolvedValue({ role: 'member' });
+
+    const r = await resolveTaskAccess(USER, TASK);
+    expect(r).toEqual({
+      ok: true,
+      task: {
+        taskId: TASK,
+        projectId: PROJECT,
+        status: 'available',
+        claimedByUserId: null,
+        filesScope: ['api/'],
+        basis: 'member',
+      },
+    });
+  });
+
+  it('reports a missing task as not_found without consulting membership', async () => {
+    taskFindUnique.mockResolvedValue(null);
+    const r = await resolveTaskAccess(USER, TASK);
+    expect(r).toEqual({ ok: false, reason: 'not_found' });
+    expect(memberFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('reports a task in a non-member project as not_found (≡ missing, no enumeration)', async () => {
+    taskFindUnique.mockResolvedValue(taskRow);
+    memberFindUnique.mockResolvedValue(null); // not a member
+    const r = await resolveTaskAccess(USER, TASK);
+    expect(r).toEqual({ ok: false, reason: 'not_found' });
   });
 });
