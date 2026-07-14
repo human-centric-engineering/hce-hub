@@ -26,13 +26,28 @@ import { BRAND } from '@/lib/brand';
  * Lives in `components/` (not `lib/app/`) because the `lib/app/**` ESLint
  * boundary bans runtime `next/*` imports and a logo commonly needs `next/image`.
  *
- * The default returns a bare string so vanilla Sunrise header/footer HTML is
- * byte-for-byte unchanged (no extra wrapper element); the surrounding `<Link>`
- * supplies the type styling. `BRAND.name` stays the identity/accessibility
- * string (`alt` / `aria-label`) even when a fork renders an image.
+ * `BRAND.name` stays the identity/accessibility string (`alt` / `aria-label`)
+ * even when a fork renders a mark.
+ *
+ * HCE Hub (f-theme): renders the design handoff's brand mark — a 26px ink
+ * square with a mono "H" — plus the "HCE Hub" wordmark. Colours resolve from
+ * the theme tokens (`bg-foreground` / `text-background`), so it reads warm on
+ * the consumer surface and inverts correctly in dim mode. The "H" is
+ * `aria-hidden`; the accessible name is `BRAND.name` on the wrapper.
  *
  * Full guide: CUSTOMIZATION.md §2.
  */
 export function BrandMark(): React.ReactNode {
-  return BRAND.name;
+  return (
+    <span className="inline-flex items-center gap-2.5" aria-label={BRAND.name}>
+      <span
+        aria-hidden="true"
+        className="bg-foreground text-background grid h-[26px] w-[26px] place-items-center rounded-md text-[13px] font-semibold"
+        style={{ fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em' }}
+      >
+        H
+      </span>
+      <span className="text-[15px] font-medium tracking-[-0.015em]">{BRAND.name}</span>
+    </span>
+  );
 }
