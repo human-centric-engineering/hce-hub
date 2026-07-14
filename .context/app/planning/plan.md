@@ -98,7 +98,7 @@ A flat list in rough dependency order (most-ready first). Order is *emergent fro
 | 03 | `f-data-model` | Simon (**shipped**) | f-fork | ~1 (built as 3) | Prisma app models + scaffolding + migrations |
 | 04 | `f-access` | Simon (**shipped**) | f-data-model | ~1 | Project-membership access control |
 | 05 | `f-project-admin` | TBD | f-access | 4 | Project + member CRUD (in Sunrise admin shell) |
-| 06 | `f-shell` | TBD | f-theme, f-access | 5 | Module-composable app shell (nav, 3-col layout) |
+| 06 | `f-shell` | Simon (**in flight**) | f-theme, f-access | 2 (was 5) | Module-composable app shell (nav, 3-col layout) |
 | 07 | `f-hub-capabilities` | Simon (**shipped**) | f-data-model, f-access | 3 | Hub tools (next/claim/create/backlog/help-wanted) + MCP |
 | 08 | `f-projects` | TBD | f-shell, f-project-admin | 3 | Projects list + project view scaffold |
 | 09 | `f-plan-view` | TBD | f-projects, f-hub-capabilities | 4 | Feature-level Plan view (topological ordering) |
@@ -175,7 +175,7 @@ Project administration inside the existing Sunrise admin shell ([[v1-requirement
 *Done when:* an admin can create a project, add members, set host platform, and attach a knowledge tag; the project appears for members only; gates green.
 
 ### 06 · `f-shell` — module-composable app shell
-*Owner:* TBD · *Depends on:* f-theme, f-access · *~5 PRs*
+*Owner:* Simon · *Status:* **in flight** · *Depends on:* f-theme, f-access · *~2 PRs (sized down from 5, HB3 integration-checkpoint split)* · *Detailed plan:* [[f-shell]]
 
 The biggest greenfield piece: the Hub's three-column shell and module-composable navigation, rooted at the deployment root (subdomain does the namespacing — no `/hub/` prefix). (Cross-ref: [[v1-requirements#13.1 Hub UI — user-facing working surface|§13.1]], [[v1-requirements#14. Open implementation questions for the Sunrise-side conversation|§14 Q2]]; design handoff "Shell / layout".)
 
