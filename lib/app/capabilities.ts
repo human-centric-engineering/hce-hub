@@ -13,6 +13,14 @@
  *
  * Full guide + example: CUSTOMIZATION.md §4 · .context/orchestration/capabilities.md
  */
+import { registerAppCapability } from '@/lib/orchestration/capabilities/registry';
+import { NextTaskCapability } from '@/lib/projects/capabilities/next-task';
+
 export function initAppCapabilities(): void {
-  // No app capabilities by default.
+  // HCE Hub coordination tools (f-hub-capabilities). Each also needs an active
+  // `AiCapability` row (seeded under prisma/seeds/app/) or dispatch dies at
+  // `capability_inactive` — registering the class here is necessary, not
+  // sufficient. Membership is enforced inside each capability's execute() via
+  // the f-access funnel; there is no per-agent binding requirement (default-allow).
+  registerAppCapability(new NextTaskCapability());
 }

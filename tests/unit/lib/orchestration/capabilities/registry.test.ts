@@ -152,10 +152,18 @@ describe('registerBuiltInCapabilities', () => {
   });
 
   it('is idempotent (second call is a no-op)', () => {
+    // The invariant under test is that the SECOND call registers nothing — the
+    // first-call count is asserted to be count-agnostic (≥ the 13 built-ins) so
+    // a fork that fills the `initAppCapabilities` seam doesn't re-break it.
+    // HCE Hub adds app capabilities (f-hub-capabilities: next_task, …), so the
+    // first-call total is 13 + the fork's app-cap count. See
+    // .context/app/platform-divergences.md.
     const spy = vi.spyOn(capabilityDispatcher, 'register');
     registerBuiltInCapabilities();
+    const afterFirstCall = spy.mock.calls.length;
     registerBuiltInCapabilities();
-    expect(spy).toHaveBeenCalledTimes(13); // only from the first call (was 12 before #24)
+    expect(spy).toHaveBeenCalledTimes(afterFirstCall); // second call added nothing
+    expect(afterFirstCall).toBeGreaterThanOrEqual(13); // the 13 built-ins (+ any app caps)
     spy.mockRestore();
   });
 });
