@@ -15,6 +15,9 @@
  */
 import { registerAppCapability } from '@/lib/orchestration/capabilities/registry';
 import { NextTaskCapability } from '@/lib/projects/capabilities/next-task';
+import { CreateTaskCapability } from '@/lib/projects/capabilities/create-task';
+import { AddBacklogCapability } from '@/lib/projects/capabilities/add-backlog';
+import { FlagHelpWantedCapability } from '@/lib/projects/capabilities/flag-help-wanted';
 
 export function initAppCapabilities(): void {
   // HCE Hub coordination tools (f-hub-capabilities). Each also needs an active
@@ -22,5 +25,8 @@ export function initAppCapabilities(): void {
   // `capability_inactive` — registering the class here is necessary, not
   // sufficient. Membership is enforced inside each capability's execute() via
   // the f-access funnel; there is no per-agent binding requirement (default-allow).
-  registerAppCapability(new NextTaskCapability());
+  registerAppCapability(new NextTaskCapability()); // read (t-1)
+  registerAppCapability(new CreateTaskCapability()); // write (t-2)
+  registerAppCapability(new AddBacklogCapability()); // write (t-2)
+  registerAppCapability(new FlagHelpWantedCapability()); // write (t-2)
 }

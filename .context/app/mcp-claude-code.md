@@ -37,7 +37,8 @@ any tool is reachable over MCP.
 ## Connecting Claude Code
 
 Add the Hub's MCP endpoint as a server in your Claude Code MCP config, authenticating with the
-`smcp_` key as a bearer token. Once connected, `next_task` (and the write tools as they land —
-`create_task`, `claim_task`, …) appear as tools; calls dispatch as **you**, membership-scoped.
+`smcp_` key as a bearer token. Once connected the Hub tools appear and dispatch as **you**,
+membership-scoped: `next_task` (read) and the write tools `create_task`, `add_backlog`,
+`flag_help_wanted` (`claim_task` lands with t-3). Writes are owner/member-scoped and audited.
 
 _This guide grows as t-2/t-3 add the write + claim tools._

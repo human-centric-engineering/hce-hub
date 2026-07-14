@@ -21,6 +21,9 @@ vi.mock('@/lib/db/client', () => ({
       findUnique: vi.fn(),
       findMany: vi.fn(),
     },
+    feature: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -31,6 +34,7 @@ const {
   getAccessibleProject,
   listAccessibleProjects,
   accessibleProjectIds,
+  resolveFeatureAccess,
 } = await import('@/lib/projects/access');
 const { NotFoundError, ForbiddenError } = await import('@/lib/api/errors');
 
@@ -38,6 +42,7 @@ const memberFindUnique = prisma.projectMember.findUnique as ReturnType<typeof vi
 const memberFindMany = prisma.projectMember.findMany as ReturnType<typeof vi.fn>;
 const projectFindUnique = prisma.project.findUnique as ReturnType<typeof vi.fn>;
 const projectFindMany = prisma.project.findMany as ReturnType<typeof vi.fn>;
+const featureFindUnique = prisma.feature.findUnique as ReturnType<typeof vi.fn>;
 
 const USER = 'user-1';
 const PROJECT = 'project-1';
@@ -163,5 +168,81 @@ describe('accessibleProjectIds', () => {
   it('returns an empty array when the user is a member of nothing', async () => {
     memberFindMany.mockResolvedValue([]);
     await expect(accessibleProjectIds(USER)).resolves.toEqual([]);
+  });
+});
+
+describe('resolveFeatureAccess', () => {
+  const FEATURE = 'feature-1';
+
+  it('grants a member at the member tier and returns the feature fields + role', async () => {
+    featureFindUnique.mockResolvedValue({
+      projectId: PROJECT,
+      ownerUserId: 'someone-else',
+      helpWanted: false,
+    });
+    memberFindUnique.mockResolvedValue({ role: 'member' });
+
+    const r = await resolveFeatureAccess(USER, FEATURE, 'member');
+    expect(r).toEqual({
+      ok: true,
+      feature: {
+        projectId: PROJECT,
+        ownerUserId: 'someone-else',
+        helpWanted: false,
+        basis: 'member',
+      },
+    });
+  });
+
+  it('reports a missing feature as not_found', async () => {
+    featureFindUnique.mockResolvedValue(null);
+    const r = await resolveFeatureAccess(USER, FEATURE, 'member');
+    expect(r).toEqual({ ok: false, reason: 'not_found' });
+    // Never consults membership for a feature that doesn't exist.
+    expect(memberFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('reports a feature in a non-member project as not_found (≡ missing, no enumeration)', async () => {
+    featureFindUnique.mockResolvedValue({
+      projectId: PROJECT,
+      ownerUserId: 'x',
+      helpWanted: false,
+    });
+    memberFindUnique.mockResolvedValue(null); // not a member
+    const r = await resolveFeatureAccess(USER, FEATURE, 'owner');
+    expect(r).toEqual({ ok: false, reason: 'not_found' });
+  });
+
+  it('owner tier: forbids a member who is neither the feature owner nor a lead', async () => {
+    featureFindUnique.mockResolvedValue({
+      projectId: PROJECT,
+      ownerUserId: 'someone-else',
+      helpWanted: false,
+    });
+    memberFindUnique.mockResolvedValue({ role: 'member' });
+    const r = await resolveFeatureAccess(USER, FEATURE, 'owner');
+    expect(r).toEqual({ ok: false, reason: 'forbidden' });
+  });
+
+  it('owner tier: grants the feature owner', async () => {
+    featureFindUnique.mockResolvedValue({
+      projectId: PROJECT,
+      ownerUserId: USER,
+      helpWanted: true,
+    });
+    memberFindUnique.mockResolvedValue({ role: 'member' });
+    const r = await resolveFeatureAccess(USER, FEATURE, 'owner');
+    expect(r.ok).toBe(true);
+  });
+
+  it('owner tier: grants a project lead even if not the feature owner', async () => {
+    featureFindUnique.mockResolvedValue({
+      projectId: PROJECT,
+      ownerUserId: 'other',
+      helpWanted: false,
+    });
+    memberFindUnique.mockResolvedValue({ role: 'lead' });
+    const r = await resolveFeatureAccess(USER, FEATURE, 'owner');
+    expect(r.ok).toBe(true);
   });
 });
