@@ -94,7 +94,7 @@ A flat list in rough dependency order (most-ready first). Order is *emergent fro
 | # | Feature | Owner | Depends on | ~PRs | Capability |
 |---|---|---|---|---|---|
 | 01 | `f-fork` | Simon (**shipped**) | — | 2 | Fork + brand + auth-only shell + strip public surfaces |
-| 02 | `f-theme` | TBD | f-fork | 3 | HCE Hub base theme (tokens, fonts, dark mode) |
+| 02 | `f-theme` | Simon (**in flight**) | f-fork | ~1 (was 3) | HCE Hub base theme (tokens, fonts, dark mode) |
 | 03 | `f-data-model` | Simon (**shipped**) | f-fork | ~1 (built as 3) | Prisma app models + scaffolding + migrations |
 | 04 | `f-access` | Simon (**shipped**) | f-data-model | ~1 | Project-membership access control |
 | 05 | `f-project-admin` | TBD | f-access | 4 | Project + member CRUD (in Sunrise admin shell) |
@@ -126,7 +126,7 @@ The fork's home: an internal-only, auth-only Sunrise app rebranded to HCE Hub, w
 *Done when:* fork builds/boots as an auth-only app; a signed-out visitor is bounced to login from every route; brand reads "HCE Hub"; gates green (`/pre-pr`, `/security-review`, `/code-review`).
 
 ### 02 · `f-theme` — HCE Hub base theme
-*Owner:* TBD · *Depends on:* f-fork · *~3 PRs*
+*Owner:* Simon · *Status:* **in flight** · *Depends on:* f-fork · *~1 PR (sized down from 3, HB3)* · *Detailed plan:* [[f-theme]]
 
 The base HCE Hub theme replacing default Sunrise styling across public/auth/protected pages — the warm, low-chroma token layer from the [[design_handoff_hce_hub/README|design handoff]]. (Cross-ref: design handoff "Design system / tokens"; [[v1-requirements#13.5 Tone, feel, and anti-patterns|§13.5]].)
 
