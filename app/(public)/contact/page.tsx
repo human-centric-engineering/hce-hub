@@ -3,21 +3,19 @@ import Link from 'next/link';
 import { Mail, Clock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ContactForm } from '@/components/forms/contact-form';
+import { BRAND } from '@/lib/brand';
 
 export const metadata: Metadata = {
   title: 'Contact',
-  description:
-    'Get in touch with the Sunrise team. Questions, feedback, or just want to say hello? We would love to hear from you.',
+  description: `Get in touch with the ${BRAND.name} team. Questions, feedback, or just want to say hello? We would love to hear from you.`,
   openGraph: {
-    title: 'Contact - Sunrise',
-    description:
-      'Get in touch with the Sunrise team. Questions, feedback, or just want to say hello? We would love to hear from you.',
+    title: `Contact - ${BRAND.name}`,
+    description: `Get in touch with the ${BRAND.name} team. Questions, feedback, or just want to say hello? We would love to hear from you.`,
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Contact - Sunrise',
-    description:
-      'Get in touch with the Sunrise team. Questions, feedback, or just want to say hello? We would love to hear from you.',
+    title: `Contact - ${BRAND.name}`,
+    description: `Get in touch with the ${BRAND.name} team. Questions, feedback, or just want to say hello? We would love to hear from you.`,
   },
 };
 
@@ -36,8 +34,8 @@ export default function ContactPage() {
         <div className="mb-12 text-center">
           <h1 className="mb-4 text-4xl font-bold tracking-tight">Get in Touch</h1>
           <p className="text-muted-foreground mx-auto max-w-2xl text-lg">
-            Have a question about Sunrise? Want to discuss a custom implementation? Or just want to
-            say hello? We&apos;d love to hear from you.
+            Have a question about {BRAND.name}? Want to discuss a custom implementation? Or just
+            want to say hello? We&apos;d love to hear from you.
           </p>
         </div>
 

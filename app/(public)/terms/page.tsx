@@ -1,18 +1,17 @@
 import type { Metadata } from 'next';
+import { BRAND } from '@/lib/brand';
 
 export const metadata: Metadata = {
   title: 'Terms of Service',
-  description: 'Terms of Service for Sunrise. Read our terms and conditions for using the service.',
+  description: `Terms of Service for ${BRAND.name}. Read our terms and conditions for using the service.`,
   openGraph: {
-    title: 'Terms of Service - Sunrise',
-    description:
-      'Terms of Service for Sunrise. Read our terms and conditions for using the service.',
+    title: `Terms of Service - ${BRAND.name}`,
+    description: `Terms of Service for ${BRAND.name}. Read our terms and conditions for using the service.`,
   },
   twitter: {
     card: 'summary',
-    title: 'Terms of Service - Sunrise',
-    description:
-      'Terms of Service for Sunrise. Read our terms and conditions for using the service.',
+    title: `Terms of Service - ${BRAND.name}`,
+    description: `Terms of Service for ${BRAND.name}. Read our terms and conditions for using the service.`,
   },
 };
 
