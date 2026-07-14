@@ -1,16 +1,36 @@
 /**
- * HubShell component tests (f-shell t-1)
+ * HubShell tests (f-shell t-2)
  *
- * The spare-but-real three-column frame: brand + footer (user + conditional
- * Admin link) + main. Navigation sections, topbar controls, and the sidekick
- * column land in t-2.
+ * The restructured shell owns the sidekick-open state + grid; sidebar/topbar
+ * content is covered by their own tests, so they're stubbed here to isolate the
+ * shell's toggle behaviour.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+vi.mock('@/components/hub/sidebar', () => ({ Sidebar: () => <div data-testid="sidebar" /> }));
+vi.mock('@/components/hub/topbar', () => ({
+  Topbar: ({
+    sidekickOpen,
+    onToggleSidekick,
+  }: {
+    sidekickOpen: boolean;
+    onToggleSidekick: () => void;
+  }) => (
+    <button data-testid="toggle" data-open={String(sidekickOpen)} onClick={onToggleSidekick}>
+      toggle
+    </button>
+  ),
+}));
+vi.mock('@/components/hub/sidekick-column', () => ({
+  SidekickColumn: () => <div data-testid="sidekick" />,
+}));
+
 import { HubShell } from '@/components/hub/hub-shell';
 
-const baseUser = {
+const user = {
   name: 'Simon Holmes',
   email: 'simon@example.com',
   image: null,
@@ -18,25 +38,26 @@ const baseUser = {
 };
 
 describe('HubShell', () => {
-  it('renders the user, avatar initials, a home-linked brand, and children', () => {
-    const { container } = render(
-      <HubShell user={baseUser}>
-        <div data-testid="content">main</div>
+  it('renders sidebar, topbar, and children; sidekick closed by default', () => {
+    render(
+      <HubShell user={user}>
+        <div data-testid="child">main</div>
       </HubShell>
     );
-
-    expect(screen.getByText('Simon Holmes')).toBeInTheDocument();
-    expect(screen.getByText('SH')).toBeInTheDocument(); // avatar fallback initials
-    expect(container.querySelector('a[href="/"]')).not.toBeNull(); // brand → Hub home
-    expect(screen.getByTestId('content')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar')).toBeInTheDocument();
+    expect(screen.getByTestId('toggle')).toHaveAttribute('data-open', 'false');
+    expect(screen.getByTestId('child')).toBeInTheDocument();
+    expect(screen.queryByTestId('sidekick')).not.toBeInTheDocument();
   });
 
-  it('shows the Admin link only for admins', () => {
-    const { rerender } = render(<HubShell user={baseUser}>c</HubShell>);
-    expect(screen.queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument();
-
-    rerender(<HubShell user={{ ...baseUser, role: 'ADMIN' }}>c</HubShell>);
-    const adminLink = screen.getByRole('link', { name: 'Admin' });
-    expect(adminLink).toHaveAttribute('href', '/admin');
+  it('toggles the sidekick column open', async () => {
+    render(
+      <HubShell user={user}>
+        <div />
+      </HubShell>
+    );
+    await userEvent.click(screen.getByTestId('toggle'));
+    expect(screen.getByTestId('sidekick')).toBeInTheDocument();
+    expect(screen.getByTestId('toggle')).toHaveAttribute('data-open', 'true');
   });
 });
