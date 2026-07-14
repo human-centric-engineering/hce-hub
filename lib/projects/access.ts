@@ -139,3 +139,59 @@ export async function accessibleProjectIds(userId: string): Promise<string[]> {
   });
   return rows.map((r) => r.projectId);
 }
+
+/** How much authority a feature-scoped write requires. */
+export type FeatureWriteMode =
+  | 'member' // any project member (e.g. drop a backlog thought)
+  | 'owner'; // the feature's owner or a project lead (e.g. promote a task, toggle help-wanted)
+
+/** The feature's write-relevant fields + the caller's role, once access is granted. */
+export interface FeatureAccess {
+  projectId: string;
+  ownerUserId: string | null;
+  helpWanted: boolean;
+  basis: ProjectAccessBasis;
+}
+
+export type FeatureAccessResult =
+  { ok: true; feature: FeatureAccess } | { ok: false; reason: 'not_found' | 'forbidden' };
+
+/**
+ * Resolve whether `userId` may write to `featureId` at the given `mode`, and
+ * load the feature's write-relevant fields — the funnel every feature-scoped
+ * write capability (`create_task`, `add_backlog`, `flag_help_wanted`) runs
+ * before mutating.
+ *
+ * Membership is decided from the feature's project via `canAccessProject`, so a
+ * **non-member is reported as `not_found`** (a missing feature and one in a
+ * project you can't see are indistinguishable — no enumeration). A member who
+ * lacks the `owner` authority is `forbidden` (they can already see the project).
+ */
+export async function resolveFeatureAccess(
+  userId: string,
+  featureId: string,
+  mode: FeatureWriteMode = 'member'
+): Promise<FeatureAccessResult> {
+  const feature = await prisma.feature.findUnique({
+    where: { id: featureId },
+    select: { projectId: true, ownerUserId: true, helpWanted: true },
+  });
+  if (!feature) return { ok: false, reason: 'not_found' };
+
+  const { basis } = await canAccessProject(userId, feature.projectId);
+  if (basis === null) return { ok: false, reason: 'not_found' }; // non-member ≡ feature does not exist
+
+  if (mode === 'owner' && feature.ownerUserId !== userId && basis !== 'lead') {
+    return { ok: false, reason: 'forbidden' }; // a member, but not the owner/lead
+  }
+
+  return {
+    ok: true,
+    feature: {
+      projectId: feature.projectId,
+      ownerUserId: feature.ownerUserId,
+      helpWanted: feature.helpWanted,
+      basis,
+    },
+  };
+}
