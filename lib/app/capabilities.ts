@@ -18,6 +18,7 @@ import { NextTaskCapability } from '@/lib/projects/capabilities/next-task';
 import { CreateTaskCapability } from '@/lib/projects/capabilities/create-task';
 import { AddBacklogCapability } from '@/lib/projects/capabilities/add-backlog';
 import { FlagHelpWantedCapability } from '@/lib/projects/capabilities/flag-help-wanted';
+import { ClaimTaskCapability } from '@/lib/projects/capabilities/claim-task';
 
 export function initAppCapabilities(): void {
   // HCE Hub coordination tools (f-hub-capabilities). Each also needs an active
@@ -29,4 +30,5 @@ export function initAppCapabilities(): void {
   registerAppCapability(new CreateTaskCapability()); // write (t-2)
   registerAppCapability(new AddBacklogCapability()); // write (t-2)
   registerAppCapability(new FlagHelpWantedCapability()); // write (t-2)
+  registerAppCapability(new ClaimTaskCapability()); // write + soft-collision (t-3)
 }
