@@ -23,6 +23,14 @@ describe('Topbar', () => {
     expect(screen.getByText('Projects')).toBeInTheDocument();
   });
 
+  it('renders a skeleton (not the raw id) for an unlabelled project-id leaf', () => {
+    vi.mocked(usePathname).mockReturnValue('/projects/chubproject');
+    const { container } = render(<Topbar sidekickOpen={false} onToggleSidekick={() => {}} />);
+    // The raw id is never shown; a pulsing placeholder stands in until the name loads.
+    expect(screen.queryByText('chubproject')).not.toBeInTheDocument();
+    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
+  });
+
   it('renders the ⌘K trigger, bell, and sidekick toggle', () => {
     render(<Topbar sidekickOpen={false} onToggleSidekick={() => {}} />);
     expect(screen.getByText(/ask the sidekick/i)).toBeInTheDocument();

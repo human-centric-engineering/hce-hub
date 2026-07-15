@@ -1,23 +1,43 @@
 import type { Metadata } from 'next';
+import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';
+import { getServerSession } from '@/lib/auth/utils';
+import { logger } from '@/lib/logging';
+import { ProjectsGrid } from '@/components/hub/projects/projects-grid';
+import type { ProjectCard } from '@/components/hub/projects/types';
 
 export const metadata: Metadata = {
   title: 'Projects',
+  description: 'Your projects',
 };
 
-/**
- * Projects — placeholder (f-shell t-2).
- *
- * The Projects nav entry routes here so the shell is navigable end-to-end. The
- * real membership-scoped projects list + project container land in `f-projects`
- * (§08), which replaces this page.
- */
-export default function ProjectsPlaceholder(): React.ReactNode {
+async function getMyProjects(): Promise<ProjectCard[]> {
+  try {
+    const res = await serverFetch('/api/v1/projects');
+    if (!res.ok) {
+      logger.error('Hub projects fetch failed', { status: res.status });
+      return [];
+    }
+    const data = await parseApiResponse<ProjectCard[]>(res);
+    return data.success ? data.data : [];
+  } catch (error) {
+    logger.error('Hub projects fetch threw', { error });
+    return [];
+  }
+}
+
+export default async function ProjectsPage() {
+  const [projects, session] = await Promise.all([getMyProjects(), getServerSession()]);
+  const canCreate = session?.user.role === 'ADMIN';
+
   return (
-    <div className="mx-auto max-w-3xl px-8 py-10">
-      <h1 className="text-[28px] font-medium tracking-[-0.025em]">Projects</h1>
-      <p className="text-muted-foreground mt-1 text-[15px]">
-        The projects list arrives with the next feature.
-      </p>
+    <div className="mx-auto max-w-5xl px-8 py-10">
+      <div className="mb-6">
+        <h1 className="text-[28px] font-medium tracking-[-0.025em]">Projects</h1>
+        <p className="text-muted-foreground mt-1 text-[15px]">
+          The projects you&apos;re a member of.
+        </p>
+      </div>
+      <ProjectsGrid projects={projects} canCreate={canCreate} />
     </div>
   );
 }

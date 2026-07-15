@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Search, Bell, PanelRight } from 'lucide-react';
 import { deriveBreadcrumbs } from '@/components/hub/breadcrumbs';
+import { useBreadcrumbLabels } from '@/components/hub/breadcrumb-label';
 
 /**
  * Hub topbar (f-shell) — route-derived breadcrumbs · ⌘K trigger · bell · sidekick
@@ -19,7 +20,7 @@ export function Topbar({
   onToggleSidekick: () => void;
 }): React.ReactNode {
   const pathname = usePathname();
-  const crumbs = deriveBreadcrumbs(pathname);
+  const crumbs = deriveBreadcrumbs(pathname, useBreadcrumbLabels());
 
   return (
     <header className="border-border bg-background sticky top-0 z-10 flex h-[52px] items-center gap-4 border-b px-6">
@@ -27,7 +28,13 @@ export function Topbar({
         {crumbs.map((crumb, i) => (
           <Fragment key={`${crumb.label}-${i}`}>
             {i > 0 && <span className="text-muted-foreground/50">/</span>}
-            {crumb.href ? (
+            {crumb.pending ? (
+              // A dynamic id awaiting its label — a skeleton, never the raw id.
+              <span
+                aria-hidden="true"
+                className="bg-muted inline-block h-3.5 w-20 animate-pulse rounded"
+              />
+            ) : crumb.href ? (
               <Link href={crumb.href} className="text-muted-foreground hover:text-foreground">
                 {crumb.label}
               </Link>
