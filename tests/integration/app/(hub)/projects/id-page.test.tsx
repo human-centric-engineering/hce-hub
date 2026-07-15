@@ -59,13 +59,32 @@ const planPayload = {
   ],
 };
 
-/** URL-aware mocks: the `/plan` fetch returns the plan payload, else the header. */
+const boardPayload = {
+  projectId: 'p1',
+  lanes: [
+    {
+      key: 'u1',
+      member: { id: 'u1', name: 'Ada', email: 'a@x.io', image: null },
+      role: 'lead',
+      ownedFeatures: [],
+      tasks: [],
+      taskCount: 0,
+    },
+  ],
+  columnTotals: { available: 0, claimed: 0, in_pr: 0, merged: 0, backlog: 0 },
+};
+
+/** URL-aware mocks: `/plan` → plan payload, `/board` → board payload, else header. */
 function wireOk() {
   fetchMock.mockImplementation((url: string) => Promise.resolve({ ok: true, url }));
   parseMock.mockImplementation((res: { url: string }) =>
     Promise.resolve({
       success: true,
-      data: res.url.endsWith('/plan') ? planPayload : view,
+      data: res.url.endsWith('/plan')
+        ? planPayload
+        : res.url.endsWith('/board')
+          ? boardPayload
+          : view,
     })
   );
 }
@@ -88,7 +107,7 @@ describe('ProjectViewPage', () => {
     expect(screen.getByText('Fork + brand')).toBeInTheDocument();
   });
 
-  it('honours ?view=board and does not fetch the plan', async () => {
+  it('honours ?view=board — fetches the board (not the plan) and renders a lane', async () => {
     wireOk();
 
     render(
@@ -98,9 +117,14 @@ describe('ProjectViewPage', () => {
       })
     );
     expect(screen.getByRole('tab', { name: 'Board' })).toHaveAttribute('aria-selected', 'true');
-    // Only the header was fetched — no `/plan` request on the Board tab.
+    // The header + the board were fetched; the plan was not.
     const urls = fetchMock.mock.calls.map((c) => c[0]);
-    expect(urls).toEqual(['/api/v1/projects/p1']);
+    expect(urls).toContain('/api/v1/projects/p1');
+    expect(urls).toContain('/api/v1/projects/p1/board');
+    expect(urls).not.toContain('/api/v1/projects/p1/plan');
+    // The board rendered its lane + column headers.
+    expect(screen.getByText('Ada')).toBeInTheDocument();
+    expect(screen.getByText('Available')).toBeInTheDocument();
   });
 
   it('renders a graceful message if the plan fetch fails but the project loads', async () => {

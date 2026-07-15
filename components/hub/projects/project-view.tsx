@@ -5,8 +5,10 @@ import { ProjectViewTabs } from '@/components/hub/projects/project-view-tabs';
 import { STATUS_VARIANT, initials } from '@/components/hub/projects/presentation';
 import { BreadcrumbLabel } from '@/components/hub/breadcrumb-label';
 import { PlanView } from '@/components/hub/projects/plan/plan-view';
+import { BoardView } from '@/components/hub/projects/board/board-view';
 import type { ProjectTab, ProjectViewDTO } from '@/components/hub/projects/types';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
+import type { ProjectBoardDTO } from '@/components/hub/projects/board/types';
 
 /** A stacked row of member avatars (overflow collapses to a +N chip). */
 function MemberStack({ members }: { members: ProjectViewDTO['members'] }) {
@@ -29,27 +31,30 @@ function MemberStack({ members }: { members: ProjectViewDTO['members'] }) {
   );
 }
 
-const BOARD_COPY = 'The Board view — what’s in flight, by person — arrives with f-board-view.';
-
 /**
  * The project-view container: header (name/status/platform + member stack) and
- * the linkable Plan⇄Board tabs. The Plan tab mounts the real Plan view (§09);
- * the Board tab is still a scaffold placeholder until §10.
+ * the linkable Plan⇄Board tabs. The Plan tab mounts the Plan view (§09); the
+ * Board tab mounts the Board (§10). Each tab's payload is fetched by the page.
  */
 export function ProjectView({
   project,
   activeTab,
   plan,
+  board,
 }: {
   project: ProjectViewDTO;
   activeTab: ProjectTab;
   /** The Plan payload — supplied only on the Plan tab; `null` if its fetch failed. */
   plan?: ProjectPlanDTO | null;
+  /** The Board payload — supplied only on the Board tab; `null` if its fetch failed. */
+  board?: ProjectBoardDTO | null;
 }) {
   const platform = getHostPlatform(project.hostPlatform)?.label ?? project.hostPlatform;
 
+  // Full-width, left-aligned — the board spans the whole main column (design
+  // handoff §3); the header + tabs align to the left edge, not centered.
   return (
-    <div className="mx-auto max-w-5xl px-8 py-10">
+    <div className="px-8 py-10">
       {/* Replace the raw project-id breadcrumb leaf with the project name. */}
       <BreadcrumbLabel segment={project.id} label={project.name} />
       <div className="mb-6 flex items-start justify-between gap-4">
@@ -79,8 +84,12 @@ export function ProjectView({
               Couldn&rsquo;t load the plan just now — try refreshing.
             </p>
           )
+        ) : board ? (
+          <BoardView board={board} />
         ) : (
-          <p className="text-muted-foreground py-16 text-center text-sm">{BOARD_COPY}</p>
+          <p className="text-muted-foreground py-16 text-center text-sm">
+            Couldn&rsquo;t load the board just now — try refreshing.
+          </p>
         )}
       </div>
     </div>

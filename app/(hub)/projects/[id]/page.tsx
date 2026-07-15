@@ -5,6 +5,7 @@ import { logger } from '@/lib/logging';
 import { ProjectView } from '@/components/hub/projects/project-view';
 import type { ProjectTab, ProjectViewDTO } from '@/components/hub/projects/types';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
+import type { ProjectBoardDTO } from '@/components/hub/projects/board/types';
 
 export const metadata: Metadata = {
   title: 'Project',
@@ -42,6 +43,22 @@ async function getPlan(id: string): Promise<ProjectPlanDTO | null> {
   }
 }
 
+async function getBoard(id: string): Promise<ProjectBoardDTO | null> {
+  try {
+    const res = await serverFetch(`/api/v1/projects/${id}/board`);
+    if (!res.ok) {
+      // 404 ≡ the project 404 (handled via getProject → notFound); log the rest.
+      if (res.status !== 404) logger.error('Hub board fetch failed', { id, status: res.status });
+      return null;
+    }
+    const data = await parseApiResponse<ProjectBoardDTO>(res);
+    return data.success ? data.data : null;
+  } catch (error) {
+    logger.error('Hub board fetch threw', { id, error });
+    return null;
+  }
+}
+
 export default async function ProjectViewPage({
   params,
   searchParams,
@@ -53,12 +70,13 @@ export default async function ProjectViewPage({
   const { view } = await searchParams;
   const activeTab: ProjectTab = view === 'board' ? 'board' : 'plan';
 
-  // Fetch the header and (only on the Plan tab) the plan in parallel — no waterfall.
-  const [project, plan] = await Promise.all([
+  // Fetch the header and the active tab's payload in parallel — no waterfall.
+  const [project, plan, board] = await Promise.all([
     getProject(id),
     activeTab === 'plan' ? getPlan(id) : Promise.resolve(null),
+    activeTab === 'board' ? getBoard(id) : Promise.resolve(null),
   ]);
   if (!project) notFound();
 
-  return <ProjectView project={project} activeTab={activeTab} plan={plan} />;
+  return <ProjectView project={project} activeTab={activeTab} plan={plan} board={board} />;
 }

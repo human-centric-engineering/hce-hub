@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { ProjectView } from '@/components/hub/projects/project-view';
 import type { ProjectViewDTO } from '@/components/hub/projects/types';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
+import type { ProjectBoardDTO } from '@/components/hub/projects/board/types';
 
 const planFixture: ProjectPlanDTO = {
   projectId: 'p1',
@@ -19,6 +20,21 @@ const planFixture: ProjectPlanDTO = {
       progress: { merged: 0, total: 0, live: 0 },
     },
   ],
+};
+
+const boardFixture: ProjectBoardDTO = {
+  projectId: 'p1',
+  lanes: [
+    {
+      key: 'u1',
+      member: { id: 'u1', name: 'Ada', email: 'a@x.io', image: null },
+      role: 'lead',
+      ownedFeatures: [],
+      tasks: [],
+      taskCount: 0,
+    },
+  ],
+  columnTotals: { available: 0, claimed: 0, in_pr: 0, merged: 0, backlog: 0 },
 };
 
 function makeProject(overrides: Partial<ProjectViewDTO> = {}): ProjectViewDTO {
@@ -66,9 +82,15 @@ describe('ProjectView', () => {
     expect(screen.getByText(/Couldn.t load the plan/i)).toBeInTheDocument();
   });
 
-  it('shows the Board scaffold copy on the board tab', () => {
-    render(<ProjectView project={makeProject()} activeTab="board" />);
-    expect(screen.getByText(/Board view/i)).toBeInTheDocument();
+  it('mounts the Board view on the board tab when a board is supplied', () => {
+    render(<ProjectView project={makeProject()} activeTab="board" board={boardFixture} />);
+    expect(screen.getByText('Ada')).toBeInTheDocument(); // the lane member
+    expect(screen.getByText('Available')).toBeInTheDocument(); // a column header
+  });
+
+  it('shows a graceful message on the board tab when the board failed to load', () => {
+    render(<ProjectView project={makeProject()} activeTab="board" board={null} />);
+    expect(screen.getByText(/Couldn.t load the board/i)).toBeInTheDocument();
   });
 
   it('falls back to the raw slug for an unknown platform and renders member avatar images', () => {
