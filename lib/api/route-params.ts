@@ -9,9 +9,9 @@
  *
  * Upstream candidate (fork-first): a generic `validatePathParam(raw, schema,
  * field)` belongs next to `validateQueryParams` in core `lib/api/validation.ts`
- * so those ~21 routes can DRY. If that proposal is filed + lands, delete this
- * file and switch to the core helper (track it in the `.context/app/
- * platform-divergences.md` upstream-asks table at that point).
+ * so those ~18 routes can DRY — proposed as sunrise#435. When it lands, delete
+ * this file and switch to the core helper (tracked in the `.context/app/
+ * platform-divergences.md` upstream-asks table).
  */
 
 import { ValidationError } from '@/lib/api/errors';
