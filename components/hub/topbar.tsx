@@ -28,7 +28,13 @@ export function Topbar({
         {crumbs.map((crumb, i) => (
           <Fragment key={`${crumb.label}-${i}`}>
             {i > 0 && <span className="text-muted-foreground/50">/</span>}
-            {crumb.href ? (
+            {crumb.pending ? (
+              // A dynamic id awaiting its label — a skeleton, never the raw id.
+              <span
+                aria-hidden="true"
+                className="bg-muted inline-block h-3.5 w-20 animate-pulse rounded"
+              />
+            ) : crumb.href ? (
               <Link href={crumb.href} className="text-muted-foreground hover:text-foreground">
                 {crumb.label}
               </Link>
