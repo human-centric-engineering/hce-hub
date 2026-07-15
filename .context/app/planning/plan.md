@@ -97,7 +97,7 @@ A flat list in rough dependency order (most-ready first). Order is *emergent fro
 | 02 | `f-theme` | Simon (**shipped**) | f-fork | 1 (was 3) | HCE Hub base theme (tokens, fonts, dark mode) |
 | 03 | `f-data-model` | Simon (**shipped**) | f-fork | ~1 (built as 3) | Prisma app models + scaffolding + migrations |
 | 04 | `f-access` | Simon (**shipped**) | f-data-model | ~1 | Project-membership access control |
-| 05 | `f-project-admin` | TBD | f-access | 4 | Project + member CRUD (in Sunrise admin shell) |
+| 05 | `f-project-admin` | Simon (**in flight**) | f-access | 2 (was 4) | Project + member CRUD (in Sunrise admin shell) |
 | 06 | `f-shell` | Simon (**shipped**) | f-theme, f-access | 2 (was 5) | Module-composable app shell (nav, 3-col layout) |
 | 07 | `f-hub-capabilities` | Simon (**shipped**) | f-data-model, f-access | 3 | Hub tools (next/claim/create/backlog/help-wanted) + MCP |
 | 08 | `f-projects` | TBD | f-shell, f-project-admin | 3 | Projects list + project view scaffold |
@@ -162,7 +162,7 @@ Per-project visibility and contribution rights: a user only sees/acts on project
 *Done when:* a non-member gets 404 on a project's pages, API, and capabilities; a member sees only their projects; gates green.
 
 ### 05 · `f-project-admin` — project + member CRUD
-*Owner:* TBD · *Depends on:* f-access · *~4 PRs*
+*Owner:* Simon · *Status:* **in flight** · *Depends on:* f-access · *~2 PRs (sized down from 4 — HB3 endpoint↔UI split)* · *Detailed plan:* [[f-project-admin]]
 
 Project administration inside the existing Sunrise admin shell ([[v1-requirements#13.2 Hub admin pages — inside the existing Sunrise admin shell|§13.2]]) — create projects, manage members/roles, configure host platform, set up the project's knowledge tag + sidekick. This is what gives every downstream surface real projects to render.
 
