@@ -35,15 +35,21 @@ const granted = {
   feature: { projectId: 'p1', ownerUserId: USER, helpWanted: false, basis: 'lead' },
 };
 
-// tx create returns a fresh task; capture the dependency createMany.
+// tx create returns a fresh task; capture the project counter bump, the task
+// create, and the dependency createMany.
 const txDepCreateMany = vi.fn();
-function mockTxCreatesTask(id = 't-new', status = 'available') {
+const txTaskCreate = vi.fn();
+const txProjectUpdate = vi.fn();
+function mockTxCreatesTask(id = 't-new', status = 'available', nextNumber = 7) {
+  txTaskCreate.mockResolvedValue({ id, status });
+  txProjectUpdate.mockResolvedValue({ taskCounter: nextNumber });
   // The mock runs the capability's real tx callback so we can assert what it
   // wrote; the untyped vi.fn() infers a void-returning impl, hence the disable.
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
-      task: { create: vi.fn().mockResolvedValue({ id, status }) },
+      project: { update: txProjectUpdate },
+      task: { create: txTaskCreate },
       taskDependency: { createMany: txDepCreateMany },
     })
   );
@@ -125,6 +131,13 @@ describe('create_task happy path (no deps)', () => {
     expect(r.data).toEqual({ taskId: 't-1', status: 'available', featureId: 'f1' });
     expect(taskFindMany).not.toHaveBeenCalled();
     expect(txDepCreateMany).not.toHaveBeenCalled();
+    // Atomic project-wide number: bump the counter, stamp the returned value.
+    expect(txProjectUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { taskCounter: { increment: 1 } } })
+    );
+    expect(txTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ number: 7 }) })
+    );
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: USER,

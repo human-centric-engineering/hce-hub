@@ -85,6 +85,7 @@ model Project {
   leadUserId      String? // hand-FK → "user" · ON DELETE SET NULL (retain the project)
   knowledgeTagId  String? // set by f-project-admin (Sunrise KnowledgeTag); no FK
   sidekickAgentId String? // set by f-sidekick (Sunrise AiAgent); no FK
+  taskCounter     Int           @default(0) // monotonic source for project-wide Task.number (f-refs)
   createdAt       DateTime      @default(now())
 
   members         ProjectMember[]
@@ -113,6 +114,7 @@ model ProjectMember {
 model Feature {
   id          String        @id @default(cuid())
   projectId   String
+  slug        String? // authored short human key (e.g. "f-mcp"); per-project unique (f-refs)
   title       String
   description String?       @db.Text
   ownerUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the feature)
@@ -127,6 +129,7 @@ model Feature {
   dependents   FeatureDependency[] @relation("FeatureDependents") // edges where another feature depends on this
   tasks        Task[]
 
+  @@unique([projectId, slug]) // human slug unique within a project (NULLs allowed while unauthored)
   @@index([projectId])
   @@index([ownerUserId])
   @@index([phaseId])
@@ -168,6 +171,7 @@ enum TaskStatus {
 model Task {
   id              String     @id @default(cuid())
   featureId       String
+  number          Int? // project-wide stable ordinal, rendered "t-N"; assigned via Project.taskCounter (f-refs)
   title           String
   description     String?    @db.Text
   status          TaskStatus @default(backlog)

@@ -58,8 +58,7 @@ function mockCtx(lead: { id: string } | null) {
     task: { upsert: vi.fn().mockResolvedValue({}) },
   };
   const logger = { info: vi.fn() };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { ctx: { prisma, logger } as any, prisma };
+  return { ctx: { prisma, logger } as unknown as Parameters<typeof unit.run>[0], prisma };
 }
 
 describe('run()', () => {
@@ -89,5 +88,26 @@ describe('run()', () => {
       expect.objectContaining({ create: expect.objectContaining({ leadUserId: null }) })
     );
     expect(prisma.projectMember.upsert).not.toHaveBeenCalled();
+  });
+
+  it('backfills feature slugs, project-wide task numbers, and the project taskCounter (f-refs)', async () => {
+    const { ctx, prisma } = mockCtx({ id: 'human-1' });
+    await unit.run(ctx);
+
+    const totalTasks = buildSamplePlan().reduce((n, f) => n + f.tasks.length, 0);
+
+    // The project counter ends at the total so the next created task is N+1.
+    expect(prisma.project.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ taskCounter: totalTasks }) })
+    );
+    // The feature carries its authored slug.
+    expect(prisma.feature.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ slug: 'f-fork' }) })
+    );
+    // Tasks get a project-wide sequential number 1..N (in feature order).
+    const numbers = prisma.task.upsert.mock.calls.map(
+      (c) => (c[0] as { create: { number: number } }).create.number
+    );
+    expect(numbers).toEqual(Array.from({ length: totalTasks }, (_, i) => i + 1));
   });
 });
