@@ -37,8 +37,12 @@ export type BoardColumn = (typeof BOARD_COLUMNS)[number];
 /** A task card on the board. */
 export interface BoardTaskCard {
   id: string;
+  /** Project-wide stable ordinal, rendered `t-N`; `null` until assigned. */
+  number: number | null;
   title: string;
   featureId: string;
+  /** The feature's authored slug (`f-mcp`); `null` until authored. */
+  featureSlug: string | null;
   featureTitle: string;
   /** Effective status (drives the column; kept for the card pill). */
   status: EffectiveStatus;
@@ -60,7 +64,7 @@ export interface BoardLane {
   member: UserRef | null;
   /** `null` for the Unassigned lane. */
   role: ProjectRole | null;
-  ownedFeatures: { id: string; title: string }[];
+  ownedFeatures: { id: string; slug: string | null; title: string }[];
   tasks: BoardTaskCard[];
   taskCount: number;
 }
@@ -89,13 +93,14 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
     }),
     prisma.feature.findMany({
       where: { projectId },
-      select: { id: true, title: true, ownerUserId: true },
+      select: { id: true, slug: true, title: true, ownerUserId: true },
     }),
     prisma.task.findMany({
       where: { feature: { projectId } },
       orderBy: { createdAt: 'asc' },
       select: {
         id: true,
+        number: true,
         title: true,
         featureId: true,
         status: true,
@@ -158,8 +163,10 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
 
     cardsByLane.get(laneKey)!.push({
       id: t.id,
+      number: t.number,
       title: t.title,
       featureId: t.featureId,
+      featureSlug: feature.slug,
       featureTitle: feature.title,
       status: effective,
       column,
@@ -180,7 +187,7 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
         role: m.role,
         ownedFeatures: features
           .filter((f) => f.ownerUserId === m.userId)
-          .map((f) => ({ id: f.id, title: f.title })),
+          .map((f) => ({ id: f.id, slug: f.slug, title: f.title })),
         tasks: laneTasks,
         taskCount: laneTasks.length,
       };

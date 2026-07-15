@@ -17,12 +17,16 @@ export type TaskEffectiveStatus =
 /** A depended-on feature, for the "depends on …" chips. */
 export interface PlanDependencyRef {
   id: string;
+  /** Authored short key (`f-access`); `null` until authored → render falls back to title. */
+  slug: string | null;
   title: string;
 }
 
 /** A task row in a feature's inset table. */
 export interface PlanTask {
   id: string;
+  /** Project-wide stable ordinal, rendered `t-N`; `null` until assigned. */
+  number: number | null;
   title: string;
   status: TaskEffectiveStatus;
   prUrl: string | null;
@@ -33,6 +37,8 @@ export interface PlanTask {
 /** A feature row in the Plan view. */
 export interface PlanFeature {
   id: string;
+  /** Authored short key (`f-mcp`); `null` until authored. */
+  slug: string | null;
   title: string;
   description: string | null;
   status: FeatureStatus;

@@ -56,7 +56,7 @@ export function SwimLane({ lane }: { lane: BoardLane }) {
                   style={{ backgroundColor: 'var(--bg-tint)', color: 'var(--ink-faint)' }}
                   title={f.title}
                 >
-                  {f.title}
+                  {f.slug ?? f.title}
                 </span>
               ))}
             </div>

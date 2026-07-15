@@ -36,6 +36,7 @@ const userFindMany = prisma.user.findMany as ReturnType<typeof vi.fn>;
 
 const task = (o: Record<string, unknown> & { deps?: string[] }) => ({
   id: o.id,
+  number: o.number ?? null,
   title: o.title ?? o.id,
   featureId: o.featureId,
   status: o.status,
@@ -43,7 +44,12 @@ const task = (o: Record<string, unknown> & { deps?: string[] }) => ({
   claimedByUserId: o.claimedByUserId ?? null,
   dependencies: (o.deps ?? []).map((s: string) => ({ dependsOn: { status: s } })),
 });
-const feature = (id: string, ownerUserId: string | null = null) => ({ id, title: id, ownerUserId });
+const feature = (id: string, ownerUserId: string | null = null, slug: string | null = null) => ({
+  id,
+  slug,
+  title: id,
+  ownerUserId,
+});
 const member = (userId: string, role = 'member') => ({ userId, role });
 const userRow = (id: string) => ({ id, name: id.toUpperCase(), email: `${id}@x.io`, image: null });
 
@@ -237,6 +243,19 @@ describe('getProjectBoard — presentation', () => {
     const card = laneOf(board, 'u1')!.tasks[0];
     expect(card.isMine).toBe(true);
     expect(card.claimer).toMatchObject({ id: 'u1' });
+  });
+
+  it('threads the feature slug + task number onto cards and lane chips (f-refs)', async () => {
+    setup({
+      members: [member('u1', 'lead')],
+      features: [feature('f1', 'u1', 'f-mcp')], // slug f-mcp
+      tasks: [task({ id: 't1', featureId: 'f1', status: 'available', number: 9 })],
+      users: [userRow('u1')],
+    });
+    const board = await getProjectBoard('u1', 'p1');
+    const lane = laneOf(board, 'u1')!;
+    expect(lane.tasks[0]).toMatchObject({ number: 9, featureSlug: 'f-mcp' });
+    expect(lane.ownedFeatures[0]).toMatchObject({ id: 'f1', slug: 'f-mcp' });
   });
 
   it('sorts member lanes by task count (most active first)', async () => {

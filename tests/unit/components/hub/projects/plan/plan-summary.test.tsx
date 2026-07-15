@@ -8,6 +8,7 @@ import type { PlanFeature } from '@/components/hub/projects/plan/types';
 
 const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   id: 'f1',
+  slug: null,
   title: 't',
   description: null,
   status: 'planning',

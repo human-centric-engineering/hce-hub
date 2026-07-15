@@ -9,6 +9,7 @@ import type { PlanTask } from '@/components/hub/projects/plan/types';
 
 const task = (over: Partial<PlanTask> = {}): PlanTask => ({
   id: 't1',
+  number: null,
   title: 'A task',
   status: 'available',
   prUrl: null,
@@ -17,10 +18,15 @@ const task = (over: Partial<PlanTask> = {}): PlanTask => ({
 });
 
 describe('TaskRow', () => {
-  it('renders the positional t-N ordinal and title', () => {
-    render(<TaskRow task={task()} ordinal={3} />);
-    expect(screen.getByText('t-3')).toBeInTheDocument();
+  it('renders the stable t-{number} and title', () => {
+    render(<TaskRow task={task({ number: 6 })} ordinal={3} />);
+    expect(screen.getByText('t-6')).toBeInTheDocument(); // the project-wide number, not the ordinal
     expect(screen.getByText('A task')).toBeInTheDocument();
+  });
+
+  it('falls back to the positional ordinal when the task has no number', () => {
+    render(<TaskRow task={task({ number: null })} ordinal={3} />);
+    expect(screen.getByText('t-3')).toBeInTheDocument();
   });
 
   it('renders the effective-status label', () => {

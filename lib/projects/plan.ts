@@ -22,15 +22,19 @@ import { computeEffectiveStatus, type EffectiveStatus } from '@/lib/projects/tas
 import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
 import { planOrder } from '@/lib/projects/plan-order';
 
-/** A depended-on feature, for the "depends on …" chips (title, since there's no slug). */
+/** A depended-on feature, for the "depends on …" chips (slug, with title fallback). */
 export interface PlanDependencyRef {
   id: string;
+  /** Authored short key (`f-access`); `null` until authored → render falls back to title. */
+  slug: string | null;
   title: string;
 }
 
 /** A task row in a feature's inset table. */
 export interface PlanTaskView {
   id: string;
+  /** Project-wide stable ordinal, rendered `t-N`; `null` until assigned. */
+  number: number | null;
   title: string;
   /** Effective status (via `computeEffectiveStatus`) — matches the §10 Board. */
   status: EffectiveStatus;
@@ -42,6 +46,8 @@ export interface PlanTaskView {
 /** A feature row in the Plan view. */
 export interface PlanFeatureView {
   id: string;
+  /** Authored short key (`f-mcp`); `null` until authored. */
+  slug: string | null;
   title: string;
   description: string | null;
   status: FeatureStatus;
@@ -73,6 +79,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
     orderBy: { createdAt: 'asc' },
     select: {
       id: true,
+      slug: true,
       title: true,
       description: true,
       status: true,
@@ -83,6 +90,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
         orderBy: { createdAt: 'asc' },
         select: {
           id: true,
+          number: true,
           title: true,
           status: true,
           prUrl: true,
@@ -100,9 +108,9 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
   ]);
   const users = await fetchUsers(userIds);
 
-  // Titles for the dependency chips — every edge in a project points at a
+  // Slug + title for the dependency chips — every edge in a project points at a
   // feature in the same project, so resolve from the loaded set.
-  const titleById = new Map(features.map((f) => [f.id, f.title]));
+  const metaById = new Map(features.map((f) => [f.id, { slug: f.slug, title: f.title }]));
 
   const views: PlanFeatureView[] = features.map((f) => {
     const total = f.tasks.length;
@@ -111,6 +119,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
 
     return {
       id: f.id,
+      slug: f.slug,
       title: f.title,
       description: f.description,
       status: f.status,
@@ -118,12 +127,13 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
       owner: f.ownerUserId ? (users.get(f.ownerUserId) ?? null) : null,
       dependsOn: f.dependencies
         .map((d) => {
-          const title = titleById.get(d.dependsOnFeatureId);
-          return title ? { id: d.dependsOnFeatureId, title } : null;
+          const meta = metaById.get(d.dependsOnFeatureId);
+          return meta ? { id: d.dependsOnFeatureId, slug: meta.slug, title: meta.title } : null;
         })
         .filter((d): d is PlanDependencyRef => d !== null),
       tasks: f.tasks.map((t) => ({
         id: t.id,
+        number: t.number,
         title: t.title,
         status: computeEffectiveStatus(
           t,

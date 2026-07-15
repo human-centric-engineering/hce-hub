@@ -28,6 +28,7 @@ const userFindMany = prisma.user.findMany as ReturnType<typeof vi.fn>;
 // A feature row as the select would return it.
 const row = (over: Record<string, unknown> = {}) => ({
   id: 'f1',
+  slug: null,
   title: 'Feature one',
   description: null,
   status: 'planning',
@@ -146,7 +147,36 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
     ]);
     const plan = await getProjectPlan('u1', 'p1');
     const b = plan.features.find((f) => f.id === 'b')!;
-    expect(b.dependsOn).toEqual([{ id: 'a', title: 'Foundation' }]);
+    expect(b.dependsOn).toEqual([{ id: 'a', slug: null, title: 'Foundation' }]);
+  });
+
+  it('threads the feature slug, task number, and depended-on slug (f-refs)', async () => {
+    featureFindMany.mockResolvedValue([
+      row({ id: 'a', slug: 'f-access', title: 'Foundation', status: 'shipped' }),
+      row({
+        id: 'b',
+        slug: 'f-shell',
+        title: 'Built on it',
+        status: 'planning',
+        dependencies: [{ dependsOnFeatureId: 'a' }],
+        tasks: [
+          {
+            id: 't1',
+            number: 7,
+            title: 'a task',
+            status: 'available',
+            prUrl: null,
+            claimedByUserId: null,
+            dependencies: [],
+          },
+        ],
+      }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    const b = plan.features.find((f) => f.id === 'b')!;
+    expect(b.slug).toBe('f-shell');
+    expect(b.tasks[0].number).toBe(7);
+    expect(b.dependsOn).toEqual([{ id: 'a', slug: 'f-access', title: 'Foundation' }]);
   });
 
   it('drops a dependency edge pointing outside the loaded feature set (no crash)', async () => {

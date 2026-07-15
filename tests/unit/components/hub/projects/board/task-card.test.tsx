@@ -9,8 +9,10 @@ import type { BoardTaskCard } from '@/components/hub/projects/board/types';
 
 const card = (over: Partial<BoardTaskCard> = {}): BoardTaskCard => ({
   id: 't1',
+  number: null,
   title: 'Do the thing',
   featureId: 'f1',
+  featureSlug: null,
   featureTitle: 'Feature one',
   status: 'available',
   column: 'available',
@@ -22,10 +24,16 @@ const card = (over: Partial<BoardTaskCard> = {}): BoardTaskCard => ({
 });
 
 describe('TaskCard', () => {
-  it('renders the task title and feature ref', () => {
+  it('renders the task title and the feature-title ref when there is no slug/number', () => {
     render(<TaskCard card={card()} />);
     expect(screen.getByText('Do the thing')).toBeInTheDocument();
     expect(screen.getByText('Feature one')).toBeInTheDocument();
+  });
+
+  it('renders the slug · t-number ref when present', () => {
+    render(<TaskCard card={card({ featureSlug: 'f-mcp', number: 6 })} />);
+    expect(screen.getByText('f-mcp')).toBeInTheDocument();
+    expect(screen.getByText(/·\s*t-6/)).toBeInTheDocument();
   });
 
   it('renders the claimer first name', () => {

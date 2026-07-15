@@ -10,6 +10,7 @@ const planFixture: ProjectPlanDTO = {
   features: [
     {
       id: 'f1',
+      slug: null,
       title: 'A real feature',
       description: null,
       status: 'planning',

@@ -2,8 +2,9 @@
  * Unit: FeatureRow (f-plan-view t-2).
  *
  * Load-bearing: a null owner renders "unassigned" (never a deref — carried
- * f-data-model t-3 finding); dependency chips show the depended-on title;
- * help-wanted flags; progress + chevron only when the feature has tasks.
+ * f-data-model t-3 finding); the mono feature slug + dependency chips render the
+ * slug (title fallback, f-refs); help-wanted flags; progress + chevron only when
+ * the feature has tasks.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -12,6 +13,7 @@ import type { PlanFeature } from '@/components/hub/projects/plan/types';
 
 const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   id: 'f1',
+  slug: null,
   title: 'Feature one',
   description: null,
   status: 'planning',
@@ -47,17 +49,36 @@ describe('FeatureRow', () => {
     expect(screen.getByText('Ada')).toBeInTheDocument();
   });
 
-  it('renders dependency chips with the depended-on feature title', () => {
+  it('renders the mono feature slug beside the title', () => {
     render(
       <FeatureRow
-        feature={feature({ dependsOn: [{ id: 'a', title: 'f-access' }] })}
+        feature={feature({ slug: 'f-access', title: 'Membership funnel' })}
+        ordinal={1}
+        expanded={false}
+        onToggle={noop}
+      />
+    );
+    expect(screen.getByText('f-access')).toBeInTheDocument();
+    expect(screen.getByText('Membership funnel')).toBeInTheDocument();
+  });
+
+  it('renders dependency chips with the depended-on feature slug (title fallback)', () => {
+    render(
+      <FeatureRow
+        feature={feature({
+          dependsOn: [
+            { id: 'a', slug: 'f-access', title: 'Membership funnel' },
+            { id: 'b', slug: null, title: 'Unslugged feature' },
+          ],
+        })}
         ordinal={2}
         expanded={false}
         onToggle={noop}
       />
     );
     expect(screen.getByText('depends on')).toBeInTheDocument();
-    expect(screen.getByText('f-access')).toBeInTheDocument();
+    expect(screen.getByText('f-access')).toBeInTheDocument(); // slug
+    expect(screen.getByText('Unslugged feature')).toBeInTheDocument(); // title fallback
   });
 
   it('flags a help-wanted feature', () => {
@@ -77,7 +98,9 @@ describe('FeatureRow', () => {
     render(
       <FeatureRow
         feature={feature({
-          tasks: [{ id: 't1', title: 'x', status: 'merged', prUrl: null, claimer: null }],
+          tasks: [
+            { id: 't1', number: null, title: 'x', status: 'merged', prUrl: null, claimer: null },
+          ],
           progress: { merged: 1, total: 2, live: 1 },
         })}
         ordinal={1}
@@ -109,7 +132,14 @@ describe('FeatureRow', () => {
       <FeatureRow
         feature={feature({
           tasks: [
-            { id: 't1', title: 'Expanded task', status: 'available', prUrl: null, claimer: null },
+            {
+              id: 't1',
+              number: null,
+              title: 'Expanded task',
+              status: 'available',
+              prUrl: null,
+              claimer: null,
+            },
           ],
           progress: { merged: 0, total: 1, live: 0 },
         })}

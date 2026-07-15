@@ -9,6 +9,7 @@ import type { PlanFeature, ProjectPlanDTO } from '@/components/hub/projects/plan
 
 const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   id: 'f1',
+  slug: null,
   title: 'Feature one',
   description: null,
   status: 'planning',
@@ -52,7 +53,14 @@ describe('PlanView rendering', () => {
             title: 'Has tasks',
             status: 'planning',
             tasks: [
-              { id: 't1', title: 'Do the thing', status: 'available', prUrl: null, claimer: null },
+              {
+                id: 't1',
+                number: null,
+                title: 'Do the thing',
+                status: 'available',
+                prUrl: null,
+                claimer: null,
+              },
             ],
             progress: { merged: 0, total: 1, live: 0 },
           }),
@@ -76,7 +84,14 @@ describe('PlanView rendering', () => {
             title: 'Shipped feature',
             status: 'shipped',
             tasks: [
-              { id: 's1', title: 'shipped task', status: 'merged', prUrl: null, claimer: null },
+              {
+                id: 's1',
+                number: null,
+                title: 'shipped task',
+                status: 'merged',
+                prUrl: null,
+                claimer: null,
+              },
             ],
             progress: { merged: 1, total: 1, live: 0 },
           }),
@@ -85,7 +100,14 @@ describe('PlanView rendering', () => {
             title: 'Live feature',
             status: 'in_flight',
             tasks: [
-              { id: 'l1', title: 'live task', status: 'claimed', prUrl: null, claimer: null },
+              {
+                id: 'l1',
+                number: null,
+                title: 'live task',
+                status: 'claimed',
+                prUrl: null,
+                claimer: null,
+              },
             ],
             progress: { merged: 0, total: 1, live: 1 },
           }),
