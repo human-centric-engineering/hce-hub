@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Sidebar } from '@/components/hub/sidebar';
 import { Topbar } from '@/components/hub/topbar';
 import { SidekickColumn } from '@/components/hub/sidekick-column';
+import { BreadcrumbLabelProvider } from '@/components/hub/breadcrumb-label';
 
 /**
  * HubShell — the module-composable three-column frame (f-shell).
@@ -13,9 +14,11 @@ import { SidekickColumn } from '@/components/hub/sidekick-column';
  * `app/(hub)/layout.tsx` (which does not remount on child navigation), that state
  * — and the sidekick column — persist across main-column nav, per the design.
  *
- * Deliberately context-free (the composable-shell guardrail): no project/module
- * assumption, so account pages could re-parent under it later without a rewrite.
- * The sidebar nav is registry-driven; the sidekick content lands in `f-sidekick`.
+ * Module-agnostic (the composable-shell guardrail): no project/module assumption
+ * baked in, so account pages could re-parent under it later without a rewrite.
+ * The sidebar nav is registry-driven; breadcrumb leaf labels are page-supplied
+ * via a generic `BreadcrumbLabelProvider` (any module writes to it); the sidekick
+ * content lands in `f-sidekick`.
  */
 export interface HubShellUser {
   name: string;
@@ -34,19 +37,21 @@ export function HubShell({
   const [sidekickOpen, setSidekickOpen] = useState(false);
 
   return (
-    <div
-      className={`bg-background text-foreground grid min-h-screen ${
-        sidekickOpen ? 'grid-cols-[240px_1fr_380px]' : 'grid-cols-[240px_1fr]'
-      }`}
-    >
-      <Sidebar user={user} />
+    <BreadcrumbLabelProvider>
+      <div
+        className={`bg-background text-foreground grid min-h-screen ${
+          sidekickOpen ? 'grid-cols-[240px_1fr_380px]' : 'grid-cols-[240px_1fr]'
+        }`}
+      >
+        <Sidebar user={user} />
 
-      <div className="flex min-w-0 flex-col">
-        <Topbar sidekickOpen={sidekickOpen} onToggleSidekick={() => setSidekickOpen((o) => !o)} />
-        <main className="min-w-0 flex-1">{children}</main>
+        <div className="flex min-w-0 flex-col">
+          <Topbar sidekickOpen={sidekickOpen} onToggleSidekick={() => setSidekickOpen((o) => !o)} />
+          <main className="min-w-0 flex-1">{children}</main>
+        </div>
+
+        {sidekickOpen && <SidekickColumn />}
       </div>
-
-      {sidekickOpen && <SidekickColumn />}
-    </div>
+    </BreadcrumbLabelProvider>
   );
 }

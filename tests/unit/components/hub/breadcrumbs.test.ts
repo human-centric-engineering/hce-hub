@@ -49,4 +49,19 @@ describe('deriveBreadcrumbs', () => {
       expect(crumbs[crumbs.length - 1]).toEqual({ label: key });
     }
   });
+
+  it('an override labels a dynamic segment (project id → name), winning over the raw id', () => {
+    expect(deriveBreadcrumbs('/projects/chubproject', { chubproject: 'HCE Hub' })).toEqual([
+      { label: 'Hub', href: '/' },
+      { label: 'Projects', href: '/projects' },
+      { label: 'HCE Hub' },
+    ]);
+  });
+
+  it('an Object.prototype-key override is still treated as a plain lookup', () => {
+    // A malicious segment `toString` with no override must not pull a prototype member.
+    expect(deriveBreadcrumbs('/projects/toString', { chubproject: 'HCE Hub' }).at(-1)).toEqual({
+      label: 'toString',
+    });
+  });
 });

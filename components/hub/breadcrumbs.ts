@@ -19,8 +19,16 @@ const SEGMENT_LABELS: Record<string, string> = {
   brief: 'Morning brief',
 };
 
-/** `/projects/abc` → `[Hub(/), Projects(/projects), abc]`; `/` → `[Hub]`. */
-export function deriveBreadcrumbs(pathname: string): Crumb[] {
+/**
+ * `/projects/abc` → `[Hub(/), Projects(/projects), abc]`; `/` → `[Hub]`.
+ * `overrides` (segment → label) lets a page label a dynamic segment (e.g. a
+ * project id → its name); it wins over the static map, which wins over the raw
+ * segment.
+ */
+export function deriveBreadcrumbs(
+  pathname: string,
+  overrides: Record<string, string> = {}
+): Crumb[] {
   const segments = pathname.split('/').filter(Boolean);
   // Root crumb: a link only when we're below it.
   const crumbs: Crumb[] = [{ label: 'Hub', href: segments.length > 0 ? '/' : undefined }];
@@ -30,11 +38,15 @@ export function deriveBreadcrumbs(pathname: string): Crumb[] {
     href += `/${segment}`;
     const isLast = i === segments.length - 1;
     crumbs.push({
-      // `Object.hasOwn` guard: a bare `SEGMENT_LABELS[segment]` would return an
+      // `Object.hasOwn` guard (both maps): a bare `MAP[segment]` would return an
       // inherited `Object.prototype` member (a function/object, not a string) for
       // a segment like `constructor`/`toString`/`__proto__` — e.g. a project id of
       // `toString` at `/projects/toString` — making `label` an invalid React child.
-      label: Object.hasOwn(SEGMENT_LABELS, segment) ? SEGMENT_LABELS[segment] : segment,
+      label: Object.hasOwn(overrides, segment)
+        ? overrides[segment]
+        : Object.hasOwn(SEGMENT_LABELS, segment)
+          ? SEGMENT_LABELS[segment]
+          : segment,
       href: isLast ? undefined : href,
     });
   });
