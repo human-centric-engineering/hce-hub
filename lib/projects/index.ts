@@ -38,3 +38,12 @@ export {
   getHostPlatform,
   type HostPlatformDescriptor,
 } from '@/lib/projects/host-platforms';
+
+// Consumer (member-facing) project reads (f-projects).
+export {
+  listProjectsForUser,
+  getProjectForUser,
+  type ProjectCard,
+  type ProjectView,
+  type ProjectMemberView as ConsumerProjectMemberView,
+} from '@/lib/projects/consumer';
