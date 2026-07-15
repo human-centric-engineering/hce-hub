@@ -53,15 +53,19 @@ describe('lib/app/ bootstrap defaults are no-ops', () => {
     expect(initAppContextContributors()).toBeUndefined();
   });
 
-  it('initAppNav registers no admin nav sections by default', () => {
-    // Arrange — clean registry
+  it('initAppNav registers the HCE Hub "Hub" admin nav section (fork fill)', () => {
+    // Fork divergence (f-project-admin): HCE Hub fills the fork-owned
+    // `lib/app/admin-nav.ts` seam with a single "Hub" section (Projects). Sunrise
+    // ships `initAppNav` empty; this assertion tracks the fork's intentional fill.
+    // A *stray* second section (or a lost Projects item) still fails the guard.
     __resetNavRegistryForTests();
 
-    // Act — run the real (empty) hook
     initAppNav();
 
-    // Assert — nothing registered
-    expect(getRegisteredNavSections()).toHaveLength(0);
+    const sections = getRegisteredNavSections();
+    expect(sections).toHaveLength(1);
+    expect(sections[0].title).toBe('Hub');
+    expect(sections[0].items?.map((i) => i.href)).toEqual(['/admin/projects']);
   });
 
   it('public-nav marketing clusters are emptied; the legal cluster keeps the platform default', () => {
