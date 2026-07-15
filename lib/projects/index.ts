@@ -47,3 +47,13 @@ export {
   type ProjectView,
   type ProjectMemberView as ConsumerProjectMemberView,
 } from '@/lib/projects/consumer';
+
+// Plan view — feature tree in optimal working order (f-plan-view).
+export {
+  getProjectPlan,
+  type ProjectPlan,
+  type PlanFeatureView,
+  type PlanTaskView,
+  type PlanDependencyRef,
+} from '@/lib/projects/plan';
+export { planOrder, type PlanOrderInput } from '@/lib/projects/plan-order';
