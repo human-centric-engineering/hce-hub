@@ -57,3 +57,13 @@ export {
   type PlanDependencyRef,
 } from '@/lib/projects/plan';
 export { planOrder, type PlanOrderInput } from '@/lib/projects/plan-order';
+
+// Board view — tasks routed into member lanes × effective-status columns (f-board-view).
+export {
+  getProjectBoard,
+  BOARD_COLUMNS,
+  type BoardColumn,
+  type ProjectBoard,
+  type BoardLane,
+  type BoardTaskCard,
+} from '@/lib/projects/board';
