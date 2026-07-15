@@ -59,7 +59,8 @@ export function TaskCard({ card }: { card: BoardTaskCard }) {
         style={{ color: 'var(--ink-faint)' }}
         title={card.featureTitle}
       >
-        {card.featureTitle}
+        {card.featureSlug ?? card.featureTitle}
+        {card.number != null && <span> · t-{card.number}</span>}
       </span>
       {(card.claimer || card.collision || prUrl) && (
         <div className="flex flex-wrap items-center gap-2">

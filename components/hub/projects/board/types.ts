@@ -14,8 +14,12 @@ export type BoardColumn = 'available' | 'claimed' | 'in_pr' | 'merged' | 'backlo
 /** A task card on the board. */
 export interface BoardTaskCard {
   id: string;
+  /** Project-wide stable ordinal, rendered `t-N`; `null` until assigned. */
+  number: number | null;
   title: string;
   featureId: string;
+  /** The feature's authored slug (`f-mcp`); `null` until authored. */
+  featureSlug: string | null;
   featureTitle: string;
   status: TaskEffectiveStatus;
   column: BoardColumn;
@@ -32,7 +36,7 @@ export interface BoardLane {
   /** `null` for the Unassigned lane or an erased member. */
   member: UserRef | null;
   role: 'lead' | 'member' | null;
-  ownedFeatures: { id: string; title: string }[];
+  ownedFeatures: { id: string; slug: string | null; title: string }[];
   tasks: BoardTaskCard[];
   taskCount: number;
 }

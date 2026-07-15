@@ -66,6 +66,11 @@ export function FeatureRow({
 
       <span className="block">
         <span className="flex flex-wrap items-baseline gap-2">
+          {feature.slug && (
+            <span className="font-mono text-xs" style={{ color: 'var(--ink-faint)' }}>
+              {feature.slug}
+            </span>
+          )}
           <span className="text-[15px] font-medium">{feature.title}</span>
           {feature.helpWanted && <HelpWantedPill />}
         </span>
@@ -85,8 +90,9 @@ export function FeatureRow({
                 key={d.id}
                 className="rounded border px-1.5 py-0.5 font-mono"
                 style={{ borderColor: 'var(--line)', color: 'var(--ink-mute)' }}
+                title={d.title}
               >
-                {d.title}
+                {d.slug ?? d.title}
               </span>
             ))}
           </span>

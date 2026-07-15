@@ -29,7 +29,7 @@ export function TaskRow({ task, ordinal }: { task: PlanTask; ordinal: number }) 
       style={{ borderColor: 'var(--line-soft)' }}
     >
       <span className="font-mono text-xs" style={{ color: 'var(--ink-faint)' }}>
-        t-{ordinal}
+        t-{task.number ?? ordinal}
       </span>
       <span style={{ color: 'var(--ink-soft)' }}>{task.title}</span>
 

@@ -9,8 +9,10 @@ import type { BoardLane, BoardTaskCard } from '@/components/hub/projects/board/t
 
 const card = (over: Partial<BoardTaskCard>): BoardTaskCard => ({
   id: 't1',
+  number: null,
   title: 't',
   featureId: 'f1',
+  featureSlug: null,
   featureTitle: 'F1',
   status: 'available',
   column: 'available',
@@ -39,7 +41,9 @@ describe('SwimLane', () => {
   });
 
   it('renders owned-feature chips', () => {
-    render(<SwimLane lane={lane({ ownedFeatures: [{ id: 'f1', title: 'f-access' }] })} />);
+    render(
+      <SwimLane lane={lane({ ownedFeatures: [{ id: 'f1', slug: 'f-access', title: 'Access' }] })} />
+    );
     expect(screen.getByText('f-access')).toBeInTheDocument();
   });
 
