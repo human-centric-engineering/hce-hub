@@ -1,8 +1,11 @@
 /**
  * Integration: Hub project-view page (server component).
  * @see app/(hub)/projects/[id]/page.tsx
+ *
+ * The page fetches the header and (only on the Plan tab) the `/plan` payload in
+ * parallel. Mocks are URL-aware so the two fetches return their own shapes.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 const navMock = vi.hoisted(() => ({
@@ -17,8 +20,10 @@ vi.mock('next/navigation', () => ({ notFound: navMock.notFound }));
 import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';
 import ProjectViewPage from '@/app/(hub)/projects/[id]/page';
 
-const fetchMock = serverFetch as ReturnType<typeof vi.fn>;
-const parseMock = parseApiResponse as ReturnType<typeof vi.fn>;
+// Typed to return promises so `mockImplementation` callbacks aren't flagged by
+// no-misused-promises; the loose payload shapes are what these tests need.
+const fetchMock = serverFetch as unknown as Mock<(url: string) => Promise<unknown>>;
+const parseMock = parseApiResponse as unknown as Mock<(res: { url: string }) => Promise<unknown>>;
 
 const view = {
   id: 'p1',
@@ -37,12 +42,39 @@ const view = {
   taskCount: 12,
 };
 
+const planPayload = {
+  projectId: 'p1',
+  features: [
+    {
+      id: 'f-fork',
+      title: 'Fork + brand',
+      description: null,
+      status: 'shipped',
+      helpWanted: false,
+      owner: null,
+      dependsOn: [],
+      tasks: [],
+      progress: { merged: 1, total: 1, live: 0 },
+    },
+  ],
+};
+
+/** URL-aware mocks: the `/plan` fetch returns the plan payload, else the header. */
+function wireOk() {
+  fetchMock.mockImplementation((url: string) => Promise.resolve({ ok: true, url }));
+  parseMock.mockImplementation((res: { url: string }) =>
+    Promise.resolve({
+      success: true,
+      data: res.url.endsWith('/plan') ? planPayload : view,
+    })
+  );
+}
+
 beforeEach(() => vi.clearAllMocks());
 
 describe('ProjectViewPage', () => {
-  it('renders the project view, defaulting to the Plan tab', async () => {
-    fetchMock.mockResolvedValue({ ok: true });
-    parseMock.mockResolvedValue({ success: true, data: view });
+  it('renders the project view and the Plan tab with real features by default', async () => {
+    wireOk();
 
     render(
       await ProjectViewPage({
@@ -52,11 +84,12 @@ describe('ProjectViewPage', () => {
     );
     expect(screen.getByRole('heading', { name: 'HCE Hub' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Plan' })).toHaveAttribute('aria-selected', 'true');
+    // The Plan view rendered the fetched feature.
+    expect(screen.getByText('Fork + brand')).toBeInTheDocument();
   });
 
-  it('honours ?view=board', async () => {
-    fetchMock.mockResolvedValue({ ok: true });
-    parseMock.mockResolvedValue({ success: true, data: view });
+  it('honours ?view=board and does not fetch the plan', async () => {
+    wireOk();
 
     render(
       await ProjectViewPage({
@@ -65,6 +98,25 @@ describe('ProjectViewPage', () => {
       })
     );
     expect(screen.getByRole('tab', { name: 'Board' })).toHaveAttribute('aria-selected', 'true');
+    // Only the header was fetched — no `/plan` request on the Board tab.
+    const urls = fetchMock.mock.calls.map((c) => c[0]);
+    expect(urls).toEqual(['/api/v1/projects/p1']);
+  });
+
+  it('renders a graceful message if the plan fetch fails but the project loads', async () => {
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(url.endsWith('/plan') ? { ok: false, status: 500, url } : { ok: true, url })
+    );
+    parseMock.mockImplementation(() => Promise.resolve({ success: true, data: view }));
+
+    render(
+      await ProjectViewPage({
+        params: Promise.resolve({ id: 'p1' }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+    expect(screen.getByRole('heading', { name: 'HCE Hub' })).toBeInTheDocument();
+    expect(screen.getByText(/Couldn.t load the plan/i)).toBeInTheDocument();
   });
 
   it('calls notFound for a non-member / unknown id (404)', async () => {

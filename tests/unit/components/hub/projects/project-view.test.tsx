@@ -2,6 +2,24 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ProjectView } from '@/components/hub/projects/project-view';
 import type { ProjectViewDTO } from '@/components/hub/projects/types';
+import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
+
+const planFixture: ProjectPlanDTO = {
+  projectId: 'p1',
+  features: [
+    {
+      id: 'f1',
+      title: 'A real feature',
+      description: null,
+      status: 'planning',
+      helpWanted: false,
+      owner: null,
+      dependsOn: [],
+      tasks: [],
+      progress: { merged: 0, total: 0, live: 0 },
+    },
+  ],
+};
 
 function makeProject(overrides: Partial<ProjectViewDTO> = {}): ProjectViewDTO {
   return {
@@ -38,10 +56,18 @@ describe('ProjectView', () => {
     expect(screen.getByText('—')).toBeInTheDocument(); // erased member fallback
   });
 
-  it('shows the Plan scaffold copy on the plan tab and Board on the board tab', () => {
-    const { rerender } = render(<ProjectView project={makeProject()} activeTab="plan" />);
-    expect(screen.getByText(/Plan view/i)).toBeInTheDocument();
-    rerender(<ProjectView project={makeProject()} activeTab="board" />);
+  it('mounts the Plan view on the plan tab when a plan is supplied', () => {
+    render(<ProjectView project={makeProject()} activeTab="plan" plan={planFixture} />);
+    expect(screen.getByText('A real feature')).toBeInTheDocument();
+  });
+
+  it('shows a graceful message on the plan tab when the plan failed to load', () => {
+    render(<ProjectView project={makeProject()} activeTab="plan" plan={null} />);
+    expect(screen.getByText(/Couldn.t load the plan/i)).toBeInTheDocument();
+  });
+
+  it('shows the Board scaffold copy on the board tab', () => {
+    render(<ProjectView project={makeProject()} activeTab="board" />);
     expect(screen.getByText(/Board view/i)).toBeInTheDocument();
   });
 
