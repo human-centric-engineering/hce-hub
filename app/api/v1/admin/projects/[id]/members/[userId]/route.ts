@@ -10,25 +10,16 @@
 
 import { withAdminAuth } from '@/lib/auth/guards';
 import { successResponse } from '@/lib/api/responses';
-import { ValidationError } from '@/lib/api/errors';
+import { parseCuidParam } from '@/lib/api/route-params';
 import { getClientIP } from '@/lib/security/ip';
 import { getRouteLogger } from '@/lib/api/context';
-import { cuidSchema } from '@/lib/validations/common';
 import { removeMember } from '@/lib/projects/admin';
-
-function parseProjectId(raw: string): string {
-  const parsed = cuidSchema.safeParse(raw);
-  if (!parsed.success) {
-    throw new ValidationError('Invalid project id', { id: ['Must be a valid CUID'] });
-  }
-  return parsed.data;
-}
 
 export const DELETE = withAdminAuth<{ id: string; userId: string }>(
   async (request, session, { params }) => {
     const log = await getRouteLogger(request);
     const { id: rawId, userId } = await params;
-    const projectId = parseProjectId(rawId);
+    const projectId = parseCuidParam(rawId);
 
     await removeMember(projectId, userId, {
       userId: session.user.id,

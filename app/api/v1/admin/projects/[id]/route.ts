@@ -12,26 +12,17 @@
 
 import { withAdminAuth } from '@/lib/auth/guards';
 import { successResponse } from '@/lib/api/responses';
-import { ValidationError } from '@/lib/api/errors';
 import { validateRequestBody } from '@/lib/api/validation';
+import { parseCuidParam } from '@/lib/api/route-params';
 import { getClientIP } from '@/lib/security/ip';
 import { getRouteLogger } from '@/lib/api/context';
-import { cuidSchema } from '@/lib/validations/common';
 import { getProjectDetail, updateProject, archiveProject } from '@/lib/projects/admin';
 import { updateProjectSchema } from '@/lib/validations/project-admin';
-
-function parseProjectId(raw: string): string {
-  const parsed = cuidSchema.safeParse(raw);
-  if (!parsed.success) {
-    throw new ValidationError('Invalid project id', { id: ['Must be a valid CUID'] });
-  }
-  return parsed.data;
-}
 
 export const GET = withAdminAuth<{ id: string }>(async (request, _session, { params }) => {
   const log = await getRouteLogger(request);
   const { id: rawId } = await params;
-  const id = parseProjectId(rawId);
+  const id = parseCuidParam(rawId);
 
   const project = await getProjectDetail(id);
 
@@ -42,7 +33,7 @@ export const GET = withAdminAuth<{ id: string }>(async (request, _session, { par
 export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { params }) => {
   const log = await getRouteLogger(request);
   const { id: rawId } = await params;
-  const id = parseProjectId(rawId);
+  const id = parseCuidParam(rawId);
 
   const body = await validateRequestBody(request, updateProjectSchema);
   const project = await updateProject(id, body, {
@@ -57,7 +48,7 @@ export const PATCH = withAdminAuth<{ id: string }>(async (request, session, { pa
 export const DELETE = withAdminAuth<{ id: string }>(async (request, session, { params }) => {
   const log = await getRouteLogger(request);
   const { id: rawId } = await params;
-  const id = parseProjectId(rawId);
+  const id = parseCuidParam(rawId);
 
   const project = await archiveProject(id, {
     userId: session.user.id,

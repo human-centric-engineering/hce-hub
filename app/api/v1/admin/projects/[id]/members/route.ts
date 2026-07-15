@@ -11,26 +11,17 @@
 
 import { withAdminAuth } from '@/lib/auth/guards';
 import { successResponse } from '@/lib/api/responses';
-import { ValidationError } from '@/lib/api/errors';
 import { validateRequestBody } from '@/lib/api/validation';
+import { parseCuidParam } from '@/lib/api/route-params';
 import { getClientIP } from '@/lib/security/ip';
 import { getRouteLogger } from '@/lib/api/context';
-import { cuidSchema } from '@/lib/validations/common';
 import { addMember } from '@/lib/projects/admin';
 import { addMemberSchema } from '@/lib/validations/project-admin';
-
-function parseProjectId(raw: string): string {
-  const parsed = cuidSchema.safeParse(raw);
-  if (!parsed.success) {
-    throw new ValidationError('Invalid project id', { id: ['Must be a valid CUID'] });
-  }
-  return parsed.data;
-}
 
 export const POST = withAdminAuth<{ id: string }>(async (request, session, { params }) => {
   const log = await getRouteLogger(request);
   const { id: rawId } = await params;
-  const projectId = parseProjectId(rawId);
+  const projectId = parseCuidParam(rawId);
 
   const { userId } = await validateRequestBody(request, addMemberSchema);
   await addMember(projectId, userId, {
