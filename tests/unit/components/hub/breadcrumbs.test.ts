@@ -41,4 +41,12 @@ describe('deriveBreadcrumbs', () => {
       { label: 'whatever' },
     ]);
   });
+
+  it('treats Object.prototype-key segments as plain strings, not inherited members', () => {
+    // e.g. a project id of `constructor` / `toString` at /projects/<id>
+    for (const key of ['constructor', 'toString', '__proto__', 'valueOf', 'hasOwnProperty']) {
+      const crumbs = deriveBreadcrumbs(`/projects/${key}`);
+      expect(crumbs[crumbs.length - 1]).toEqual({ label: key });
+    }
+  });
 });

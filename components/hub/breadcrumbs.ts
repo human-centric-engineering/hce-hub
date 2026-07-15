@@ -30,7 +30,11 @@ export function deriveBreadcrumbs(pathname: string): Crumb[] {
     href += `/${segment}`;
     const isLast = i === segments.length - 1;
     crumbs.push({
-      label: SEGMENT_LABELS[segment] ?? segment,
+      // `Object.hasOwn` guard: a bare `SEGMENT_LABELS[segment]` would return an
+      // inherited `Object.prototype` member (a function/object, not a string) for
+      // a segment like `constructor`/`toString`/`__proto__` — e.g. a project id of
+      // `toString` at `/projects/toString` — making `label` an invalid React child.
+      label: Object.hasOwn(SEGMENT_LABELS, segment) ? SEGMENT_LABELS[segment] : segment,
       href: isLast ? undefined : href,
     });
   });
