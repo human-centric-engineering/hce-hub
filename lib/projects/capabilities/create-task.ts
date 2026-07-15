@@ -124,9 +124,18 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
     }
 
     const task = await executeTransaction(async (tx) => {
+      // Assign the next project-wide task number by atomically bumping the
+      // project counter. The row-level lock on the project row serializes
+      // concurrent creates, so numbers are unique by construction (f-refs).
+      const { taskCounter } = await tx.project.update({
+        where: { id: access.feature.projectId },
+        data: { taskCounter: { increment: 1 } },
+        select: { taskCounter: true },
+      });
       const created = await tx.task.create({
         data: {
           featureId: args.featureId,
+          number: taskCounter,
           title: args.title,
           status: 'available',
           filesScope: args.filesScope ?? [],

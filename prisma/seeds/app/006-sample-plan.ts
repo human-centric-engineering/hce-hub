@@ -188,16 +188,21 @@ const unit: SeedUnit = {
     });
     const leadUserId = lead?.id ?? null;
 
+    // Task numbers run project-wide (t-1 … t-N) in feature order; the counter
+    // ends at the total so a subsequently-created task picks up at N+1 (f-refs).
+    const totalTasks = features.reduce((n, f) => n + f.tasks.length, 0);
+
     // Project (+ keep the lead-has-member-row invariant when a human exists).
     await prisma.project.upsert({
       where: { id: SAMPLE_PROJECT.id },
-      update: { leadUserId },
+      update: { leadUserId, taskCounter: totalTasks },
       create: {
         id: SAMPLE_PROJECT.id,
         name: SAMPLE_PROJECT.name,
         hostPlatform: SAMPLE_PROJECT.hostPlatform,
         status: 'active',
         leadUserId,
+        taskCounter: totalTasks,
       },
     });
     if (leadUserId) {
@@ -212,16 +217,18 @@ const unit: SeedUnit = {
     for (const f of features) {
       await prisma.feature.upsert({
         where: { id: featureSeedId(f.slug) },
-        update: { title: f.title, status: f.status, ownerUserId: leadUserId },
+        update: { slug: f.slug, title: f.title, status: f.status, ownerUserId: leadUserId },
         create: {
           id: featureSeedId(f.slug),
           projectId: SAMPLE_PROJECT.id,
+          slug: f.slug,
           title: f.title,
           status: f.status,
           ownerUserId: leadUserId,
         },
       });
     }
+    let taskNumber = 0;
     for (const f of features) {
       for (const dep of f.dependsOn) {
         await prisma.featureDependency.upsert({
@@ -235,12 +242,14 @@ const unit: SeedUnit = {
         });
       }
       for (const [i, t] of f.tasks.entries()) {
+        taskNumber += 1; // project-wide t-N, in feature order
         await prisma.task.upsert({
           where: { id: taskSeedId(f.slug, i) },
-          update: { title: t.title, status: t.status },
+          update: { title: t.title, status: t.status, number: taskNumber },
           create: {
             id: taskSeedId(f.slug, i),
             featureId: featureSeedId(f.slug),
+            number: taskNumber,
             title: t.title,
             status: t.status,
           },

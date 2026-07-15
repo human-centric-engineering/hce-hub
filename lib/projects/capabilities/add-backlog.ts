@@ -17,7 +17,7 @@ import type {
   CapabilityFunctionDefinition,
   CapabilityResult,
 } from '@/lib/orchestration/capabilities/types';
-import { prisma } from '@/lib/db/client';
+import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { redactedString } from '@/lib/security/redact';
@@ -81,9 +81,23 @@ export class AddBacklogCapability extends BaseCapability<Args, Data> {
       return this.error(`Feature ${args.featureId} not found.`, 'not_found');
     }
 
-    const task = await prisma.task.create({
-      data: { featureId: args.featureId, title: args.title, status: 'backlog' },
-      select: { id: true, status: true },
+    // Assign the next project-wide task number via an atomic counter bump (the
+    // project row lock serializes concurrent creates → unique by construction).
+    const task = await executeTransaction(async (tx) => {
+      const { taskCounter } = await tx.project.update({
+        where: { id: access.feature.projectId },
+        data: { taskCounter: { increment: 1 } },
+        select: { taskCounter: true },
+      });
+      return tx.task.create({
+        data: {
+          featureId: args.featureId,
+          number: taskCounter,
+          title: args.title,
+          status: 'backlog',
+        },
+        select: { id: true, status: true },
+      });
     });
 
     logAdminAction({
