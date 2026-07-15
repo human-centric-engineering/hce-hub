@@ -13,6 +13,22 @@
  *
  * Full guide + example: CUSTOMIZATION.md §4 · lib/admin-nav/registry.ts
  */
+import { FolderKanban } from 'lucide-react';
+import { registerNavSection } from '@/lib/admin-nav/registry';
+
 export function initAppNav(): void {
-  // No app nav sections by default.
+  // HCE Hub — Project Coordination admin (f-project-admin, feature 05).
+  // A "Hub" section (a title distinct from the core Overview/Management/AI
+  // Orchestration/System sections) grouping the fork's operator surfaces.
+  registerNavSection({
+    title: 'Hub',
+    items: [
+      {
+        href: '/admin/projects',
+        label: 'Projects',
+        icon: FolderKanban,
+        description: 'Create and manage Hub projects, members, and project knowledge',
+      },
+    ],
+  });
 }
