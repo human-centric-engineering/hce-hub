@@ -23,6 +23,7 @@ import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { NotFoundError, ConflictError } from '@/lib/api/errors';
 import { logAdminAction, computeChanges } from '@/lib/orchestration/audit/admin-audit-logger';
+import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
 import type { CreateProjectInput, UpdateProjectInput } from '@/lib/validations/project-admin';
 
 /** The admin performing the action — carried into the audit log. */
@@ -31,13 +32,7 @@ export interface AdminActor {
   clientIp?: string | null;
 }
 
-/** A user reference for display; `null` where the user has been erased. */
-export interface UserRef {
-  id: string;
-  name: string;
-  email: string;
-  image: string | null;
-}
+export type { UserRef };
 
 export interface ProjectMemberView {
   userId: string;
@@ -73,16 +68,7 @@ export interface ProjectDetail {
 }
 
 // ─── User enrichment (hand-FK → "user", no Prisma relation) ──────────────────
-
-async function fetchUsers(ids: readonly string[]): Promise<Map<string, UserRef>> {
-  const unique = [...new Set(ids)];
-  if (unique.length === 0) return new Map();
-  const users = await prisma.user.findMany({
-    where: { id: { in: unique } },
-    select: { id: true, name: true, email: true, image: true },
-  });
-  return new Map(users.map((u) => [u.id, u]));
-}
+// `fetchUsers` is shared with the consumer service — see `lib/projects/user-refs.ts`.
 
 /** Throw a clean 404 (not a raw FK error) if the referenced user is missing. */
 async function requireUserExists(userId: string): Promise<void> {
