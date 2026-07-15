@@ -100,7 +100,7 @@ A flat list in rough dependency order (most-ready first). Order is *emergent fro
 | 05 | `f-project-admin` | Simon (**shipped**) | f-access | 2 (was 4) | Project + member CRUD (in Sunrise admin shell) |
 | 06 | `f-shell` | Simon (**shipped**) | f-theme, f-access | 2 (was 5) | Module-composable app shell (nav, 3-col layout) |
 | 07 | `f-hub-capabilities` | Simon (**shipped**) | f-data-model, f-access | 3 | Hub tools (next/claim/create/backlog/help-wanted) + MCP |
-| 08 | `f-projects` | TBD | f-shell, f-project-admin | 3 | Projects list + project view scaffold |
+| 08 | `f-projects` | Simon (**in flight**) | f-shell, f-project-admin | 2 (was 3) | Projects list + project view scaffold |
 | 09 | `f-plan-view` | TBD | f-projects, f-hub-capabilities | 4 | Feature-level Plan view (topological ordering) |
 | 10 | `f-board-view` | TBD | f-projects, f-hub-capabilities | 4 | Board (Kanban) — lanes, column routing, collisions |
 | 11 | `f-task-sheet` | TBD | f-plan-view, f-hub-capabilities | 4 | Deep-linkable task detail side sheet |
@@ -202,7 +202,7 @@ The Hub's read/write operations as Sunrise capabilities — the shared engine th
 *Done when:* each capability works membership-scoped with soft-collision behaviour; callable from Claude Code via MCP with a scoped key; writes audit-logged; gates green. *Watch ([[feature-plan-authoring-guide]] §6):* `next-task`/collision logic is algorithm-dense — budget a `/code-review` fix commit.
 
 ### 08 · `f-projects` — projects list + project view scaffold
-*Owner:* TBD · *Depends on:* f-shell, f-project-admin · *~3 PRs*
+*Owner:* Simon · *Status:* **in flight** · *Depends on:* f-shell, f-project-admin · *~2 PRs (API ↔ UI+seed; sized down from 3 pending owner confirm)* · *Detailed plan:* [[f-projects]]
 
 The user-facing project index and the project-view container the Plan/Board mount into. (Cross-ref: [[v1-requirements#13.1 Hub UI — user-facing working surface|§13.1]]; design handoff "1. Hub home / Projects".)
 
