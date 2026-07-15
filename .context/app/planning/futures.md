@@ -192,6 +192,12 @@ Decisions made 6 months ago that the code has since contradicted are quietly fla
 
 *Why it matters:* Captures the "wait, didn't we decide we wouldn't do X?" moment that everyone forgets until it bites.
 
+### Access-tiered project-KB management `[v1.x]`
+
+A Hub-native, project-scoped knowledge-base surface (upload/curate a project's docs from within Project Admin), gated by a **project-level** role rather than full Sunrise admin. In v1, `f-project-admin` attaches a per-project `KnowledgeTag` and points at Sunrise's existing (admin-gated) KB uploader — right while everyone touching project admin is already a Sunrise admin. The **trigger to build this** is the moment a project lead / dedicated KB-manager should curate their project's knowledge *without* being handed the full Sunrise admin portal. It mounts on the *same* per-project `KnowledgeTag` primitive v1 already creates, driven by a `f-access` role-tier expansion (`read_only` reserved; a `project-admin`-shaped grant slots in).
+
+*Why it matters:* Lets knowledge ownership sit with the people closest to a project without over-granting platform admin — the least-privilege shape for a multi-project studio.
+
 ---
 
 ## Rich project context
