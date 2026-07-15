@@ -58,6 +58,11 @@ export interface ProjectView {
 
 /** The projects `userId` is a member of, newest first, enriched for the card grid. */
 export async function listProjectsForUser(userId: string): Promise<ProjectCard[]> {
+  // Scope through the funnel's `accessibleProjectIds` rather than hand-writing a
+  // `members: { some: { userId } }` predicate here — the membership rule stays in
+  // one place (access.ts). That costs one extra cheap indexed query over inlining
+  // the predicate into the enriched findMany; on a member's low-cardinality
+  // project set the avoided authz-predicate duplication is the better trade.
   const ids = await accessibleProjectIds(userId);
   if (ids.length === 0) return [];
 
@@ -103,6 +108,9 @@ export async function getProjectForUser(userId: string, projectId: string): Prom
   ]);
 
   const memberIds = members.map((m) => m.userId);
+  // The lead already has a member row (the lead-has-member-row invariant), so
+  // it's normally in `memberIds`; appending leadUserId is belt-and-suspenders if
+  // that invariant is ever violated. `fetchUsers` dedupes via Set → a no-op here.
   const users = await fetchUsers(
     project.leadUserId ? [...memberIds, project.leadUserId] : memberIds
   );
