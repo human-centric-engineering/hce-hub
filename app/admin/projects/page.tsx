@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';
 import { PROJECT_ADMIN_API } from '@/lib/projects/admin-endpoints';
+import { logger } from '@/lib/logging';
 import { ProjectsList } from '@/components/admin/projects/projects-list';
 import type { ProjectRow } from '@/components/admin/projects/types';
 
@@ -12,10 +13,14 @@ export const metadata: Metadata = {
 async function getProjects(): Promise<ProjectRow[]> {
   try {
     const res = await serverFetch(`${PROJECT_ADMIN_API.list}?limit=100`);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      logger.error('getProjects: projects list fetch failed', { status: res.status });
+      return [];
+    }
     const data = await parseApiResponse<ProjectRow[]>(res);
     return data.success ? data.data : [];
-  } catch {
+  } catch (error) {
+    logger.error('getProjects threw', { error });
     return [];
   }
 }

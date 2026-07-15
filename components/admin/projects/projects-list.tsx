@@ -60,7 +60,7 @@ export function ProjectsList({ projects }: { projects: ProjectRow[] }) {
             </TableHeader>
             <TableBody>
               {projects.map((p) => (
-                <TableRow key={p.id} className="cursor-pointer">
+                <TableRow key={p.id}>
                   <TableCell className="font-medium">
                     <Link href={`/admin/projects/${p.id}`} className="hover:underline">
                       {p.name}

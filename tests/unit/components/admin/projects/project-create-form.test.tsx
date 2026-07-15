@@ -81,6 +81,20 @@ describe('ProjectCreateForm', () => {
     expect(nav.push).not.toHaveBeenCalled();
   });
 
+  it('shows inline field errors for an empty name and a bad repo URL', async () => {
+    const user = userEvent.setup();
+    render(<ProjectCreateForm users={users} />);
+
+    await user.click(screen.getByRole('combobox', { name: /lead/i }));
+    await user.click(screen.getByRole('option', { name: /Ada/i }));
+    await user.type(screen.getByLabelText('Repository URLs'), 'not-a-url');
+    await user.click(screen.getByRole('button', { name: /create project/i }));
+
+    expect(await screen.findByText(/name is required/i)).toBeInTheDocument();
+    expect(await screen.findByText(/each line must be a valid url/i)).toBeInTheDocument();
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
   it('shows a generic message for a non-API failure', async () => {
     vi.mocked(apiClient.post).mockRejectedValue(new Error('network'));
     const user = userEvent.setup();

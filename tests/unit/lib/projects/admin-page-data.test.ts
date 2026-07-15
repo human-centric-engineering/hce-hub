@@ -24,8 +24,12 @@ describe('getSelectableUsers', () => {
     expect(users).toEqual([{ id: 'u1', name: 'Ada', email: 'ada@x.io', image: null }]);
   });
 
-  it('returns [] when the fetch is not ok or throws', async () => {
-    fetchMock.mockResolvedValue({ ok: false });
+  it('returns [] when the fetch is not ok, the API reports failure, or it throws', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+    expect(await getSelectableUsers()).toEqual([]);
+
+    fetchMock.mockResolvedValue({ ok: true });
+    parseMock.mockResolvedValue({ success: false });
     expect(await getSelectableUsers()).toEqual([]);
 
     fetchMock.mockRejectedValue(new Error('boom'));
@@ -41,8 +45,17 @@ describe('getProjectDetail', () => {
     expect(project?.id).toBe('p1');
   });
 
-  it('returns null on a 404 / failure', async () => {
-    fetchMock.mockResolvedValue({ ok: false });
+  it('returns null on a 404 (expected) and on a non-404 failure', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 404 });
     expect(await getProjectDetail('missing')).toBeNull();
+
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+    expect(await getProjectDetail('boom')).toBeNull();
+  });
+
+  it('returns null when the API reports failure', async () => {
+    fetchMock.mockResolvedValue({ ok: true });
+    parseMock.mockResolvedValue({ success: false });
+    expect(await getProjectDetail('p1')).toBeNull();
   });
 });
