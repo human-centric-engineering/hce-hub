@@ -15,16 +15,27 @@ const card: ProjectCard = {
 };
 
 describe('ProjectsGrid', () => {
-  it('renders a card per project plus the New-project affordance', () => {
-    render(<ProjectsGrid projects={[card]} />);
+  it('renders a card per project; shows the New-project affordance only for admins', () => {
+    const { rerender } = render(<ProjectsGrid projects={[card]} canCreate />);
     expect(screen.getByText('HCE Hub')).toBeInTheDocument();
-    const newLink = screen.getByRole('link', { name: /new project/i });
-    expect(newLink).toHaveAttribute('href', '/admin/projects/new');
+    expect(screen.getByRole('link', { name: /new project/i })).toHaveAttribute(
+      'href',
+      '/admin/projects/new'
+    );
+
+    rerender(<ProjectsGrid projects={[card]} canCreate={false} />);
+    expect(screen.getByText('HCE Hub')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /new project/i })).not.toBeInTheDocument();
   });
 
-  it('shows only the affordance when the member has no projects', () => {
-    render(<ProjectsGrid projects={[]} />);
-    expect(screen.getAllByRole('link')).toHaveLength(1);
+  it('shows the affordance in the empty state for an admin', () => {
+    render(<ProjectsGrid projects={[]} canCreate />);
     expect(screen.getByRole('link', { name: /new project/i })).toBeInTheDocument();
+  });
+
+  it('shows a plain empty message (no admin link) for a non-admin with no projects', () => {
+    render(<ProjectsGrid projects={[]} canCreate={false} />);
+    expect(screen.getByText(/not a member of any projects/i)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /new project/i })).not.toBeInTheDocument();
   });
 });

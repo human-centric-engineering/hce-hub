@@ -2,21 +2,8 @@ import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { getHostPlatform } from '@/lib/projects/host-platforms';
+import { STATUS_VARIANT, initials } from '@/components/hub/projects/presentation';
 import type { ProjectCard as ProjectCardData } from '@/components/hub/projects/types';
-
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'outline'> = {
-  active: 'default',
-  planning: 'secondary',
-  archived: 'outline',
-};
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('');
-}
 
 /** One project in the grid — links to the project view. */
 export function ProjectCard({ project }: { project: ProjectCardData }) {

@@ -2,21 +2,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { getHostPlatform } from '@/lib/projects/host-platforms';
 import { ProjectViewTabs } from '@/components/hub/projects/project-view-tabs';
+import { STATUS_VARIANT, initials } from '@/components/hub/projects/presentation';
 import type { ProjectTab, ProjectViewDTO } from '@/components/hub/projects/types';
-
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'outline'> = {
-  active: 'default',
-  planning: 'secondary',
-  archived: 'outline',
-};
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('');
-}
 
 /** A stacked row of member avatars (overflow collapses to a +N chip). */
 function MemberStack({ members }: { members: ProjectViewDTO['members'] }) {

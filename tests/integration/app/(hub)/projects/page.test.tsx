@@ -7,14 +7,21 @@ import { render, screen } from '@testing-library/react';
 
 vi.mock('@/lib/api/server-fetch', () => ({ serverFetch: vi.fn(), parseApiResponse: vi.fn() }));
 vi.mock('@/lib/logging', () => ({ logger: { error: vi.fn(), info: vi.fn() } }));
+vi.mock('@/lib/auth/utils', () => ({ getServerSession: vi.fn() }));
 
 import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';
+import { getServerSession } from '@/lib/auth/utils';
 import ProjectsPage from '@/app/(hub)/projects/page';
 
 const fetchMock = serverFetch as ReturnType<typeof vi.fn>;
 const parseMock = parseApiResponse as ReturnType<typeof vi.fn>;
+const sessionMock = getServerSession as ReturnType<typeof vi.fn>;
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Default: an admin (so the create affordance renders); overridden per test.
+  sessionMock.mockResolvedValue({ user: { id: 'u1', role: 'ADMIN' } });
+});
 
 describe('ProjectsPage', () => {
   it('renders the member’s projects', async () => {

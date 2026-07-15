@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';
+import { getServerSession } from '@/lib/auth/utils';
 import { logger } from '@/lib/logging';
 import { ProjectsGrid } from '@/components/hub/projects/projects-grid';
 import type { ProjectCard } from '@/components/hub/projects/types';
@@ -25,7 +26,8 @@ async function getMyProjects(): Promise<ProjectCard[]> {
 }
 
 export default async function ProjectsPage() {
-  const projects = await getMyProjects();
+  const [projects, session] = await Promise.all([getMyProjects(), getServerSession()]);
+  const canCreate = session?.user.role === 'ADMIN';
 
   return (
     <div className="mx-auto max-w-5xl px-8 py-10">
@@ -35,7 +37,7 @@ export default async function ProjectsPage() {
           The projects you&apos;re a member of.
         </p>
       </div>
-      <ProjectsGrid projects={projects} />
+      <ProjectsGrid projects={projects} canCreate={canCreate} />
     </div>
   );
 }

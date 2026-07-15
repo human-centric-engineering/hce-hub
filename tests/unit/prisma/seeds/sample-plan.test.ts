@@ -3,7 +3,22 @@
  * Pure data fidelity + run() idempotency/invariant over a mocked prisma (B9).
  */
 import { describe, it, expect, vi } from 'vitest';
-import unit, { buildSamplePlan, SAMPLE_PROJECT } from '@/prisma/seeds/app/006-sample-plan';
+import unit, {
+  buildSamplePlan,
+  SAMPLE_PROJECT,
+  featureSeedId,
+  taskSeedId,
+} from '@/prisma/seeds/app/006-sample-plan';
+import { cuidSchema } from '@/lib/validations/common';
+
+describe('seed ids are cuid-shaped (so /projects/:id parseCuidParam accepts them)', () => {
+  it('project + feature + task ids all pass cuidSchema', () => {
+    expect(cuidSchema.safeParse(SAMPLE_PROJECT.id).success).toBe(true);
+    expect(cuidSchema.safeParse(featureSeedId('f-projects')).success).toBe(true);
+    expect(cuidSchema.safeParse(featureSeedId('f-morning-brief')).success).toBe(true);
+    expect(cuidSchema.safeParse(taskSeedId('f-board-view', 0)).success).toBe(true);
+  });
+});
 
 describe('buildSamplePlan (pure)', () => {
   const features = buildSamplePlan();

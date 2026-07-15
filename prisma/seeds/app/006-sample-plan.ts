@@ -12,13 +12,19 @@ import type { SeedUnit } from '@/prisma/runner';
  * only a *real* member (no fabricated users — that's the dev-only
  * `007-demo-collaborators` seed) and is idempotent via explicit stable ids.
  *
- * **Lead resolution:** the first human user (`humanWhere`, ordered by creation).
- * On a fresh DB where only the SERVICE config-owner exists (the human admin is
- * created at runtime on first sign-in, *after* seeding), there's no human yet —
- * the project is still created (leadUserId null, no members) and the lead +
- * membership fill in on the next `db:seed` once a human exists, or via the admin
- * project page (f-project-admin). The seed keeps the lead-has-member-row
- * invariant itself (it writes rows directly, bypassing the admin service).
+ * **Lead resolution:** the first *real* human user (`humanWhere`, excluding the
+ * `007` demo accounts, ordered by creation). On a fresh DB where only the SERVICE
+ * config-owner exists (the human admin is created at runtime on first sign-in,
+ * *after* seeding), there's no human yet — the project is created leaderless/
+ * memberless. It does **not** auto-heal (the runner hash-gates unchanged units,
+ * so a plain re-`db:seed` won't re-run this): once a human exists, seat them as
+ * lead + member via the admin project page (f-project-admin), or `db:reset` to
+ * re-seed from scratch. The seed keeps the lead-has-member-row invariant itself
+ * (it writes rows directly, bypassing the admin service).
+ *
+ * **Ids are cuid-shaped** (`c` + no hyphens) so the seeded project opens through
+ * the `parseCuidParam`-guarded `/api/v1/projects/:id` route — a plain slug id
+ * (e.g. `seed-hub-project`) fails `z.cuid()` and 400s → the card 404s on click.
  */
 
 interface SeedTask {
@@ -33,11 +39,21 @@ interface SeedFeature {
   tasks: SeedTask[];
 }
 
+/** Deterministic, cuid-shaped stable id (`c` + no hyphens) so seeded rows pass
+ * `z.cuid()` route guards while staying idempotent across re-seeds. */
+const cid = (...parts: (string | number)[]): string =>
+  'c' + parts.join('').replace(/-/g, '').toLowerCase();
+
 export const SAMPLE_PROJECT = {
-  id: 'seed-hub-project',
+  id: cid('hubproject'),
   name: 'HCE Hub',
   hostPlatform: 'sunrise',
 } as const;
+
+/** Stable ids for the seeded features/tasks (shared with `007`). */
+export const featureSeedId = (slug: string): string => cid('feat', slug);
+export const taskSeedId = (slug: string, index: number): string => cid('task', slug, index);
+const depSeedId = (slug: string, dep: string): string => cid('fdep', slug, dep);
 
 /** Pure — the plan's features/deps/tasks. Unit-tested; `run` upserts these. */
 export function buildSamplePlan(): SeedFeature[] {
@@ -162,8 +178,11 @@ const unit: SeedUnit = {
   name: 'app/006-sample-plan',
   async run({ prisma, logger }) {
     const features = buildSamplePlan();
+    // First *real* human — exclude the dev-only 007 demo accounts, else a demo
+    // user (created at seed time, before the real dev signs up) could be picked
+    // as lead on a later re-seed.
     const lead = await prisma.user.findFirst({
-      where: humanWhere,
+      where: { ...humanWhere, NOT: { email: { endsWith: '@demo.hce.local' } } },
       orderBy: { createdAt: 'asc' },
       select: { id: true },
     });
@@ -192,10 +211,10 @@ const unit: SeedUnit = {
     // Features, then dependency edges (features must exist first), then tasks.
     for (const f of features) {
       await prisma.feature.upsert({
-        where: { id: `seed-feat-${f.slug}` },
+        where: { id: featureSeedId(f.slug) },
         update: { title: f.title, status: f.status, ownerUserId: leadUserId },
         create: {
-          id: `seed-feat-${f.slug}`,
+          id: featureSeedId(f.slug),
           projectId: SAMPLE_PROJECT.id,
           title: f.title,
           status: f.status,
@@ -206,22 +225,22 @@ const unit: SeedUnit = {
     for (const f of features) {
       for (const dep of f.dependsOn) {
         await prisma.featureDependency.upsert({
-          where: { id: `seed-fdep-${f.slug}-${dep}` },
+          where: { id: depSeedId(f.slug, dep) },
           update: {},
           create: {
-            id: `seed-fdep-${f.slug}-${dep}`,
-            featureId: `seed-feat-${f.slug}`,
-            dependsOnFeatureId: `seed-feat-${dep}`,
+            id: depSeedId(f.slug, dep),
+            featureId: featureSeedId(f.slug),
+            dependsOnFeatureId: featureSeedId(dep),
           },
         });
       }
       for (const [i, t] of f.tasks.entries()) {
         await prisma.task.upsert({
-          where: { id: `seed-task-${f.slug}-${i}` },
+          where: { id: taskSeedId(f.slug, i) },
           update: { title: t.title, status: t.status },
           create: {
-            id: `seed-task-${f.slug}-${i}`,
-            featureId: `seed-feat-${f.slug}`,
+            id: taskSeedId(f.slug, i),
+            featureId: featureSeedId(f.slug),
             title: t.title,
             status: t.status,
           },

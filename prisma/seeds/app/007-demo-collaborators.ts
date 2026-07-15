@@ -1,4 +1,4 @@
-import { SAMPLE_PROJECT } from '@/prisma/seeds/app/006-sample-plan';
+import { SAMPLE_PROJECT, featureSeedId, taskSeedId } from '@/prisma/seeds/app/006-sample-plan';
 import type { SeedUnit } from '@/prisma/runner';
 
 /**
@@ -44,11 +44,11 @@ const unit: SeedUnit = {
     // Decorate a couple of rows so the board shows non-lead ownership + a claim.
     // (No-ops gracefully if 006's rows are absent — updateMany with 0 matches.)
     await prisma.feature.updateMany({
-      where: { id: 'seed-feat-f-plan-view' },
+      where: { id: featureSeedId('f-plan-view') },
       data: { ownerUserId: 'seed-demo-grace' },
     });
     await prisma.task.updateMany({
-      where: { id: 'seed-task-f-board-view-0' },
+      where: { id: taskSeedId('f-board-view', 0) },
       data: { status: 'claimed', claimedByUserId: 'seed-demo-ada' },
     });
 
