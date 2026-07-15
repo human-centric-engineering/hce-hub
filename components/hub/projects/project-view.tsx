@@ -4,7 +4,9 @@ import { getHostPlatform } from '@/lib/projects/host-platforms';
 import { ProjectViewTabs } from '@/components/hub/projects/project-view-tabs';
 import { STATUS_VARIANT, initials } from '@/components/hub/projects/presentation';
 import { BreadcrumbLabel } from '@/components/hub/breadcrumb-label';
+import { PlanView } from '@/components/hub/projects/plan/plan-view';
 import type { ProjectTab, ProjectViewDTO } from '@/components/hub/projects/types';
+import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
 
 /** A stacked row of member avatars (overflow collapses to a +N chip). */
 function MemberStack({ members }: { members: ProjectViewDTO['members'] }) {
@@ -27,22 +29,22 @@ function MemberStack({ members }: { members: ProjectViewDTO['members'] }) {
   );
 }
 
-const TAB_COPY: Record<ProjectTab, string> = {
-  plan: 'The Plan view — features in optimal working order — arrives with f-plan-view.',
-  board: 'The Board view — what’s in flight, by person — arrives with f-board-view.',
-};
+const BOARD_COPY = 'The Board view — what’s in flight, by person — arrives with f-board-view.';
 
 /**
  * The project-view container: header (name/status/platform + member stack) and
- * the linkable Plan⇄Board tabs. The tab *content* is a scaffold placeholder in
- * §08 — the real Plan/Board views mount here in §09/§10.
+ * the linkable Plan⇄Board tabs. The Plan tab mounts the real Plan view (§09);
+ * the Board tab is still a scaffold placeholder until §10.
  */
 export function ProjectView({
   project,
   activeTab,
+  plan,
 }: {
   project: ProjectViewDTO;
   activeTab: ProjectTab;
+  /** The Plan payload — supplied only on the Plan tab; `null` if its fetch failed. */
+  plan?: ProjectPlanDTO | null;
 }) {
   const platform = getHostPlatform(project.hostPlatform)?.label ?? project.hostPlatform;
 
@@ -68,7 +70,19 @@ export function ProjectView({
 
       <ProjectViewTabs projectId={project.id} active={activeTab} />
 
-      <div className="text-muted-foreground py-16 text-center text-sm">{TAB_COPY[activeTab]}</div>
+      <div className="py-8">
+        {activeTab === 'plan' ? (
+          plan ? (
+            <PlanView plan={plan} />
+          ) : (
+            <p className="text-muted-foreground py-16 text-center text-sm">
+              Couldn&rsquo;t load the plan just now — try refreshing.
+            </p>
+          )
+        ) : (
+          <p className="text-muted-foreground py-16 text-center text-sm">{BOARD_COPY}</p>
+        )}
+      </div>
     </div>
   );
 }
