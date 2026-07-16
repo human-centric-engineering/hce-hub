@@ -124,19 +124,22 @@ export function TaskSheet({
 
   const path = `/api/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`;
 
-  // Claim feedback is per-task: clear it when the sheet switches tasks, but NOT
-  // on a same-task refetch (which is what surfaces warnings post-claim).
+  // Per-task state clears when the sheet switches tasks, but NOT on a same-task
+  // refetch — so a post-claim reload refreshes in place (keeping the content and
+  // the just-surfaced warnings visible) instead of blanking to the skeleton.
   useEffect(() => {
     setWarnings([]);
     setClaimError(false);
+    setDetail(null);
   }, [path]);
 
-  // Fetch the detail on task change / after a claim (reloadKey).
+  // Fetch the detail on task change / after a claim (reloadKey). `detail` is left
+  // in place here (cleared above only on task change), so the skeleton shows for
+  // the initial load, not for a same-task refresh.
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
     setState('loading');
-    setDetail(null);
     fetch(path, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -256,7 +259,7 @@ export function TaskSheet({
             </div>
           </div>
 
-          {state === 'ready' && detail && (
+          {detail && (
             <>
               <h2 className="text-[17px] leading-snug font-medium">{detail.title}</h2>
               <div className="flex items-center gap-3">
@@ -333,19 +336,19 @@ export function TaskSheet({
         </header>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {state === 'loading' && (
+          {!detail && state === 'loading' && (
             <div className="space-y-3" aria-hidden>
               <div className="bg-muted h-4 w-2/3 animate-pulse rounded" />
               <div className="bg-muted h-3 w-full animate-pulse rounded" />
               <div className="bg-muted h-3 w-4/5 animate-pulse rounded" />
             </div>
           )}
-          {state === 'error' && (
+          {!detail && state === 'error' && (
             <p className="text-muted-foreground py-8 text-center text-sm">
               Couldn&rsquo;t load this task — try reopening it.
             </p>
           )}
-          {state === 'ready' && detail && (
+          {detail && (
             <div className="flex flex-col gap-6">
               {/* Description */}
               <section className="flex flex-col gap-1.5">

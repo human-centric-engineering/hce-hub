@@ -7,7 +7,7 @@
  * a failed fetch renders the error state, never a crash.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { TaskSheet } from '@/components/hub/projects/task-sheet/task-sheet';
 import { SidekickProvider } from '@/components/hub/sidekick-context';
 import { TaskSheetControlsProvider } from '@/components/hub/projects/task-sheet/task-sheet-context';
@@ -229,6 +229,49 @@ describe('TaskSheet body + actions (t-3)', () => {
       '/api/v1/projects/p1/tasks/t1/claim',
       expect.objectContaining({ method: 'POST' })
     );
+  });
+
+  it('keeps the content visible during the post-claim refetch (no blank flash)', async () => {
+    let getCount = 0;
+    let resolveReload: (v: unknown) => void = () => {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((_url: string, init?: { method?: string }) => {
+        if (init?.method === 'POST') {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({ data: { taskId: 't1', claimed: true, warnings: [] } }),
+          });
+        }
+        getCount += 1;
+        if (getCount === 1) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({ data: detail({ status: 'available' }) }),
+          });
+        }
+        // The reload GET hangs — the content must NOT blank while it's in flight.
+        return new Promise((r) => {
+          resolveReload = r;
+        });
+      })
+    );
+    render(
+      <SidekickProvider value={{ open: false, setOpen: () => {} }}>
+        <TaskSheet projectId="p1" taskId="t1" onClose={() => {}} />
+      </SidekickProvider>
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Claim' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3)); // GET, POST, reload GET
+    // The reload is still pending, yet the task content is still on screen.
+    expect(screen.getByText('Wire the streaming handler')).toBeInTheDocument();
+    resolveReload({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: detail({ status: 'claimed' }) }),
+    });
   });
 
   it('surfaces a claim failure (never a silent write) — retryable', async () => {
