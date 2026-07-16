@@ -2,9 +2,10 @@
  * Unit: TaskCard (f-board-view t-2) — title, feature ref, claimer, collision,
  * PR link (sanitized), is-mine.
  */
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { TaskCard } from '@/components/hub/projects/board/task-card';
+import { TaskSheetControlsProvider } from '@/components/hub/projects/task-sheet/task-sheet-context';
 import type { BoardTaskCard } from '@/components/hub/projects/board/types';
 
 const card = (over: Partial<BoardTaskCard> = {}): BoardTaskCard => ({
@@ -34,6 +35,43 @@ describe('TaskCard', () => {
     render(<TaskCard card={card({ featureSlug: 'f-mcp', number: 6 })} />);
     expect(screen.getByText('f-mcp')).toBeInTheDocument();
     expect(screen.getByText(/·\s*t-6/)).toBeInTheDocument();
+  });
+
+  it('opens the task sheet with the task id on click', () => {
+    const open = vi.fn();
+    render(
+      <TaskSheetControlsProvider value={{ open, close: vi.fn() }}>
+        <TaskCard card={card({ id: 'task-abc' })} />
+      </TaskSheetControlsProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Open task/ }));
+    expect(open).toHaveBeenCalledWith('task-abc');
+  });
+
+  it('opens the sheet on keyboard activation (Enter / Space)', () => {
+    const open = vi.fn();
+    render(
+      <TaskSheetControlsProvider value={{ open, close: vi.fn() }}>
+        <TaskCard card={card({ id: 'task-kbd' })} />
+      </TaskSheetControlsProvider>
+    );
+    const cardEl = screen.getByRole('button', { name: /Open task/ });
+    fireEvent.keyDown(cardEl, { key: 'Enter' });
+    fireEvent.keyDown(cardEl, { key: ' ' });
+    fireEvent.keyDown(cardEl, { key: 'a' }); // a non-activating key does nothing
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledWith('task-kbd');
+  });
+
+  it('clicking the PR link does not open the sheet (stops propagation)', () => {
+    const open = vi.fn();
+    render(
+      <TaskSheetControlsProvider value={{ open, close: vi.fn() }}>
+        <TaskCard card={card({ prUrl: 'https://github.com/x/y/pull/5' })} />
+      </TaskSheetControlsProvider>
+    );
+    fireEvent.click(screen.getByRole('link'));
+    expect(open).not.toHaveBeenCalled();
   });
 
   it('renders the claimer first name', () => {

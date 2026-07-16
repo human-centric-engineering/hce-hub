@@ -15,7 +15,12 @@ const navMock = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api/server-fetch', () => ({ serverFetch: vi.fn(), parseApiResponse: vi.fn() }));
 vi.mock('@/lib/logging', () => ({ logger: { error: vi.fn(), info: vi.fn() } }));
-vi.mock('next/navigation', () => ({ notFound: navMock.notFound }));
+// The project view now mounts the client `TaskSheetProvider`, which reads
+// `useSearchParams` — provide it (empty → no sheet) alongside `notFound`.
+vi.mock('next/navigation', () => ({
+  notFound: navMock.notFound,
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';
 import ProjectViewPage from '@/app/(hub)/projects/[id]/page';

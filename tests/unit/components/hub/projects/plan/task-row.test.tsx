@@ -2,9 +2,10 @@
  * Unit: TaskRow (f-plan-view t-2) — title, claimer (null → "—"), PR label,
  * effective-status pill.
  */
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { TaskRow } from '@/components/hub/projects/plan/task-row';
+import { TaskSheetControlsProvider } from '@/components/hub/projects/task-sheet/task-sheet-context';
 import type { PlanTask } from '@/components/hub/projects/plan/types';
 
 const task = (over: Partial<PlanTask> = {}): PlanTask => ({
@@ -32,6 +33,43 @@ describe('TaskRow', () => {
   it('renders the effective-status label', () => {
     render(<TaskRow task={task({ status: 'blocked' })} ordinal={1} />);
     expect(screen.getByText('blocked')).toBeInTheDocument();
+  });
+
+  it('opens the task sheet with the task id on click', () => {
+    const open = vi.fn();
+    render(
+      <TaskSheetControlsProvider value={{ open, close: vi.fn() }}>
+        <TaskRow task={task({ id: 'task-xyz' })} ordinal={1} />
+      </TaskSheetControlsProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Open task/ }));
+    expect(open).toHaveBeenCalledWith('task-xyz');
+  });
+
+  it('opens the sheet on keyboard activation (Enter / Space)', () => {
+    const open = vi.fn();
+    render(
+      <TaskSheetControlsProvider value={{ open, close: vi.fn() }}>
+        <TaskRow task={task({ id: 'task-kbd' })} ordinal={1} />
+      </TaskSheetControlsProvider>
+    );
+    const row = screen.getByRole('button', { name: /Open task/ });
+    fireEvent.keyDown(row, { key: 'Enter' });
+    fireEvent.keyDown(row, { key: ' ' });
+    fireEvent.keyDown(row, { key: 'a' }); // a non-activating key does nothing
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledWith('task-kbd');
+  });
+
+  it('clicking the PR link does not open the sheet (stops propagation)', () => {
+    const open = vi.fn();
+    render(
+      <TaskSheetControlsProvider value={{ open, close: vi.fn() }}>
+        <TaskRow task={task({ prUrl: 'https://github.com/x/y/pull/5' })} ordinal={1} />
+      </TaskSheetControlsProvider>
+    );
+    fireEvent.click(screen.getByRole('link'));
+    expect(open).not.toHaveBeenCalled();
   });
 
   it('renders "in pr" for the in_pr status', () => {

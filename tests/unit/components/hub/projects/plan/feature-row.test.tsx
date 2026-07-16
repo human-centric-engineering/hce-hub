@@ -148,7 +148,10 @@ describe('FeatureRow', () => {
         onToggle={noop}
       />
     );
-    expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true');
+    // The expanded task row is itself a button (opens the sheet), so select the
+    // feature toggle by its aria-expanded state to disambiguate.
+    expect(screen.getByRole('button', { expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open task Expanded task' })).toBeInTheDocument();
     expect(screen.getByText('Expanded task')).toBeInTheDocument();
   });
 });

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Sidebar } from '@/components/hub/sidebar';
 import { Topbar } from '@/components/hub/topbar';
 import { SidekickColumn } from '@/components/hub/sidekick-column';
+import { SidekickProvider } from '@/components/hub/sidekick-context';
 import { BreadcrumbLabelProvider } from '@/components/hub/breadcrumb-label';
 
 /**
@@ -38,20 +39,25 @@ export function HubShell({
 
   return (
     <BreadcrumbLabelProvider>
-      <div
-        className={`bg-background text-foreground grid min-h-screen ${
-          sidekickOpen ? 'grid-cols-[240px_1fr_380px]' : 'grid-cols-[240px_1fr]'
-        }`}
-      >
-        <Sidebar user={user} />
+      <SidekickProvider value={{ open: sidekickOpen }}>
+        <div
+          className={`bg-background text-foreground grid min-h-screen ${
+            sidekickOpen ? 'grid-cols-[240px_1fr_380px]' : 'grid-cols-[240px_1fr]'
+          }`}
+        >
+          <Sidebar user={user} />
 
-        <div className="flex min-w-0 flex-col">
-          <Topbar sidekickOpen={sidekickOpen} onToggleSidekick={() => setSidekickOpen((o) => !o)} />
-          <main className="min-w-0 flex-1">{children}</main>
+          <div className="flex min-w-0 flex-col">
+            <Topbar
+              sidekickOpen={sidekickOpen}
+              onToggleSidekick={() => setSidekickOpen((o) => !o)}
+            />
+            <main className="min-w-0 flex-1">{children}</main>
+          </div>
+
+          {sidekickOpen && <SidekickColumn />}
         </div>
-
-        {sidekickOpen && <SidekickColumn />}
-      </div>
+      </SidekickProvider>
     </BreadcrumbLabelProvider>
   );
 }
