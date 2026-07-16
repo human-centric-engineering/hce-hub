@@ -791,3 +791,28 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   the PR can merge — don't trust that a push to a PR branch re-synced the PR. If a merge slips through at the wrong
   SHA, fix forward with a cherry-pick PR rather than rewriting merged history. _Status: open — worth a branch-protection/
   auto-merge review so a stale-head squash can't merge past an unpushed-to-PR-head commit._
+
+### B31 · A design affordance whose _mechanism_ doesn't exist (not a data gap) has three honest options — omit / minimal-stub / build-the-mechanism — settle it with the owner at claim, and don't ship a plausible-looking stand-in
+
+- **Discovery ([[f-task-sheet]] t-3).** The design's task-sheet action row showed an **"Open in Claude Code"** button.
+  At build it turned out the Hub↔Claude Code integration is **MCP** (config + `smcp_` key + natural-language tool
+  calls, [[mcp-claude-code]]) — there is **no `claudecode://` deep-link scheme**, and no way for a web page to open a
+  terminal in the right folder on a developer's machine. So the "link" the design implied cannot exist. I shipped a
+  reasonable-looking stand-in (a button that copies a ready-to-paste `claim_task` prompt) and flagged it for a nod —
+  the owner's answer was **"that's not a real thing; remove it."** The button + `lib/projects/claude-code-link.ts`
+  came back out.
+- **Lesson.** This is the sibling of [[planning-retro#HB8]] (surface a **schema** gap the design assumes) but one
+  layer up: here the gap is a **capability/affordance** the platform structurally can't provide. When the design shows
+  an action whose _mechanism_ you can't find at recon, the honest options are exactly three — **(a) omit it, (b) ship
+  a minimal honest stub, (c) build the missing mechanism** — and which one is an **owner call to make at claim time**,
+  not a build-time default. Don't build even a plausible stand-in on spec: a copy-a-prompt button _looks_ like it
+  satisfies the design, so it invites shipping a feature nobody wants. The tell: you're writing "since there's no real
+  X, I'll approximate it with Y" about an **interaction the design shows as present** → stop, name the missing
+  mechanism, and offer the three options. (Recon _did_ flag the deep-link URL as an open question — the miss was
+  building a stand-in _before_ the answer instead of leaving it un-built pending the nod.)
+- **Process hazard (same feature).** A `format:check` failure reached CI red despite a locally-"clean" run, because
+  the local `npm run validate` output was being **grep-filtered to `error|warning|problem`**, which hid Prettier's
+  `[warn]` lines — and heredoc/patch-appended test blocks never went through Prettier. **Lesson:** read the **full**
+  `validate` output before declaring gates green; never filter away `format:check`. Any test block appended by a tool
+  that bypasses the editor (heredoc, `python` patch, `sed`) must be `prettier --write`-run before commit — the
+  formatter only fires on files the editor touches.
