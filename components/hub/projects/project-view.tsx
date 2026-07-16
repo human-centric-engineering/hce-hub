@@ -6,6 +6,7 @@ import { STATUS_VARIANT, initials } from '@/components/hub/projects/presentation
 import { BreadcrumbLabel } from '@/components/hub/breadcrumb-label';
 import { PlanView } from '@/components/hub/projects/plan/plan-view';
 import { BoardView } from '@/components/hub/projects/board/board-view';
+import { TaskSheetProvider } from '@/components/hub/projects/task-sheet/task-sheet-host';
 import type { ProjectTab, ProjectViewDTO } from '@/components/hub/projects/types';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
 import type { ProjectBoardDTO } from '@/components/hub/projects/board/types';
@@ -73,25 +74,29 @@ export function ProjectView({
         <MemberStack members={project.members} />
       </div>
 
-      <ProjectViewTabs projectId={project.id} active={activeTab} />
+      {/* The task sheet opens (deep-linked via `?task=`) over whichever tab is
+          active — mounted here so Plan rows and Board cards can open it. */}
+      <TaskSheetProvider projectId={project.id}>
+        <ProjectViewTabs projectId={project.id} active={activeTab} />
 
-      <div className="py-8">
-        {activeTab === 'plan' ? (
-          plan ? (
-            <PlanView plan={plan} />
+        <div className="py-8">
+          {activeTab === 'plan' ? (
+            plan ? (
+              <PlanView plan={plan} />
+            ) : (
+              <p className="text-muted-foreground py-16 text-center text-sm">
+                Couldn&rsquo;t load the plan just now — try refreshing.
+              </p>
+            )
+          ) : board ? (
+            <BoardView board={board} />
           ) : (
             <p className="text-muted-foreground py-16 text-center text-sm">
-              Couldn&rsquo;t load the plan just now — try refreshing.
+              Couldn&rsquo;t load the board just now — try refreshing.
             </p>
-          )
-        ) : board ? (
-          <BoardView board={board} />
-        ) : (
-          <p className="text-muted-foreground py-16 text-center text-sm">
-            Couldn&rsquo;t load the board just now — try refreshing.
-          </p>
-        )}
-      </div>
+          )}
+        </div>
+      </TaskSheetProvider>
     </div>
   );
 }
