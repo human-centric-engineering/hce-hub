@@ -17,6 +17,7 @@
  * dereferenced. `prUrl` is returned raw and sanitized at render (as `task-row` /
  * `task-card` do), keeping the raw-in-service / sanitize-in-component pattern.
  */
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { NotFoundError } from '@/lib/api/errors';
 import { getAccessibleProject } from '@/lib/projects/access';
@@ -71,7 +72,7 @@ export interface TaskDetail {
  * neighbour to render its row *and* compute its own effective status (its stored
  * status + claimant + the statuses of the tasks it in turn depends on).
  */
-const NEIGHBOUR_SELECT = {
+const NEIGHBOUR_SELECT = Prisma.validator<Prisma.TaskSelect>()({
   id: true,
   number: true,
   title: true,
@@ -79,17 +80,11 @@ const NEIGHBOUR_SELECT = {
   claimedByUserId: true,
   feature: { select: { slug: true } },
   dependencies: { select: { dependsOn: { select: { status: true } } } },
-} as const;
+});
 
-type Neighbour = {
-  id: string;
-  number: number | null;
-  title: string;
-  status: import('@prisma/client').TaskStatus;
-  claimedByUserId: string | null;
-  feature: { slug: string | null };
-  dependencies: { dependsOn: { status: import('@prisma/client').TaskStatus } }[];
-};
+// Derived from the select so the two never drift (add a field to the select and
+// the type follows automatically).
+type Neighbour = Prisma.TaskGetPayload<{ select: typeof NEIGHBOUR_SELECT }>;
 
 function toRef(n: Neighbour): TaskDetailRef {
   return {
