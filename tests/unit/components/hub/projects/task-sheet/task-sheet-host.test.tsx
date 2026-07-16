@@ -73,6 +73,25 @@ describe('TaskSheetProvider', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('closes the sheet when a navigation drops ?task= (URL is the source of truth)', async () => {
+    seedParams('view=plan&task=t1');
+    const { rerender } = render(
+      <TaskSheetProvider projectId="p1">
+        <Trigger />
+      </TaskSheetProvider>
+    );
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+
+    // A <Link> tab switch navigates to a URL without ?task= — the sheet follows.
+    seedParams('view=board');
+    rerender(
+      <TaskSheetProvider projectId="p1">
+        <Trigger />
+      </TaskSheetProvider>
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
   it('open(id) writes ?task= and shows the sheet; close() clears it', async () => {
     render(
       <TaskSheetProvider projectId="p1">
