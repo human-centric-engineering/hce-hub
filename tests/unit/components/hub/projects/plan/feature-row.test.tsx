@@ -161,7 +161,9 @@ describe('FeatureRow', () => {
         feature={feature({
           id: 'feat-9',
           title: 'MCP server',
-          tasks: [{ id: 't1', number: 1, title: 'x', status: 'available', prUrl: null, claimer: null }],
+          tasks: [
+            { id: 't1', number: 1, title: 'x', status: 'available', prUrl: null, claimer: null },
+          ],
           progress: { merged: 0, total: 1, live: 0 },
         })}
         ordinal={1}

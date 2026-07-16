@@ -45,7 +45,11 @@ function ActionButton({
       className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--bg-tint)] disabled:cursor-not-allowed disabled:opacity-50"
       style={
         primary
-          ? { backgroundColor: 'var(--accent)', borderColor: 'var(--accent)', color: 'var(--accent-fg, #fff)' }
+          ? {
+              backgroundColor: 'var(--accent)',
+              borderColor: 'var(--accent)',
+              color: 'var(--accent-fg, #fff)',
+            }
           : { borderColor: 'var(--line)' }
       }
     >
@@ -65,7 +69,7 @@ function DepRow({ dep, onJump }: { dep: TaskDetailRef; onJump: (id: string) => v
       className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left transition-colors hover:bg-[var(--bg-tint)]"
     >
       <span className="font-mono text-[11px]" style={{ color: 'var(--ink-faint)' }}>
-        {dep.number != null ? `t-${dep.number}` : dep.featureSlug ?? '—'}
+        {dep.number != null ? `t-${dep.number}` : (dep.featureSlug ?? '—')}
       </span>
       <span className="min-w-0 flex-1 truncate text-xs" style={{ color: 'var(--ink-soft)' }}>
         {dep.title}
@@ -267,7 +271,12 @@ export function TaskSheet({
               {/* Action row */}
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 {canClaim && (
-                  <ActionButton icon={Check} primary onClick={() => void claim()} disabled={claiming}>
+                  <ActionButton
+                    icon={Check}
+                    primary
+                    onClick={() => void claim()}
+                    disabled={claiming}
+                  >
                     {claiming ? 'Claiming…' : 'Claim'}
                   </ActionButton>
                 )}

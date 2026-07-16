@@ -132,7 +132,7 @@ describe('TaskSheet', () => {
 
 /**
  * t-3: the body (description, files, dependency graph) + the action row
- * (Claim via the shared service, Open PR, Open in Claude Code, Ask sidekick).
+ * (Claim via the shared service, Open PR, Ask sidekick).
  */
 describe('TaskSheet body + actions (t-3)', () => {
   /** Method-aware fetch: GET → detail, POST (claim) → the claim result. */
@@ -149,7 +149,11 @@ describe('TaskSheet body + actions (t-3)', () => {
             }),
           });
         }
-        return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: opts.detail }) });
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ data: opts.detail }),
+        });
       })
     );
   }
@@ -183,7 +187,15 @@ describe('TaskSheet body + actions (t-3)', () => {
       detail: detail({
         description: 'Implements the SSE bridge.',
         filesScope: ['lib/sse.ts', 'app/api/chat/route.ts'],
-        blockedBy: [{ id: 'b1', number: 2, title: 'Provider abstraction', featureSlug: 'f-llm', status: 'merged' }],
+        blockedBy: [
+          {
+            id: 'b1',
+            number: 2,
+            title: 'Provider abstraction',
+            featureSlug: 'f-llm',
+            status: 'merged',
+          },
+        ],
         blocks: [],
       }),
     });
@@ -204,7 +216,9 @@ describe('TaskSheet body + actions (t-3)', () => {
     const onOpen = vi.fn();
     renderSheet({
       detail: detail({
-        blockedBy: [{ id: 'dep-9', number: 9, title: 'Do the base', featureSlug: 'f-x', status: 'available' }],
+        blockedBy: [
+          { id: 'dep-9', number: 9, title: 'Do the base', featureSlug: 'f-x', status: 'available' },
+        ],
       }),
       onOpen,
     });
@@ -218,7 +232,9 @@ describe('TaskSheet body + actions (t-3)', () => {
       claim: {
         taskId: 't1',
         claimed: true,
-        warnings: [{ kind: 'already_claimed', message: 'Heads-up: already claimed by someone else.' }],
+        warnings: [
+          { kind: 'already_claimed', message: 'Heads-up: already claimed by someone else.' },
+        ],
       },
     });
     const btn = await screen.findByRole('button', { name: 'Claim' });
@@ -278,11 +294,13 @@ describe('TaskSheet body + actions (t-3)', () => {
     // GET detail ok; POST claim fails.
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockImplementation((_url: string, init?: { method?: string }) =>
-        init?.method === 'POST'
-          ? Promise.resolve({ ok: false, status: 500, json: async () => ({}) })
-          : Promise.resolve({ ok: true, status: 200, json: async () => ({ data: detail() }) })
-      )
+      vi
+        .fn()
+        .mockImplementation((_url: string, init?: { method?: string }) =>
+          init?.method === 'POST'
+            ? Promise.resolve({ ok: false, status: 500, json: async () => ({}) })
+            : Promise.resolve({ ok: true, status: 200, json: async () => ({ data: detail() }) })
+        )
     );
     render(
       <SidekickProvider value={{ open: false, setOpen: () => {} }}>

@@ -11,9 +11,7 @@ import { useSidekick } from '@/components/hub/sidekick-context';
 
 function Consumer() {
   const { open, setOpen } = useSidekick();
-  return (
-    <button onClick={() => setOpen(true)}>{open ? 'open' : 'closed'}</button>
-  );
+  return <button onClick={() => setOpen(true)}>{open ? 'open' : 'closed'}</button>;
 }
 
 describe('useSidekick (no provider)', () => {
