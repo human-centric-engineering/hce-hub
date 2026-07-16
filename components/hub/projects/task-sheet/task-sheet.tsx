@@ -47,7 +47,13 @@ export function TaskSheet({
     const controller = new AbortController();
     setState('loading');
     setDetail(null);
-    fetch(`/api/v1/projects/${projectId}/tasks/${taskId}`, { signal: controller.signal })
+    // Encode both ids into the path: `taskId` comes from the `?task=` URL param
+    // (user-controllable), so encoding confines the request to this endpoint —
+    // a crafted `../…` can't reshape the path. The request is same-origin on the
+    // caller's own session and the API re-validates + access-scopes both ids
+    // (t-1), so this is defence-in-depth, not the primary control.
+    const path = `/api/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`;
+    fetch(path, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = (await res.json()) as { data: TaskDetailDTO };
