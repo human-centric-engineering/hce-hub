@@ -103,7 +103,7 @@ A flat list in rough dependency order (most-ready first). Order is *emergent fro
 | 08 | `f-projects` | Simon (**shipped**) | f-shell, f-project-admin | 2 (was 3) | Projects list + project view scaffold |
 | 09 | `f-plan-view` | Simon (**shipped**) | f-projects, f-hub-capabilities | 2 (was 4) | Feature-level Plan view (topological ordering) |
 | 10 | `f-board-view` | Simon (**shipped**) | f-projects, f-hub-capabilities | 2 (was 4) | Board (Kanban) — lanes, column routing, collisions |
-| 11 | `f-task-sheet` | TBD | f-plan-view, f-hub-capabilities | 4 | Deep-linkable task detail side sheet |
+| 11 | `f-task-sheet` | Simon (**in flight**) | f-plan-view, f-hub-capabilities | 3 (was 4) | Deep-linkable task detail side sheet |
 | 12 | `f-sidekick` | TBD | f-hub-capabilities, f-shell | 5 | Per-project sidekick agent + chat panel + MCP |
 | 13 | `f-intake` | TBD | f-sidekick, f-projects | 5 | Intake workflow + intake UI (→ human approval) |
 | 14 | `f-github-sync` | TBD | f-hub-capabilities | 4 | GitHub PR integration + PR-merged reconcile |
@@ -241,7 +241,7 @@ What's in flight now, by person — with soft, ambient collision treatment. (Cro
 *Done when:* the Board renders lanes with correct effective-status routing and ambient collisions; claim is a pull action from any lane; gates green. *Shipped (2026-07-15, PRs #48 + #49):* the person-lane × effective-status-column Kanban rendering the same seed as the Plan view. **#48** the routing/collision read (`lib/projects/board.ts` `getProjectBoard` + `GET /api/v1/projects/[id]/board`, funnel → **404-not-403**, server-side lane×column routing; **both carried f-data-model findings discharged here** — null-claimant `claimed` → owner-lane/Available [t-2], orphan/null-or-non-member-owner → a graceful **Unassigned lane** [t-3]; soft collision via `filesOverlap` over open `TaskClaim`s). **#49** the grid UI (`components/hub/projects/board/**`) + the container's board-tab mount. **Two `/code-review`-driven follow-ups:** a **routing bug caught + fixed in-review** (a merged/in-PR task with a claimer routed to the owner lane instead of the claimer's — the lane key must be raw `claimedByUserId ?? owner`, effective status governs only the column), and the **sticky-header CSS finding deferred to §11** (above). **Owner browser-validated** — and flagged the board was crushed into `max-w-5xl`; the container is now full-width left-aligned (per design §3). Real `f-slug · t-N` refs arrived via [[f-refs]] §16. No migration, no platform edit, no HB2. **Sized to 2 PRs (HB3) — owner-confirmed.**
 
 ### 11 · `f-task-sheet` — task detail side sheet
-*Owner:* TBD · *Depends on:* f-plan-view, f-hub-capabilities · *~4 PRs*
+*Owner:* Simon · *Status:* **in flight** · *Depends on:* f-plan-view, f-hub-capabilities · *planned as 3 PRs (read · sheet-shell/deep-link/reposition · content/actions) — sized down from indicative 4 (HB3)* · *Detailed plan:* [[f-task-sheet]]
 
 Full task detail without losing context — a deep-linkable side sheet that repositions beside the sidekick. (Cross-ref: design handoff "7. Task detail sheet".)
 
