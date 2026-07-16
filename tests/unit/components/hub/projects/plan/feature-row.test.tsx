@@ -154,4 +154,24 @@ describe('FeatureRow', () => {
     expect(screen.getByRole('button', { name: 'Open task Expanded task' })).toBeInTheDocument();
     expect(screen.getByText('Expanded task')).toBeInTheDocument();
   });
+
+  it('labels the expand toggle and links it to its task region (a11y — carried §09)', () => {
+    render(
+      <FeatureRow
+        feature={feature({
+          id: 'feat-9',
+          title: 'MCP server',
+          tasks: [{ id: 't1', number: 1, title: 'x', status: 'available', prUrl: null, claimer: null }],
+          progress: { merged: 0, total: 1, live: 0 },
+        })}
+        ordinal={1}
+        expanded
+        onToggle={noop}
+      />
+    );
+    const toggle = screen.getByRole('button', { name: 'Toggle tasks for MCP server' });
+    expect(toggle).toHaveAttribute('aria-controls', 'feature-tasks-feat-9');
+    // The controlled region carries the matching id.
+    expect(document.getElementById('feature-tasks-feat-9')).toBeInTheDocument();
+  });
 });

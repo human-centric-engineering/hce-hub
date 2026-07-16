@@ -70,3 +70,6 @@ export {
 
 // Task sheet — one task's full detail + dependency graph (f-task-sheet).
 export { getTaskDetail, type TaskDetail, type TaskDetailRef } from '@/lib/projects/task-detail';
+
+// Claim a task — shared by the capability + the consumer route (f-task-sheet).
+export { claimTask, type ClaimTaskResult } from '@/lib/projects/claim-task-service';
