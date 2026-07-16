@@ -1,10 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Link2, Check, GitPullRequest, Terminal, MessageSquare, Lock, Folder } from 'lucide-react';
+import { X, Link2, Check, GitPullRequest, MessageSquare, Lock, Folder } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
-import { buildClaudeCodeCommand } from '@/lib/projects/claude-code-link';
 import { useSidekick } from '@/components/hub/sidekick-context';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
@@ -83,9 +82,8 @@ function DepRow({ dep, onJump }: { dep: TaskDetailRef; onJump: (id: string) => v
  * slides in over a scrim, closes on Esc / scrim / the close button, and anchors
  * to the left of the sidekick when it's open (`right: 392px`). t-3 fills the
  * body (description, files in scope, the two-way dependency graph) + the action
- * row (Claim via the shared claim service, Open PR, Open in Claude Code, Ask
- * sidekick), and does the dialog a11y pass (focus in on open, return focus on
- * close, `aria-modal`).
+ * row (Claim via the shared claim service, Open PR, Ask sidekick), and does the
+ * dialog a11y pass (focus in on open, return focus on close, `aria-modal`).
  */
 export function TaskSheet({
   projectId,
@@ -105,9 +103,7 @@ export function TaskSheet({
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState(false);
   const [warnings, setWarnings] = useState<ClaimWarning[]>([]);
-  const [copied, setCopied] = useState(false);
   const asideRef = useRef<HTMLElement>(null);
-  const copyTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Slide in on mount.
   useEffect(() => setEntered(true), []);
@@ -118,9 +114,6 @@ export function TaskSheet({
     asideRef.current?.focus();
     return () => prev?.focus?.();
   }, []);
-
-  // Clear the "copied" timer on unmount.
-  useEffect(() => () => clearTimeout(copyTimer.current), []);
 
   const path = `/api/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`;
 
@@ -186,19 +179,6 @@ export function TaskSheet({
       setClaiming(false);
     }
   }, [path]);
-
-  const copyClaudeCommand = () => {
-    if (!detail) return;
-    void navigator.clipboard?.writeText(
-      buildClaudeCodeCommand({
-        number: detail.number,
-        title: detail.title,
-        featureSlug: detail.feature.slug,
-      })
-    );
-    setCopied(true);
-    copyTimer.current = setTimeout(() => setCopied(false), 2000);
-  };
 
   const ref = detail?.number != null ? `t-${detail.number}` : `t-${taskId.slice(-4)}`;
   const status = detail ? taskStatus(detail.status) : null;
@@ -308,9 +288,6 @@ export function TaskSheet({
                     {prLabel(prUrl)}
                   </a>
                 )}
-                <ActionButton icon={Terminal} onClick={copyClaudeCommand}>
-                  {copied ? 'Copied' : 'Open in Claude Code'}
-                </ActionButton>
                 <ActionButton icon={MessageSquare} onClick={() => setSidekickOpen(true)}>
                   Ask sidekick
                 </ActionButton>

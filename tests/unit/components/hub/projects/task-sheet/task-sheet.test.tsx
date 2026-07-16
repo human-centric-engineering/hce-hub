@@ -301,15 +301,6 @@ describe('TaskSheet body + actions (t-3)', () => {
     expect(screen.queryByRole('button', { name: 'Claim' })).not.toBeInTheDocument();
   });
 
-  it('copies the Claude Code MCP command (no fabricated deep-link)', async () => {
-    renderSheet({ detail: detail({ number: 6, title: 'Wire the streaming handler', feature: { id: 'f1', slug: 'f-mcp', title: 'MCP server', owner: null } }) });
-    fireEvent.click(await screen.findByRole('button', { name: /Open in Claude Code/ }));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      expect.stringContaining('claim task t-6')
-    );
-    expect(await screen.findByText('Copied')).toBeInTheDocument();
-  });
-
   it('opens the sidekick column from "Ask sidekick"', async () => {
     const setSidekickOpen = vi.fn();
     renderSheet({ detail: detail(), setSidekickOpen });
