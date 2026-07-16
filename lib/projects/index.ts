@@ -67,3 +67,6 @@ export {
   type BoardLane,
   type BoardTaskCard,
 } from '@/lib/projects/board';
+
+// Task sheet — one task's full detail + dependency graph (f-task-sheet).
+export { getTaskDetail, type TaskDetail, type TaskDetailRef } from '@/lib/projects/task-detail';
