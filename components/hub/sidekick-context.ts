@@ -10,9 +10,11 @@ import { createContext, useContext } from 'react';
  */
 export interface SidekickState {
   open: boolean;
+  /** Open/close the sidekick column — e.g. the task sheet's "Ask sidekick" action. */
+  setOpen: (open: boolean) => void;
 }
 
-const SidekickContext = createContext<SidekickState>({ open: false });
+const SidekickContext = createContext<SidekickState>({ open: false, setOpen: () => {} });
 
 /** Provider — the shell wraps its content in this with the live open state. */
 export const SidekickProvider = SidekickContext.Provider;

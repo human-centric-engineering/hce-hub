@@ -39,7 +39,7 @@ export function HubShell({
 
   return (
     <BreadcrumbLabelProvider>
-      <SidekickProvider value={{ open: sidekickOpen }}>
+      <SidekickProvider value={{ open: sidekickOpen, setOpen: setSidekickOpen }}>
         <div
           className={`bg-background text-foreground grid min-h-screen ${
             sidekickOpen ? 'grid-cols-[240px_1fr_380px]' : 'grid-cols-[240px_1fr]'

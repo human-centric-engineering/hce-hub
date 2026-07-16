@@ -167,6 +167,8 @@ export function FeatureRow({
           type="button"
           onClick={onToggle}
           aria-expanded={expanded}
+          aria-controls={`feature-tasks-${feature.id}`}
+          aria-label={`Toggle tasks for ${feature.title}`}
           className={cn(headGrid, 'hover:bg-muted/40 transition-colors')}
         >
           {head}
@@ -176,7 +178,7 @@ export function FeatureRow({
       )}
 
       {expanded && hasTasks && (
-        <div style={{ backgroundColor: 'var(--bg-sunken)' }}>
+        <div id={`feature-tasks-${feature.id}`} style={{ backgroundColor: 'var(--bg-sunken)' }}>
           <div
             className={`${TASK_ROW_GRID} px-4 py-1.5 pl-7 text-[9.5px] tracking-wider uppercase`}
             style={{ color: 'var(--ink-faint)' }}

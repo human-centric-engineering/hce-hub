@@ -144,4 +144,15 @@ describe('claim_task soft collisions (never a block)', () => {
       })
     );
   });
+  it('errors (no_user_context) without a signed-in caller', async () => {
+    const r = await cap.execute({ taskId: 't1' }, ctx(null));
+    expect(r.success).toBe(false);
+    expect(r.error?.code).toBe('no_user_context');
+  });
+
+  it('propagates a non-not-found error from the claim core', async () => {
+    grantTask();
+    runTx.mockRejectedValue(new Error('db down'));
+    await expect(cap.execute({ taskId: 't1' }, ctx())).rejects.toThrow('db down');
+  });
 });
