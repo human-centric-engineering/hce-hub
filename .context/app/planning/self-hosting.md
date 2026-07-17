@@ -130,6 +130,13 @@ indicative list with real tasks** rather than promoting rows in place. Addition 
   defaulting to the feature owner at creation, freely reassignable. Kept **distinct** from the
   pull-`claim` ("I'm actively on it now") — the Board already routes by `claimer ?? owner`, so
   the assignee is the softer ownership signal.
+- **`doneWhen String? @db.Text`** — the task's **acceptance contract** (the plan tables' per-task
+  `Done-when` cell — the single richest, most operational per-task field: "a member gets the
+  task's detail; a cross-project id → 404; gates green"). Distinct from `Feature.doneWhen` (the
+  feature-level definition of done): a builder claiming a task needs *this task's* done-when, and
+  without the column a claimed `Task` would carry files + deps + status but not what "finished"
+  means. Set by `plan_feature` per task (added by the 2026-07-17 plan-coverage assessment — the
+  completed plans surface it in every task row; see the decisions log).
 
 **Status vocabulary reconciliation.** `FeatureStatus` (`planning | in_flight | blocked |
 shipped`) is the ownership/progress axis; `planningStage` is the depth axis. A feature can be
@@ -243,6 +250,42 @@ is *getting to v1*, which self-hosting is part of (owner, 2026-07-17); it's stan
 discovery/dev work, not a new milestone. Built the current GitHub way, so C's import captures
 the complete record including the self-hosting build itself. `plan.md` freezes only *after* C
 runs.
+
+## 7 · Plan-doc coverage — the completed plans vs the model (assessment 2026-07-17)
+
+Read a few shipped `<feature>.md` plans against the current + planned schema (owner
+prompt): does the model capture everything the plans hold, for the right audience? The
+**record** (what happened / was decided) and the **structure** (features → tasks →
+stages) are well covered by §17 + §18. Three things the completed plans surface that the
+model must too — decided here so they aren't lost at the §19 cutover:
+
+1. **Per-task `doneWhen` → a first-class `Task` field (§18, above).** The plan tables'
+   per-task `Done-when` cell is the richest, most operational per-task content — the
+   builder's acceptance contract. `Feature.doneWhen` is feature-level and doesn't cover
+   it. **Resolved:** add `Task.doneWhen` (§2), set by `plan_feature`.
+2. **Open / pending decisions are NOT a journal kind — they belong to the §12 approval
+   queue.** A whole section of every plan is "*for the owner to confirm*" — *pending*
+   decisions awaiting a call. The journal models **resolved** decisions (`record_decision`,
+   append-only/immutable); an *open* question is a different thing. **Resolved:** do **not**
+   add an `open_question` `ProjectEventKind`. Pending-decision capture is the §12
+   propose→approve surface (Sunrise's approvals primitive). Until §12 lands, the cutover
+   keeps claim-review-by-PR for anything needing an owner nod. (Flagged now so it doesn't
+   silently vanish at §19.)
+3. **Carried cross-feature findings must surface on the *target* feature.** The decisions
+   logs are full of "finding carried to §10 / deferred to §11" — an actionable TODO for a
+   *future* feature. A `note` event scoped to the *source* feature never shows where the
+   work happens. **Resolved:** a carry is written **scoped to the *target* `featureId`** —
+   as an `add_note` (or, once §18 exists, an `IndicativeTask` on the target). The mechanism
+   is the target-scoped write, not a new model.
+
+**Declared non-goals (a decision, not a leak):**
+- **Reconciliation-findings *structure* + test strategy are build-time workspace, not the
+  system of record.** Flattened into decision-event prose they lose their finding→decision
+  shape — and that's fine: the *frozen markdown* stays the archive of the thinking; the Hub
+  holds the *outcome*. We do not model recon lists or vitest plans.
+- **The `[[wikilink]]` graph** — `Feature.references` (Json) holds a curated top-level set;
+  dense inline cross-refs become flat text in event/description markdown. Acceptable for v1
+  unless in-Hub cross-navigation becomes a real need (then promote `references` to rows).
 
 ## Open questions (for the owner, at claim)
 
