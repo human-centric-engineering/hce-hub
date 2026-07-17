@@ -20,6 +20,7 @@ import { executeTransaction } from '@/lib/db/utils';
 import { NotFoundError } from '@/lib/api/errors';
 import { resolveTaskAccess } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
+import { recordProjectEvent } from '@/lib/projects/project-event';
 import { detectFileOverlapWarnings, type CollisionWarning } from '@/lib/projects/collision';
 
 export interface ClaimTaskResult {
@@ -101,6 +102,17 @@ export async function claimTask(
     await tx.task.update({
       where: { id: task.taskId },
       data: { status: 'claimed', claimedByUserId: userId },
+    });
+    // Journal the claim inside the same tx (an event iff the claim commits).
+    // Emitting here — in the shared service, not each caller — means the
+    // capability AND the consumer route both journal identically, no drift.
+    await recordProjectEvent(tx, {
+      projectId: task.projectId,
+      featureId: task.featureId,
+      taskId: task.taskId,
+      kind: 'task_claimed',
+      actorUserId: userId,
+      metadata: { previousClaimant: task.claimedByUserId },
     });
   });
 

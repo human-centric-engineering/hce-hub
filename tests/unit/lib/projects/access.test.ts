@@ -256,6 +256,7 @@ describe('resolveTaskAccess', () => {
   const TASK = 'task-1';
   const taskRow = {
     id: TASK,
+    featureId: 'feature-1',
     status: 'available',
     claimedByUserId: null,
     filesScope: ['api/'],
@@ -271,6 +272,7 @@ describe('resolveTaskAccess', () => {
       ok: true,
       task: {
         taskId: TASK,
+        featureId: 'feature-1',
         projectId: PROJECT,
         status: 'available',
         claimedByUserId: null,

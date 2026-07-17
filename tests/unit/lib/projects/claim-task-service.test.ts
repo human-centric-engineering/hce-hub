@@ -12,16 +12,19 @@ vi.mock('@/lib/projects/access', () => ({ resolveTaskAccess: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({ prisma: { taskClaim: { findMany: vi.fn() } } }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
+vi.mock('@/lib/projects/project-event', () => ({ recordProjectEvent: vi.fn() }));
 
 const { resolveTaskAccess } = await import('@/lib/projects/access');
 const { prisma } = await import('@/lib/db/client');
 const { executeTransaction } = await import('@/lib/db/utils');
+const { recordProjectEvent } = await import('@/lib/projects/project-event');
 const { NotFoundError } = await import('@/lib/api/errors');
 const { claimTask } = await import('@/lib/projects/claim-task-service');
 
 const resolveTask = resolveTaskAccess as ReturnType<typeof vi.fn>;
 const claimFindMany = prisma.taskClaim.findMany as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
+const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
 
 const txUpdateMany = vi.fn();
 const txCreate = vi.fn();
@@ -32,6 +35,7 @@ function grantTask(over: Partial<{ claimedByUserId: string | null; filesScope: s
     ok: true,
     task: {
       taskId: 't1',
+      featureId: 'f1',
       projectId: 'p1',
       status: 'available',
       claimedByUserId: over.claimedByUserId ?? null,
@@ -67,6 +71,23 @@ describe('claimTask', () => {
       where: { id: 't1' },
       data: { status: 'claimed', claimedByUserId: 'user-1' },
     });
+  });
+
+  it('journals a task_claimed event inside the same transaction', async () => {
+    grantTask({ claimedByUserId: 'prev-owner' });
+    await claimTask('user-1', 't1');
+
+    expect(emit).toHaveBeenCalledWith(expect.anything(), {
+      projectId: 'p1',
+      featureId: 'f1',
+      taskId: 't1',
+      kind: 'task_claimed',
+      actorUserId: 'user-1',
+      metadata: { previousClaimant: 'prev-owner' },
+    });
+    // Atomicity: written with the transaction client (the same object that
+    // carries the claim update), so it commits iff the claim does.
+    expect(emit.mock.calls[0][0].task.update).toBe(txTaskUpdate);
   });
 
   it('surfaces an already-claimed soft warning (still claims — never a lock)', async () => {

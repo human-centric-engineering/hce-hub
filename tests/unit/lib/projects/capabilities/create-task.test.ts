@@ -15,17 +15,20 @@ vi.mock('@/lib/db/client', () => ({
 }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
+vi.mock('@/lib/projects/project-event', () => ({ recordProjectEvent: vi.fn() }));
 
 const { resolveFeatureAccess } = await import('@/lib/projects/access');
 const { prisma } = await import('@/lib/db/client');
 const { executeTransaction } = await import('@/lib/db/utils');
 const { logAdminAction } = await import('@/lib/orchestration/audit/admin-audit-logger');
+const { recordProjectEvent } = await import('@/lib/projects/project-event');
 const { CreateTaskCapability } = await import('@/lib/projects/capabilities/create-task');
 
 const resolveFeature = resolveFeatureAccess as ReturnType<typeof vi.fn>;
 const taskFindMany = prisma.task.findMany as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
+const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
 
 const cap = new CreateTaskCapability();
 const USER = 'user-1';
@@ -147,6 +150,23 @@ describe('create_task happy path (no deps)', () => {
         entityName: 'Ship it',
       })
     );
+  });
+
+  it('journals a task_created event inside the same transaction', async () => {
+    mockTxCreatesTask('t-1', 'available');
+    await cap.execute({ featureId: 'f1', title: 'Ship it' }, ctx());
+
+    expect(emit).toHaveBeenCalledWith(expect.anything(), {
+      projectId: 'p1',
+      featureId: 'f1',
+      taskId: 't-1',
+      kind: 'task_created',
+      actorUserId: USER,
+      metadata: { status: 'available' },
+    });
+    // Atomicity: the event is written with the *transaction* client (the same
+    // object carrying the task create), so it commits iff the task does.
+    expect(emit.mock.calls[0][0].task.create).toBe(txTaskCreate);
   });
 });
 

@@ -28,6 +28,7 @@ import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
+import { recordProjectEvent } from '@/lib/projects/project-event';
 import { redactedString } from '@/lib/security/redact';
 
 const schema = z.object({
@@ -147,6 +148,15 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           data: depIds.map((dependsOnTaskId) => ({ taskId: created.id, dependsOnTaskId })),
         });
       }
+      // Journal the creation inside the same tx (an event iff the task commits).
+      await recordProjectEvent(tx, {
+        projectId: access.feature.projectId,
+        featureId: args.featureId,
+        taskId: created.id,
+        kind: 'task_created',
+        actorUserId: userId,
+        metadata: { status: created.status },
+      });
       return created;
     });
 
