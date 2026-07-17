@@ -19,6 +19,8 @@ import { CreateTaskCapability } from '@/lib/projects/capabilities/create-task';
 import { AddBacklogCapability } from '@/lib/projects/capabilities/add-backlog';
 import { FlagHelpWantedCapability } from '@/lib/projects/capabilities/flag-help-wanted';
 import { ClaimTaskCapability } from '@/lib/projects/capabilities/claim-task';
+import { RecordDecisionCapability } from '@/lib/projects/capabilities/record-decision';
+import { AddNoteCapability } from '@/lib/projects/capabilities/add-note';
 
 export function initAppCapabilities(): void {
   // HCE Hub coordination tools (f-hub-capabilities). Each also needs an active
@@ -31,4 +33,8 @@ export function initAppCapabilities(): void {
   registerAppCapability(new AddBacklogCapability()); // write (t-2)
   registerAppCapability(new FlagHelpWantedCapability()); // write (t-2)
   registerAppCapability(new ClaimTaskCapability()); // write + soft-collision (t-3)
+  // Journal authored verbs (f-journal §17 t-2) — free-text narrative into the
+  // ProjectEvent stream; membership-scoped via the resolveEventScope funnel.
+  registerAppCapability(new RecordDecisionCapability());
+  registerAppCapability(new AddNoteCapability());
 }
