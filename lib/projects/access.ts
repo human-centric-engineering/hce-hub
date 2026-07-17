@@ -196,6 +196,40 @@ export async function resolveFeatureAccess(
   };
 }
 
+/**
+ * The resolved scope of an authored journal entry (`record_decision` /
+ * `add_note`, f-journal §17 t-2): the project it lands on, and the feature it
+ * concerns (or null for a project/epic-level entry).
+ */
+export type EventScopeResult =
+  { ok: true; projectId: string; featureId: string | null } | { ok: false };
+
+/**
+ * Resolve (and authorize) the project/feature scope for an authored journal
+ * entry through the same membership funnel — never hand-rolled. A `featureId`
+ * **takes precedence** and derives its *own* project, so an entry can't be
+ * mis-scoped to a project the feature isn't in; otherwise a `projectId` gives a
+ * project-level entry. A non-member — or neither id supplied — resolves to
+ * `{ ok: false }` (the caller maps it to `not_found`, no enumeration). Any
+ * member may author (the `member` tier); there is no owner gate on narrative.
+ */
+export async function resolveEventScope(
+  userId: string,
+  scope: { projectId?: string; featureId?: string }
+): Promise<EventScopeResult> {
+  if (scope.featureId) {
+    const access = await resolveFeatureAccess(userId, scope.featureId, 'member');
+    if (!access.ok) return { ok: false };
+    return { ok: true, projectId: access.feature.projectId, featureId: scope.featureId };
+  }
+  if (scope.projectId) {
+    const { basis } = await canAccessProject(userId, scope.projectId);
+    if (basis === null) return { ok: false };
+    return { ok: true, projectId: scope.projectId, featureId: null };
+  }
+  return { ok: false };
+}
+
 /** A task's claim-relevant fields + the caller's role, once access is granted. */
 export interface TaskAccess {
   taskId: string;

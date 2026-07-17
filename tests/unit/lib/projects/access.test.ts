@@ -39,6 +39,7 @@ const {
   accessibleProjectIds,
   resolveFeatureAccess,
   resolveTaskAccess,
+  resolveEventScope,
 } = await import('@/lib/projects/access');
 const { NotFoundError, ForbiddenError } = await import('@/lib/api/errors');
 
@@ -294,5 +295,62 @@ describe('resolveTaskAccess', () => {
     memberFindUnique.mockResolvedValue(null); // not a member
     const r = await resolveTaskAccess(USER, TASK);
     expect(r).toEqual({ ok: false, reason: 'not_found' });
+  });
+});
+
+describe('resolveEventScope', () => {
+  it('derives the project from a featureId (feature scope) for a member', async () => {
+    featureFindUnique.mockResolvedValue({
+      projectId: PROJECT,
+      ownerUserId: 'x',
+      helpWanted: false,
+    });
+    memberFindUnique.mockResolvedValue({ role: 'member' });
+
+    const r = await resolveEventScope(USER, { featureId: 'feature-1' });
+    expect(r).toEqual({ ok: true, projectId: PROJECT, featureId: 'feature-1' });
+  });
+
+  it('a featureId takes precedence — the project comes from the feature, not a passed projectId', async () => {
+    featureFindUnique.mockResolvedValue({
+      projectId: PROJECT,
+      ownerUserId: 'x',
+      helpWanted: false,
+    });
+    memberFindUnique.mockResolvedValue({ role: 'member' });
+
+    const r = await resolveEventScope(USER, { featureId: 'feature-1', projectId: 'other-project' });
+    expect(r).toEqual({ ok: true, projectId: PROJECT, featureId: 'feature-1' });
+  });
+
+  it('project scope (featureId omitted) for a member', async () => {
+    memberFindUnique.mockResolvedValue({ role: 'lead' });
+
+    const r = await resolveEventScope(USER, { projectId: PROJECT });
+    expect(r).toEqual({ ok: true, projectId: PROJECT, featureId: null });
+    expect(featureFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('a non-member is denied (→ not_found), for both feature and project scope', async () => {
+    featureFindUnique.mockResolvedValue({
+      projectId: PROJECT,
+      ownerUserId: 'x',
+      helpWanted: false,
+    });
+    memberFindUnique.mockResolvedValue(null); // not a member
+
+    expect(await resolveEventScope(USER, { featureId: 'feature-1' })).toEqual({ ok: false });
+    expect(await resolveEventScope(USER, { projectId: PROJECT })).toEqual({ ok: false });
+  });
+
+  it('a missing feature is denied', async () => {
+    featureFindUnique.mockResolvedValue(null);
+    expect(await resolveEventScope(USER, { featureId: 'nope' })).toEqual({ ok: false });
+  });
+
+  it('neither id supplied is denied without touching the DB', async () => {
+    expect(await resolveEventScope(USER, {})).toEqual({ ok: false });
+    expect(featureFindUnique).not.toHaveBeenCalled();
+    expect(memberFindUnique).not.toHaveBeenCalled();
   });
 });
