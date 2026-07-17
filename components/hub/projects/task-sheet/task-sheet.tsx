@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
 import { useSidekick } from '@/components/hub/sidekick-context';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
+import { TaskActivity } from '@/components/hub/projects/task-sheet/task-activity';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
 import { taskStatus, firstName, prLabel } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
@@ -408,8 +409,10 @@ export function TaskSheet({
                 </div>
               </section>
 
-              {/* Activity timeline + sidekick notes are deferred — no v1 data source
-                  (no per-task event feed; the sidekick lands in §12). */}
+              {/* Activity timeline — the task's ProjectEvent stream (f-journal
+                  §17 t-3). Refetches after a claim via `reloadKey`. Sidekick
+                  notes still land with the sidekick (§12). */}
+              <TaskActivity projectId={projectId} taskId={taskId} refreshKey={reloadKey} />
             </div>
           )}
         </div>

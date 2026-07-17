@@ -32,10 +32,17 @@ const detail = (over: Partial<TaskDetailDTO> = {}): TaskDetailDTO => ({
 function mockFetchOnce(res: { ok?: boolean; data?: TaskDetailDTO }) {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue({
-      ok: res.ok ?? true,
-      status: res.ok === false ? 500 : 200,
-      json: async () => ({ data: res.data }),
+    vi.fn().mockImplementation((url: string) => {
+      // The activity timeline (f-journal §17 t-3) fetches events once detail
+      // loads; keep it empty so these detail-focused tests are unaffected.
+      if (typeof url === 'string' && url.includes('/events')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: [] }) });
+      }
+      return Promise.resolve({
+        ok: res.ok ?? true,
+        status: res.ok === false ? 500 : 200,
+        json: async () => ({ data: res.data }),
+      });
     })
   );
 }
@@ -139,7 +146,7 @@ describe('TaskSheet body + actions (t-3)', () => {
   function mockFetch(opts: { detail: TaskDetailDTO; claim?: ClaimResultDTO }) {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockImplementation((_url: string, init?: { method?: string }) => {
+      vi.fn().mockImplementation((url: string, init?: { method?: string }) => {
         if (init?.method === 'POST') {
           return Promise.resolve({
             ok: true,
@@ -148,6 +155,10 @@ describe('TaskSheet body + actions (t-3)', () => {
               data: opts.claim ?? { taskId: 't1', claimed: true, warnings: [] },
             }),
           });
+        }
+        // The activity timeline fetches events (GET); keep it empty here.
+        if (typeof url === 'string' && url.includes('/events')) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: [] }) });
         }
         return Promise.resolve({
           ok: true,
