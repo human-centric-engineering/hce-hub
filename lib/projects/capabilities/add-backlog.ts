@@ -20,6 +20,7 @@ import type {
 import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
+import { recordProjectEvent } from '@/lib/projects/project-event';
 import { redactedString } from '@/lib/security/redact';
 
 const schema = z.object({
@@ -89,7 +90,7 @@ export class AddBacklogCapability extends BaseCapability<Args, Data> {
         data: { taskCounter: { increment: 1 } },
         select: { taskCounter: true },
       });
-      return tx.task.create({
+      const created = await tx.task.create({
         data: {
           featureId: args.featureId,
           number: taskCounter,
@@ -98,6 +99,16 @@ export class AddBacklogCapability extends BaseCapability<Args, Data> {
         },
         select: { id: true, status: true },
       });
+      // Journal the capture inside the same tx (an event iff the task commits).
+      await recordProjectEvent(tx, {
+        projectId: access.feature.projectId,
+        featureId: args.featureId,
+        taskId: created.id,
+        kind: 'task_created',
+        actorUserId: userId,
+        metadata: { status: created.status },
+      });
+      return created;
     });
 
     logAdminAction({

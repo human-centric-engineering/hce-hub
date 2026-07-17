@@ -7,15 +7,18 @@ import { it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@/lib/projects/access', () => ({ resolveFeatureAccess: vi.fn() }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
+vi.mock('@/lib/projects/project-event', () => ({ recordProjectEvent: vi.fn() }));
 
 const { resolveFeatureAccess } = await import('@/lib/projects/access');
 const { executeTransaction } = await import('@/lib/db/utils');
 const { logAdminAction } = await import('@/lib/orchestration/audit/admin-audit-logger');
+const { recordProjectEvent } = await import('@/lib/projects/project-event');
 const { AddBacklogCapability } = await import('@/lib/projects/capabilities/add-backlog');
 
 const resolveFeature = resolveFeatureAccess as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
+const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
 
 const cap = new AddBacklogCapability();
 const USER = 'user-1';
@@ -70,6 +73,23 @@ it('creates a backlog task (any member) with the next project number and audits'
   expect(audit).toHaveBeenCalledWith(
     expect.objectContaining({ action: 'task.add_backlog', entityId: 't-b', userId: USER })
   );
+});
+
+it('journals a task_created (backlog) event inside the same transaction', async () => {
+  resolveFeature.mockResolvedValue(granted);
+  mockTxCreatesTask('t-b', 'backlog', 4);
+
+  await cap.execute({ featureId: 'f1', title: 'idea' }, ctx());
+
+  expect(emit).toHaveBeenCalledWith(expect.anything(), {
+    projectId: 'p1',
+    featureId: 'f1',
+    taskId: 't-b',
+    kind: 'task_created',
+    actorUserId: USER,
+    metadata: { status: 'backlog' },
+  });
+  expect(emit.mock.calls[0][0].task.create).toBe(txTaskCreate);
 });
 
 it('uses the member (not owner) access tier', async () => {

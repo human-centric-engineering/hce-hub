@@ -199,6 +199,7 @@ export async function resolveFeatureAccess(
 /** A task's claim-relevant fields + the caller's role, once access is granted. */
 export interface TaskAccess {
   taskId: string;
+  featureId: string;
   projectId: string;
   status: TaskStatus;
   claimedByUserId: string | null;
@@ -220,6 +221,7 @@ export async function resolveTaskAccess(userId: string, taskId: string): Promise
     where: { id: taskId },
     select: {
       id: true,
+      featureId: true,
       status: true,
       claimedByUserId: true,
       filesScope: true,
@@ -235,6 +237,7 @@ export async function resolveTaskAccess(userId: string, taskId: string): Promise
     ok: true,
     task: {
       taskId: task.id,
+      featureId: task.featureId,
       projectId: task.feature.projectId,
       status: task.status,
       claimedByUserId: task.claimedByUserId,

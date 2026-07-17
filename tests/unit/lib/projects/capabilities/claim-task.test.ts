@@ -13,6 +13,10 @@ vi.mock('@/lib/projects/access', () => ({ resolveTaskAccess: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({ prisma: { taskClaim: { findMany: vi.fn() } } }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
+// The capability runs the real claimTask service; its journal write is covered
+// in claim-task-service.test.ts, so stub it here to keep this matrix on
+// collisions/handoff.
+vi.mock('@/lib/projects/project-event', () => ({ recordProjectEvent: vi.fn() }));
 
 const { resolveTaskAccess } = await import('@/lib/projects/access');
 const { prisma } = await import('@/lib/db/client');
@@ -36,6 +40,7 @@ function grantTask(
     ok: true,
     task: {
       taskId: 't1',
+      featureId: 'f1',
       projectId: 'p1',
       status: 'available',
       claimedByUserId: overrides.claimedByUserId ?? null,

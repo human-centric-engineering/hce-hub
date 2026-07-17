@@ -92,6 +92,7 @@ model Project {
   features        Feature[]
   phases          Phase[]
   focusDirectives FocusDirective[]
+  events          ProjectEvent[]
 
   @@index([leadUserId])
   @@map("app_project")
@@ -317,4 +318,71 @@ model Phase {
 
   @@index([projectId])
   @@map("app_phase")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Journal — f-journal (§17). The Hub's own consumer-facing event stream: ONE
+// append-only table, scoped to project / feature / task, carrying both
+// AUTO-events (state changes the capabilities emit) and AUTHORED entries
+// (decision / note, written over MCP). Every "log" surface — the decisions log,
+// work-completed, the task-sheet activity timeline, recent-activity, the morning
+// brief — is a filtered VIEW over this one stream, not its own model
+// (self-hosting §1). Sits beside Sunrise's AiAdminAuditLog (which is admin-only —
+// the reason f-task-sheet §11 deferred its timeline); this one is member-facing.
+//
+// Same fork conventions: `app_*`-mapped; the satellite FK actorUserId → core
+// "user" is hand-written in the migration + drift-probed (SET NULL — an event is
+// retained shared history, so the actor reference drops but the record stays).
+// featureId / taskId are NULLABLE, UNCONSTRAINED scope pointers (no `@relation`,
+// no FK) so a feature/task can be hard-deleted while its history is retained —
+// resolved best-effort on read. projectId cascades (an event is meaningless
+// without its project). actorAgentId (a Sunrise AiAgent id) carries NO FK —
+// cross-tier, exactly like Project.sidekickAgentId; agent actors arrive with
+// f-sidekick §12 (null until then).
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ProjectEventKind {
+  // Feature lifecycle — emitters land in f-feature-planning §18 (defined now so
+  // §18 needs no enum migration; f-journal §17 emits none of these).
+  feature_created
+  feature_claimed
+  feature_planned
+  feature_shipped
+  feature_blocked
+  feature_unblocked
+  // Task lifecycle — §17 emits task_created (create_task / add_backlog),
+  // task_claimed (the shared claimTask service), and help_wanted
+  // (flag_help_wanted). task_pr_linked / task_merged await a link_pr /
+  // complete_task capability (later, f-github-sync).
+  task_created
+  task_claimed
+  task_pr_linked
+  task_merged
+  help_wanted
+  // Membership.
+  member_added
+  // Authored narrative — record_decision / add_note (f-journal §17 t-2).
+  decision
+  note
+}
+
+model ProjectEvent {
+  id           String           @id @default(cuid())
+  projectId    String
+  featureId    String? // soft scope pointer — no FK (history outlives the feature)
+  taskId       String? // soft scope pointer — no FK (history outlives the task)
+  kind         ProjectEventKind
+  actorUserId  String? // hand-FK → "user" · ON DELETE SET NULL (retain the event, drop the actor)
+  actorAgentId String? // Sunrise AiAgent id (agent actor); no FK — cross-tier
+  title        String? // authored kinds (a decision title / a ship-narrative heading)
+  body         String?          @db.Text // markdown (authored entries + ship narratives)
+  metadata     Json? // kind-specific: { status } | { helpWanted } | { prUrl } | …
+  createdAt    DateTime         @default(now()) // seed sets it explicitly to backdate the import (§19)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@index([featureId])
+  @@index([taskId])
+  @@map("app_project_event")
 }

@@ -86,4 +86,13 @@ export function registerAppDriftProbes(): void {
     table: 'app_focus_directive',
     probe: constraintExists('app_focus_directive_declaredByUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // Journal (f-journal §17): a ProjectEvent is retained shared history — the
+  // actor reference nulls on erasure, the event stays. (featureId/taskId are
+  // unconstrained soft scope pointers — no FK, so nothing to probe there.)
+  registerAppDriftProbe({
+    name: 'app_project_event_actorUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_project_event',
+    probe: constraintExists('app_project_event_actorUserId_fkey', 'ON DELETE SET NULL'),
+  });
 }

@@ -16,9 +16,10 @@ import type {
   CapabilityFunctionDefinition,
   CapabilityResult,
 } from '@/lib/orchestration/capabilities/types';
-import { prisma } from '@/lib/db/client';
+import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
+import { recordProjectEvent } from '@/lib/projects/project-event';
 
 const schema = z.object({
   featureId: z.string().describe('The feature to toggle help-wanted on.'),
@@ -70,9 +71,19 @@ export class FlagHelpWantedCapability extends BaseCapability<Args, Data> {
 
     const before = access.feature.helpWanted;
     if (before !== args.helpWanted) {
-      await prisma.feature.update({
-        where: { id: args.featureId },
-        data: { helpWanted: args.helpWanted },
+      // Update + journal atomically (the help_wanted event iff the flag flips).
+      await executeTransaction(async (tx) => {
+        await tx.feature.update({
+          where: { id: args.featureId },
+          data: { helpWanted: args.helpWanted },
+        });
+        await recordProjectEvent(tx, {
+          projectId: access.feature.projectId,
+          featureId: args.featureId,
+          kind: 'help_wanted',
+          actorUserId: userId,
+          metadata: { helpWanted: args.helpWanted },
+        });
       });
       logAdminAction({
         userId,

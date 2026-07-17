@@ -73,3 +73,6 @@ export { getTaskDetail, type TaskDetail, type TaskDetailRef } from '@/lib/projec
 
 // Claim a task — shared by the capability + the consumer route (f-task-sheet).
 export { claimTask, type ClaimTaskResult } from '@/lib/projects/claim-task-service';
+
+// Journal writer — append a ProjectEvent inside a transaction (f-journal §17).
+export { recordProjectEvent, type RecordProjectEventInput } from '@/lib/projects/project-event';
