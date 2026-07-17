@@ -45,5 +45,5 @@ export interface ProjectViewDTO {
   taskCount: number;
 }
 
-/** The two project-view tabs (linkable via `?view=`). */
-export type ProjectTab = 'plan' | 'board';
+/** The project-view tabs (linkable via `?view=`). */
+export type ProjectTab = 'plan' | 'board' | 'log';

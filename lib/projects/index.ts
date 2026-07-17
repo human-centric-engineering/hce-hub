@@ -76,3 +76,13 @@ export { claimTask, type ClaimTaskResult } from '@/lib/projects/claim-task-servi
 
 // Journal writer — append a ProjectEvent inside a transaction (f-journal §17).
 export { recordProjectEvent, type RecordProjectEventInput } from '@/lib/projects/project-event';
+
+// Journal read — the membership-scoped event stream behind every log surface (f-journal §17).
+export {
+  getProjectEvents,
+  PROJECT_EVENT_LIMIT,
+  type ProjectEventView,
+  type GetProjectEventsOptions,
+  type EventFeatureRef,
+  type EventTaskRef,
+} from '@/lib/projects/journal';

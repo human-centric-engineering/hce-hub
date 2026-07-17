@@ -68,7 +68,9 @@ export default async function ProjectViewPage({
 }) {
   const { id } = await params;
   const { view } = await searchParams;
-  const activeTab: ProjectTab = view === 'board' ? 'board' : 'plan';
+  // Plan is the default; Board and Log are explicit. The Log tab is
+  // client-fetched (filterable), so it needs no server payload here.
+  const activeTab: ProjectTab = view === 'board' ? 'board' : view === 'log' ? 'log' : 'plan';
 
   // Fetch the header and the active tab's payload in parallel — no waterfall.
   const [project, plan, board] = await Promise.all([

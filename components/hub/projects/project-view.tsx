@@ -6,6 +6,7 @@ import { STATUS_VARIANT, initials } from '@/components/hub/projects/presentation
 import { BreadcrumbLabel } from '@/components/hub/breadcrumb-label';
 import { PlanView } from '@/components/hub/projects/plan/plan-view';
 import { BoardView } from '@/components/hub/projects/board/board-view';
+import { LogView } from '@/components/hub/projects/log/log-view';
 import { TaskSheetProvider } from '@/components/hub/projects/task-sheet/task-sheet-host';
 import type { ProjectTab, ProjectViewDTO } from '@/components/hub/projects/types';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
@@ -88,12 +89,17 @@ export function ProjectView({
                 Couldn&rsquo;t load the plan just now — try refreshing.
               </p>
             )
-          ) : board ? (
-            <BoardView board={board} />
+          ) : activeTab === 'board' ? (
+            board ? (
+              <BoardView board={board} />
+            ) : (
+              <p className="text-muted-foreground py-16 text-center text-sm">
+                Couldn&rsquo;t load the board just now — try refreshing.
+              </p>
+            )
           ) : (
-            <p className="text-muted-foreground py-16 text-center text-sm">
-              Couldn&rsquo;t load the board just now — try refreshing.
-            </p>
+            // Log — the journal stream, client-fetched + filterable (f-journal §17).
+            <LogView projectId={project.id} />
           )}
         </div>
       </TaskSheetProvider>

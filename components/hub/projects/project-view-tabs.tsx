@@ -5,12 +5,14 @@ import type { ProjectTab } from '@/components/hub/projects/types';
 const TABS: { key: ProjectTab; label: string }[] = [
   { key: 'plan', label: 'Plan' },
   { key: 'board', label: 'Board' },
+  { key: 'log', label: 'Log' },
 ];
 
 /**
- * The Plan⇄Board tab control. The active view is part of the URL (`?view=`) so a
- * tab is linkable/shareable and survives refresh; the tab *content* arrives with
- * `f-plan-view` (§09) and `f-board-view` (§10).
+ * The Plan⇄Board⇄Log tab control. The active view is part of the URL (`?view=`)
+ * so a tab is linkable/shareable and survives refresh; the tab *content* arrives
+ * with `f-plan-view` (§09), `f-board-view` (§10), and the journal Log
+ * (`f-journal` §17).
  */
 export function ProjectViewTabs({ projectId, active }: { projectId: string; active: ProjectTab }) {
   return (
