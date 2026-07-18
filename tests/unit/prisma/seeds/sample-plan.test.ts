@@ -46,6 +46,13 @@ describe('buildSamplePlan (pure)', () => {
     const valid = new Set(['backlog', 'available', 'claimed', 'in_pr', 'merged']);
     for (const f of features) for (const t of f.tasks) expect(valid.has(t.status)).toBe(true);
   });
+
+  it('carries §18 indicative sketches on a few unplanned features', () => {
+    const sketched = features.filter((f) => (f.indicativeTasks?.length ?? 0) > 0);
+    expect(sketched.map((f) => f.slug)).toContain('f-task-sheet');
+    // A sketched feature has no real tasks yet (it isn't planned).
+    for (const f of sketched) expect(f.tasks).toHaveLength(0);
+  });
 });
 
 function mockCtx(lead: { id: string } | null) {
@@ -55,6 +62,7 @@ function mockCtx(lead: { id: string } | null) {
     projectMember: { upsert: vi.fn().mockResolvedValue({}) },
     feature: { upsert: vi.fn().mockResolvedValue({}) },
     featureDependency: { upsert: vi.fn().mockResolvedValue({}) },
+    indicativeTask: { upsert: vi.fn().mockResolvedValue({}) },
     task: { upsert: vi.fn().mockResolvedValue({}) },
   };
   const logger = { info: vi.fn() };
@@ -109,5 +117,21 @@ describe('run()', () => {
       (c) => (c[0] as { create: { number: number } }).create.number
     );
     expect(numbers).toEqual(Array.from({ length: totalTasks }, (_, i) => i + 1));
+  });
+
+  it('derives planningStage (§18) — planned when the feature has tasks, else indicative', async () => {
+    const { ctx, prisma } = mockCtx({ id: 'human-1' });
+    await unit.run(ctx);
+
+    const stageBySlug = new Map(
+      prisma.feature.upsert.mock.calls.map((c) => {
+        const create = (c[0] as { create: { slug: string; planningStage: string } }).create;
+        return [create.slug, create.planningStage];
+      })
+    );
+    expect(stageBySlug.get('f-fork')).toBe('planned'); // shipped, has a task
+    expect(stageBySlug.get('f-task-sheet')).toBe('indicative'); // sketched, no real tasks
+    // The sketch bullets were written as indicative tasks.
+    expect(prisma.indicativeTask.upsert).toHaveBeenCalled();
   });
 });

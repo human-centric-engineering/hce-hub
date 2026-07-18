@@ -15,7 +15,7 @@
  * "unassigned / former member" — carried f-data-model t-3 finding), never
  * dereferenced.
  */
-import type { FeatureStatus } from '@prisma/client';
+import type { FeaturePlanningStage, FeatureStatus } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { getAccessibleProject } from '@/lib/projects/access';
 import { computeEffectiveStatus, type EffectiveStatus } from '@/lib/projects/task-status';
@@ -43,6 +43,13 @@ export interface PlanTaskView {
   claimer: UserRef | null;
 }
 
+/** An indicative-task sketch bullet on a not-yet-planned feature (§18). */
+export interface PlanIndicativeTaskView {
+  id: string;
+  order: number;
+  text: string;
+}
+
 /** A feature row in the Plan view. */
 export interface PlanFeatureView {
   id: string;
@@ -51,11 +58,15 @@ export interface PlanFeatureView {
   title: string;
   description: string | null;
   status: FeatureStatus;
+  /** Depth axis: `indicative` sketch vs `planned` (real tasks) — §18. */
+  planningStage: FeaturePlanningStage;
   helpWanted: boolean;
   /** `null` when unowned or the owner was erased. */
   owner: UserRef | null;
   dependsOn: PlanDependencyRef[];
   tasks: PlanTaskView[];
+  /** The high-level sketch, shown while `indicative` (empty once planned). */
+  indicativeTasks: PlanIndicativeTaskView[];
   /**
    * Progress off *effective* status (so a feature's counts match its task rows):
    * `merged`/`total`, `live` (in-flight and genuinely pullable — not merged,
@@ -87,9 +98,14 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
       title: true,
       description: true,
       status: true,
+      planningStage: true,
       helpWanted: true,
       ownerUserId: true,
       dependencies: { select: { dependsOnFeatureId: true } },
+      indicativeTasks: {
+        orderBy: { order: 'asc' },
+        select: { id: true, order: true, text: true },
+      },
       tasks: {
         orderBy: { createdAt: 'asc' },
         select: {
@@ -145,6 +161,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
       title: f.title,
       description: f.description,
       status: f.status,
+      planningStage: f.planningStage,
       helpWanted: f.helpWanted,
       owner: f.ownerUserId ? (users.get(f.ownerUserId) ?? null) : null,
       dependsOn: f.dependencies
@@ -154,6 +171,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
         })
         .filter((d): d is PlanDependencyRef => d !== null),
       tasks,
+      indicativeTasks: f.indicativeTasks,
       progress: { merged, total, live, blocked },
     };
   });

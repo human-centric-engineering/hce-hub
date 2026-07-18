@@ -13,11 +13,13 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   title: 'Feature one',
   description: null,
   status: 'planning',
+  planningStage: 'planned',
   helpWanted: false,
   owner: null,
   dependsOn: [],
   tasks: [],
-  progress: { merged: 0, total: 0, live: 0 },
+  indicativeTasks: [],
+  progress: { merged: 0, total: 0, live: 0, blocked: 0 },
   ...over,
 });
 
@@ -62,7 +64,7 @@ describe('PlanView rendering', () => {
                 claimer: null,
               },
             ],
-            progress: { merged: 0, total: 1, live: 0 },
+            progress: { merged: 0, total: 1, live: 0, blocked: 0 },
           }),
         ])}
       />
@@ -93,7 +95,7 @@ describe('PlanView rendering', () => {
                 claimer: null,
               },
             ],
-            progress: { merged: 1, total: 1, live: 0 },
+            progress: { merged: 1, total: 1, live: 0, blocked: 0 },
           }),
           feature({
             id: 'live',
@@ -109,7 +111,7 @@ describe('PlanView rendering', () => {
                 claimer: null,
               },
             ],
-            progress: { merged: 0, total: 1, live: 1 },
+            progress: { merged: 0, total: 1, live: 1, blocked: 0 },
           }),
         ])}
       />

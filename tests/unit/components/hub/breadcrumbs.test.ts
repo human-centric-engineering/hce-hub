@@ -61,4 +61,19 @@ describe('deriveBreadcrumbs', () => {
       { label: 'HCE Hub', href: undefined },
     ]);
   });
+
+  it('labels the feature-page chain — project name + Features + feature title (§18)', () => {
+    // `/projects/<id>/features/<slug>` with both id → name and slug → title
+    // overrides supplied by the feature page. "Features" prettifies via the map
+    // and links to /projects/<id>/features (a redirect back to the project).
+    expect(
+      deriveBreadcrumbs('/projects/p1/features/f-mcp', { p1: 'HCE Hub', 'f-mcp': 'MCP server' })
+    ).toEqual([
+      { label: 'Hub', href: '/' },
+      { label: 'Projects', href: '/projects' },
+      { label: 'HCE Hub', href: '/projects/p1' },
+      { label: 'Features', href: '/projects/p1/features' },
+      { label: 'MCP server', href: undefined },
+    ]);
+  });
 });

@@ -55,7 +55,18 @@ export {
   type PlanFeatureView,
   type PlanTaskView,
   type PlanDependencyRef,
+  type PlanIndicativeTaskView,
 } from '@/lib/projects/plan';
+
+// Feature detail — one feature's deep view for the shareable feature page (§18).
+export {
+  getFeatureDetail,
+  type FeatureDetail,
+  type FeatureDetailTask,
+  type FeatureDetailIndicativeTask,
+  type FeatureDetailRef,
+  type FeatureReference,
+} from '@/lib/projects/feature-detail';
 export { planOrder, type PlanOrderInput } from '@/lib/projects/plan-order';
 
 // Board view — tasks routed into member lanes × effective-status columns (f-board-view).

@@ -10,6 +10,16 @@ import type { UserRef } from '@/components/hub/projects/types';
 /** Stored feature status (`Feature.status`). */
 export type FeatureStatus = 'planning' | 'in_flight' | 'blocked' | 'shipped';
 
+/** Feature depth axis (`Feature.planningStage`) — sketch vs materialised tasks. */
+export type FeaturePlanningStage = 'indicative' | 'planned';
+
+/** An indicative-task sketch bullet on a not-yet-planned feature (§18). */
+export interface PlanIndicativeTask {
+  id: string;
+  order: number;
+  text: string;
+}
+
 /** A task's *effective* status (`computeEffectiveStatus`) — includes computed `blocked`. */
 export type TaskEffectiveStatus =
   'backlog' | 'available' | 'claimed' | 'in_pr' | 'merged' | 'blocked';
@@ -42,12 +52,16 @@ export interface PlanFeature {
   title: string;
   description: string | null;
   status: FeatureStatus;
+  /** Depth axis: `indicative` sketch vs `planned` (real tasks) — §18. */
+  planningStage: FeaturePlanningStage;
   helpWanted: boolean;
   /** `null` when unowned or the owner was erased. */
   owner: UserRef | null;
   dependsOn: PlanDependencyRef[];
   tasks: PlanTask[];
-  progress: { merged: number; total: number; live: number };
+  /** The high-level sketch, shown while `indicative` (empty once planned). */
+  indicativeTasks: PlanIndicativeTask[];
+  progress: { merged: number; total: number; live: number; blocked: number };
 }
 
 /** The `/plan` payload — features already in `planOrder()`. */
