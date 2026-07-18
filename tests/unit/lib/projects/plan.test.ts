@@ -32,9 +32,11 @@ const row = (over: Record<string, unknown> = {}) => ({
   title: 'Feature one',
   description: null,
   status: 'planning',
+  planningStage: 'indicative',
   helpWanted: false,
   ownerUserId: null,
   dependencies: [],
+  indicativeTasks: [],
   tasks: [],
   ...over,
 });
@@ -221,6 +223,26 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
     userFindMany.mockResolvedValue([{ id: 'u1', name: 'Ada', email: 'a@x.io', image: null }]);
     const plan = await getProjectPlan('u1', 'p1');
     expect(plan.features[0].progress).toEqual({ merged: 1, total: 3, live: 1, blocked: 0 });
+  });
+
+  it('carries planningStage + the ordered indicative sketch (§18)', async () => {
+    featureFindMany.mockResolvedValue([
+      row({
+        planningStage: 'indicative',
+        indicativeTasks: [
+          { id: 'i2', order: 1, text: 'second' },
+          { id: 'i1', order: 0, text: 'first' },
+        ],
+      }),
+    ]);
+    userFindMany.mockResolvedValue([]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(plan.features[0].planningStage).toBe('indicative');
+    // Passed through in the query's `order` sort (the mock returns them as given).
+    expect(plan.features[0].indicativeTasks).toEqual([
+      { id: 'i2', order: 1, text: 'second' },
+      { id: 'i1', order: 0, text: 'first' },
+    ]);
   });
 
   it('counts a dep-blocked task as blocked, not live (§09 carry — matches its row)', async () => {

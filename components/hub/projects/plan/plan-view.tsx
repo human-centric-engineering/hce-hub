@@ -36,6 +36,7 @@ export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
           <FeatureRow
             key={feature.id}
             feature={feature}
+            projectId={plan.projectId}
             ordinal={i + 1}
             expanded={!!expanded[feature.id]}
             onToggle={() => toggle(feature.id)}

@@ -12,11 +12,13 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   title: 't',
   description: null,
   status: 'planning',
+  planningStage: 'planned',
   helpWanted: false,
   owner: null,
   dependsOn: [],
   tasks: [],
-  progress: { merged: 0, total: 0, live: 0 },
+  indicativeTasks: [],
+  progress: { merged: 0, total: 0, live: 0, blocked: 0 },
   ...over,
 });
 
@@ -25,8 +27,8 @@ describe('PlanSummary', () => {
     render(
       <PlanSummary
         features={[
-          feature({ status: 'shipped', progress: { merged: 1, total: 2, live: 0 } }),
-          feature({ status: 'planning', progress: { merged: 0, total: 3, live: 1 } }),
+          feature({ status: 'shipped', progress: { merged: 1, total: 2, live: 0, blocked: 0 } }),
+          feature({ status: 'planning', progress: { merged: 0, total: 3, live: 1, blocked: 0 } }),
         ]}
       />
     );

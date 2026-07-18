@@ -1,4 +1,4 @@
-import type { FeatureStatus, TaskStatus } from '@prisma/client';
+import type { FeaturePlanningStage, FeatureStatus, TaskStatus } from '@prisma/client';
 import { humanWhere } from '@/lib/auth/account';
 import type { SeedUnit } from '@/prisma/runner';
 
@@ -37,6 +37,14 @@ interface SeedFeature {
   status: FeatureStatus;
   dependsOn: string[];
   tasks: SeedTask[];
+  /** §18 depth axis; defaults to `planned` when the feature has tasks, else `indicative`. */
+  planningStage?: FeaturePlanningStage;
+  /** §18 definition of done. */
+  doneWhen?: string;
+  /** §18 cross-reference chips. */
+  references?: { label: string; target: string }[];
+  /** §18 indicative sketch (ordered) — the high-level task list before planning. */
+  indicativeTasks?: string[];
 }
 
 /** Deterministic, cuid-shaped stable id (`c` + no hyphens) so seeded rows pass
@@ -54,6 +62,7 @@ export const SAMPLE_PROJECT = {
 export const featureSeedId = (slug: string): string => cid('feat', slug);
 export const taskSeedId = (slug: string, index: number): string => cid('task', slug, index);
 const depSeedId = (slug: string, dep: string): string => cid('fdep', slug, dep);
+const indicativeSeedId = (slug: string, index: number): string => cid('ind', slug, index);
 
 /** Pure — the plan's features/deps/tasks. Unit-tested; `run` upserts these. */
 export function buildSamplePlan(): SeedFeature[] {
@@ -114,6 +123,11 @@ export function buildSamplePlan(): SeedFeature[] {
       title: 'Projects list + project-view scaffold',
       status: 'in_flight',
       dependsOn: ['f-shell', 'f-project-admin'],
+      doneWhen: 'A member sees their projects and opens one; a non-member gets a 404.',
+      references: [
+        { label: 'v1-requirements §08', target: 'v1-requirements#08' },
+        { label: 'design handoff', target: 'https://example.com/hce/design' },
+      ],
       tasks: [
         merged('Consumer projects read API'),
         { title: 'Projects UI + sample-data seed', status: 'claimed' },
@@ -141,6 +155,13 @@ export function buildSamplePlan(): SeedFeature[] {
       title: 'Task detail side sheet',
       status: 'planning',
       dependsOn: ['f-plan-view', 'f-hub-capabilities'],
+      doneWhen: 'A task opens in a deep-linkable sheet; a cross-project id 404s.',
+      references: [{ label: 'v1-requirements §11', target: 'v1-requirements#11' }],
+      indicativeTasks: [
+        'One-task detail read (funnel-scoped, effective status)',
+        'Deep-linkable ?task= sheet + History-API host',
+        'Activity timeline over the journal',
+      ],
       tasks: [],
     },
     {
@@ -148,6 +169,12 @@ export function buildSamplePlan(): SeedFeature[] {
       title: 'Per-project sidekick agent + chat',
       status: 'planning',
       dependsOn: ['f-hub-capabilities', 'f-shell'],
+      doneWhen: 'Each project has a sidekick you can chat with about its plan.',
+      indicativeTasks: [
+        'Per-project agent config + binding',
+        'Streaming chat surface in the shell',
+        'Sidekick context read (plan + board snapshot)',
+      ],
       tasks: [],
     },
     {
@@ -155,6 +182,11 @@ export function buildSamplePlan(): SeedFeature[] {
       title: 'Intake workflow + UI',
       status: 'planning',
       dependsOn: ['f-sidekick', 'f-projects'],
+      indicativeTasks: [
+        'Intake capability (idea → structured feature)',
+        'Triage workflow (dedupe, route, size)',
+        'Intake UI + review queue',
+      ],
       tasks: [],
     },
     {
@@ -215,18 +247,47 @@ const unit: SeedUnit = {
 
     // Features, then dependency edges (features must exist first), then tasks.
     for (const f of features) {
+      // Depth axis (§18): explicit, else a feature with tasks is `planned`, one
+      // without is a `indicative` sketch.
+      const planningStage: FeaturePlanningStage =
+        f.planningStage ?? (f.tasks.length > 0 ? 'planned' : 'indicative');
+      const references = f.references ?? undefined;
       await prisma.feature.upsert({
         where: { id: featureSeedId(f.slug) },
-        update: { slug: f.slug, title: f.title, status: f.status, ownerUserId: leadUserId },
+        update: {
+          slug: f.slug,
+          title: f.title,
+          status: f.status,
+          planningStage,
+          doneWhen: f.doneWhen ?? null,
+          ...(references ? { references } : {}),
+          ownerUserId: leadUserId,
+        },
         create: {
           id: featureSeedId(f.slug),
           projectId: SAMPLE_PROJECT.id,
           slug: f.slug,
           title: f.title,
           status: f.status,
+          planningStage,
+          doneWhen: f.doneWhen ?? null,
+          ...(references ? { references } : {}),
           ownerUserId: leadUserId,
         },
       });
+      // The indicative sketch (§18) — upsert by stable id so re-seeds are idempotent.
+      for (const [i, text] of (f.indicativeTasks ?? []).entries()) {
+        await prisma.indicativeTask.upsert({
+          where: { id: indicativeSeedId(f.slug, i) },
+          update: { order: i, text },
+          create: {
+            id: indicativeSeedId(f.slug, i),
+            featureId: featureSeedId(f.slug),
+            order: i,
+            text,
+          },
+        });
+      }
     }
     let taskNumber = 0;
     for (const f of features) {

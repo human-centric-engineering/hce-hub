@@ -27,6 +27,9 @@ export interface Crumb {
 const SEGMENT_LABELS: Record<string, string> = {
   projects: 'Projects',
   brief: 'Morning brief',
+  // The feature-page path `/projects/<id>/features/<slug>` (f-feature-planning
+  // §18); `/projects/<id>/features` redirects back to the project.
+  features: 'Features',
 };
 
 /**
