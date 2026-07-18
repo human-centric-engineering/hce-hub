@@ -184,6 +184,8 @@ describe('resolveFeatureAccess', () => {
     featureFindUnique.mockResolvedValue({
       projectId: PROJECT,
       ownerUserId: 'someone-else',
+      status: 'planning',
+      planningStage: 'indicative',
       helpWanted: false,
     });
     memberFindUnique.mockResolvedValue({ role: 'member' });
@@ -194,6 +196,8 @@ describe('resolveFeatureAccess', () => {
       feature: {
         projectId: PROJECT,
         ownerUserId: 'someone-else',
+        status: 'planning',
+        planningStage: 'indicative',
         helpWanted: false,
         basis: 'member',
       },

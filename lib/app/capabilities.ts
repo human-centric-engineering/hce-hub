@@ -21,6 +21,10 @@ import { FlagHelpWantedCapability } from '@/lib/projects/capabilities/flag-help-
 import { ClaimTaskCapability } from '@/lib/projects/capabilities/claim-task';
 import { RecordDecisionCapability } from '@/lib/projects/capabilities/record-decision';
 import { AddNoteCapability } from '@/lib/projects/capabilities/add-note';
+import { CreateFeatureCapability } from '@/lib/projects/capabilities/create-feature';
+import { ClaimFeatureCapability } from '@/lib/projects/capabilities/claim-feature';
+import { PlanFeatureCapability } from '@/lib/projects/capabilities/plan-feature';
+import { ShipFeatureCapability } from '@/lib/projects/capabilities/ship-feature';
 
 export function initAppCapabilities(): void {
   // HCE Hub coordination tools (f-hub-capabilities). Each also needs an active
@@ -37,4 +41,10 @@ export function initAppCapabilities(): void {
   // ProjectEvent stream; membership-scoped via the resolveEventScope funnel.
   registerAppCapability(new RecordDecisionCapability());
   registerAppCapability(new AddNoteCapability());
+  // Feature lifecycle (f-feature-planning §18 t-2) — claim-then-plan over MCP.
+  // Each emits its feature_* journal event; membership via the feature funnel.
+  registerAppCapability(new CreateFeatureCapability()); // author (member)
+  registerAppCapability(new ClaimFeatureCapability()); // take ownership (member)
+  registerAppCapability(new PlanFeatureCapability()); // materialise tasks (owner)
+  registerAppCapability(new ShipFeatureCapability()); // close out (owner)
 }
