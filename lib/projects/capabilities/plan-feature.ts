@@ -177,9 +177,17 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
       }
     }
 
+    // Each task's dependency list, de-duplicated — a repeated entry (e.g. an LLM
+    // listing the same dep twice) would otherwise collide on
+    // TaskDependency's @@unique([taskId, dependsOnTaskId]) and abort the write
+    // (mirrors create_task's dedup).
+    const depsByRef = new Map(args.tasks.map((t) => [t.ref, [...new Set(t.dependsOn ?? [])]]));
+
     // Prove the combined graph (batch refs + existing ids they point at) is a DAG
     // BEFORE writing anything — a cyclic batch is rejected, nothing is created.
-    const edges = args.tasks.flatMap((t) => (t.dependsOn ?? []).map((to) => ({ from: t.ref, to })));
+    const edges = args.tasks.flatMap((t) =>
+      depsByRef.get(t.ref)!.map((to) => ({ from: t.ref, to }))
+    );
     try {
       assertAcyclic(edges);
     } catch (err) {
@@ -221,9 +229,10 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
         created.push(task.id);
       }
 
-      // Wire dependencies, resolving batch refs → created ids (existing ids pass through).
+      // Wire dependencies (de-duplicated per task), resolving batch refs → created
+      // ids (existing ids pass through).
       const depRows = args.tasks.flatMap((spec) =>
-        (spec.dependsOn ?? []).map((to) => ({
+        depsByRef.get(spec.ref)!.map((to) => ({
           taskId: refToId.get(spec.ref)!,
           dependsOnTaskId: refToId.get(to) ?? to,
         }))

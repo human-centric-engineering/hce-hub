@@ -208,6 +208,21 @@ describe('plan_feature materialise', () => {
     });
   });
 
+  it('de-duplicates a task’s repeated dependency (no @@unique collision)', async () => {
+    taskFindMany.mockResolvedValue([{ id: 'existing-1' }]);
+    await cap.execute(
+      {
+        featureId: 'f1',
+        tasks: [{ ref: 't1', title: 'a', dependsOn: ['existing-1', 'existing-1'] }],
+      },
+      ctx()
+    );
+    // One edge written despite the duplicate input — mirrors create_task's dedup.
+    expect(txTaskDepCreateMany).toHaveBeenCalledWith({
+      data: [{ taskId: 'id-0', dependsOnTaskId: 'existing-1' }],
+    });
+  });
+
   it('assigns null when a lead plans an unowned feature', async () => {
     resolveFeature.mockResolvedValue(granted({ ownerUserId: null }));
     await cap.execute({ featureId: 'f1', tasks: oneTask }, ctx());
