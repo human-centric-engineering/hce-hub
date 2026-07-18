@@ -76,6 +76,17 @@ enum FeatureStatus {
   shipped
 }
 
+// Orthogonal to FeatureStatus (the ownership/progress axis): the *depth* axis.
+// `indicative` = a high-level sketch (IndicativeTask bullets, no real tasks yet);
+// `planned` = plan_feature has materialised real Task rows (f-feature-planning
+// §18). A feature can be planning+indicative, in_flight+indicative (claimed, not
+// yet planned), in_flight+planned, etc. Drives the Plan view's at-a-glance
+// "planned & ready" vs "still high-level" signal (self-hosting §2).
+enum FeaturePlanningStage {
+  indicative
+  planned
+}
+
 model Project {
   id              String        @id @default(cuid())
   name            String
@@ -113,22 +124,26 @@ model ProjectMember {
 }
 
 model Feature {
-  id          String        @id @default(cuid())
-  projectId   String
-  slug        String? // authored short human key (e.g. "f-mcp"); per-project unique (f-refs)
-  title       String
-  description String?       @db.Text
-  ownerUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the feature)
-  status      FeatureStatus @default(planning)
-  helpWanted  Boolean       @default(false)
-  phaseId     String? // intra-Hub FK → app_phase · ON DELETE SET NULL (futures scaffolding, t-3)
-  createdAt   DateTime      @default(now())
+  id            String               @id @default(cuid())
+  projectId     String
+  slug          String? // authored short human key (e.g. "f-mcp"); per-project unique (f-refs)
+  title         String
+  description   String?              @db.Text
+  doneWhen      String?              @db.Text // the feature's definition of done (f-feature-planning §18)
+  references    Json? // cross-refs: a list of { label, target }, rendered as ref-chips (§18)
+  ownerUserId   String? // hand-FK → "user" · ON DELETE SET NULL (retain the feature)
+  status        FeatureStatus        @default(planning)
+  planningStage FeaturePlanningStage @default(indicative) // depth axis: sketch vs materialised tasks (§18)
+  helpWanted    Boolean              @default(false)
+  phaseId       String? // intra-Hub FK → app_phase · ON DELETE SET NULL (futures scaffolding, t-3)
+  createdAt     DateTime             @default(now())
 
-  project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  phase        Phase?              @relation(fields: [phaseId], references: [id], onDelete: SetNull)
-  dependencies FeatureDependency[] @relation("FeatureDependencies") // edges where this feature depends on another
-  dependents   FeatureDependency[] @relation("FeatureDependents") // edges where another feature depends on this
-  tasks        Task[]
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase           Phase?              @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  dependencies    FeatureDependency[] @relation("FeatureDependencies") // edges where this feature depends on another
+  dependents      FeatureDependency[] @relation("FeatureDependents") // edges where another feature depends on this
+  tasks           Task[]
+  indicativeTasks IndicativeTask[] // the high-level sketch, replaced by real tasks at plan time (§18)
 
   @@unique([projectId, slug]) // human slug unique within a project (NULLs allowed while unauthored)
   @@index([projectId])
@@ -150,6 +165,24 @@ model FeatureDependency {
   @@unique([featureId, dependsOnFeatureId]) // no duplicate edges
   @@index([dependsOnFeatureId])
   @@map("app_feature_dependency")
+}
+
+// The high-level task sketch on an `indicative` feature (the plan's `- t —`
+// bullets): ordered, free-text, NOT claimable — no number, no assignee, no PR,
+// no dependency edges (f-feature-planning §18). `plan_feature` REPLACES this
+// list with real `Task` rows (the sketch rarely survives planning 1:1), so this
+// is intra-Hub only: an ordinary `@relation` to Feature, ON DELETE CASCADE (the
+// sketch dies with its feature — no user data, no satellite FK).
+model IndicativeTask {
+  id        String @id @default(cuid())
+  featureId String
+  order     Int // display order within the feature
+  text      String @db.Text
+
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@index([featureId])
+  @@map("app_indicative_task")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -175,8 +208,10 @@ model Task {
   number          Int? // project-wide stable ordinal, rendered "t-N"; assigned via Project.taskCounter (f-refs)
   title           String
   description     String?    @db.Text
+  doneWhen        String?    @db.Text // per-task acceptance contract (f-feature-planning §18)
   status          TaskStatus @default(backlog)
   filesScope      String[]   @default([]) // paths/globs a claim expects to touch — soft-collision hint
+  assigneeUserId  String? // hand-FK → "user" · ON DELETE SET NULL — "this is yours" (defaults to feature owner at plan time; distinct from the pull-claim)
   claimedByUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the task, drop the claimant)
   prUrl           String?
   createdAt       DateTime   @default(now())
@@ -187,6 +222,7 @@ model Task {
   claims       TaskClaim[]
 
   @@index([featureId])
+  @@index([assigneeUserId])
   @@index([claimedByUserId])
   @@map("app_task")
 }

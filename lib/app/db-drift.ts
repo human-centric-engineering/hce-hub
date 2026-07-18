@@ -71,6 +71,16 @@ export function registerAppDriftProbes(): void {
     table: 'app_task',
     probe: constraintExists('app_task_claimedByUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // Feature planning (f-feature-planning §18): task.assigneeUserId — "this is
+  // yours to do" (defaults to the feature owner at plan time, freely
+  // reassignable). Retained work, so the assignee reference nulls on erasure —
+  // the same SET NULL policy as claimedByUserId, kept as a distinct column.
+  registerAppDriftProbe({
+    name: 'app_task_assigneeUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_task',
+    probe: constraintExists('app_task_assigneeUserId_fkey', 'ON DELETE SET NULL'),
+  });
   registerAppDriftProbe({
     name: 'app_task_claim_userId_fkey (hand-written FK → user)',
     kind: 'FK constraint',

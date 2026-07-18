@@ -187,7 +187,7 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
     expect(plan.features[0].dependsOn).toEqual([]);
   });
 
-  it('computes progress off stored status (merged/total + live)', async () => {
+  it('computes progress off effective status (merged/total + live + blocked)', async () => {
     featureFindMany.mockResolvedValue([
       row({
         tasks: [
@@ -220,7 +220,38 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
     ]);
     userFindMany.mockResolvedValue([{ id: 'u1', name: 'Ada', email: 'a@x.io', image: null }]);
     const plan = await getProjectPlan('u1', 'p1');
-    expect(plan.features[0].progress).toEqual({ merged: 1, total: 3, live: 1 });
+    expect(plan.features[0].progress).toEqual({ merged: 1, total: 3, live: 1, blocked: 0 });
+  });
+
+  it('counts a dep-blocked task as blocked, not live (§09 carry — matches its row)', async () => {
+    // An `available` task whose dependency is unmerged is effectively `blocked`;
+    // it must NOT inflate `live`, so the feature summary agrees with the row.
+    featureFindMany.mockResolvedValue([
+      row({
+        tasks: [
+          {
+            id: 't1',
+            title: 'ready',
+            status: 'available',
+            prUrl: null,
+            claimedByUserId: null,
+            dependencies: [],
+          },
+          {
+            id: 't2',
+            title: 'blocked',
+            status: 'available',
+            prUrl: null,
+            claimedByUserId: null,
+            dependencies: [{ dependsOn: { status: 'available' } }], // dep not merged
+          },
+        ],
+      }),
+    ]);
+    userFindMany.mockResolvedValue([]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(plan.features[0].tasks[1].status).toBe('blocked');
+    expect(plan.features[0].progress).toEqual({ merged: 0, total: 2, live: 1, blocked: 1 });
   });
 
   it('returns features in planOrder (shipped before planning)', async () => {

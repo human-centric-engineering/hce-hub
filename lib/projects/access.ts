@@ -22,7 +22,7 @@
  * 403 (`basis` set, `ok` false). See `.context/app/planning/f-access.md`.
  */
 
-import type { Project, TaskStatus } from '@prisma/client';
+import type { FeaturePlanningStage, FeatureStatus, Project, TaskStatus } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { NotFoundError, ForbiddenError } from '@/lib/api/errors';
 
@@ -149,6 +149,9 @@ export type FeatureWriteMode =
 export interface FeatureAccess {
   projectId: string;
   ownerUserId: string | null;
+  status: FeatureStatus;
+  /** Depth axis: `indicative` sketch vs `planned` (real tasks materialised). */
+  planningStage: FeaturePlanningStage;
   helpWanted: boolean;
   basis: ProjectAccessBasis;
 }
@@ -174,7 +177,13 @@ export async function resolveFeatureAccess(
 ): Promise<FeatureAccessResult> {
   const feature = await prisma.feature.findUnique({
     where: { id: featureId },
-    select: { projectId: true, ownerUserId: true, helpWanted: true },
+    select: {
+      projectId: true,
+      ownerUserId: true,
+      status: true,
+      planningStage: true,
+      helpWanted: true,
+    },
   });
   if (!feature) return { ok: false, reason: 'not_found' };
 
@@ -190,6 +199,8 @@ export async function resolveFeatureAccess(
     feature: {
       projectId: feature.projectId,
       ownerUserId: feature.ownerUserId,
+      status: feature.status,
+      planningStage: feature.planningStage,
       helpWanted: feature.helpWanted,
       basis,
     },

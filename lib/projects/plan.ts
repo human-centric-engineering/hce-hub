@@ -56,8 +56,12 @@ export interface PlanFeatureView {
   owner: UserRef | null;
   dependsOn: PlanDependencyRef[];
   tasks: PlanTaskView[];
-  /** Progress off *stored* status: merged/total + live (in-flight, i.e. not merged/backlog). */
-  progress: { merged: number; total: number; live: number };
+  /**
+   * Progress off *effective* status (so a feature's counts match its task rows):
+   * `merged`/`total`, `live` (in-flight and genuinely pullable — not merged,
+   * backlog, or blocked) and `blocked` (waiting on an unmerged dependency).
+   */
+  progress: { merged: number; total: number; live: number; blocked: number };
 }
 
 /** The Plan view's payload — features already in `planOrder()`. */
@@ -113,9 +117,27 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
   const metaById = new Map(features.map((f) => [f.id, { slug: f.slug, title: f.title }]));
 
   const views: PlanFeatureView[] = features.map((f) => {
-    const total = f.tasks.length;
-    const merged = f.tasks.filter((t) => t.status === 'merged').length;
-    const live = f.tasks.filter((t) => t.status !== 'merged' && t.status !== 'backlog').length;
+    const tasks: PlanTaskView[] = f.tasks.map((t) => ({
+      id: t.id,
+      number: t.number,
+      title: t.title,
+      status: computeEffectiveStatus(
+        t,
+        t.dependencies.map((d) => d.dependsOn)
+      ),
+      prUrl: t.prUrl,
+      claimer: t.claimedByUserId ? (users.get(t.claimedByUserId) ?? null) : null,
+    }));
+
+    // Progress reads off the SAME effective status the rows render (§09 carry):
+    // a dep-blocked task counts as `blocked`, never `live`, so a feature's
+    // summary can't disagree with its own task table.
+    const total = tasks.length;
+    const merged = tasks.filter((t) => t.status === 'merged').length;
+    const blocked = tasks.filter((t) => t.status === 'blocked').length;
+    const live = tasks.filter(
+      (t) => t.status !== 'merged' && t.status !== 'backlog' && t.status !== 'blocked'
+    ).length;
 
     return {
       id: f.id,
@@ -131,18 +153,8 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
           return meta ? { id: d.dependsOnFeatureId, slug: meta.slug, title: meta.title } : null;
         })
         .filter((d): d is PlanDependencyRef => d !== null),
-      tasks: f.tasks.map((t) => ({
-        id: t.id,
-        number: t.number,
-        title: t.title,
-        status: computeEffectiveStatus(
-          t,
-          t.dependencies.map((d) => d.dependsOn)
-        ),
-        prUrl: t.prUrl,
-        claimer: t.claimedByUserId ? (users.get(t.claimedByUserId) ?? null) : null,
-      })),
-      progress: { merged, total, live },
+      tasks,
+      progress: { merged, total, live, blocked },
     };
   });
 
