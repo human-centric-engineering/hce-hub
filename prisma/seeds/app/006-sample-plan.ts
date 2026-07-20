@@ -30,6 +30,10 @@ import type { SeedUnit } from '@/prisma/runner';
 interface SeedTask {
   title: string;
   status: TaskStatus;
+  /** Longer detail shown in the task sheet. */
+  description?: string;
+  /** §18 per-task acceptance contract, shown on the feature page. */
+  doneWhen?: string;
 }
 interface SeedFeature {
   slug: string;
@@ -37,6 +41,12 @@ interface SeedFeature {
   status: FeatureStatus;
   dependsOn: string[];
   tasks: SeedTask[];
+  /** Human-readable summary shown in the Plan row + on the feature page. */
+  description?: string;
+  /** When true, the feature is unowned (a backlog item available to claim). */
+  unowned?: boolean;
+  /** Flags the feature as wanting help (the "help wanted" pill). */
+  helpWanted?: boolean;
   /** §18 depth axis; defaults to `planned` when the feature has tasks, else `indicative`. */
   planningStage?: FeaturePlanningStage;
   /** §18 definition of done. */
@@ -69,11 +79,13 @@ export function buildSamplePlan(): SeedFeature[] {
   const shipped = (
     slug: string,
     title: string,
+    description: string,
     dependsOn: string[],
     tasks: SeedTask[]
   ): SeedFeature => ({
     slug,
     title,
+    description,
     status: 'shipped',
     dependsOn,
     tasks,
@@ -84,43 +96,57 @@ export function buildSamplePlan(): SeedFeature[] {
     shipped(
       'f-fork',
       'Fork + brand + auth-only shell',
+      'Fork Sunrise, apply HCE Hub branding, and stand up the auth-only shell everything else builds on.',
       [],
       [merged('Auth-only shell + brand identity')]
     ),
-    shipped('f-theme', 'HCE Hub base theme', ['f-fork'], [merged('Warm/dim token layer + fonts')]),
+    shipped(
+      'f-theme',
+      'HCE Hub base theme',
+      'The warm/dim consumer token layer and fonts that give the Hub its calm, glanceable look.',
+      ['f-fork'],
+      [merged('Warm/dim token layer + fonts')]
+    ),
     shipped(
       'f-data-model',
       'Prisma models + scaffolding',
+      'The project/feature/task domain schema (plus futures scaffolding) — the spine the whole Hub reads and writes.',
       ['f-fork'],
       [merged('Project domain schema'), merged('Task domain schema'), merged('Futures scaffolding')]
     ),
     shipped(
       'f-access',
       'Project-membership access control',
+      'The 404-not-403 membership funnel every project-scoped read and write gates through.',
       ['f-data-model'],
       [merged('The membership authz funnel')]
     ),
     shipped(
       'f-project-admin',
       'Project + member CRUD (admin)',
+      'Admin surface to create projects and manage members, with the lead-has-a-member-row invariant enforced.',
       ['f-access'],
       [merged('Admin API + invariant service'), merged('Admin UI + admin-nav seam')]
     ),
     shipped(
       'f-shell',
       'Module-composable app shell',
+      'The three-column Hub shell — nav, topbar, and a module registry so new surfaces slot in without shell edits.',
       ['f-theme', 'f-access'],
       [merged('Shell skeleton + Hub Home'), merged('Navigation + module registry')]
     ),
     shipped(
       'f-hub-capabilities',
       'Hub tools + MCP exposure',
+      'The agent-callable coordination tools (next_task, create/claim tools) exposed over MCP.',
       ['f-data-model', 'f-access'],
       [merged('Read pipeline + next_task'), merged('Write tools'), merged('claim_task + collision')]
     ),
     {
       slug: 'f-projects',
       title: 'Projects list + project-view scaffold',
+      description:
+        'The member-facing projects list and the project view shell the Plan, Board, and Log tabs hang off.',
       status: 'in_flight',
       dependsOn: ['f-shell', 'f-project-admin'],
       doneWhen: 'A member sees their projects and opens one; a non-member gets a 404.',
@@ -129,30 +155,59 @@ export function buildSamplePlan(): SeedFeature[] {
         { label: 'design handoff', target: 'https://example.com/hce/design' },
       ],
       tasks: [
-        merged('Consumer projects read API'),
-        { title: 'Projects UI + sample-data seed', status: 'claimed' },
+        {
+          ...merged('Consumer projects read API'),
+          description:
+            'The membership-scoped list + single-project read behind the projects surface.',
+          doneWhen: 'Lists only the caller’s projects; a non-member id 404s.',
+        },
+        {
+          title: 'Projects UI + sample-data seed',
+          status: 'claimed',
+          description:
+            'The projects grid, the project-view header/tabs, and this sample-plan seed.',
+          doneWhen: 'The grid renders real projects and a card opens its project view.',
+        },
       ],
     },
     {
       slug: 'f-plan-view',
       title: 'Feature-level Plan view',
+      description:
+        'The project’s features in optimal working order, each expandable to its task table.',
       status: 'planning',
       dependsOn: ['f-projects', 'f-hub-capabilities'],
       tasks: [
-        { title: 'planOrder() topological sort', status: 'available' },
+        {
+          title: 'planOrder() topological sort',
+          status: 'available',
+          description:
+            'Order features by dependency + readiness so the most-advanceable sit first.',
+          doneWhen: 'A dependency always sorts before the feature that needs it.',
+        },
         { title: 'Feature row + expand-to-tasks', status: 'backlog' },
       ],
     },
     {
       slug: 'f-board-view',
       title: 'Board (Kanban)',
+      description:
+        'Tasks routed into member lanes × effective-status columns — the who’s-on-what glance.',
       status: 'planning',
       dependsOn: ['f-projects', 'f-hub-capabilities'],
-      tasks: [{ title: 'Grid + effectiveStatus column routing', status: 'available' }],
+      tasks: [
+        {
+          title: 'Grid + effectiveStatus column routing',
+          status: 'available',
+          doneWhen: 'Each task lands in its member lane and effective-status column.',
+        },
+      ],
     },
     {
       slug: 'f-task-sheet',
       title: 'Task detail side sheet',
+      description:
+        'A deep-linkable sheet for one task — its detail, dependency graph, and claim action.',
       status: 'planning',
       dependsOn: ['f-plan-view', 'f-hub-capabilities'],
       doneWhen: 'A task opens in a deep-linkable sheet; a cross-project id 404s.',
@@ -167,6 +222,8 @@ export function buildSamplePlan(): SeedFeature[] {
     {
       slug: 'f-sidekick',
       title: 'Per-project sidekick agent + chat',
+      description:
+        'A per-project assistant you can ask about the plan, wired to the project’s context.',
       status: 'planning',
       dependsOn: ['f-hub-capabilities', 'f-shell'],
       doneWhen: 'Each project has a sidekick you can chat with about its plan.',
@@ -180,6 +237,7 @@ export function buildSamplePlan(): SeedFeature[] {
     {
       slug: 'f-intake',
       title: 'Intake workflow + UI',
+      description: 'Turn a raw idea into a structured, triaged feature ready to sit on the plan.',
       status: 'planning',
       dependsOn: ['f-sidekick', 'f-projects'],
       indicativeTasks: [
@@ -192,15 +250,34 @@ export function buildSamplePlan(): SeedFeature[] {
     {
       slug: 'f-github-sync',
       title: 'GitHub PR integration + reconcile',
+      description:
+        'Link tasks to their PRs and reconcile merge state back onto the board — an unclaimed backlog item.',
       status: 'planning',
+      // Unowned + help-wanted: the canonical "available to claim" backlog sketch.
+      unowned: true,
+      helpWanted: true,
       dependsOn: ['f-hub-capabilities'],
+      indicativeTasks: [
+        'link_pr / complete_task capabilities',
+        'Webhook receiver + merge reconcile',
+        'PR status on the task sheet + board',
+      ],
       tasks: [],
     },
     {
       slug: 'f-morning-brief',
       title: 'Scheduled per-user brief',
-      status: 'planning',
+      description:
+        'A scheduled per-user digest of what advanced and what needs attention — blocked pending scheduling.',
+      // Blocked + unowned: shows the blocked pill on an unclaimed feature.
+      status: 'blocked',
+      unowned: true,
       dependsOn: ['f-hub-capabilities', 'f-shell'],
+      indicativeTasks: [
+        'Brief content builder (per-user rollup)',
+        'Schedule + delivery channel',
+        'Brief surface in the shell',
+      ],
       tasks: [],
     },
   ];
@@ -252,27 +329,34 @@ const unit: SeedUnit = {
       const planningStage: FeaturePlanningStage =
         f.planningStage ?? (f.tasks.length > 0 ? 'planned' : 'indicative');
       const references = f.references ?? undefined;
+      // Unowned features are the "available to claim" backlog (owner = null);
+      // the rest belong to the lead.
+      const ownerUserId = f.unowned ? null : leadUserId;
       await prisma.feature.upsert({
         where: { id: featureSeedId(f.slug) },
         update: {
           slug: f.slug,
           title: f.title,
+          description: f.description ?? null,
           status: f.status,
           planningStage,
+          helpWanted: f.helpWanted ?? false,
           doneWhen: f.doneWhen ?? null,
           ...(references ? { references } : {}),
-          ownerUserId: leadUserId,
+          ownerUserId,
         },
         create: {
           id: featureSeedId(f.slug),
           projectId: SAMPLE_PROJECT.id,
           slug: f.slug,
           title: f.title,
+          description: f.description ?? null,
           status: f.status,
           planningStage,
+          helpWanted: f.helpWanted ?? false,
           doneWhen: f.doneWhen ?? null,
           ...(references ? { references } : {}),
-          ownerUserId: leadUserId,
+          ownerUserId,
         },
       });
       // The indicative sketch (§18) — upsert by stable id so re-seeds are idempotent.
@@ -306,13 +390,21 @@ const unit: SeedUnit = {
         taskNumber += 1; // project-wide t-N, in feature order
         await prisma.task.upsert({
           where: { id: taskSeedId(f.slug, i) },
-          update: { title: t.title, status: t.status, number: taskNumber },
+          update: {
+            title: t.title,
+            status: t.status,
+            number: taskNumber,
+            description: t.description ?? null,
+            doneWhen: t.doneWhen ?? null,
+          },
           create: {
             id: taskSeedId(f.slug, i),
             featureId: featureSeedId(f.slug),
             number: taskNumber,
             title: t.title,
             status: t.status,
+            description: t.description ?? null,
+            doneWhen: t.doneWhen ?? null,
           },
         });
       }
