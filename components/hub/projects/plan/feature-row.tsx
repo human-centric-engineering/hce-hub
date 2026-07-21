@@ -18,6 +18,7 @@ import { TaskRow, TASK_ROW_GRID } from '@/components/hub/projects/plan/task-row'
 import { featureStatus, firstName } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ClaimFeatureButton } from '@/components/hub/projects/feature-view/claim-feature-button';
 import type { PlanFeature } from '@/components/hub/projects/plan/types';
 
 /** Small clay pill flagging a feature that wants help (§5, §13.5). */
@@ -146,8 +147,14 @@ export function FeatureRow({
               <span className="text-muted-foreground text-xs">{firstName(feature.owner.name)}</span>
             </>
           ) : (
-            <span className="text-xs italic" style={{ color: 'var(--ink-faint)' }}>
-              unassigned
+            <span className="flex items-center gap-2">
+              <span className="text-xs italic" style={{ color: 'var(--ink-faint)' }}>
+                unassigned
+              </span>
+              {/* Pick it up right here — unowned + unshipped is claimable. */}
+              {feature.status !== 'shipped' && (
+                <ClaimFeatureButton projectId={projectId} featureId={feature.id} variant="inline" />
+              )}
             </span>
           )}
         </span>
