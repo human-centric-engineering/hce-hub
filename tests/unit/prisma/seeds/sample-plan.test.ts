@@ -30,7 +30,20 @@ describe('buildSamplePlan (pure)', () => {
     expect(features.filter((f) => f.status === 'in_flight').map((f) => f.slug)).toEqual([
       'f-projects',
     ]);
-    expect(features.filter((f) => f.status === 'planning')).toHaveLength(7);
+    expect(features.filter((f) => f.status === 'planning')).toHaveLength(6);
+    expect(features.filter((f) => f.status === 'blocked').map((f) => f.slug)).toEqual([
+      'f-morning-brief',
+    ]);
+  });
+
+  it('every feature carries a human description', () => {
+    for (const f of features) expect((f.description ?? '').length).toBeGreaterThan(0);
+  });
+
+  it('surfaces unowned "available to claim" backlog features (incl. help-wanted)', () => {
+    const unowned = features.filter((f) => f.unowned);
+    expect(unowned.map((f) => f.slug)).toEqual(['f-github-sync', 'f-morning-brief']);
+    expect(features.find((f) => f.slug === 'f-github-sync')?.helpWanted).toBe(true);
   });
 
   it('carries the real dependency edges', () => {
@@ -119,18 +132,32 @@ describe('run()', () => {
     expect(numbers).toEqual(Array.from({ length: totalTasks }, (_, i) => i + 1));
   });
 
-  it('derives planningStage (§18) — planned when the feature has tasks, else indicative', async () => {
+  it('derives planningStage, owner, + description (§18) and writes sketches', async () => {
     const { ctx, prisma } = mockCtx({ id: 'human-1' });
     await unit.run(ctx);
 
-    const stageBySlug = new Map(
+    const bySlug = new Map(
       prisma.feature.upsert.mock.calls.map((c) => {
-        const create = (c[0] as { create: { slug: string; planningStage: string } }).create;
-        return [create.slug, create.planningStage];
+        const create = (
+          c[0] as {
+            create: {
+              slug: string;
+              planningStage: string;
+              ownerUserId: string | null;
+              description: string | null;
+            };
+          }
+        ).create;
+        return [create.slug, create];
       })
     );
-    expect(stageBySlug.get('f-fork')).toBe('planned'); // shipped, has a task
-    expect(stageBySlug.get('f-task-sheet')).toBe('indicative'); // sketched, no real tasks
+    expect(bySlug.get('f-fork')?.planningStage).toBe('planned'); // shipped, has a task
+    expect(bySlug.get('f-task-sheet')?.planningStage).toBe('indicative'); // sketched, no real tasks
+    // Unowned backlog features are seeded with no owner (available to claim).
+    expect(bySlug.get('f-github-sync')?.ownerUserId).toBeNull();
+    expect(bySlug.get('f-fork')?.ownerUserId).toBe('human-1');
+    // Every feature carries a description.
+    expect((bySlug.get('f-fork')?.description ?? '').length).toBeGreaterThan(0);
     // The sketch bullets were written as indicative tasks.
     expect(prisma.indicativeTask.upsert).toHaveBeenCalled();
   });
