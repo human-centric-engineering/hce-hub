@@ -816,3 +816,22 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   `validate` output before declaring gates green; never filter away `format:check`. Any test block appended by a tool
   that bypasses the editor (heredoc, `python` patch, `sed`) must be `prettier --write`-run before commit — the
   formatter only fires on files the editor touches.
+
+### B32 · A shared client component that gains a `next/navigation` hook breaks every test that _self-mocks_ the module — a targeted local run won't catch it; the full sharded CI will
+
+- **Discovery ([[f-feature-planning]] t-4).** t-4 added a `ClaimFeatureButton` (a client component calling
+  `useRouter`) into two **widely-rendered** components — the Plan `feature-row` and the feature-page `feature-view`.
+  My targeted local run (the button's own test + the unit component tests) was green, but the full sharded **CI went
+  red**: `No "useRouter" export is defined on the "next/navigation" mock`. Cause: the global `tests/setup.ts` mocks
+  `next/navigation` **with** `useRouter`, so tests that don't touch the module are fine — but any test file that
+  declares its **own** `vi.mock('next/navigation', …)` **replaces the whole module**, and the `(hub)` page integration
+  tests self-mock it (for `notFound`/`useSearchParams`) **without** `useRouter`. Once `ClaimFeatureButton` rendered
+  inside their trees (an unowned feature), `useRouter()` was `undefined` → throw. `feature-page.test.tsx` hit it (its
+  fixture is unowned); `id-page.test.tsx` dodged it only because its seed feature is `shipped` (no claim button).
+- **Lesson.** When you drop a client component that uses a `next/navigation` hook into a **shared/reused** component,
+  the blast radius is **every test that self-mocks `next/navigation`** and transitively renders it — not just the
+  component's own test. **Before pushing such a change, run the FULL `npm run test`** (not a targeted subset), or
+  `grep -rl "vi.mock('next/navigation'" tests/` and add the new hook to each self-mocker that could render the
+  component. The green-targeted-run ≠ green-CI trap is the same shape as [[planning-retro#HB6]] (green gates ≠ working
+  surface), but here it's **test isolation**: a local module mock shadows the global `setup.ts` one, so "passes for me"
+  depends on _which_ files ran. Fix was one line per self-mocker: `useRouter: () => ({ refresh: vi.fn() })`.
