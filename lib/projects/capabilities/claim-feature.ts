@@ -7,9 +7,11 @@
  * weigh, and the claim still proceeds (ownership is a coordination signal, not a
  * lock).
  *
- * Authorization is the feature funnel at the `member` tier (`resolveFeatureAccess`)
- * — a non-member, or a feature in a project the caller can't see, is `not_found`
- * (no enumeration). No free text ⇒ no PII redaction.
+ * The MCP/chat face of the shared `claimFeature()` core (t-4) — the same logic
+ * the consumer `POST …/features/[key]/claim` route (the feature page's Claim
+ * button) runs, so the two never drift. Membership is the funnel's: a non-member,
+ * or a feature in a project the caller can't see, is `not_found` (the service
+ * throws `NotFoundError`; no enumeration). No free text ⇒ no PII redaction.
  */
 
 import { z } from 'zod';
@@ -19,23 +21,14 @@ import type {
   CapabilityFunctionDefinition,
   CapabilityResult,
 } from '@/lib/orchestration/capabilities/types';
-import { executeTransaction } from '@/lib/db/utils';
-import { resolveFeatureAccess } from '@/lib/projects/access';
-import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
-import { recordProjectEvent } from '@/lib/projects/project-event';
+import { NotFoundError } from '@/lib/api/errors';
+import { claimFeature, type ClaimFeatureWarning } from '@/lib/projects/claim-feature-service';
 
 const schema = z.object({
   featureId: z.string().describe('The feature to claim ownership of.'),
 });
 
 type Args = z.infer<typeof schema>;
-
-/** Advisory, never a block — mirrors the claim_task collision warnings. */
-interface ClaimFeatureWarning {
-  kind: 'already_owned';
-  ownerUserId: string;
-  message: string;
-}
 
 interface Data {
   featureId: string;
@@ -67,47 +60,16 @@ export class ClaimFeatureCapability extends BaseCapability<Args, Data> {
       return this.error('claim_feature requires a signed-in caller.', 'no_user_context');
     }
 
-    // Any member may claim (the pull action); a non-member sees not_found.
-    const access = await resolveFeatureAccess(userId, args.featureId, 'member');
-    if (!access.ok) {
-      return this.error(`Feature ${args.featureId} not found.`, 'not_found');
+    // Shared core with the consumer claim route — a funnel denial surfaces as
+    // NotFoundError, which maps to the capability's not_found (no enumeration).
+    try {
+      const result = await claimFeature(userId, args.featureId);
+      return this.success(result);
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return this.error(`Feature ${args.featureId} not found.`, 'not_found');
+      }
+      throw err;
     }
-
-    const previousOwner = access.feature.ownerUserId;
-    const warnings: ClaimFeatureWarning[] = [];
-    // Already owned by another live user? (A null owner — unowned or erased — is
-    // not a collision.) Soft signal only; the claim still proceeds.
-    if (previousOwner && previousOwner !== userId) {
-      warnings.push({
-        kind: 'already_owned',
-        ownerUserId: previousOwner,
-        message: 'Heads-up: this feature is already owned by someone else.',
-      });
-    }
-
-    await executeTransaction(async (tx) => {
-      await tx.feature.update({
-        where: { id: args.featureId },
-        data: { ownerUserId: userId, status: 'in_flight' },
-      });
-      // Journal the claim inside the same tx (an event iff the claim commits).
-      await recordProjectEvent(tx, {
-        projectId: access.feature.projectId,
-        featureId: args.featureId,
-        kind: 'feature_claimed',
-        actorUserId: userId,
-        metadata: { previousOwner },
-      });
-    });
-
-    logAdminAction({
-      userId,
-      action: 'feature.claim',
-      entityType: 'app_feature',
-      entityId: args.featureId,
-      metadata: { previousOwner, warningCount: warnings.length },
-    });
-
-    return this.success({ featureId: args.featureId, claimed: true, warnings });
   }
 }

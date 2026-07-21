@@ -106,9 +106,33 @@ describe('FeatureRow', () => {
   });
 
   it('has no toggle and shows "no tasks yet" when a planning feature has none', () => {
-    renderRow({ feature: feature({ status: 'planning', planningStage: 'planned', tasks: [] }) });
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    renderRow({
+      feature: feature({
+        status: 'planning',
+        planningStage: 'planned',
+        tasks: [],
+        owner: { id: 'u1', name: 'Ada', email: 'a@x', image: null },
+      }),
+    });
+    expect(screen.queryByRole('button', { name: /Toggle/ })).not.toBeInTheDocument();
     expect(screen.getByText('no tasks yet')).toBeInTheDocument();
+  });
+
+  it('shows an inline Claim button on an unowned, unshipped feature (§18 t-4)', () => {
+    renderRow({ feature: feature({ owner: null, status: 'planning' }) });
+    expect(screen.getByRole('button', { name: 'Claim this feature' })).toBeInTheDocument();
+  });
+
+  it('shows no Claim button once a feature is owned', () => {
+    renderRow({
+      feature: feature({ owner: { id: 'u1', name: 'Ada', email: 'a@x', image: null } }),
+    });
+    expect(screen.queryByRole('button', { name: 'Claim this feature' })).not.toBeInTheDocument();
+  });
+
+  it('shows no Claim button on a shipped feature (even if unowned)', () => {
+    renderRow({ feature: feature({ owner: null, status: 'shipped' }) });
+    expect(screen.queryByRole('button', { name: 'Claim this feature' })).not.toBeInTheDocument();
   });
 
   it('renders the task table when expanded', () => {

@@ -18,6 +18,8 @@ vi.mock('@/lib/logging', () => ({ logger: { error: vi.fn(), info: vi.fn() } }));
 vi.mock('next/navigation', () => ({
   notFound: navMock.notFound,
   useSearchParams: () => new URLSearchParams(),
+  // The unowned feature renders ClaimFeatureButton, which calls useRouter (§18 t-4).
+  useRouter: () => ({ refresh: vi.fn() }),
 }));
 
 import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';

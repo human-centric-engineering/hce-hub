@@ -17,6 +17,7 @@ import { featureStatus } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
 import { FeatureTaskList } from '@/components/hub/projects/feature-view/feature-task-list';
 import { FeatureActivity } from '@/components/hub/projects/feature-view/feature-activity';
+import { ClaimFeatureButton } from '@/components/hub/projects/feature-view/claim-feature-button';
 import type {
   FeatureDetailDTO,
   FeatureReferenceDTO,
@@ -117,6 +118,14 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
             </span>
           )}
         </div>
+
+        {/* Claim affordance — an unowned, unshipped feature is available to pick
+            up (owner's self-hosting flow: claim here, then a repo session plans it). */}
+        {!feature.owner && feature.status !== 'shipped' && (
+          <div className="mt-4">
+            <ClaimFeatureButton projectId={feature.projectId} featureId={feature.id} />
+          </div>
+        )}
       </header>
 
       <div className="flex flex-col gap-8">

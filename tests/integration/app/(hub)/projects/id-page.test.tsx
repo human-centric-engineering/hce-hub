@@ -20,6 +20,9 @@ vi.mock('@/lib/logging', () => ({ logger: { error: vi.fn(), info: vi.fn() } }));
 vi.mock('next/navigation', () => ({
   notFound: navMock.notFound,
   useSearchParams: () => new URLSearchParams(),
+  // A Plan row for an unowned+unshipped feature renders ClaimFeatureButton,
+  // which calls useRouter (§18 t-4) — provide it so the mock is complete.
+  useRouter: () => ({ refresh: vi.fn() }),
 }));
 
 import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';

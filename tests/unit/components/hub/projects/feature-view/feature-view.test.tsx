@@ -81,6 +81,20 @@ describe('FeatureView', () => {
     expect(screen.getByText('planned')).toBeInTheDocument();
   });
 
+  it('shows a Claim button on an unowned, unshipped feature (§18 t-4)', () => {
+    render(<FeatureView feature={detail({ owner: null, status: 'planning' })} />);
+    expect(screen.getByRole('button', { name: /Claim feature/ })).toBeInTheDocument();
+  });
+
+  it('shows no Claim button when the feature is owned or shipped', () => {
+    const { rerender } = render(
+      <FeatureView feature={detail({ owner: null, status: 'shipped' })} />
+    );
+    expect(screen.queryByRole('button', { name: /Claim feature/ })).not.toBeInTheDocument();
+    rerender(<FeatureView feature={detail()} />); // owned
+    expect(screen.queryByRole('button', { name: /Claim feature/ })).not.toBeInTheDocument();
+  });
+
   it('labels the section "Sketch" for an indicative feature and renders its bullets', () => {
     render(
       <FeatureView
