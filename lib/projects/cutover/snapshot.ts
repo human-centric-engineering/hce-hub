@@ -31,10 +31,15 @@ type Data = ProjectSnapshotData;
 /**
  * Build the cutover snapshot. `leadUserId` is the real Hub lead (resolved by
  * `import-plan`); it owns every shipped/in-flight feature and authors the
- * events. `exportedAt` is injectable for deterministic tests.
+ * events. `memberId` is the id to use for the lead's membership row — pass an
+ * **existing** membership's id so the upsert updates it in place rather than
+ * colliding on the `(projectId, userId)` unique (the retired `006` seed created
+ * that row with a non-deterministic id); defaults to a stable id for a fresh DB.
+ * `exportedAt` is injectable for deterministic tests.
  */
 export function buildCutoverSnapshot(
   leadUserId: string,
+  memberId = cid('member', 'lead'),
   exportedAt = '2026-07-22T12:00:00.000Z'
 ): ProjectTransfer {
   const features = buildCutoverPlan();
@@ -147,7 +152,7 @@ export function buildCutoverSnapshot(
     },
     members: [
       {
-        id: cid('member', 'lead'),
+        id: memberId,
         userId: leadUserId,
         role: 'lead',
         addedAt: CUTOVER_PROJECT.createdAt,

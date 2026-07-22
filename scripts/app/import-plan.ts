@@ -12,17 +12,18 @@
  *   npm run app:project:import-plan          # first human user = lead
  *   npm run app:project:import-plan -- <email>   # a specific lead
  *
- * First run on a dev DB that still holds the *retired* `006` sample project:
- * clear it first (`db:reset` — the seed no longer recreates it — or delete the
- * `chubproject` project), because that seed created the lead's membership with a
- * non-deterministic id whose (project, user) key collides with this load's. A
- * clean DB and every subsequent re-run are conflict-free + idempotent.
+ * Idempotent + conflict-free on a fresh DB and every re-run (it reconciles the
+ * lead's membership id in place — see the note in `buildCutoverSnapshot`). On a
+ * dev DB that still holds the *retired* `006`/`007` seed data, the retired demo
+ * collaborators linger as members (harmless — an additive load doesn't remove
+ * them; `db:reset` clears them, since the seed no longer recreates the project).
  */
 
 import { prisma } from '@/lib/db/client';
 import { humanWhere } from '@/lib/auth/account';
 import { importProject } from '@/lib/projects/transfer/importer';
 import { buildCutoverSnapshot } from '@/lib/projects/cutover/snapshot';
+import { CUTOVER_PROJECT } from '@/lib/projects/cutover/plan-data';
 
 async function main(): Promise<void> {
   const email = process.argv[2];
@@ -42,7 +43,14 @@ async function main(): Promise<void> {
   }
 
   console.log(`Importing the HCE Hub build plan with lead ${lead.email} …`);
-  const snapshot = buildCutoverSnapshot(lead.id);
+  // Reuse an existing lead membership's id (e.g. one the retired 006 seed created
+  // with a non-deterministic id) so the upsert updates it in place instead of
+  // colliding on the (projectId, userId) unique. Fresh DBs use the default id.
+  const existingMember = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId: CUTOVER_PROJECT.id, userId: lead.id } },
+    select: { id: true },
+  });
+  const snapshot = buildCutoverSnapshot(lead.id, existingMember?.id);
   const r = await importProject(snapshot);
 
   console.log(`✓ Cutover import complete (project ${r.project})`);
