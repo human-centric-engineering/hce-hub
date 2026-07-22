@@ -163,7 +163,6 @@ function makeSnapshot(): ProjectTransfer {
           status: 'shipped',
           planningStage: 'planned',
           helpWanted: false,
-          phaseId: null,
           createdAt: '2026-07-02T00:00:00.000Z',
         },
         {
@@ -178,7 +177,6 @@ function makeSnapshot(): ProjectTransfer {
           status: 'planning',
           planningStage: 'indicative',
           helpWanted: true,
-          phaseId: null,
           createdAt: '2026-07-03T00:00:00.000Z',
         },
       ],

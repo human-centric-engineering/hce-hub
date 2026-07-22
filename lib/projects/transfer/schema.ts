@@ -96,7 +96,11 @@ export const featureSnapshot = z.object({
   status: featureStatus,
   planningStage,
   helpWanted: z.boolean(),
-  phaseId: z.string().nullable(),
+  // `Feature.phaseId` is deliberately NOT transferred: it's a real FK → `Phase`,
+  // but `Phase` is unconsumed v1 futures scaffolding, so the snapshot carries no
+  // `Phase` rows — importing a `phaseId` would violate the FK on any target that
+  // lacks that phase. `phaseId` defaults to null on import. When phases are
+  // consumed, add `Phase` transfer (upserted before features) + `phaseId` here.
   createdAt: isoDate,
 });
 

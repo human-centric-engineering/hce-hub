@@ -237,7 +237,7 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
         status: f.status,
         planningStage: f.planningStage,
         helpWanted: f.helpWanted,
-        phaseId: f.phaseId,
+        // phaseId not transferred (Phase unconsumed; see schema.ts) → defaults null.
         createdAt: new Date(f.createdAt),
       };
       await tx.feature.upsert({

@@ -28,8 +28,11 @@ export class ProjectNotFoundError extends Error {
 }
 
 const iso = (d: Date): string => d.toISOString();
+// Locale-independent code-unit ordering (not `localeCompare`, whose collation is
+// ICU/locale-sensitive) so the sort — hence the whole snapshot — is byte-stable
+// across environments. Branch-free; ids are unique so the 0 case never sorts.
 const byId = <T extends { id: string }>(rows: T[]): T[] =>
-  [...rows].sort((a, b) => a.id.localeCompare(b.id));
+  [...rows].sort((a, b) => Number(a.id > b.id) - Number(a.id < b.id));
 
 /**
  * Build the full snapshot for `projectId`. Throws `ProjectNotFoundError` if the
@@ -108,7 +111,7 @@ export async function exportProject(
       status: f.status,
       planningStage: f.planningStage,
       helpWanted: f.helpWanted,
-      phaseId: f.phaseId,
+      // phaseId intentionally omitted — see schema.ts (Phase not transferred).
       createdAt: iso(f.createdAt),
     })),
     featureDependencies: byId(featureDependencies).map((d) => ({
