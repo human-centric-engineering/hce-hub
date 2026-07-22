@@ -39,6 +39,18 @@ export {
   type HostPlatformDescriptor,
 } from '@/lib/projects/host-platforms';
 
+// Project transfer — export/import one project's coordination graph as a
+// versioned snapshot (f-selfhost-cutover §19 t-1). The durable, portable medium
+// for the Hub-as-system-of-record (survives db:reset; moves dev → prod).
+export { exportProject, ProjectNotFoundError } from '@/lib/projects/transfer/exporter';
+export { importProject, type ImportResult } from '@/lib/projects/transfer/importer';
+export {
+  projectTransferSchema,
+  PROJECT_TRANSFER_VERSION,
+  type ProjectTransfer,
+  type ProjectSnapshotData,
+} from '@/lib/projects/transfer/schema';
+
 // Consumer (member-facing) project reads (f-projects).
 export {
   listProjectsForUser,
