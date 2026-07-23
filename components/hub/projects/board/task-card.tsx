@@ -3,13 +3,16 @@
 /**
  * A task card on the Board (f-board-view t-2).
  *
- * Title · feature ref (slug · t-N) · meta (claimer avatar, soft-collision
- * marker, PR link). `is-mine` gets a clay left border; a collision gets an
+ * Title · feature ref (slug · t-N) · meta (blocked marker, claimer avatar,
+ * soft-collision marker, PR link). A blocked task folds into the Claimed column,
+ * so the marker is what tells it apart there. `is-mine` gets a clay left border;
+ * a collision gets an
  * ambient bottom tint + a pulsing marker (§5/§13.5 — a signal, never a lock).
  * Filenames are intentionally off the card. Clicking the card opens the
  * deep-linkable task sheet (f-task-sheet §11); the PR link stops propagation so
  * it opens the PR, not the sheet.
  */
+import { Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
@@ -17,6 +20,21 @@ import { firstName, prLabel } from '@/components/hub/projects/plan/presentation'
 import { initials } from '@/components/hub/projects/presentation';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
 import type { BoardTaskCard } from '@/components/hub/projects/board/types';
+
+/** A quiet marker for a task that can't start yet (a claimed task with unmerged
+ *  deps folds into the Claimed column — this is what distinguishes it there). */
+function BlockedMark() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 font-mono text-[9.5px] tracking-wide"
+      style={{ color: 'var(--signal-blocked)' }}
+      title="Blocked — a dependency hasn't merged yet"
+    >
+      <Lock className="h-2.5 w-2.5" aria-hidden />
+      blocked
+    </span>
+  );
+}
 
 /** A quiet, slowly-pulsing collision marker. */
 function CollisionMark({ note }: { note: string }) {
@@ -77,8 +95,9 @@ export function TaskCard({ card }: { card: BoardTaskCard }) {
         {card.featureSlug ?? card.featureTitle}
         {card.number != null && <span> · t-{card.number}</span>}
       </span>
-      {(card.claimer || card.collision || prUrl) && (
+      {(card.claimer || card.collision || prUrl || card.status === 'blocked') && (
         <div className="flex flex-wrap items-center gap-2">
+          {card.status === 'blocked' && <BlockedMark />}
           {card.claimer && (
             <span className="flex items-center gap-1">
               <Avatar className="h-4 w-4">

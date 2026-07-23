@@ -3,9 +3,9 @@
  *
  * Load-bearing assertions:
  *   - membership is the funnel's — `getAccessibleProject` deny → 404-not-403;
- *   - routing: claimed → claimer lane; unclaimed → owner lane; effective status
- *     drives the column (deps-blocked available → Backlog);
- *   - carried f-data-model t-2: a null-claimant `claimed` → owner lane, Available;
+ *   - routing: the held-by claimer's lane (else the feature owner); effective
+ *     status drives the column — a deps-blocked `claimed` task folds into the
+ *     Claimed column (f-status-model §20: three columns, claimed/active/merged);
  *   - carried f-data-model t-3: an orphaned / non-member-owned task → Unassigned;
  *   - soft collision: overlapping open claims flag both tasks (`filesOverlap`).
  */
@@ -39,7 +39,7 @@ const task = (o: Record<string, unknown> & { deps?: string[] }) => ({
   number: o.number ?? null,
   title: o.title ?? o.id,
   featureId: o.featureId,
-  status: o.status,
+  status: o.status ?? 'claimed',
   prUrl: o.prUrl ?? null,
   claimedByUserId: o.claimedByUserId ?? null,
   dependencies: (o.deps ?? []).map((s: string) => ({ dependsOn: { status: s } })),
@@ -82,29 +82,29 @@ describe('getProjectBoard — membership funnel', () => {
 });
 
 describe('getProjectBoard — lane + column routing', () => {
-  it('routes a claimed task to the claimer lane, Claimed column', async () => {
+  it('routes an actively-worked task to the claimer lane, Active column', async () => {
     setup({
       members: [member('u1'), member('u2')],
       features: [feature('f1', 'u1')],
-      tasks: [task({ id: 't1', featureId: 'f1', status: 'claimed', claimedByUserId: 'u2' })],
+      tasks: [task({ id: 't1', featureId: 'f1', status: 'active', claimedByUserId: 'u2' })],
       users: [userRow('u1'), userRow('u2')],
     });
     const board = await getProjectBoard('u1', 'p1');
     const u2 = laneOf(board, 'u2')!;
     expect(u2.tasks).toHaveLength(1);
-    expect(u2.tasks[0]).toMatchObject({ id: 't1', column: 'claimed' });
+    expect(u2.tasks[0]).toMatchObject({ id: 't1', column: 'active' });
     expect(laneOf(board, 'u1')!.tasks).toHaveLength(0);
   });
 
-  it('routes an unclaimed available task to the owner lane, Available column', async () => {
+  it('routes a ready (unclaimed by anyone in particular) claimed task to the owner lane, Claimed column', async () => {
     setup({
       members: [member('u1')],
       features: [feature('f1', 'u1')],
-      tasks: [task({ id: 't1', featureId: 'f1', status: 'available' })],
+      tasks: [task({ id: 't1', featureId: 'f1', status: 'claimed' })],
       users: [userRow('u1')],
     });
     const board = await getProjectBoard('u1', 'p1');
-    expect(laneOf(board, 'u1')!.tasks[0]).toMatchObject({ id: 't1', column: 'available' });
+    expect(laneOf(board, 'u1')!.tasks[0]).toMatchObject({ id: 't1', column: 'claimed' });
   });
 
   it('routes a merged task to the CLAIMER lane (credit the doer), not the owner', async () => {
@@ -119,24 +119,24 @@ describe('getProjectBoard — lane + column routing', () => {
     expect(laneOf(board, 'u1')!.tasks).toHaveLength(0);
   });
 
-  it('routes a deps-blocked available task to the Backlog column (owner lane)', async () => {
+  it('folds a deps-blocked claimed task into the Claimed column, with the blocked treatment (owner lane)', async () => {
     setup({
       members: [member('u1')],
       features: [feature('f1', 'u1')],
-      tasks: [task({ id: 't1', featureId: 'f1', status: 'available', deps: ['available'] })],
+      tasks: [task({ id: 't1', featureId: 'f1', status: 'claimed', deps: ['claimed'] })],
       users: [userRow('u1')],
     });
     const board = await getProjectBoard('u1', 'p1');
     expect(laneOf(board, 'u1')!.tasks[0]).toMatchObject({
       id: 't1',
-      column: 'backlog',
+      column: 'claimed',
       status: 'blocked',
     });
   });
 });
 
 describe('getProjectBoard — carried f-data-model findings', () => {
-  it('t-2: a null-claimant claimed task → owner lane, Available column (not a phantom lane)', async () => {
+  it('t-2: a null-claimant claimed task → owner lane, Claimed column (not a phantom lane)', async () => {
     setup({
       members: [member('u1')],
       features: [feature('f1', 'u1')],
@@ -146,8 +146,8 @@ describe('getProjectBoard — carried f-data-model findings', () => {
     const board = await getProjectBoard('u1', 'p1');
     expect(laneOf(board, 'u1')!.tasks[0]).toMatchObject({
       id: 't1',
-      column: 'available',
-      status: 'available',
+      column: 'claimed',
+      status: 'claimed',
     });
     expect(laneOf(board, 'unassigned')).toBeUndefined();
   });
@@ -156,7 +156,7 @@ describe('getProjectBoard — carried f-data-model findings', () => {
     setup({
       members: [member('u1')],
       features: [feature('f1', null)],
-      tasks: [task({ id: 't1', featureId: 'f1', status: 'available' })],
+      tasks: [task({ id: 't1', featureId: 'f1', status: 'claimed' })],
       users: [userRow('u1')],
     });
     const board = await getProjectBoard('u1', 'p1');
@@ -169,7 +169,7 @@ describe('getProjectBoard — carried f-data-model findings', () => {
     setup({
       members: [member('u1')],
       features: [feature('f1', 'ghost')], // ghost is not a member
-      tasks: [task({ id: 't1', featureId: 'f1', status: 'available' })],
+      tasks: [task({ id: 't1', featureId: 'f1', status: 'claimed' })],
       users: [userRow('u1')],
     });
     const board = await getProjectBoard('u1', 'p1');
@@ -181,7 +181,7 @@ describe('getProjectBoard — carried f-data-model findings', () => {
     setup({
       members: [member('u1')],
       features: [feature('f1', 'u1')],
-      tasks: [task({ id: 't1', featureId: 'f1', status: 'available' })],
+      tasks: [task({ id: 't1', featureId: 'f1', status: 'claimed' })],
       users: [userRow('u1')],
     });
     const board = await getProjectBoard('u1', 'p1');
@@ -249,7 +249,7 @@ describe('getProjectBoard — presentation', () => {
     setup({
       members: [member('u1', 'lead')],
       features: [feature('f1', 'u1', 'f-mcp')], // slug f-mcp
-      tasks: [task({ id: 't1', featureId: 'f1', status: 'available', number: 9 })],
+      tasks: [task({ id: 't1', featureId: 'f1', status: 'claimed', number: 9 })],
       users: [userRow('u1')],
     });
     const board = await getProjectBoard('u1', 'p1');
@@ -263,9 +263,9 @@ describe('getProjectBoard — presentation', () => {
       members: [member('u1'), member('u2')],
       features: [feature('f1', 'u1'), feature('f2', 'u2')],
       tasks: [
-        task({ id: 'a', featureId: 'f2', status: 'available' }),
-        task({ id: 'b', featureId: 'f1', status: 'available' }),
-        task({ id: 'c', featureId: 'f1', status: 'available' }),
+        task({ id: 'a', featureId: 'f2', status: 'claimed' }),
+        task({ id: 'b', featureId: 'f1', status: 'claimed' }),
+        task({ id: 'c', featureId: 'f1', status: 'claimed' }),
       ],
       users: [userRow('u1'), userRow('u2')],
     });
@@ -274,24 +274,22 @@ describe('getProjectBoard — presentation', () => {
     expect(board.lanes.map((l) => l.key)).toEqual(['u1', 'u2']);
   });
 
-  it('computes column totals from effective status', async () => {
+  it('computes column totals from effective status (blocked folds into claimed)', async () => {
     setup({
       members: [member('u1')],
       features: [feature('f1', 'u1')],
       tasks: [
         task({ id: 't1', featureId: 'f1', status: 'merged' }),
-        task({ id: 't2', featureId: 'f1', status: 'available', deps: ['available'] }), // → backlog
-        task({ id: 't3', featureId: 'f1', status: 'available' }),
+        task({ id: 't2', featureId: 'f1', status: 'claimed', deps: ['claimed'] }), // → blocked, folds into claimed
+        task({ id: 't3', featureId: 'f1', status: 'claimed' }),
       ],
       users: [userRow('u1')],
     });
     const board = await getProjectBoard('u1', 'p1');
     expect(board.columnTotals).toMatchObject({
       merged: 1,
-      backlog: 1,
-      available: 1,
-      claimed: 0,
-      in_pr: 0,
+      claimed: 2,
+      active: 0,
     });
   });
 

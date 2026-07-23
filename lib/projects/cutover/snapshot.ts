@@ -76,16 +76,15 @@ export function buildCutoverSnapshot(
     }))
   );
 
-  // Real tasks get a project-wide number 1..N in feature order (f-refs invariant),
-  // default their assignee to the feature owner, and record the claimant for any
-  // task past `available`.
+  // Real tasks get a project-wide number 1..N in feature order (f-refs invariant).
+  // Every task is *born claimed* and owned by the feature owner (f-status-model
+  // §20), so both the assignee and the held-by claimant point at the owner.
   const tasks: Data['tasks'] = [];
   let taskNumber = 0;
   for (const f of features) {
     const owner = f.unowned ? null : leadUserId;
     for (const [i, t] of f.tasks.entries()) {
       taskNumber += 1;
-      const claimed = t.status === 'claimed' || t.status === 'in_pr' || t.status === 'merged';
       tasks.push({
         id: taskId(f.slug, i),
         featureId: featureId(f.slug),
@@ -96,7 +95,7 @@ export function buildCutoverSnapshot(
         status: t.status,
         filesScope: t.files ?? [],
         assigneeUserId: owner,
-        claimedByUserId: claimed ? owner : null,
+        claimedByUserId: owner,
         prUrl: t.prUrl ?? null,
         createdAt: f.shippedAt ?? f.createdAt,
       });

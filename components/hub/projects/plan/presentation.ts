@@ -22,11 +22,9 @@ const FEATURE_TONE: Record<FeatureStatus, StatusTone> = {
 };
 
 const TASK_TONE: Record<TaskEffectiveStatus, StatusTone> = {
-  merged: { tone: 'merged', label: 'merged' },
-  in_pr: { tone: 'pr', label: 'in pr' },
   claimed: { tone: 'claimed', label: 'claimed' },
-  available: { tone: 'available', label: 'available' },
-  backlog: { tone: 'backlog', label: 'backlog' },
+  active: { tone: 'active', label: 'active' },
+  merged: { tone: 'merged', label: 'merged' },
   blocked: { tone: 'blocked', label: 'blocked' },
 };
 

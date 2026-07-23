@@ -8,8 +8,8 @@
 import type { UserRef } from '@/components/hub/projects/types';
 import type { TaskEffectiveStatus } from '@/components/hub/projects/plan/types';
 
-/** The board's status columns (effective `blocked` folds into `backlog` server-side). */
-export type BoardColumn = 'available' | 'claimed' | 'in_pr' | 'merged' | 'backlog';
+/** The board's status columns (effective `blocked` folds into `claimed` server-side). */
+export type BoardColumn = 'claimed' | 'active' | 'merged';
 
 /** A task card on the board. */
 export interface BoardTaskCard {

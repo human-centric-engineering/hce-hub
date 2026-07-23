@@ -191,14 +191,15 @@ model IndicativeTask {
 // `@relation` on User), each drift-probed in lib/app/db-drift.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// The persisted task lifecycle. This is the *data* enum; the effective board
-// status (e.g. surfacing a stale claim as "available") is computed later by
-// f-board-view (v1-requirements §5) — it is not a stored value here.
+// The persisted task lifecycle (f-status-model §20). A task is *born* `claimed`
+// the moment its feature is planned (you claim features, not tasks — the
+// feature-claim cascade), is `active` while worked, and `merged` when done.
+// `blocked` is NOT stored — it's a derived overlay (`computeEffectiveStatus`: a
+// claimed task with an unmerged dependency), so the effective board status never
+// diverges across read surfaces.
 enum TaskStatus {
-  backlog
-  available
   claimed
-  in_pr
+  active
   merged
 }
 
@@ -209,7 +210,7 @@ model Task {
   title           String
   description     String?    @db.Text
   doneWhen        String?    @db.Text // per-task acceptance contract (f-feature-planning §18)
-  status          TaskStatus @default(backlog)
+  status          TaskStatus @default(claimed)
   filesScope      String[]   @default([]) // paths/globs a claim expects to touch — soft-collision hint
   assigneeUserId  String? // hand-FK → "user" · ON DELETE SET NULL — "this is yours" (defaults to feature owner at plan time; distinct from the pull-claim)
   claimedByUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the task, drop the claimant)

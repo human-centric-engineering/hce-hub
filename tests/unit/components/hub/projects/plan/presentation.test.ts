@@ -18,7 +18,9 @@ describe('featureStatus / taskStatus', () => {
 
   it('maps task effective status, including computed blocked', () => {
     expect(taskStatus('blocked')).toEqual({ tone: 'blocked', label: 'blocked' });
-    expect(taskStatus('in_pr')).toEqual({ tone: 'pr', label: 'in pr' });
+    expect(taskStatus('active')).toEqual({ tone: 'active', label: 'active' });
+    expect(taskStatus('claimed')).toEqual({ tone: 'claimed', label: 'claimed' });
+    expect(taskStatus('merged')).toEqual({ tone: 'merged', label: 'merged' });
   });
 });
 

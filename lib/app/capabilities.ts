@@ -16,9 +16,7 @@
 import { registerAppCapability } from '@/lib/orchestration/capabilities/registry';
 import { NextTaskCapability } from '@/lib/projects/capabilities/next-task';
 import { CreateTaskCapability } from '@/lib/projects/capabilities/create-task';
-import { AddBacklogCapability } from '@/lib/projects/capabilities/add-backlog';
 import { FlagHelpWantedCapability } from '@/lib/projects/capabilities/flag-help-wanted';
-import { ClaimTaskCapability } from '@/lib/projects/capabilities/claim-task';
 import { RecordDecisionCapability } from '@/lib/projects/capabilities/record-decision';
 import { AddNoteCapability } from '@/lib/projects/capabilities/add-note';
 import { CreateFeatureCapability } from '@/lib/projects/capabilities/create-feature';
@@ -34,9 +32,10 @@ export function initAppCapabilities(): void {
   // the f-access funnel; there is no per-agent binding requirement (default-allow).
   registerAppCapability(new NextTaskCapability()); // read (t-1)
   registerAppCapability(new CreateTaskCapability()); // write (t-2)
-  registerAppCapability(new AddBacklogCapability()); // write (t-2)
   registerAppCapability(new FlagHelpWantedCapability()); // write (t-2)
-  registerAppCapability(new ClaimTaskCapability()); // write + soft-collision (t-3)
+  // Task progress (Start/Complete) is not a capability — you claim features, not
+  // tasks (f-status-model §20); the sheet drives `startTask`/`completeTask` over
+  // the consumer route. `claim_task` + `add_backlog` were retired here.
   // Journal authored verbs (f-journal §17 t-2) — free-text narrative into the
   // ProjectEvent stream; membership-scoped via the resolveEventScope funnel.
   registerAppCapability(new RecordDecisionCapability());

@@ -41,12 +41,17 @@ describe('buildCutoverSnapshot', () => {
     expect(numbers).toEqual(Array.from({ length: snap.data.tasks.length }, (_, i) => i + 1));
   });
 
-  it('assigns tasks to the owner and marks past-available tasks claimed', () => {
-    const merged = snap.data.tasks.find((t) => t.prUrl?.endsWith('/4'));
-    expect(merged?.assigneeUserId).toBe(LEAD);
-    expect(merged?.claimedByUserId).toBe(LEAD); // merged ⇒ claimant recorded
-    const backlog = snap.data.tasks.find((t) => t.status === 'backlog');
-    expect(backlog?.claimedByUserId).toBeNull();
+  it('assigns every task to the owner as both assignee and held-by claimant (born claimed, f-status-model §20)', () => {
+    expect(snap.data.tasks.length).toBeGreaterThan(0);
+    for (const t of snap.data.tasks) {
+      expect(t.assigneeUserId).toBe(LEAD);
+      expect(t.claimedByUserId).toBe(LEAD);
+    }
+    // No `backlog` status exists in the new model — every stored task status is
+    // one of the three valid enum values.
+    expect(snap.data.tasks.every((t) => ['claimed', 'active', 'merged'].includes(t.status))).toBe(
+      true
+    );
   });
 
   it('emits one backdated feature_shipped event per shipped feature', () => {

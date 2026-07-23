@@ -9,7 +9,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const planFeatureFunctionDefinition = {
   name: 'plan_feature',
   description:
-    "Materialise a feature's tasks: creates real, claimable tasks (numbered, assigned to the feature owner, available to pull), wires their dependencies, replaces the indicative sketch, and marks the feature planned. Only the feature owner or a project lead may plan. A cyclic task batch is rejected.",
+    "Materialise a feature's tasks: creates real tasks (numbered, born claimed and owned by the feature owner), wires their dependencies, replaces the indicative sketch, and marks the feature planned. Only the feature owner or a project lead may plan. A cyclic task batch is rejected.",
   parameters: {
     type: 'object',
     properties: {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Link2, Check, GitPullRequest, MessageSquare, Lock, Folder } from 'lucide-react';
+import { X, Link2, Play, Check, GitPullRequest, MessageSquare, Lock, Folder } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
 import { useSidekick } from '@/components/hub/sidekick-context';
@@ -13,8 +13,8 @@ import { initials } from '@/components/hub/projects/presentation';
 import type {
   TaskDetailDTO,
   TaskDetailRef,
-  ClaimResultDTO,
-  ClaimWarning,
+  TaskActionResultDTO,
+  CollisionWarning,
 } from '@/components/hub/projects/task-sheet/types';
 
 /** The width the sidekick column occupies + its gutter — the sheet anchors to its left. */
@@ -105,9 +105,9 @@ export function TaskSheet({
   const [state, setState] = useState<LoadState>('loading');
   const [entered, setEntered] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [claiming, setClaiming] = useState(false);
-  const [claimError, setClaimError] = useState(false);
-  const [warnings, setWarnings] = useState<ClaimWarning[]>([]);
+  const [acting, setActing] = useState(false);
+  const [actionError, setActionError] = useState(false);
+  const [warnings, setWarnings] = useState<CollisionWarning[]>([]);
   const asideRef = useRef<HTMLElement>(null);
 
   // Slide in on mount.
@@ -123,11 +123,11 @@ export function TaskSheet({
   const path = `/api/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`;
 
   // Per-task state clears when the sheet switches tasks, but NOT on a same-task
-  // refetch — so a post-claim reload refreshes in place (keeping the content and
+  // refetch — so a post-action reload refreshes in place (keeping the content and
   // the just-surfaced warnings visible) instead of blanking to the skeleton.
   useEffect(() => {
     setWarnings([]);
-    setClaimError(false);
+    setActionError(false);
     setDetail(null);
   }, [path]);
 
@@ -169,26 +169,32 @@ export function TaskSheet({
 
   const copyLink = () => void navigator.clipboard?.writeText(window.location.href);
 
-  const claim = useCallback(async () => {
-    setClaiming(true);
-    setClaimError(false);
-    try {
-      const res = await fetch(`${path}/claim`, { method: 'POST' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as { data: ClaimResultDTO };
-      setWarnings(json.data.warnings);
-      setReloadKey((k) => k + 1); // refetch so status/claimer reflect the claim
-    } catch {
-      setClaimError(true); // surface it (never a silent write failure) — retryable
-    } finally {
-      setClaiming(false);
-    }
-  }, [path]);
+  // Start (claimed → active) and Complete (active → merged) share one poster; the
+  // action row picks which by the task's effective status.
+  const advance = useCallback(
+    async (action: 'start' | 'complete') => {
+      setActing(true);
+      setActionError(false);
+      try {
+        const res = await fetch(`${path}/${action}`, { method: 'POST' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as { data: TaskActionResultDTO };
+        setWarnings(json.data.warnings);
+        setReloadKey((k) => k + 1); // refetch so status/claimer reflect the change
+      } catch {
+        setActionError(true); // surface it (never a silent write failure) — retryable
+      } finally {
+        setActing(false);
+      }
+    },
+    [path]
+  );
 
   const ref = detail?.number != null ? `t-${detail.number}` : `t-${taskId.slice(-4)}`;
   const status = detail ? taskStatus(detail.status) : null;
   const prUrl = detail?.prUrl ? sanitizeUrl(detail.prUrl) : '';
-  const canClaim = detail?.status === 'available';
+  const canStart = detail?.status === 'claimed'; // ready — deps met, not started
+  const canComplete = detail?.status === 'active';
   const blocked = detail?.status === 'blocked';
 
   return (
@@ -264,21 +270,32 @@ export function TaskSheet({
                   </span>
                 ) : (
                   <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                    unclaimed
+                    unassigned
                   </span>
                 )}
               </div>
 
-              {/* Action row */}
+              {/* Action row — Start (claimed → active) then Complete (active →
+                  merged). You claim features, not tasks (f-status-model §20). */}
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                {canClaim && (
+                {canStart && (
+                  <ActionButton
+                    icon={Play}
+                    primary
+                    onClick={() => void advance('start')}
+                    disabled={acting}
+                  >
+                    {acting ? 'Starting…' : 'Start'}
+                  </ActionButton>
+                )}
+                {canComplete && (
                   <ActionButton
                     icon={Check}
                     primary
-                    onClick={() => void claim()}
-                    disabled={claiming}
+                    onClick={() => void advance('complete')}
+                    disabled={acting}
                   >
-                    {claiming ? 'Claiming…' : 'Claim'}
+                    {acting ? 'Completing…' : 'Complete'}
                   </ActionButton>
                 )}
                 {blocked && (
@@ -303,9 +320,9 @@ export function TaskSheet({
                 </ActionButton>
               </div>
 
-              {claimError && (
+              {actionError && (
                 <p className="text-xs" style={{ color: 'var(--signal-blocked)' }}>
-                  Couldn&rsquo;t claim just now — try again.
+                  Couldn&rsquo;t update just now — try again.
                 </p>
               )}
 
@@ -390,7 +407,7 @@ export function TaskSheet({
                       detail.blockedBy.map((d) => <DepRow key={d.id} dep={d} onJump={openTask} />)
                     ) : (
                       <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                        none — ready to pull
+                        none — ready to start
                       </p>
                     )}
                   </div>

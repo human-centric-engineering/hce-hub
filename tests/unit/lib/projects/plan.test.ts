@@ -4,8 +4,8 @@
  * Load-bearing assertions:
  *   - membership is the funnel's — `getAccessibleProject` deny (NotFoundError)
  *     propagates → 404-not-403 at the boundary;
- *   - task status is the shared `computeEffectiveStatus` (a null-claimant
- *     `claimed` task returns to the pool; a dep-blocked `available` is `blocked`);
+ *   - task status is the shared `computeEffectiveStatus` (f-status-model §20: a
+ *     dep-blocked `claimed` task is `blocked`; the claimant no longer gates it);
  *   - nullable owner/claimer refs resolve to `null`, never a throw;
  *   - dependency chips carry the depended-on feature's title.
  */
@@ -65,17 +65,17 @@ describe('getProjectPlan — membership funnel', () => {
 });
 
 describe('getProjectPlan — effective status (shared with the Board)', () => {
-  it('returns a dep-blocked available task as blocked', async () => {
+  it('returns a dep-blocked claimed task as blocked', async () => {
     featureFindMany.mockResolvedValue([
       row({
         tasks: [
           {
             id: 't1',
             title: 'Blocked task',
-            status: 'available',
+            status: 'claimed',
             prUrl: null,
             claimedByUserId: null,
-            dependencies: [{ dependsOn: { status: 'available' } }], // dep not merged
+            dependencies: [{ dependsOn: { status: 'claimed' } }], // dep not merged
           },
         ],
       }),
@@ -84,23 +84,23 @@ describe('getProjectPlan — effective status (shared with the Board)', () => {
     expect(plan.features[0].tasks[0].status).toBe('blocked');
   });
 
-  it('returns a null-claimant claimed task to the pool (not "claimed")', async () => {
+  it('reports a claimed task as claimed regardless of its claimant (f-status-model §20 — the claimant no longer gates readiness)', async () => {
     featureFindMany.mockResolvedValue([
       row({
         tasks: [
           {
             id: 't1',
-            title: 'Orphaned claim',
+            title: 'Erased claimant',
             status: 'claimed',
             prUrl: null,
-            claimedByUserId: null, // erased claimant
+            claimedByUserId: null, // erased claimant — never dereferenced
             dependencies: [],
           },
         ],
       }),
     ]);
     const plan = await getProjectPlan('u1', 'p1');
-    expect(plan.features[0].tasks[0].status).toBe('available');
+    expect(plan.features[0].tasks[0].status).toBe('claimed');
     expect(plan.features[0].tasks[0].claimer).toBeNull();
   });
 });
@@ -166,7 +166,7 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
             id: 't1',
             number: 7,
             title: 'a task',
-            status: 'available',
+            status: 'claimed',
             prUrl: null,
             claimedByUserId: null,
             dependencies: [],
@@ -204,17 +204,17 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
           {
             id: 't2',
             title: 'wip',
-            status: 'claimed',
+            status: 'active',
             prUrl: null,
             claimedByUserId: 'u1',
             dependencies: [],
           },
           {
             id: 't3',
-            title: 'idea',
-            status: 'backlog',
+            title: 'ready but not started',
+            status: 'claimed',
             prUrl: null,
-            claimedByUserId: null,
+            claimedByUserId: 'u1',
             dependencies: [],
           },
         ],
@@ -246,15 +246,16 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
   });
 
   it('counts a dep-blocked task as blocked, not live (§09 carry — matches its row)', async () => {
-    // An `available` task whose dependency is unmerged is effectively `blocked`;
-    // it must NOT inflate `live`, so the feature summary agrees with the row.
+    // A `claimed` task whose dependency is unmerged is effectively `blocked`;
+    // it must NOT inflate `live` (which counts effective `active`), so the
+    // feature summary agrees with the row.
     featureFindMany.mockResolvedValue([
       row({
         tasks: [
           {
             id: 't1',
-            title: 'ready',
-            status: 'available',
+            title: 'in progress',
+            status: 'active',
             prUrl: null,
             claimedByUserId: null,
             dependencies: [],
@@ -262,10 +263,10 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
           {
             id: 't2',
             title: 'blocked',
-            status: 'available',
+            status: 'claimed',
             prUrl: null,
             claimedByUserId: null,
-            dependencies: [{ dependsOn: { status: 'available' } }], // dep not merged
+            dependencies: [{ dependsOn: { status: 'claimed' } }], // dep not merged
           },
         ],
       }),

@@ -43,7 +43,7 @@ const granted = {
 const txDepCreateMany = vi.fn();
 const txTaskCreate = vi.fn();
 const txProjectUpdate = vi.fn();
-function mockTxCreatesTask(id = 't-new', status = 'available', nextNumber = 7) {
+function mockTxCreatesTask(id = 't-new', status = 'claimed', nextNumber = 7) {
   txTaskCreate.mockResolvedValue({ id, status });
   txProjectUpdate.mockResolvedValue({ taskCounter: nextNumber });
   // The mock runs the capability's real tx callback so we can assert what it
@@ -103,7 +103,7 @@ describe('create_task dependency integrity', () => {
 
   it('creates the task and its dependency edges when deps are valid', async () => {
     taskFindMany.mockResolvedValue([{ id: 'd1' }, { id: 'd2' }]);
-    mockTxCreatesTask('t-new', 'available');
+    mockTxCreatesTask('t-new', 'claimed');
 
     const r = await cap.execute(
       { featureId: 'f1', title: 'Wire auth', dependsOnTaskIds: ['d1', 'd2', 'd1'] },
@@ -112,7 +112,7 @@ describe('create_task dependency integrity', () => {
 
     expect(r).toEqual({
       success: true,
-      data: { taskId: 't-new', status: 'available', featureId: 'f1' },
+      data: { taskId: 't-new', status: 'claimed', featureId: 'f1' },
     });
     // De-duplicated edges from the new task to each dep.
     expect(txDepCreateMany).toHaveBeenCalledWith({
@@ -127,19 +127,28 @@ describe('create_task dependency integrity', () => {
 describe('create_task happy path (no deps)', () => {
   beforeEach(() => resolveFeature.mockResolvedValue(granted));
 
-  it('creates an available task, audits, and does not query deps', async () => {
-    mockTxCreatesTask('t-1', 'available');
+  it('creates a claimed task owned by the feature owner, audits, and does not query deps', async () => {
+    mockTxCreatesTask('t-1', 'claimed');
     const r = await cap.execute({ featureId: 'f1', title: 'Ship it' }, ctx());
 
-    expect(r.data).toEqual({ taskId: 't-1', status: 'available', featureId: 'f1' });
+    expect(r.data).toEqual({ taskId: 't-1', status: 'claimed', featureId: 'f1' });
     expect(taskFindMany).not.toHaveBeenCalled();
     expect(txDepCreateMany).not.toHaveBeenCalled();
     // Atomic project-wide number: bump the counter, stamp the returned value.
     expect(txProjectUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: { taskCounter: { increment: 1 } } })
     );
+    // Born claimed, owned by the feature owner (f-status-model §20): both the
+    // assignee and the held-by claimant point at the granted feature's owner.
     expect(txTaskCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ number: 7 }) })
+      expect.objectContaining({
+        data: expect.objectContaining({
+          number: 7,
+          status: 'claimed',
+          assigneeUserId: USER,
+          claimedByUserId: USER,
+        }),
+      })
     );
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -153,7 +162,7 @@ describe('create_task happy path (no deps)', () => {
   });
 
   it('journals a task_created event inside the same transaction', async () => {
-    mockTxCreatesTask('t-1', 'available');
+    mockTxCreatesTask('t-1', 'claimed');
     await cap.execute({ featureId: 'f1', title: 'Ship it' }, ctx());
 
     expect(emit).toHaveBeenCalledWith(expect.anything(), {
@@ -162,7 +171,7 @@ describe('create_task happy path (no deps)', () => {
       taskId: 't-1',
       kind: 'task_created',
       actorUserId: USER,
-      metadata: { status: 'available' },
+      metadata: { status: 'claimed' },
     });
     // Atomicity: the event is written with the *transaction* client (the same
     // object carrying the task create), so it commits iff the task does.
@@ -175,7 +184,7 @@ describe('create_task redactProvenance', () => {
     const args = { featureId: 'f1', title: 'secret title text', filesScope: ['api/'] };
     const out = cap.redactProvenance(args, {
       success: true,
-      data: { taskId: 't', status: 'available', featureId: 'f1' },
+      data: { taskId: 't', status: 'claimed', featureId: 'f1' },
     });
     const redactedArgs = out.args as { title: string; featureId: string };
     expect(redactedArgs.featureId).toBe('f1');

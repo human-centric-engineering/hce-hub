@@ -143,7 +143,8 @@ export async function getFeatureDetail(
         select: { dependsOn: { select: { id: true, slug: true, title: true } } },
       },
       tasks: {
-        orderBy: { createdAt: 'asc' },
+        // Numerical order — tasks are built sequentially (f-status-model §20).
+        orderBy: [{ number: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
         select: {
           id: true,
           number: true,

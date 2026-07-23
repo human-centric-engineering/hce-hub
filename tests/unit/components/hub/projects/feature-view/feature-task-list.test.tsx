@@ -13,7 +13,7 @@ const task = (over: Partial<FeatureDetailTaskDTO> = {}): FeatureDetailTaskDTO =>
   id: 't1',
   number: 3,
   title: 'Wire the guard',
-  status: 'available',
+  status: 'claimed',
   doneWhen: null,
   prUrl: null,
   claimer: null,

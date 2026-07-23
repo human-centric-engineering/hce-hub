@@ -1,24 +1,31 @@
 /**
- * Unit: TaskSheet — the sliding task detail panel (f-task-sheet §11 t-2).
+ * Unit: TaskSheet — the sliding task detail panel (f-task-sheet §11 t-2; the
+ * action row moved from Claim to Start/Complete in f-status-model §20 t-1).
  *
  * Load-bearing: fetches the detail client-side and renders the identity/status;
  * Esc + scrim close; copy-link writes `location.href`; the sheet's `right`
  * offset flips with the sidekick-open context (the reposition requirement);
- * a failed fetch renders the error state, never a crash.
+ * a failed fetch renders the error state, never a crash. You claim features,
+ * not tasks — a task is *born* `claimed`; **Start** (`claimed → active`) and
+ * **Complete** (`active → merged`) are the two hand transitions, POSTing to
+ * `.../start` and `.../complete` via the shared `lib/projects/task-actions.ts`.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { TaskSheet } from '@/components/hub/projects/task-sheet/task-sheet';
 import { SidekickProvider } from '@/components/hub/sidekick-context';
 import { TaskSheetControlsProvider } from '@/components/hub/projects/task-sheet/task-sheet-context';
-import type { TaskDetailDTO, ClaimResultDTO } from '@/components/hub/projects/task-sheet/types';
+import type {
+  TaskDetailDTO,
+  TaskActionResultDTO,
+} from '@/components/hub/projects/task-sheet/types';
 
 const detail = (over: Partial<TaskDetailDTO> = {}): TaskDetailDTO => ({
   id: 't1',
   number: 6,
   title: 'Wire the streaming handler',
   description: null,
-  status: 'available',
+  status: 'claimed',
   prUrl: null,
   filesScope: [],
   claimer: null,
@@ -73,8 +80,8 @@ describe('TaskSheet', () => {
     expect(await screen.findByText('Wire the streaming handler')).toBeInTheDocument();
     expect(screen.getByText('t-6')).toBeInTheDocument();
     expect(screen.getByText('f-mcp')).toBeInTheDocument();
-    expect(screen.getByText('available')).toBeInTheDocument();
-    expect(screen.getByText('unclaimed')).toBeInTheDocument();
+    expect(screen.getByText('claimed')).toBeInTheDocument();
+    expect(screen.getByText('unassigned')).toBeInTheDocument();
   });
 
   it('closes on Escape', async () => {
@@ -138,12 +145,13 @@ describe('TaskSheet', () => {
 });
 
 /**
- * t-3: the body (description, files, dependency graph) + the action row
- * (Claim via the shared service, Open PR, Ask sidekick).
+ * t-3 (retrofitted for f-status-model §20): the body (description, files,
+ * dependency graph) + the action row — Start (claimed → active), Complete
+ * (active → merged), Open PR, Ask sidekick.
  */
-describe('TaskSheet body + actions (t-3)', () => {
-  /** Method-aware fetch: GET → detail, POST (claim) → the claim result. */
-  function mockFetch(opts: { detail: TaskDetailDTO; claim?: ClaimResultDTO }) {
+describe('TaskSheet body + actions', () => {
+  /** Method-aware fetch: GET → detail, POST (start/complete) → the action result. */
+  function mockFetch(opts: { detail: TaskDetailDTO; action?: TaskActionResultDTO }) {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((url: string, init?: { method?: string }) => {
@@ -152,7 +160,7 @@ describe('TaskSheet body + actions (t-3)', () => {
             ok: true,
             status: 200,
             json: async () => ({
-              data: opts.claim ?? { taskId: 't1', claimed: true, warnings: [] },
+              data: opts.action ?? { taskId: 't1', status: 'active', warnings: [] },
             }),
           });
         }
@@ -171,11 +179,11 @@ describe('TaskSheet body + actions (t-3)', () => {
 
   const renderSheet = (opts: {
     detail: TaskDetailDTO;
-    claim?: ClaimResultDTO;
+    action?: TaskActionResultDTO;
     onOpen?: (id: string) => void;
     setSidekickOpen?: (v: boolean) => void;
   }) => {
-    mockFetch({ detail: opts.detail, claim: opts.claim });
+    mockFetch({ detail: opts.detail, action: opts.action });
     return render(
       <SidekickProvider value={{ open: false, setOpen: opts.setSidekickOpen ?? (() => {}) }}>
         <TaskSheetControlsProvider value={{ open: opts.onOpen ?? (() => {}), close: () => {} }}>
@@ -220,7 +228,7 @@ describe('TaskSheet body + actions (t-3)', () => {
     renderSheet({ detail: detail() });
     expect(await screen.findByText('No description yet.')).toBeInTheDocument();
     expect(screen.getByText('No files declared.')).toBeInTheDocument();
-    expect(screen.getByText('none — ready to pull')).toBeInTheDocument();
+    expect(screen.getByText('none — ready to start')).toBeInTheDocument();
   });
 
   it('jumps to a dependency task when its row is clicked', async () => {
@@ -228,7 +236,7 @@ describe('TaskSheet body + actions (t-3)', () => {
     renderSheet({
       detail: detail({
         blockedBy: [
-          { id: 'dep-9', number: 9, title: 'Do the base', featureSlug: 'f-x', status: 'available' },
+          { id: 'dep-9', number: 9, title: 'Do the base', featureSlug: 'f-x', status: 'claimed' },
         ],
       }),
       onOpen,
@@ -237,28 +245,42 @@ describe('TaskSheet body + actions (t-3)', () => {
     expect(onOpen).toHaveBeenCalledWith('dep-9');
   });
 
-  it('claims via POST and renders the returned soft warnings', async () => {
+  it('starts via POST and renders the returned soft warnings', async () => {
     renderSheet({
-      detail: detail({ status: 'available' }),
-      claim: {
+      detail: detail({ status: 'claimed' }),
+      action: {
         taskId: 't1',
-        claimed: true,
+        status: 'active',
         warnings: [
           { kind: 'already_claimed', message: 'Heads-up: already claimed by someone else.' },
         ],
       },
     });
-    const btn = await screen.findByRole('button', { name: 'Claim' });
+    const btn = await screen.findByRole('button', { name: 'Start' });
     fireEvent.click(btn);
     expect(await screen.findByText(/already claimed by someone else/)).toBeInTheDocument();
-    // The claim POSTs to the claim sub-path.
+    // Start POSTs to the start sub-path.
     expect(fetch).toHaveBeenCalledWith(
-      '/api/v1/projects/p1/tasks/t1/claim',
+      '/api/v1/projects/p1/tasks/t1/start',
       expect.objectContaining({ method: 'POST' })
     );
   });
 
-  it('keeps the content visible during the post-claim refetch (no blank flash)', async () => {
+  it('completes via POST once the task is active', async () => {
+    renderSheet({
+      detail: detail({ status: 'active' }),
+      action: { taskId: 't1', status: 'merged', warnings: [] },
+    });
+    const btn = await screen.findByRole('button', { name: 'Complete' });
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+    fireEvent.click(btn);
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/v1/projects/p1/tasks/t1/complete',
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
+
+  it('keeps the content visible during the post-start refetch (no blank flash)', async () => {
     let getCount = 0;
     let resolveReload: (v: unknown) => void = () => {};
     vi.stubGlobal(
@@ -268,7 +290,7 @@ describe('TaskSheet body + actions (t-3)', () => {
           return Promise.resolve({
             ok: true,
             status: 200,
-            json: async () => ({ data: { taskId: 't1', claimed: true, warnings: [] } }),
+            json: async () => ({ data: { taskId: 't1', status: 'active', warnings: [] } }),
           });
         }
         getCount += 1;
@@ -276,7 +298,7 @@ describe('TaskSheet body + actions (t-3)', () => {
           return Promise.resolve({
             ok: true,
             status: 200,
-            json: async () => ({ data: detail({ status: 'available' }) }),
+            json: async () => ({ data: detail({ status: 'claimed' }) }),
           });
         }
         // The reload GET hangs — the content must NOT blank while it's in flight.
@@ -290,19 +312,19 @@ describe('TaskSheet body + actions (t-3)', () => {
         <TaskSheet projectId="p1" taskId="t1" onClose={() => {}} />
       </SidekickProvider>
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'Claim' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3)); // GET, POST, reload GET
     // The reload is still pending, yet the task content is still on screen.
     expect(screen.getByText('Wire the streaming handler')).toBeInTheDocument();
     resolveReload({
       ok: true,
       status: 200,
-      json: async () => ({ data: detail({ status: 'claimed' }) }),
+      json: async () => ({ data: detail({ status: 'active' }) }),
     });
   });
 
-  it('surfaces a claim failure (never a silent write) — retryable', async () => {
-    // GET detail ok; POST claim fails.
+  it('surfaces a start failure (never a silent write) — retryable', async () => {
+    // GET detail ok; POST start fails.
     vi.stubGlobal(
       'fetch',
       vi
@@ -318,16 +340,25 @@ describe('TaskSheet body + actions (t-3)', () => {
         <TaskSheet projectId="p1" taskId="t1" onClose={() => {}} />
       </SidekickProvider>
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'Claim' }));
-    expect(await screen.findByText(/Couldn.t claim just now/)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+    expect(await screen.findByText(/Couldn.t update just now — try again\./)).toBeInTheDocument();
     // The button re-enables for a retry.
-    expect(screen.getByRole('button', { name: 'Claim' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Start' })).not.toBeDisabled();
   });
 
-  it('disables Claim with a "Blocked by deps" state when the task is blocked', async () => {
+  it('disables the action with a "Blocked by deps" state when the task is blocked', async () => {
     renderSheet({ detail: detail({ status: 'blocked' }) });
     expect(await screen.findByRole('button', { name: /Blocked by deps/ })).toBeDisabled();
-    expect(screen.queryByRole('button', { name: 'Claim' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Complete' })).not.toBeInTheDocument();
+  });
+
+  it('shows neither Start nor Complete once the task is merged', async () => {
+    renderSheet({ detail: detail({ status: 'merged' }) });
+    await screen.findByText('Wire the streaming handler');
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Complete' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Blocked by deps/ })).not.toBeInTheDocument();
   });
 
   it('opens the sidekick column from "Ask sidekick"', async () => {

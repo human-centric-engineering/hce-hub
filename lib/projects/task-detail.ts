@@ -43,7 +43,7 @@ export interface TaskDetail {
   number: number | null;
   title: string;
   description: string | null;
-  /** Effective status (drives the pill + the Claim/Blocked action state). */
+  /** Effective status (drives the pill + the Start/Complete/Blocked action state). */
   status: EffectiveStatus;
   /** Raw human-declared PR url — sanitized at render (see file header). */
   prUrl: string | null;

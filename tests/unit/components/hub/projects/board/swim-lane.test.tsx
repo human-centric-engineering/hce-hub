@@ -14,8 +14,8 @@ const card = (over: Partial<BoardTaskCard>): BoardTaskCard => ({
   featureId: 'f1',
   featureSlug: null,
   featureTitle: 'F1',
-  status: 'available',
-  column: 'available',
+  status: 'claimed',
+  column: 'claimed',
   prUrl: null,
   claimer: null,
   isMine: false,
@@ -73,7 +73,7 @@ describe('SwimLane', () => {
       />
     );
     expect(screen.getByText('Merged task')).toBeInTheDocument();
-    // available/claimed/in_pr/backlog empty → four dots (merged has the card)
-    expect(screen.getAllByText('·')).toHaveLength(4);
+    // claimed/active empty → two dots (merged has the card)
+    expect(screen.getAllByText('·')).toHaveLength(2);
   });
 });

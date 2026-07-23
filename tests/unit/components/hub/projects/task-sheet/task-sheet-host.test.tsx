@@ -18,7 +18,7 @@ const DETAIL: TaskDetailDTO = {
   number: 6,
   title: 'Wire the streaming handler',
   description: null,
-  status: 'available',
+  status: 'claimed',
   prUrl: null,
   filesScope: [],
   claimer: null,

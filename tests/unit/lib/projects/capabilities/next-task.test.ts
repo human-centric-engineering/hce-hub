@@ -3,8 +3,9 @@
  *
  * next_task is membership-scoped and dependency-aware, so its matrix is the
  * load-bearing test: no-user guard, project scoping through the f-access funnel
- * (deny ≡ not_found), the owned-vs-help-wanted candidate set, and the pullable
- * filter (skips blocked/claimed, honours the null-claimant finding).
+ * (deny ≡ not_found), the owned-vs-help-wanted candidate set, and the readiness
+ * filter (skips blocked/active/merged, picking an effective `claimed` task —
+ * f-status-model §20, where the claimant no longer gates readiness).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -44,7 +45,7 @@ function task(opts: {
     featureId: `feat-${opts.id}`,
     filesScope: [],
     prUrl: null,
-    status: opts.status ?? 'available',
+    status: opts.status ?? 'claimed',
     claimedByUserId: opts.claimedByUserId ?? null,
     feature: { projectId: opts.projectId ?? 'proj-1' },
     dependencies: (opts.deps ?? []).map((status) => ({ dependsOn: { status } })),
@@ -131,17 +132,17 @@ describe('next_task project scoping (f-access funnel)', () => {
   });
 });
 
-describe('next_task pullable selection', () => {
+describe('next_task readiness selection', () => {
   beforeEach(() => {
     accessibleProjectIds.mockResolvedValue(['p1']);
   });
 
-  it('returns the first genuinely pullable task, skipping blocked and claimed', async () => {
+  it('returns the first genuinely ready task, skipping blocked and already-in-progress', async () => {
     findMany.mockResolvedValue([
-      task({ id: 'blocked', status: 'available', deps: ['in_pr'] }), // dep unmerged → blocked
-      task({ id: 'claimed', status: 'claimed', claimedByUserId: 'someone' }), // really claimed
-      task({ id: 'ready', status: 'available', deps: ['merged'] }), // pullable ✓
-      task({ id: 'later', status: 'available' }),
+      task({ id: 'blocked', status: 'claimed', deps: ['active'] }), // dep unmerged → blocked
+      task({ id: 'in-progress', status: 'active' }), // already being worked
+      task({ id: 'ready', status: 'claimed', deps: ['merged'] }), // ready ✓
+      task({ id: 'later', status: 'claimed' }),
     ]);
 
     const r = await cap.execute({}, ctx());
@@ -149,17 +150,19 @@ describe('next_task pullable selection', () => {
     expect(r.data?.consideredCount).toBe(4);
   });
 
-  it('treats a claimed-but-null-claimant task as pullable (erased-user finding)', async () => {
+  it('picks a claimed task regardless of its claimant (the claimant no longer gates readiness — f-status-model §20)', async () => {
+    // Born-claimed tasks always carry a claimant (the feature owner); a task
+    // being already "held" no longer excludes it from the recommendation.
     findMany.mockResolvedValue([
-      task({ id: 'orphan', status: 'claimed', claimedByUserId: null, deps: ['merged'] }),
+      task({ id: 'owned', status: 'claimed', claimedByUserId: 'someone', deps: ['merged'] }),
     ]);
 
     const r = await cap.execute({}, ctx());
-    expect(r.data?.task?.id).toBe('orphan');
+    expect(r.data?.task?.id).toBe('owned');
   });
 
-  it('returns null when nothing is pullable', async () => {
-    findMany.mockResolvedValue([task({ id: 'blocked', deps: ['backlog'] })]);
+  it('returns null when nothing is ready', async () => {
+    findMany.mockResolvedValue([task({ id: 'blocked', deps: ['claimed'] })]);
     const r = await cap.execute({}, ctx());
     expect(r.data).toEqual({ task: null, consideredCount: 1 });
   });

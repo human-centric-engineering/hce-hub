@@ -35,7 +35,7 @@ const projectStatus = z.enum(['planning', 'active', 'archived']);
 const projectRole = z.enum(['lead', 'member']);
 const featureStatus = z.enum(['planning', 'in_flight', 'blocked', 'shipped']);
 const planningStage = z.enum(['indicative', 'planned']);
-const taskStatus = z.enum(['backlog', 'available', 'claimed', 'in_pr', 'merged']);
+const taskStatus = z.enum(['claimed', 'active', 'merged']);
 const projectEventKind = z.enum([
   'feature_created',
   'feature_claimed',

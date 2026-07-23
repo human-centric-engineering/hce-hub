@@ -1,19 +1,19 @@
 /**
- * `next_task` — recommend the caller's highest-priority pullable task.
+ * `next_task` — recommend the caller's highest-priority task to start next.
  *
  * The flagship Hub read capability (v1-requirements §11, §5). Returns the single
- * best task the caller can pull right now: a genuinely **pullable** task (every
- * dependency merged — never one blocked by an unmerged PR) in a feature the
- * caller **owns**, or — when `includeHelpWanted` is set — any `help-wanted`
- * feature. Everything is membership-scoped through the f-access funnel: a caller
- * only ever sees tasks in projects they're a member of.
+ * best task the caller can start right now: a `claimed` task whose every
+ * dependency is merged (never one blocked by an unmerged PR — that's the derived
+ * `blocked`), in a feature the caller **owns**, or — when `includeHelpWanted` is
+ * set — any `help-wanted` feature. Everything is membership-scoped through the
+ * f-access funnel: a caller only ever sees tasks in projects they're a member of.
  *
- * It is a *recommendation*, never enforcement — the caller may pull any task
+ * It is a *recommendation*, never enforcement — the caller may work any task
  * they can see; this just answers "what would I pick up next?" (§3.5,
  * exploratory ordering). v1 priority heuristic: oldest-ready-first (by feature
  * then task creation), deterministic and advisory.
  *
- * Pullability (incl. the null-claimant handling) is computed by the shared
+ * Readiness (effective `claimed` — deps all merged) is computed by the shared
  * `computeEffectiveStatus` so this and `f-board-view` never diverge.
  */
 
@@ -64,7 +64,7 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'next_task',
     description:
-      "Recommend the single highest-priority task the caller can pull right now — a task whose dependencies are all merged (nothing blocked by an open PR), in a feature the caller owns, or any help-wanted feature when includeHelpWanted is true. Membership-scoped: only the caller's projects are considered. A recommendation, not an assignment.",
+      "Recommend the single highest-priority task the caller can start next — a claimed task whose dependencies are all merged (nothing blocked by an open PR), in a feature the caller owns, or any help-wanted feature when includeHelpWanted is true. Membership-scoped: only the caller's projects are considered. A recommendation, not an assignment.",
     parameters: {
       type: 'object',
       properties: {
@@ -136,7 +136,7 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
         computeEffectiveStatus(
           t,
           t.dependencies.map((d) => d.dependsOn)
-        ) === 'available'
+        ) === 'claimed'
     );
 
     return this.success({

@@ -38,15 +38,15 @@ export interface TaskDetailDTO {
   blocks: TaskDetailRef[];
 }
 
-/** A soft-collision warning from a claim — advisory, never a block (mirrors `CollisionWarning`). */
-export interface ClaimWarning {
+/** A soft-collision warning from Start — advisory, never a block (mirrors `CollisionWarning`). */
+export interface CollisionWarning {
   kind: 'already_claimed' | 'file_overlap';
   message: string;
 }
 
-/** The `POST …/claim` payload. */
-export interface ClaimResultDTO {
+/** The `POST …/start` | `…/complete` payload (mirrors `TaskActionResult`). */
+export interface TaskActionResultDTO {
   taskId: string;
-  claimed: boolean;
-  warnings: ClaimWarning[];
+  status: TaskEffectiveStatus;
+  warnings: CollisionWarning[];
 }

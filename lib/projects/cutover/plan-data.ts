@@ -64,7 +64,7 @@ export interface CutoverFeature {
   createdAt: string;
   /** ISO — when it shipped (drives the `feature_shipped` event); shipped only. */
   shippedAt?: string;
-  /** Real tasks (shipped = merged w/ PR; in-flight/backlog otherwise). */
+  /** Real tasks (shipped = merged w/ PR; born claimed → active otherwise). */
   tasks: CutoverTask[];
   /** The high-level sketch — for features not yet planned (indicative stage). */
   indicativeTasks?: string[];
@@ -72,7 +72,7 @@ export interface CutoverFeature {
   doneWhen?: string;
   /** Curated top-level cross-refs (rendered as ref-chips). */
   references?: { label: string; target: string }[];
-  /** Unowned = a backlog item available to claim (owner resolves to null). */
+  /** Unowned = an unclaimed feature, available to claim (owner resolves to null). */
   unowned?: boolean;
   helpWanted?: boolean;
   planningStage?: FeaturePlanningStage;
@@ -703,7 +703,7 @@ export function buildCutoverPlan(): CutoverFeature[] {
         ),
       ],
     },
-    // §19 — in flight: t-1 merged (#75), t-2 in progress, t-3 backlog.
+    // §19 — in flight: t-1 merged (#75), t-2 merged (#77), t-3 claimed (next up).
     {
       slug: 'f-selfhost-cutover',
       title: 'Import plan.md → Hub; the Hub becomes its own system of record',
@@ -734,7 +734,8 @@ export function buildCutoverPlan(): CutoverFeature[] {
         ),
         {
           title: 'Backdated cutover load + retire the sample seed',
-          status: 'claimed',
+          status: 'merged',
+          prUrl: PR(77),
           description:
             'Move the sample-plan builder into a cutover module enriched with the real per-task detail + a backdated-events builder, add an import-plan one-shot that upgrades the seeded project in place seating the lead, retire the 006/007 seeds, and document the dev loop.',
           doneWhen:
@@ -743,7 +744,7 @@ export function buildCutoverPlan(): CutoverFeature[] {
         },
         {
           title: 'Project slugs (f-project-slugs, folded in)',
-          status: 'backlog',
+          status: 'claimed',
           description:
             'Add Project.slug (globally unique) with an additive migration + a name-derived backfill, author slugs in createProject/updateProject stable + name-independent, and resolve slug-or-cuid → the canonical id in the detail route while sub-routes stay cuid-only.',
           doneWhen:

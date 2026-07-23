@@ -59,7 +59,7 @@ describe('PlanView rendering', () => {
                 id: 't1',
                 number: null,
                 title: 'Do the thing',
-                status: 'available',
+                status: 'claimed',
                 prUrl: null,
                 claimer: null,
               },
