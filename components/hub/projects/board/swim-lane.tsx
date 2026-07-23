@@ -1,7 +1,7 @@
 /**
  * A swim lane on the Board (f-board-view t-2) — one row per project member (or
  * the terminal Unassigned bucket): a lane head (avatar + name + role + owned-
- * feature chips) followed by the five status columns of task cards.
+ * feature chips) followed by the three status columns of task cards.
  */
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Layers } from 'lucide-react';

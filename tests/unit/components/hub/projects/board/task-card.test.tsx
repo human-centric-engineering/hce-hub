@@ -83,6 +83,16 @@ describe('TaskCard', () => {
     expect(screen.getByText('Grace')).toBeInTheDocument();
   });
 
+  it('renders the blocked marker for a blocked task (folds into the Claimed column)', () => {
+    render(<TaskCard card={card({ status: 'blocked', column: 'claimed' })} />);
+    expect(screen.getByText('blocked')).toBeInTheDocument();
+  });
+
+  it('shows no blocked marker for a plain claimed task', () => {
+    render(<TaskCard card={card({ status: 'claimed' })} />);
+    expect(screen.queryByText('blocked')).not.toBeInTheDocument();
+  });
+
   it('renders the collision marker with its note as a tooltip', () => {
     render(<TaskCard card={card({ collision: { note: 'Overlaps “Other task”' } })} />);
     const mark = screen.getByText('collision');
