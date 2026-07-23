@@ -79,7 +79,7 @@ const boardPayload = {
       taskCount: 0,
     },
   ],
-  columnTotals: { available: 0, claimed: 0, in_pr: 0, merged: 0, backlog: 0 },
+  columnTotals: { claimed: 0, active: 0, merged: 0 },
 };
 
 /** URL-aware mocks: `/plan` → plan payload, `/board` → board payload, else header. */
@@ -132,7 +132,7 @@ describe('ProjectViewPage', () => {
     expect(urls).not.toContain('/api/v1/projects/p1/plan');
     // The board rendered its lane + column headers.
     expect(screen.getByText('Ada')).toBeInTheDocument();
-    expect(screen.getByText('Available')).toBeInTheDocument();
+    expect(screen.getByText('Claimed')).toBeInTheDocument();
   });
 
   it('renders a graceful message if the plan fetch fails but the project loads', async () => {
