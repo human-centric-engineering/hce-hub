@@ -42,6 +42,7 @@
     "app:smoke:transfer": "tsx --env-file=.env.local scripts/app/smoke/transfer.ts",
     "app:project:export": "tsx --env-file=.env.local scripts/app/project-export.ts",
     "app:project:import": "tsx --env-file=.env.local scripts/app/project-import.ts",
+    "app:project:import-plan": "tsx --env-file=.env.local scripts/app/import-plan.ts",
     "postinstall": "prisma generate",
     "prepare": "husky"
   },
