@@ -11,6 +11,10 @@
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { capabilityDispatcher } from '@/lib/orchestration/capabilities/dispatcher';
+// HCE Hub keep-mine (fix/mcp-capability-boot-registration): the MCP dispatch
+// path must warm the capability registry, like the chat + workflow paths do.
+// See the note at the top of `callMcpTool`. Filed upstream; delete on merge.
+import { registerBuiltInCapabilities } from '@/lib/orchestration/capabilities/registry';
 import { capabilityFunctionDefinitionSchema } from '@/lib/validations/orchestration';
 import type {
   McpToolDefinition,
@@ -149,6 +153,15 @@ export async function callMcpTool(
   args: Record<string, unknown> | undefined,
   caller: { userId: string | null; scopedAgentId?: string | null; scope?: Record<string, string> }
 ): Promise<McpToolCallResult> {
+  // Warm the in-memory capability registry before dispatch. The chat
+  // (`streaming-handler`) and workflow (`agent-call`) paths both call this
+  // before dispatching; the MCP path did not, so a tool call on a process that
+  // had only ever served MCP hit an empty registry and failed `Unknown
+  // capability` for every capability (Hub tools AND core built-ins). Idempotent
+  // — a cheap boolean check once flushed. [HCE Hub keep-mine — Sunrise gap,
+  // filed upstream; this belongs in core. Delete on merge.]
+  registerBuiltInCapabilities();
+
   // Resolve the actual capability slug from tool name (custom names are
   // supported, so we look up by either). Resolve against the UNSCOPED global
   // list on purpose: a direct call to a tool disabled for the scoped agent

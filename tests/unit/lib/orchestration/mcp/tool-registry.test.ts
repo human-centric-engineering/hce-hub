@@ -21,10 +21,18 @@ vi.mock('@/lib/logging', () => ({
 vi.mock('@/lib/orchestration/capabilities/dispatcher', () => ({
   capabilityDispatcher: {
     dispatch: vi.fn(),
+    // `callMcpTool` now warms the registry (registerBuiltInCapabilities), which
+    // calls `capabilityDispatcher.register(...)` for each built-in — a no-op here.
+    register: vi.fn(),
   },
 }));
 
-vi.mock('@/lib/validations/orchestration', () => ({
+// Partial mock: keep every real export (the capability registry that
+// `callMcpTool` now warms transitively pulls in `notificationToSchema`,
+// `workflowDefinitionSchema`, … via the engine executors) and override only the
+// schema this suite drives. (HCE Hub — adapted with the MCP registry-warming fix.)
+vi.mock('@/lib/validations/orchestration', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/validations/orchestration')>()),
   capabilityFunctionDefinitionSchema: {
     safeParse: vi.fn(),
   },
