@@ -121,12 +121,12 @@ describe('getFeatureDetail mapping', () => {
             id: 't1',
             number: 1,
             title: 'blocked task',
-            status: 'available',
+            status: 'claimed',
             doneWhen: 'ok',
             prUrl: null,
             claimedByUserId: null,
             assigneeUserId: 'gone', // erased → not in the users map → null
-            dependencies: [{ dependsOn: { status: 'available' } }], // unmerged dep → blocked
+            dependencies: [{ dependsOn: { status: 'claimed' } }], // unmerged dep → blocked
           },
           {
             id: 't2',

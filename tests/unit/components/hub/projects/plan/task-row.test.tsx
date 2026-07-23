@@ -12,7 +12,7 @@ const task = (over: Partial<PlanTask> = {}): PlanTask => ({
   id: 't1',
   number: null,
   title: 'A task',
-  status: 'available',
+  status: 'claimed',
   prUrl: null,
   claimer: null,
   ...over,
@@ -72,9 +72,9 @@ describe('TaskRow', () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  it('renders "in pr" for the in_pr status', () => {
-    render(<TaskRow task={task({ status: 'in_pr' })} ordinal={1} />);
-    expect(screen.getByText('in pr')).toBeInTheDocument();
+  it('renders "active" for the active status', () => {
+    render(<TaskRow task={task({ status: 'active' })} ordinal={1} />);
+    expect(screen.getByText('active')).toBeInTheDocument();
   });
 
   it('renders a null claimer as "—"', () => {

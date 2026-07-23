@@ -178,7 +178,8 @@ describe('plan_feature materialise', () => {
       planningStage: 'planned',
     });
 
-    // First task: numbered from the counter, owner-assigned, available, done-when.
+    // First task: numbered from the counter, born claimed and owned by the
+    // feature owner (f-status-model §20 — both assignee and held-by claimant).
     expect(txTaskCreate).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -187,9 +188,10 @@ describe('plan_feature materialise', () => {
           number: 11,
           title: 'schema',
           doneWhen: 'migrates',
-          status: 'available',
+          status: 'claimed',
           filesScope: ['prisma/'],
           assigneeUserId: USER,
+          claimedByUserId: USER,
         }),
       })
     );
@@ -223,11 +225,13 @@ describe('plan_feature materialise', () => {
     });
   });
 
-  it('assigns null when a lead plans an unowned feature', async () => {
+  it('assigns null (assignee + claimant) when a lead plans an unowned feature', async () => {
     resolveFeature.mockResolvedValue(granted({ ownerUserId: null }));
     await cap.execute({ featureId: 'f1', tasks: oneTask }, ctx());
     expect(txTaskCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ assigneeUserId: null }) })
+      expect.objectContaining({
+        data: expect.objectContaining({ assigneeUserId: null, claimedByUserId: null }),
+      })
     );
   });
 
@@ -251,9 +255,17 @@ describe('plan_feature materialise', () => {
       actorUserId: USER,
       metadata: { taskCount: 2 },
     });
-    // task_created events carry the created task ids.
-    expect(emit.mock.calls[1][1]).toMatchObject({ taskId: 'id-0', kind: 'task_created' });
-    expect(emit.mock.calls[2][1]).toMatchObject({ taskId: 'id-1', kind: 'task_created' });
+    // task_created events carry the created task ids and the born-claimed status.
+    expect(emit.mock.calls[1][1]).toMatchObject({
+      taskId: 'id-0',
+      kind: 'task_created',
+      metadata: { status: 'claimed' },
+    });
+    expect(emit.mock.calls[2][1]).toMatchObject({
+      taskId: 'id-1',
+      kind: 'task_created',
+      metadata: { status: 'claimed' },
+    });
     // Atomic with the write (same tx client that created the tasks).
     expect(emit.mock.calls[0][0].task.create).toBe(txTaskCreate);
   });

@@ -21,8 +21,7 @@ export interface PlanIndicativeTask {
 }
 
 /** A task's *effective* status (`computeEffectiveStatus`) — includes computed `blocked`. */
-export type TaskEffectiveStatus =
-  'backlog' | 'available' | 'claimed' | 'in_pr' | 'merged' | 'blocked';
+export type TaskEffectiveStatus = 'claimed' | 'active' | 'merged' | 'blocked';
 
 /** A depended-on feature, for the "depends on …" chips. */
 export interface PlanDependencyRef {

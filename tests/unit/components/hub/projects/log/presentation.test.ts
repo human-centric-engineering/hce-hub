@@ -25,17 +25,17 @@ describe('describeEvent', () => {
     expect(describeEvent(ev({ kind: 'decision' }))).toBe('recorded a decision');
     expect(describeEvent(ev({ kind: 'note' }))).toBe('added a note');
     expect(describeEvent(ev({ kind: 'feature_shipped' }))).toBe('shipped the feature');
-    expect(describeEvent(ev({ kind: 'task_claimed' }))).toBe('claimed the task');
-    expect(describeEvent(ev({ kind: 'task_merged' }))).toBe('merged the task');
+    // task_claimed is reused for Start — a task is *born* claimed, so the
+    // notable event is being actively taken (f-status-model §20).
+    expect(describeEvent(ev({ kind: 'task_claimed' }))).toBe('started the task');
+    expect(describeEvent(ev({ kind: 'task_merged' }))).toBe('completed the task');
   });
 
-  it('reads metadata to disambiguate task_created (backlog vs task)', () => {
-    expect(describeEvent(ev({ kind: 'task_created', metadata: { status: 'available' } }))).toBe(
+  it('labels task_created unconditionally (no backlog branch — every task is born claimed)', () => {
+    expect(describeEvent(ev({ kind: 'task_created', metadata: { status: 'claimed' } }))).toBe(
       'created the task'
     );
-    expect(describeEvent(ev({ kind: 'task_created', metadata: { status: 'backlog' } }))).toBe(
-      'added a backlog item'
-    );
+    expect(describeEvent(ev({ kind: 'task_created', metadata: null }))).toBe('created the task');
   });
 
   it('reads metadata to disambiguate help_wanted (set vs cleared)', () => {

@@ -31,7 +31,9 @@ describe('TaskActivity', () => {
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [claimed] }) })
     );
     render(<TaskActivity projectId="p1" taskId="t1" refreshKey={0} />);
-    expect(await screen.findByText(/claimed the task/)).toBeInTheDocument();
+    // task_claimed is reused for Start under f-status-model §20 — a task is
+    // *born* claimed, so the notable event is being actively taken.
+    expect(await screen.findByText(/started the task/)).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       '/api/v1/projects/p1/events?taskId=t1',
       expect.objectContaining({ signal: expect.anything() })

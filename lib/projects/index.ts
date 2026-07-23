@@ -94,8 +94,8 @@ export {
 // Task sheet — one task's full detail + dependency graph (f-task-sheet).
 export { getTaskDetail, type TaskDetail, type TaskDetailRef } from '@/lib/projects/task-detail';
 
-// Claim a task — shared by the capability + the consumer route (f-task-sheet).
-export { claimTask, type ClaimTaskResult } from '@/lib/projects/claim-task-service';
+// Task progress actions — Start/Complete, shared by the consumer routes (f-status-model §20).
+export { startTask, completeTask, type TaskActionResult } from '@/lib/projects/task-actions';
 
 // Claim a feature — shared by the capability + the consumer route (§18 t-4).
 export {

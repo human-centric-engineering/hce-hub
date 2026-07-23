@@ -3,22 +3,22 @@
  *
  * The **task-centric** read the Board (Kanban) renders — the same features/tasks
  * as the Plan view (§09), but grouped into a 2-D matrix: **member swim lanes**
- * (rows) × **effective-status columns** (Available · Claimed · In PR · Merged ·
- * Backlog). All the routing is done here (server-side, like §09's `planOrder`) so
- * the client just renders a grid and the load-bearing logic is testable at the
- * boundary.
+ * (rows) × **effective-status columns** (Claimed · Active · Merged). All the
+ * routing is done here (server-side, like §09's `planOrder`) so the client just
+ * renders a grid and the load-bearing logic is testable at the boundary.
  *
- * Routing rules (v1-requirements §5, pull-not-push):
- *   - **lane** = the task's effective claimer, else its feature's owner
- *     ("unclaimed routes to the owner's lane"); a null/non-member target →
- *     the terminal **Unassigned** lane (carried f-data-model t-3 — never deref).
+ * Routing rules (v1-requirements §5, pull-not-push; statuses per f-status-model §20):
+ *   - **lane** = the task's held-by claimer (the doer, once Started), else its
+ *     feature's owner (a born-claimed task routes to the owner's lane); a
+ *     null/non-member target → the terminal **Unassigned** lane (carried
+ *     f-data-model t-3 — never deref).
  *   - **column** = the task's *effective* status (`computeEffectiveStatus`, so
- *     Plan and Board never diverge); a deps-blocked `available` → the Backlog
- *     column ("Available means genuinely pullable"). A null-claimant `claimed`
- *     is effectively unclaimed → routes to the owner lane's Available column
- *     (carried f-data-model t-2).
- *   - **collision** = a soft, ambient flag when the task's open claim overlaps
- *     another open claim's file scope (`filesOverlap`); never a lock (§13.5).
+ *     Plan and Board never diverge); a deps-blocked task (effective `blocked`)
+ *     folds into the **Claimed** column with the blocked treatment (it's a
+ *     claimed task that can't start yet — no column of its own).
+ *   - **collision** = a soft, ambient flag when the task's open (active-work)
+ *     claim overlaps another open claim's file scope (`filesOverlap`); never a
+ *     lock (§13.5).
  *
  * Membership is the [[f-access]] funnel's: the load goes through
  * `getAccessibleProject`, so a non-member or unknown id is a 404, never a 403.
@@ -30,8 +30,8 @@ import { computeEffectiveStatus, type EffectiveStatus } from '@/lib/projects/tas
 import { filesOverlap } from '@/lib/projects/collision';
 import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
 
-/** The board's status columns, in display order. Effective `blocked` folds into `backlog`. */
-export const BOARD_COLUMNS = ['available', 'claimed', 'in_pr', 'merged', 'backlog'] as const;
+/** The board's status columns, in display order. Effective `blocked` folds into `claimed`. */
+export const BOARD_COLUMNS = ['claimed', 'active', 'merged'] as const;
 export type BoardColumn = (typeof BOARD_COLUMNS)[number];
 
 /** A task card on the board. */
@@ -153,7 +153,9 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
       t,
       t.dependencies.map((d) => d.dependsOn)
     );
-    const column: BoardColumn = effective === 'blocked' ? 'backlog' : effective;
+    // A blocked task is a claimed task that can't start yet — it shows in the
+    // Claimed column with the blocked treatment, not a column of its own.
+    const column: BoardColumn = effective === 'blocked' ? 'claimed' : effective;
     // Lane = the claimer (credit the doer, in any status), else the feature owner.
     // A null claimant (unclaimed, or erased → carried f-data-model t-2) falls to
     // the owner; effective status handles the *column* (a null-claimant `claimed`
@@ -212,11 +214,9 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
       : memberLanes;
 
   const columnTotals: Record<BoardColumn, number> = {
-    available: 0,
     claimed: 0,
-    in_pr: 0,
+    active: 0,
     merged: 0,
-    backlog: 0,
   };
   for (const lane of lanes) for (const card of lane.tasks) columnTotals[card.column]++;
 

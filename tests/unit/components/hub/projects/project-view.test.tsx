@@ -37,7 +37,7 @@ const boardFixture: ProjectBoardDTO = {
       taskCount: 0,
     },
   ],
-  columnTotals: { available: 0, claimed: 0, in_pr: 0, merged: 0, backlog: 0 },
+  columnTotals: { claimed: 0, active: 0, merged: 0 },
 };
 
 function makeProject(overrides: Partial<ProjectViewDTO> = {}): ProjectViewDTO {
@@ -88,7 +88,7 @@ describe('ProjectView', () => {
   it('mounts the Board view on the board tab when a board is supplied', () => {
     render(<ProjectView project={makeProject()} activeTab="board" board={boardFixture} />);
     expect(screen.getByText('Ada')).toBeInTheDocument(); // the lane member
-    expect(screen.getByText('Available')).toBeInTheDocument(); // a column header
+    expect(screen.getByText('Claimed')).toBeInTheDocument(); // a column header
   });
 
   it('shows a graceful message on the board tab when the board failed to load', () => {

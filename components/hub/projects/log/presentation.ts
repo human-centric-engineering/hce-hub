@@ -18,7 +18,8 @@ function readMeta(metadata: unknown): Record<string, unknown> {
  * A short verb phrase describing what happened, phrased to read after the
  * actor's name in both the project Log ("Simon created the task") and the
  * task-sheet timeline. Auto-events derive their nuance from metadata
- * (backlog vs task, help-wanted set vs cleared).
+ * (help-wanted set vs cleared). `task_claimed` is reused for Start (a task is
+ * *born* claimed, so the notable event is being actively taken — f-status-model §20).
  */
 export function describeEvent(event: ProjectEventDTO): string {
   const meta = readMeta(event.metadata);
@@ -36,13 +37,13 @@ export function describeEvent(event: ProjectEventDTO): string {
     case 'feature_unblocked':
       return 'unblocked the feature';
     case 'task_created':
-      return meta.status === 'backlog' ? 'added a backlog item' : 'created the task';
+      return 'created the task';
     case 'task_claimed':
-      return 'claimed the task';
+      return 'started the task';
     case 'task_pr_linked':
       return 'linked a PR';
     case 'task_merged':
-      return 'merged the task';
+      return 'completed the task';
     case 'help_wanted':
       return meta.helpWanted === true ? 'flagged help wanted' : 'cleared help wanted';
     case 'member_added':

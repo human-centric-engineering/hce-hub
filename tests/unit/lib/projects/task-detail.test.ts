@@ -42,7 +42,7 @@ const neighbour = (o: {
   id: o.id,
   number: o.number ?? null,
   title: o.id,
-  status: o.status ?? 'available',
+  status: o.status ?? 'claimed',
   claimedByUserId: null,
   feature: { slug: o.slug ?? null },
   dependencies: (o.deps ?? []).map((s) => ({ dependsOn: { status: s } })),
@@ -54,7 +54,7 @@ const taskRow = (o: Record<string, unknown> = {}) => ({
   number: 1,
   title: 'Do the thing',
   description: 'desc',
-  status: 'available',
+  status: 'claimed',
   prUrl: null,
   filesScope: [],
   claimedByUserId: null,
@@ -102,11 +102,11 @@ describe('getTaskDetail', () => {
     expect(detail.prUrl).toBe('javascript:alert(1)');
   });
 
-  it('computes the task effective status (deps-blocked available → blocked)', async () => {
+  it('computes the task effective status (deps-blocked claimed → blocked)', async () => {
     taskFindFirst.mockResolvedValue(
       taskRow({
-        status: 'available',
-        dependencies: [{ dependsOn: neighbour({ id: 'b1', status: 'in_pr' }) }],
+        status: 'claimed',
+        dependencies: [{ dependsOn: neighbour({ id: 'b1', status: 'active' }) }], // dep not merged
       })
     );
     const detail = await getTaskDetail('u1', 'p1', 't1');
@@ -122,7 +122,7 @@ describe('getTaskDetail', () => {
         dependents: [
           {
             // a dependent that is itself deps-blocked → effective 'blocked'
-            task: neighbour({ id: 'd1', number: 3, status: 'available', deps: ['available'] }),
+            task: neighbour({ id: 'd1', number: 3, status: 'claimed', deps: ['claimed'] }),
           },
         ],
       })

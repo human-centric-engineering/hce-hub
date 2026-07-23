@@ -69,8 +69,8 @@ export interface PlanFeatureView {
   indicativeTasks: PlanIndicativeTaskView[];
   /**
    * Progress off *effective* status (so a feature's counts match its task rows):
-   * `merged`/`total`, `live` (in-flight and genuinely pullable — not merged,
-   * backlog, or blocked) and `blocked` (waiting on an unmerged dependency).
+   * `merged`/`total`, `live` (actively being worked — effective `active`) and
+   * `blocked` (a claimed task waiting on an unmerged dependency).
    */
   progress: { merged: number; total: number; live: number; blocked: number };
 }
@@ -107,7 +107,9 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
         select: { id: true, order: true, text: true },
       },
       tasks: {
-        orderBy: { createdAt: 'asc' },
+        // Numerical order — tasks are built sequentially (f-status-model §20).
+        // Unnumbered (null) tasks sort last, then by creation for a stable tie.
+        orderBy: [{ number: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
         select: {
           id: true,
           number: true,
@@ -147,13 +149,12 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
 
     // Progress reads off the SAME effective status the rows render (§09 carry):
     // a dep-blocked task counts as `blocked`, never `live`, so a feature's
-    // summary can't disagree with its own task table.
+    // summary can't disagree with its own task table. `live` = actively worked
+    // (`active`); claimed-but-ready tasks are pending, neither live nor blocked.
     const total = tasks.length;
     const merged = tasks.filter((t) => t.status === 'merged').length;
     const blocked = tasks.filter((t) => t.status === 'blocked').length;
-    const live = tasks.filter(
-      (t) => t.status !== 'merged' && t.status !== 'backlog' && t.status !== 'blocked'
-    ).length;
+    const live = tasks.filter((t) => t.status === 'active').length;
 
     return {
       id: f.id,

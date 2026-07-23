@@ -1,9 +1,10 @@
 /**
- * `create_task` — the feature owner promotes a planned task into the Hub
+ * `create_task` — the feature owner adds a task to a feature they own
  * (v1-requirements §11): declares its title, file scope, and dependencies on
- * existing tasks. The created task is `available` (ready to pull); if its
- * dependencies aren't all merged yet, `computeEffectiveStatus` reports it as
- * `blocked` until they are, so `next_task` won't recommend it prematurely.
+ * existing tasks. The created task is born `claimed` and owned by the feature
+ * owner (f-status-model §20); if its dependencies aren't all merged yet,
+ * `computeEffectiveStatus` reports it as `blocked` until they are, so `next_task`
+ * won't recommend it prematurely.
  *
  * Authorization is the `owner` tier — the feature's owner or a project lead —
  * routed through `resolveFeatureAccess` (a non-member sees `not_found`, no
@@ -59,7 +60,7 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'create_task',
     description:
-      "Promote a planned task into a feature you own (or lead): declares its title, optional file scope, and optional dependencies on existing tasks. The task becomes available to pull (or blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks.",
+      "Add a task to a feature you own (or lead): declares its title, optional file scope, and optional dependencies on existing tasks. The task is born claimed and owned by the feature owner (blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks.",
     parameters: {
       type: 'object',
       properties: {
@@ -138,8 +139,12 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           featureId: args.featureId,
           number: taskCounter,
           title: args.title,
-          status: 'available',
+          // Born `claimed`, owned by the feature owner (f-status-model §20); its
+          // effective status is `blocked` until its dependencies merge.
+          status: 'claimed',
           filesScope: args.filesScope ?? [],
+          assigneeUserId: access.feature.ownerUserId,
+          claimedByUserId: access.feature.ownerUserId,
         },
         select: { id: true, status: true },
       });

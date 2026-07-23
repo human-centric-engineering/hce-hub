@@ -18,16 +18,16 @@ const board = (over: Partial<ProjectBoardDTO> = {}): ProjectBoardDTO => ({
       taskCount: 0,
     },
   ],
-  columnTotals: { available: 3, claimed: 1, in_pr: 0, merged: 5, backlog: 2 },
+  columnTotals: { claimed: 3, active: 1, merged: 5 },
   ...over,
 });
 
 describe('BoardView', () => {
   it('renders the column headers with their counts', () => {
     render(<BoardView board={board()} />);
-    expect(screen.getByText('Available')).toBeInTheDocument();
+    expect(screen.getByText('Claimed')).toBeInTheDocument();
     expect(screen.getByText('Merged')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument(); // available total
+    expect(screen.getByText('3')).toBeInTheDocument(); // claimed total
     expect(screen.getByText('5')).toBeInTheDocument(); // merged total
   });
 

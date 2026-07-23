@@ -8,7 +8,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const createTaskFunctionDefinition = {
   name: 'create_task',
   description:
-    "Promote a planned task into a feature you own (or lead): declares its title, optional file scope, and optional dependencies on existing tasks. The task becomes available to pull (or blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks.",
+    "Add a task to a feature you own (or lead): declares its title, optional file scope, and optional dependencies on existing tasks. The task is born claimed and owned by the feature owner (blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks.",
   parameters: {
     type: 'object',
     properties: {

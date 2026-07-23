@@ -1,8 +1,8 @@
 /**
  * `plan_feature` — turn an indicative feature's sketch into real, claimable tasks
  * (f-feature-planning §18). The owner-tier verb where planning becomes concrete:
- * it creates a batch of `Task` rows (each numbered via the project counter,
- * assigned to the feature owner, `available` to pull), wires their dependencies,
+ * it creates a batch of `Task` rows (each numbered via the project counter, born
+ * `claimed` and owned by the feature owner), wires their dependencies,
  * **replaces** the feature's `IndicativeTask` sketch (planning rarely survives
  * 1:1), and flips `planningStage → planned`. Emits `feature_planned` + one
  * `task_created` per task, atomically with the write.
@@ -73,7 +73,7 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'plan_feature',
     description:
-      "Materialise a feature's tasks: creates real, claimable tasks (numbered, assigned to the feature owner, available to pull), wires their dependencies, replaces the indicative sketch, and marks the feature planned. Only the feature owner or a project lead may plan. A cyclic task batch is rejected.",
+      "Materialise a feature's tasks: creates real tasks (numbered, born claimed and owned by the feature owner), wires their dependencies, replaces the indicative sketch, and marks the feature planned. Only the feature owner or a project lead may plan. A cyclic task batch is rejected.",
     parameters: {
       type: 'object',
       properties: {
@@ -217,11 +217,14 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
             number: taskCounter,
             title: spec.title,
             doneWhen: spec.doneWhen ?? null,
-            status: 'available',
+            // Born `claimed`, owned by the feature owner — you claim features, not
+            // tasks (f-status-model §20). Both the assignee ("this is yours") and
+            // the held-by claimant point at the owner; null when a lead plans an
+            // unclaimed feature (effective status stays `claimed`/`blocked`).
+            status: 'claimed',
             filesScope: spec.filesScope ?? [],
-            // Assignee defaults to the feature owner ("this is yours"); distinct
-            // from the pull-claim. Null when a lead plans an unclaimed feature.
             assigneeUserId: access.feature.ownerUserId,
+            claimedByUserId: access.feature.ownerUserId,
           },
           select: { id: true },
         });
@@ -263,7 +266,7 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
           taskId,
           kind: 'task_created',
           actorUserId: userId,
-          metadata: { status: 'available' },
+          metadata: { status: 'claimed' },
         });
       }
       return created;

@@ -105,6 +105,8 @@
   --signal-pr-bg: #efe6cf;
   --signal-claimed: #4a5d7a; /* slate-blue */
   --signal-claimed-bg: #dee5ef;
+  --signal-active: #2f6e78; /* teal — being worked (f-status-model §20) */
+  --signal-active-bg: #d9e9eb;
   --signal-blocked: #8a4a4a; /* brick */
   --signal-blocked-bg: #efdedc;
   --signal-available: #3a3a38;
@@ -186,6 +188,8 @@
   --signal-pr-bg: #2a2418;
   --signal-claimed: #8a9bb4;
   --signal-claimed-bg: #1f242d;
+  --signal-active: #7bb8c0; /* teal — being worked (f-status-model §20) */
+  --signal-active-bg: #182529;
   --signal-blocked: #c08a8a;
   --signal-blocked-bg: #2a1f1f;
   --signal-available: #d8d4c8;
