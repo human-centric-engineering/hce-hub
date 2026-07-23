@@ -112,7 +112,8 @@ A flat list in rough dependency order (most-ready first). Order is *emergent fro
 | 17 | `f-journal` | Simon | f-data-model, f-hub-capabilities | 3 | Project event/journal stream (activity · decisions · work log) |
 | 18 | `f-feature-planning` | Simon | f-journal, f-plan-view | 3 | Feature lifecycle caps + indicative vs planned tasks + detail |
 | 19 | `f-selfhost-cutover` | Simon (**in flight**) | f-feature-planning, f-projects | 3 (was 2 — folds in `f-project-slugs`) | Import `plan.md` → Hub via a durable export/import; retire the docs-PR flow; project slugs |
-| 20 | `f-status-model` | Simon (**in flight**) | f-selfhost-cutover (t-2) | 2 | **Corrective:** readiness-derived feature status (available/blocked) + task statuses (claimed/active/merged) |
+| 20 | `f-status-model` | Simon (**in flight**) | f-selfhost-cutover (t-2) | 2 | **Corrective:** readiness-derived feature status (available/blocked) + task statuses (claimed/active/merged) + stable feature number |
+| 21 | `f-authoring-fidelity` | Simon (**in flight**) | f-feature-planning, f-status-model | 3 | **Corrective:** the MCP write verbs carry + render full task/feature detail (description/done-when/markdown) + `update_task` |
 
 **Critical path (the spine):** `f-fork → f-data-model → f-access → f-hub-capabilities → f-sidekick → f-intake`. The UI spine `f-fork → f-theme → f-shell → f-projects → f-plan-view/f-board-view → f-task-sheet` parallelises off it once `f-access` + `f-hub-capabilities` exist. `f-github-sync` and `f-morning-brief` hang off `f-hub-capabilities` and parallelise late.
 
@@ -365,12 +366,28 @@ The dogfood switch: the Hub becomes its own system of record. A one-shot command
 
 A **corrective** feature (like [[f-refs]] §16), surfaced browser-validating the §19 cutover: the Hub's status labels don't reflect reality — a not-started feature reads "planning" (not available/blocked), a claimed+planned feature's tasks read "claimed"/"backlog" inconsistently, and a "blocked" feature shows only its satisfied dependencies. Make status **derived from readiness** at both levels. **Sequenced before the §19 close-out** (don't freeze a system-of-record that mislabels its own statuses); §19 t-3 (slugs) follows.
 
-- **t-1** — **Task statuses → `claimed | active | merged`** (tasks born `claimed` at plan time — the feature-claim cascade; `blocked` a derived overlay). **Task-level pulling removed** ("claim features, not tasks"): the Board *Available* column + `claim_task` retire; the sheet action becomes **Start** (claimed→active) then **Complete** (active→merged). A hand-authored data-migrating `TaskStatus` enum migration (the risk); one atomic vertical (schema + logic + Board + actions + cutover/transfer re-author).
-- **t-2** — **Derived feature readiness**: an unclaimed feature reads **available** (all deps shipped) or **blocked · waiting on `<dep>`** (a dep unshipped); the static "planning" pill goes. Pure derivation, no schema change.
+- **t-1 (Hub `t-36`)** — **Task statuses → `claimed | active | merged`** (tasks born `claimed` at plan time — the feature-claim cascade; `blocked` a derived overlay). **Task-level pulling removed** ("claim features, not tasks"): the Board *Available* column + `claim_task` retire; the sheet action becomes **Start** (claimed→active) then **Complete** (active→merged). A hand-authored data-migrating `TaskStatus` enum migration (the risk); one atomic vertical (schema + logic + Board + actions + cutover/transfer re-author) + **numerical task order**. **BUILT — PR #80** (awaiting merge).
+- **t-2 (Hub `t-37`)** — **Derived feature readiness + stable feature number**: an unclaimed feature reads **available** (all deps shipped) or **blocked · waiting on `<dep>`** (a dep unshipped), the static "planning" pill goes; plus a project-wide stable `Feature.number` (via `Project.featureCounter`, displayed while the sort stays `planOrder`, so a feature reads its true §N — not its row position). Readiness derivation + a small additive `Feature.number` migration.
+
+*Scope moved out (owner 2026-07-23):* the **description/summary split + markdown rendering** (folded into t-2 mid-build) now lives in **[[plan#21 · `f-authoring-fidelity`|§21 `f-authoring-fidelity`]]** — it's the same "faithful detail" axis as the MCP authoring fix, not status/identity.
 
 *Parked (owner 2026-07-23):* the **external / Sunrise-gap** dependency model (flag "blocked · Sunrise `<cap>` gap" + fix-on-fork → raise-issue). No v1 consumer — the Hub builds entirely on existing Sunrise seams (scheduling/agents/webhooks/workflows all exist), so ship-nothing-unused; build on the first real gap.
 
-*Done when:* the Plan reads correctly — §16–§19 (app ordinals) show f-intake **blocked · waiting on f-sidekick** and f-sidekick/f-github-sync/f-morning-brief **available**; a task lifecycle claimed→active→merged is drivable in the Hub; the cutover re-imports with §19 tasks reading merged/active/claimed; gates green.
+*Done when:* the Plan reads correctly — §16–§19 (app ordinals) show f-intake **blocked · waiting on f-sidekick** and f-sidekick/f-github-sync/f-morning-brief **available**; each feature shows its stable number; a task lifecycle claimed→active→merged is drivable in the Hub; the cutover re-imports with §19 tasks reading merged/active/claimed; gates green.
+
+---
+
+### 21 · `f-authoring-fidelity` — the MCP authoring path carries + renders the full record
+*Owner:* Simon · *Status:* **in flight** · *Depends on:* f-feature-planning, f-status-model · *~3 PRs* · *Design:* [[self-hosting#5 · How features get into the Hub — three paths|self-hosting §5]] · *Detailed plan:* [[f-authoring-fidelity]]
+
+A **corrective** feature (the fourth dogfood-surfaced correction, after [[f-refs]] §16 and [[f-status-model]] §20), surfaced authoring §20 into the Hub over MCP: the task-level write verbs are **lossy** — `plan_feature`/`create_task` carry no `description` — so an MCP-authored feature comes out as skeleton tasks and you can't pull the next task's detail from the Hub (we fell back to the MD for §20 t-36). §19's *cutover* is faithful; the *ongoing authoring path* is the gap. **Authored into the Hub over MCP** (create + claim done; planned once §20's enum is merged) as a re-test of §5 path B — its own tasks land detail-thin, demonstrating the gap. First feature the Hub is the primary record for; the [[f-authoring-fidelity]] MD is a backup until the path is faithful.
+
+- **t-a** — **Write-verb detail completeness**: `description` on `plan_feature`/`create_task`, `doneWhen` on `create_task` (verb-surface only — the `Task` columns exist, no migration); sync seeds + provenance.
+- **t-b** — **`update_task` verb**: edit an existing task's title/description/doneWhen/filesScope (owner-tier); the way to backfill §20's empty tasks over MCP.
+- **t-c** — **Task-sheet faithfulness**: render `doneWhen` (never fetched today) + the task description as **markdown**.
+- **t-d** — **Feature summary/description split + markdown** (moved from §20 t-37): additive `Feature.summary`; plain summary on the plan row/board, markdown description on the feature page; re-author cutover.
+
+*Done when:* a feature authored over MCP carries + renders full task detail (description + done-when + markdown), tasks are editable via `update_task`, the feature page renders its markdown description — so the Hub is the pull-the-next-task record, never the MD; gates green.
 
 ---
 
