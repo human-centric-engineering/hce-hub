@@ -2,8 +2,10 @@
  * A feature row in the Plan view (f-plan-view t-2; feature-page link + indicative
  * rendering added f-feature-planning §18 t-3).
  *
- * `ordinal | title (+ help-wanted, indicative chip, description, dependency
- * chips) | owner | status + progress | chevron`. Two affordances, per the owner's
+ * `number | title (+ help-wanted, indicative chip, description, dependency +
+ * waiting-on chips) | owner | status + progress | chevron`. The leading number is
+ * the feature's **stable** project-wide `§N` (not its row position — the list
+ * sorts by `planOrder`). Two affordances, per the owner's
  * three-tier UI: the **slug/title links to the feature page** (the deep,
  * shareable view), and the **chevron toggles** an inset — the glance. A *planned*
  * feature expands to its real task table; an *indicative* feature expands to its
@@ -14,6 +16,7 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
+import { WaitingOnChips } from '@/components/hub/projects/plan/waiting-on-chips';
 import { TaskRow, TASK_ROW_GRID } from '@/components/hub/projects/plan/task-row';
 import { featureStatus, firstName } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
@@ -133,6 +136,11 @@ export function FeatureRow({
               ))}
             </span>
           )}
+          {/* Why this feature is blocked — the unshipped deps it's waiting on
+              (readiness-derived, f-status-model §20 t-37). */}
+          {feature.status === 'blocked' && (
+            <WaitingOnChips waitingOn={feature.waitingOn} className="mt-1.5" />
+          )}
         </span>
 
         <span className="flex items-center gap-1.5 whitespace-nowrap">
@@ -184,7 +192,7 @@ export function FeatureRow({
             <span className="font-mono text-[11px]" style={{ color: 'var(--ink-faint)' }}>
               {hasSketch
                 ? `${feature.indicativeTasks.length} in sketch`
-                : feature.status === 'planning'
+                : feature.status === 'available' || feature.status === 'blocked'
                   ? 'no tasks yet'
                   : '—'}
             </span>

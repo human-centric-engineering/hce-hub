@@ -4,7 +4,7 @@
  * The Plan view (f-plan-view t-2) — the project's features in optimal working
  * order (server-sorted by `planOrder()`), each expandable to its task table.
  * Owns only the expand/collapse UI state; the ordering + data are the server's.
- * One in-flight feature is expanded by default so the view opens on live work.
+ * The feature with live work is expanded by default so the view opens on it.
  */
 import { useState } from 'react';
 import { FeatureRow } from '@/components/hub/projects/plan/feature-row';
@@ -13,8 +13,12 @@ import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
 
 export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
-    // Open the first non-shipped feature that has tasks — the live work.
-    const first = plan.features.find((f) => f.status !== 'shipped' && f.tasks.length > 0);
+    // Prefer the feature with a task actually being worked (an `active` task) —
+    // that's where attention is, even when an earlier-in-order in-flight feature
+    // sorts above it. Fall back to the first non-shipped feature with tasks.
+    const first =
+      plan.features.find((f) => f.tasks.some((t) => t.status === 'active')) ??
+      plan.features.find((f) => f.status !== 'shipped' && f.tasks.length > 0);
     return first ? { [first.id]: true } : {};
   });
 
@@ -37,7 +41,9 @@ export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
             key={feature.id}
             feature={feature}
             projectId={plan.projectId}
-            ordinal={i + 1}
+            // Stable project-wide number (its plan §N), not the row position —
+            // the list sorts by `planOrder` but each feature keeps its identity.
+            ordinal={feature.number ?? i + 1}
             expanded={!!expanded[feature.id]}
             onToggle={() => toggle(feature.id)}
           />

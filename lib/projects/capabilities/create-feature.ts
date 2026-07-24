@@ -184,9 +184,17 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
     }
 
     const feature = await executeTransaction(async (tx) => {
+      // Bump the project counter for a unique, stable project-wide `number` by
+      // construction — the feature's §N, mirroring Task.number (f-status-model §20 t-37).
+      const { featureCounter } = await tx.project.update({
+        where: { id: args.projectId },
+        data: { featureCounter: { increment: 1 } },
+        select: { featureCounter: true },
+      });
       const created = await tx.feature.create({
         data: {
           projectId: args.projectId,
+          number: featureCounter,
           title: args.title,
           slug: args.slug ?? null,
           description: args.description ?? null,

@@ -8,7 +8,7 @@ import type { PlanFeature, FeatureStatus } from '@/components/hub/projects/plan/
 const BANDS: { key: FeatureStatus; label: string; tone: string }[] = [
   { key: 'shipped', label: 'shipped', tone: 'merged' },
   { key: 'in_flight', label: 'in flight', tone: 'pr' },
-  { key: 'planning', label: 'planning', tone: 'backlog' },
+  { key: 'available', label: 'available', tone: 'available' },
   { key: 'blocked', label: 'blocked', tone: 'blocked' },
 ];
 

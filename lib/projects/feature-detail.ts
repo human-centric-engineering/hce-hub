@@ -17,11 +17,16 @@
  * the §09 Plan / §10 Board), and every nullable `user` ref resolves to
  * `UserRef | null` ("unassigned / former member"), never dereferenced.
  */
-import type { FeaturePlanningStage, FeatureStatus, Prisma } from '@prisma/client';
+import type { FeaturePlanningStage, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { NotFoundError } from '@/lib/api/errors';
 import { getAccessibleProject } from '@/lib/projects/access';
 import { computeEffectiveStatus, type EffectiveStatus } from '@/lib/projects/task-status';
+import {
+  computeFeatureStatus,
+  type EffectiveFeatureStatus,
+  type WaitingOnRef,
+} from '@/lib/projects/feature-status';
 import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
 
 /** A cross-reference chip (`Feature.references` — a stored `{ label, target }` list). */
@@ -68,13 +73,18 @@ export interface FeatureDetail {
   projectId: string;
   /** The parent project's name — for the feature page's breadcrumb + header. */
   projectName: string;
+  /** Project-wide stable ordinal, rendered `§N`; `null` until assigned. */
+  number: number | null;
   /** Authored short key (`f-mcp`); `null` until authored. */
   slug: string | null;
   title: string;
   description: string | null;
   doneWhen: string | null;
   references: FeatureReference[];
-  status: FeatureStatus;
+  /** Readiness-derived status (via `computeFeatureStatus`) — never raw `planning`. */
+  status: EffectiveFeatureStatus;
+  /** For a `blocked` feature: the unshipped dependencies it's waiting on. */
+  waitingOn: WaitingOnRef[];
   /** Depth axis: `indicative` sketch vs `planned` (real tasks materialised). */
   planningStage: FeaturePlanningStage;
   helpWanted: boolean;
@@ -130,6 +140,7 @@ export async function getFeatureDetail(
     where: { projectId, OR: [{ slug: key }, { id: key }] },
     select: {
       id: true,
+      number: true,
       slug: true,
       title: true,
       description: true,
@@ -140,7 +151,8 @@ export async function getFeatureDetail(
       helpWanted: true,
       ownerUserId: true,
       dependencies: {
-        select: { dependsOn: { select: { id: true, slug: true, title: true } } },
+        // `status` feeds the readiness derivation; slug/title feed the chips.
+        select: { dependsOn: { select: { id: true, slug: true, title: true, status: true } } },
       },
       tasks: {
         // Numerical order — tasks are built sequentially (f-status-model §20).
@@ -175,20 +187,32 @@ export async function getFeatureDetail(
   ];
   const users = await fetchUsers(userIds);
 
+  // Readiness-derived status from the dependencies' stored statuses.
+  const { status: effectiveStatus, waitingOn } = computeFeatureStatus(
+    feature.status,
+    feature.dependencies.map((d) => d.dependsOn)
+  );
+
   return {
     id: feature.id,
     projectId,
     projectName: project.name,
+    number: feature.number,
     slug: feature.slug,
     title: feature.title,
     description: feature.description,
     doneWhen: feature.doneWhen,
     references: toReferences(feature.references),
-    status: feature.status,
+    status: effectiveStatus,
+    waitingOn,
     planningStage: feature.planningStage,
     helpWanted: feature.helpWanted,
     owner: feature.ownerUserId ? (users.get(feature.ownerUserId) ?? null) : null,
-    dependsOn: feature.dependencies.map((d) => d.dependsOn),
+    dependsOn: feature.dependencies.map((d) => ({
+      id: d.dependsOn.id,
+      slug: d.dependsOn.slug,
+      title: d.dependsOn.title,
+    })),
     tasks: feature.tasks.map((t) => ({
       id: t.id,
       number: t.number,

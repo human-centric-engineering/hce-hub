@@ -8,10 +8,12 @@ import type { PlanFeature } from '@/components/hub/projects/plan/types';
 
 const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   id: 'f1',
+  number: null,
   slug: null,
   title: 't',
   description: null,
-  status: 'planning',
+  status: 'available',
+  waitingOn: [],
   planningStage: 'planned',
   helpWanted: false,
   owner: null,
@@ -28,19 +30,19 @@ describe('PlanSummary', () => {
       <PlanSummary
         features={[
           feature({ status: 'shipped', progress: { merged: 1, total: 2, live: 0, blocked: 0 } }),
-          feature({ status: 'planning', progress: { merged: 0, total: 3, live: 1, blocked: 0 } }),
+          feature({ status: 'available', progress: { merged: 0, total: 3, live: 1, blocked: 0 } }),
         ]}
       />
     );
     expect(screen.getByText('2')).toBeInTheDocument(); // feature count (unique)
     expect(screen.getByText('/5')).toBeInTheDocument(); // total tasks
     expect(screen.getByText('shipped')).toBeInTheDocument();
-    expect(screen.getByText('planning')).toBeInTheDocument();
+    expect(screen.getByText('available')).toBeInTheDocument();
   });
 
   it('omits a status pill for a band with zero features', () => {
-    render(<PlanSummary features={[feature({ status: 'planning' })]} />);
+    render(<PlanSummary features={[feature({ status: 'available' })]} />);
     expect(screen.queryByText('blocked')).not.toBeInTheDocument();
-    expect(screen.getByText('planning')).toBeInTheDocument();
+    expect(screen.getByText('available')).toBeInTheDocument();
   });
 });

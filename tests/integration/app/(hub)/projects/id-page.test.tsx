@@ -55,9 +55,11 @@ const planPayload = {
   features: [
     {
       id: 'f-fork',
+      number: 1,
       title: 'Fork + brand',
       description: null,
       status: 'shipped',
+      waitingOn: [],
       helpWanted: false,
       owner: null,
       dependsOn: [],

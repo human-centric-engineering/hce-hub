@@ -44,9 +44,12 @@ export function buildCutoverSnapshot(
 ): ProjectTransfer {
   const features = buildCutoverPlan();
 
-  const featureRows: Data['features'] = features.map((f) => ({
+  // Real features get a project-wide number 1..N in plan (§N) order — the stable
+  // ordinal they keep for life (f-status-model §20 t-37), mirroring Task.number.
+  const featureRows: Data['features'] = features.map((f, i) => ({
     id: featureId(f.slug),
     projectId: CUTOVER_PROJECT.id,
+    number: i + 1,
     slug: f.slug,
     title: f.title,
     description: f.description,
@@ -147,6 +150,7 @@ export function buildCutoverSnapshot(
       knowledgeTagId: null,
       sidekickAgentId: null,
       taskCounter: taskNumber,
+      featureCounter: features.length,
       createdAt: CUTOVER_PROJECT.createdAt,
     },
     members: [

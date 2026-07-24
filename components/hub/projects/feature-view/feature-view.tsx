@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { sanitizeUrl } from '@/lib/security/sanitize';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
+import { WaitingOnChips } from '@/components/hub/projects/plan/waiting-on-chips';
 import { featureStatus } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
 import { FeatureTaskList } from '@/components/hub/projects/feature-view/feature-task-list';
@@ -82,6 +83,11 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
 
       <header className="mt-3 mb-8">
         <div className="flex flex-wrap items-center gap-2">
+          {feature.number != null && (
+            <span className="font-mono text-sm tabular-nums" style={{ color: 'var(--ink-faint)' }}>
+              §{feature.number}
+            </span>
+          )}
           {feature.slug && (
             <span className="font-mono text-sm" style={{ color: 'var(--ink-faint)' }}>
               {feature.slug}
@@ -98,6 +104,10 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
             </span>
           )}
         </div>
+        {/* Why this feature is blocked — the unshipped deps it waits on (§20 t-37). */}
+        {feature.status === 'blocked' && (
+          <WaitingOnChips waitingOn={feature.waitingOn} className="mt-2" />
+        )}
         <h1 className="mt-2 text-[26px] font-medium tracking-[-0.02em]">{feature.title}</h1>
 
         <div className="mt-3 flex items-center gap-2 text-sm" style={{ color: 'var(--ink-mute)' }}>

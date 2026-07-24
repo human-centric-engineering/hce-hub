@@ -87,6 +87,7 @@ export async function exportProject(
       knowledgeTagId: project.knowledgeTagId,
       sidekickAgentId: project.sidekickAgentId,
       taskCounter: project.taskCounter,
+      featureCounter: project.featureCounter,
       createdAt: iso(project.createdAt),
     },
     members: byId(members).map((m) => {
@@ -102,6 +103,7 @@ export async function exportProject(
     features: byId(features).map((f) => ({
       id: f.id,
       projectId: f.projectId,
+      number: f.number,
       slug: f.slug,
       title: f.title,
       description: f.description,

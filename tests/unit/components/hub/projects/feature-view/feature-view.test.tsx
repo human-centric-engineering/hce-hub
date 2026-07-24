@@ -13,12 +13,14 @@ const detail = (over: Partial<FeatureDetailDTO> = {}): FeatureDetailDTO => ({
   id: 'f1',
   projectId: 'p1',
   projectName: 'HCE Hub',
+  number: 3,
   slug: 'f-mcp',
   title: 'MCP server',
   description: 'Expose the tools.',
   doneWhen: 'tools/list works',
   references: [{ label: 'spec', target: 'https://example.com/spec' }],
   status: 'in_flight',
+  waitingOn: [],
   planningStage: 'planned',
   helpWanted: false,
   owner: { id: 'u1', name: 'Ada Lovelace', email: 'a@x', image: null },
@@ -82,8 +84,21 @@ describe('FeatureView', () => {
   });
 
   it('shows a Claim button on an unowned, unshipped feature (§18 t-4)', () => {
-    render(<FeatureView feature={detail({ owner: null, status: 'planning' })} />);
+    render(<FeatureView feature={detail({ owner: null, status: 'available' })} />);
     expect(screen.getByRole('button', { name: /Claim feature/ })).toBeInTheDocument();
+  });
+
+  it('shows a "waiting on" line naming the unshipped dependency for a blocked feature', () => {
+    render(
+      <FeatureView
+        feature={detail({
+          status: 'blocked',
+          waitingOn: [{ slug: 'f-other', title: 'Other feature' }],
+        })}
+      />
+    );
+    expect(screen.getByText('waiting on')).toBeInTheDocument();
+    expect(screen.getByText('f-other')).toBeInTheDocument();
   });
 
   it('shows no Claim button when the feature is owned or shipped', () => {
