@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { sanitizeUrl } from '@/lib/security/sanitize';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
+import { WaitingOnChips } from '@/components/hub/projects/plan/waiting-on-chips';
 import { featureStatus } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
 import { FeatureTaskList } from '@/components/hub/projects/feature-view/feature-task-list';
@@ -104,23 +105,8 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
           )}
         </div>
         {/* Why this feature is blocked — the unshipped deps it waits on (§20 t-37). */}
-        {feature.status === 'blocked' && feature.waitingOn.length > 0 && (
-          <div
-            className="mt-2 flex flex-wrap items-center gap-1.5 text-xs"
-            style={{ color: 'var(--signal-blocked)' }}
-          >
-            <span>waiting on</span>
-            {feature.waitingOn.map((d) => (
-              <span
-                key={d.slug ?? d.title}
-                className="rounded px-1.5 py-0.5 font-mono"
-                style={{ backgroundColor: 'var(--signal-blocked-bg)' }}
-                title={d.title}
-              >
-                {d.slug ?? d.title}
-              </span>
-            ))}
-          </div>
+        {feature.status === 'blocked' && (
+          <WaitingOnChips waitingOn={feature.waitingOn} className="mt-2" />
         )}
         <h1 className="mt-2 text-[26px] font-medium tracking-[-0.02em]">{feature.title}</h1>
 

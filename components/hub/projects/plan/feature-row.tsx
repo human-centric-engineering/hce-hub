@@ -16,6 +16,7 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
+import { WaitingOnChips } from '@/components/hub/projects/plan/waiting-on-chips';
 import { TaskRow, TASK_ROW_GRID } from '@/components/hub/projects/plan/task-row';
 import { featureStatus, firstName } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
@@ -137,23 +138,8 @@ export function FeatureRow({
           )}
           {/* Why this feature is blocked — the unshipped deps it's waiting on
               (readiness-derived, f-status-model §20 t-37). */}
-          {feature.status === 'blocked' && feature.waitingOn.length > 0 && (
-            <span
-              className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs"
-              style={{ color: 'var(--signal-blocked)' }}
-            >
-              <span>waiting on</span>
-              {feature.waitingOn.map((d) => (
-                <span
-                  key={d.slug ?? d.title}
-                  className="rounded px-1.5 py-0.5 font-mono"
-                  style={{ backgroundColor: 'var(--signal-blocked-bg)' }}
-                  title={d.title}
-                >
-                  {d.slug ?? d.title}
-                </span>
-              ))}
-            </span>
+          {feature.status === 'blocked' && (
+            <WaitingOnChips waitingOn={feature.waitingOn} className="mt-1.5" />
           )}
         </span>
 
