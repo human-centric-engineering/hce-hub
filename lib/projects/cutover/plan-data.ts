@@ -42,6 +42,46 @@ export const CUTOVER_PROJECT = {
 
 const PR = (n: number): string => `https://github.com/human-centric-engineering/hce-hub/pull/${n}`;
 
+/**
+ * The canonical plan.md §N ordering of the founding features — the feature's
+ * `number` is an **authored** ordinal (like the slug), = its plan §N. It is NOT a
+ * timestamp rank (the founding features share one `createdAt`) and NOT this
+ * module's array order (`buildCutoverPlan` is in *build/ship* chronology, so
+ * f-refs ships early but is §16). Kept as an explicit list, eyeball-checkable
+ * against the plan.md feature table. §20+ are authored later via `create_feature`'s
+ * counter, so they aren't listed here (f-status-model = §20, f-authoring-fidelity = §21).
+ */
+export const PLAN_FEATURE_ORDER: readonly string[] = [
+  'f-fork', // §1
+  'f-theme', // §2
+  'f-data-model', // §3
+  'f-access', // §4
+  'f-project-admin', // §5
+  'f-shell', // §6
+  'f-hub-capabilities', // §7
+  'f-projects', // §8
+  'f-plan-view', // §9
+  'f-board-view', // §10
+  'f-task-sheet', // §11
+  'f-sidekick', // §12
+  'f-intake', // §13
+  'f-github-sync', // §14
+  'f-morning-brief', // §15
+  'f-refs', // §16
+  'f-journal', // §17
+  'f-feature-planning', // §18
+  'f-selfhost-cutover', // §19
+];
+
+/** The authored §N (1-based) for a founding feature slug; throws if unlisted. */
+export function planNumber(slug: string): number {
+  const i = PLAN_FEATURE_ORDER.indexOf(slug);
+  if (i === -1) {
+    throw new Error(`No plan §N for feature "${slug}" — add it to PLAN_FEATURE_ORDER.`);
+  }
+  return i + 1;
+}
+
 export interface CutoverTask {
   title: string;
   status: TaskStatus;

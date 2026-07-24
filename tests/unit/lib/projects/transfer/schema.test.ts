@@ -19,6 +19,7 @@ const minimal = {
       knowledgeTagId: null,
       sidekickAgentId: null,
       taskCounter: 0,
+      featureCounter: 0,
       createdAt: '2026-07-01T00:00:00.000Z',
     },
     members: [],

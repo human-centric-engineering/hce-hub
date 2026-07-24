@@ -11,6 +11,7 @@ import type {
   FeaturePlanningStage,
   FeatureStatus,
   TaskEffectiveStatus,
+  WaitingOnRef,
 } from '@/components/hub/projects/plan/types';
 
 /** A cross-reference chip (`Feature.references`). */
@@ -50,12 +51,16 @@ export interface FeatureDetailDTO {
   id: string;
   projectId: string;
   projectName: string;
+  /** Project-wide stable ordinal, rendered `§N`; `null` until assigned. */
+  number: number | null;
   slug: string | null;
   title: string;
   description: string | null;
   doneWhen: string | null;
   references: FeatureReferenceDTO[];
   status: FeatureStatus;
+  /** For a `blocked` feature: the unshipped dependencies it's waiting on. */
+  waitingOn: WaitingOnRef[];
   planningStage: FeaturePlanningStage;
   helpWanted: boolean;
   owner: UserRef | null;

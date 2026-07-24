@@ -9,10 +9,12 @@ import type { PlanFeature, ProjectPlanDTO } from '@/components/hub/projects/plan
 
 const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   id: 'f1',
+  number: null,
   slug: null,
   title: 'Feature one',
   description: null,
-  status: 'planning',
+  status: 'available',
+  waitingOn: [],
   planningStage: 'planned',
   helpWanted: false,
   owner: null,
@@ -53,7 +55,7 @@ describe('PlanView rendering', () => {
           feature({
             id: 'f1',
             title: 'Has tasks',
-            status: 'planning',
+            status: 'available',
             tasks: [
               {
                 id: 't1',
@@ -121,9 +123,54 @@ describe('PlanView rendering', () => {
     expect(screen.queryByText('shipped task')).not.toBeInTheDocument();
   });
 
+  it('prefers the feature containing an active task over an earlier non-shipped feature with only claimed tasks (f-status-model §20 t-37)', () => {
+    render(
+      <PlanView
+        plan={plan([
+          feature({
+            id: 'first',
+            title: 'First in order, nothing active',
+            status: 'in_flight',
+            tasks: [
+              {
+                id: 't1',
+                number: null,
+                title: 'claimed task',
+                status: 'claimed',
+                prUrl: null,
+                claimer: null,
+              },
+            ],
+            progress: { merged: 0, total: 1, live: 0, blocked: 0 },
+          }),
+          feature({
+            id: 'second',
+            title: 'Later, has the active task',
+            status: 'in_flight',
+            tasks: [
+              {
+                id: 't2',
+                number: null,
+                title: 'active task',
+                status: 'active',
+                prUrl: null,
+                claimer: null,
+              },
+            ],
+            progress: { merged: 0, total: 1, live: 1, blocked: 0 },
+          }),
+        ])}
+      />
+    );
+    // The second feature (the one with the active task) is expanded by default,
+    // even though the first feature sorts earlier and is also non-shipped with tasks.
+    expect(screen.getByText('active task')).toBeInTheDocument();
+    expect(screen.queryByText('claimed task')).not.toBeInTheDocument();
+  });
+
   it('renders the summary line', () => {
     render(
-      <PlanView plan={plan([feature({ status: 'shipped' }), feature({ status: 'planning' })])} />
+      <PlanView plan={plan([feature({ status: 'shipped' }), feature({ status: 'available' })])} />
     );
     const summary = screen.getByText('features').closest('div')!;
     expect(within(summary).getByText('2')).toBeInTheDocument();

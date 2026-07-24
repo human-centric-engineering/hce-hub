@@ -195,6 +195,7 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
         knowledgeTagId: p.knowledgeTagId,
         sidekickAgentId: p.sidekickAgentId,
         taskCounter: p.taskCounter,
+        featureCounter: p.featureCounter,
         createdAt: new Date(p.createdAt),
       },
       update: {
@@ -206,6 +207,7 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
         knowledgeTagId: p.knowledgeTagId,
         sidekickAgentId: p.sidekickAgentId,
         taskCounter: p.taskCounter,
+        featureCounter: p.featureCounter,
         createdAt: new Date(p.createdAt),
       },
     });
@@ -228,6 +230,7 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
 
     for (const f of data.features) {
       const base = {
+        number: f.number,
         slug: f.slug,
         title: f.title,
         description: f.description,
