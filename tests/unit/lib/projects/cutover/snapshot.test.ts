@@ -36,6 +36,12 @@ describe('buildCutoverSnapshot', () => {
     expect(owner('f-sidekick')).toBeNull();
   });
 
+  it('numbers features 1..N in plan order and sets the project featureCounter to the count (f-status-model §20 t-37)', () => {
+    const numbers = snap.data.features.map((f) => f.number);
+    expect(numbers).toEqual(Array.from({ length: snap.data.features.length }, (_, i) => i + 1));
+    expect(snap.data.project.featureCounter).toBe(snap.data.features.length);
+  });
+
   it('numbers tasks 1..N project-wide in feature order', () => {
     const numbers = snap.data.tasks.map((t) => t.number);
     expect(numbers).toEqual(Array.from({ length: snap.data.tasks.length }, (_, i) => i + 1));

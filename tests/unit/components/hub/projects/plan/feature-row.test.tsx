@@ -15,10 +15,12 @@ import type { PlanFeature } from '@/components/hub/projects/plan/types';
 
 const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   id: 'f1',
+  number: null,
   slug: null,
   title: 'Feature one',
   description: null,
-  status: 'planning',
+  status: 'available',
+  waitingOn: [],
   planningStage: 'planned',
   helpWanted: false,
   owner: null,
@@ -105,10 +107,10 @@ describe('FeatureRow', () => {
     expect(onToggle).toHaveBeenCalledOnce();
   });
 
-  it('has no toggle and shows "no tasks yet" when a planning feature has none', () => {
+  it('has no toggle and shows "no tasks yet" when an available feature has none', () => {
     renderRow({
       feature: feature({
-        status: 'planning',
+        status: 'available',
         planningStage: 'planned',
         tasks: [],
         owner: { id: 'u1', name: 'Ada', email: 'a@x', image: null },
@@ -119,7 +121,7 @@ describe('FeatureRow', () => {
   });
 
   it('shows an inline Claim button on an unowned, unshipped feature (§18 t-4)', () => {
-    renderRow({ feature: feature({ owner: null, status: 'planning' }) });
+    renderRow({ feature: feature({ owner: null, status: 'available' }) });
     expect(screen.getByRole('button', { name: 'Claim this feature' })).toBeInTheDocument();
   });
 
@@ -170,6 +172,41 @@ describe('FeatureRow', () => {
     const toggle = screen.getByRole('button', { name: 'Toggle tasks for MCP server' });
     expect(toggle).toHaveAttribute('aria-controls', 'feature-tasks-feat-9');
     expect(document.getElementById('feature-tasks-feat-9')).toBeInTheDocument();
+  });
+
+  describe('readiness derivation (f-status-model §20 t-37)', () => {
+    it('renders a "waiting on" line naming the unshipped dependency for a blocked feature', () => {
+      renderRow({
+        feature: feature({
+          status: 'blocked',
+          waitingOn: [{ slug: 'f-x', title: 'Feature X' }],
+        }),
+      });
+      expect(screen.getByText('waiting on')).toBeInTheDocument();
+      expect(screen.getByText('f-x')).toBeInTheDocument();
+    });
+
+    it('falls back to the title when a waiting-on dependency has no slug', () => {
+      renderRow({
+        feature: feature({
+          status: 'blocked',
+          waitingOn: [{ slug: null, title: 'Unslugged blocker' }],
+        }),
+      });
+      expect(screen.getByText('Unslugged blocker')).toBeInTheDocument();
+    });
+
+    it('shows no "waiting on" line for an available feature (empty waitingOn)', () => {
+      renderRow({ feature: feature({ status: 'available', waitingOn: [] }) });
+      expect(screen.queryByText('waiting on')).not.toBeInTheDocument();
+    });
+
+    it("renders the row number from the stable ordinal prop (the feature's §N, not row position)", () => {
+      // The Plan view computes `ordinal = feature.number ?? index + 1` and passes
+      // it in — FeatureRow just formats whatever it's given, zero-padded.
+      renderRow({ feature: feature({ number: 15 }), ordinal: 15 });
+      expect(screen.getByText('15')).toBeInTheDocument();
+    });
   });
 
   describe('indicative features (§18)', () => {

@@ -17,7 +17,7 @@ export interface StatusTone {
 const FEATURE_TONE: Record<FeatureStatus, StatusTone> = {
   shipped: { tone: 'merged', label: 'shipped' },
   in_flight: { tone: 'pr', label: 'in flight' },
-  planning: { tone: 'backlog', label: 'planning' },
+  available: { tone: 'available', label: 'available' },
   blocked: { tone: 'blocked', label: 'blocked' },
 };
 

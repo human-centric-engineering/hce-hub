@@ -15,10 +15,15 @@
  * "unassigned / former member" — carried f-data-model t-3 finding), never
  * dereferenced.
  */
-import type { FeaturePlanningStage, FeatureStatus } from '@prisma/client';
+import type { FeaturePlanningStage } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { getAccessibleProject } from '@/lib/projects/access';
 import { computeEffectiveStatus, type EffectiveStatus } from '@/lib/projects/task-status';
+import {
+  computeFeatureStatus,
+  type EffectiveFeatureStatus,
+  type WaitingOnRef,
+} from '@/lib/projects/feature-status';
 import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
 import { planOrder } from '@/lib/projects/plan-order';
 
@@ -53,11 +58,16 @@ export interface PlanIndicativeTaskView {
 /** A feature row in the Plan view. */
 export interface PlanFeatureView {
   id: string;
+  /** Project-wide stable ordinal, rendered `§N`; `null` until assigned. */
+  number: number | null;
   /** Authored short key (`f-mcp`); `null` until authored. */
   slug: string | null;
   title: string;
   description: string | null;
-  status: FeatureStatus;
+  /** Readiness-derived status (via `computeFeatureStatus`) — never raw `planning`. */
+  status: EffectiveFeatureStatus;
+  /** For a `blocked` feature: the unshipped dependencies it's waiting on. */
+  waitingOn: WaitingOnRef[];
   /** Depth axis: `indicative` sketch vs `planned` (real tasks) — §18. */
   planningStage: FeaturePlanningStage;
   helpWanted: boolean;
@@ -94,6 +104,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
     orderBy: { createdAt: 'asc' },
     select: {
       id: true,
+      number: true,
       slug: true,
       title: true,
       description: true,
@@ -130,9 +141,12 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
   ]);
   const users = await fetchUsers(userIds);
 
-  // Slug + title for the dependency chips — every edge in a project points at a
-  // feature in the same project, so resolve from the loaded set.
-  const metaById = new Map(features.map((f) => [f.id, { slug: f.slug, title: f.title }]));
+  // Slug + title (chips) + stored status (readiness derivation) for every
+  // feature — every dependency edge points at a feature in the same project, so
+  // resolve from the loaded set (no extra query, no N+1).
+  const metaById = new Map(
+    features.map((f) => [f.id, { slug: f.slug, title: f.title, status: f.status }])
+  );
 
   const views: PlanFeatureView[] = features.map((f) => {
     const tasks: PlanTaskView[] = f.tasks.map((t) => ({
@@ -156,12 +170,21 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
     const blocked = tasks.filter((t) => t.status === 'blocked').length;
     const live = tasks.filter((t) => t.status === 'active').length;
 
+    // Readiness-derived feature status: `planning` becomes `available`/`blocked`
+    // from the loaded dependency statuses (`in_flight`/`shipped` pass through).
+    const deps = f.dependencies
+      .map((d) => metaById.get(d.dependsOnFeatureId))
+      .filter((m): m is NonNullable<typeof m> => m != null);
+    const { status: effectiveStatus, waitingOn } = computeFeatureStatus(f.status, deps);
+
     return {
       id: f.id,
+      number: f.number,
       slug: f.slug,
       title: f.title,
       description: f.description,
-      status: f.status,
+      status: effectiveStatus,
+      waitingOn,
       planningStage: f.planningStage,
       helpWanted: f.helpWanted,
       owner: f.ownerUserId ? (users.get(f.ownerUserId) ?? null) : null,
@@ -177,8 +200,15 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
     };
   });
 
+  // Ordering bands on the *stored* status (unchanged, `planOrder`'s STATUS_BAND) —
+  // the derived `available`/`blocked` are presentation only. Take it from the raw
+  // rows so the derived-status views don't feed the ordering.
   const ordered = planOrder(
-    views.map((v) => ({ id: v.id, status: v.status, dependsOn: v.dependsOn.map((d) => d.id) }))
+    features.map((f) => ({
+      id: f.id,
+      status: f.status,
+      dependsOn: f.dependencies.map((d) => d.dependsOnFeatureId),
+    }))
   );
   const viewById = new Map(views.map((v) => [v.id, v]));
 

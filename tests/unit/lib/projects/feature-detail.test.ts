@@ -24,6 +24,7 @@ const USER = 'user-1';
 
 const featureRow = (over: Record<string, unknown> = {}) => ({
   id: 'f1',
+  number: null,
   slug: 'f-mcp',
   title: 'MCP server',
   description: 'Expose tools',
@@ -149,5 +150,65 @@ describe('getFeatureDetail mapping', () => {
     expect(detail.tasks[0].assignee).toBeNull(); // erased assignee never derefs
     expect(detail.tasks[1].status).toBe('claimed');
     expect(detail.tasks[1].claimer?.name).toBe('Bo');
+  });
+});
+
+describe('getFeatureDetail — readiness-derived feature status (f-status-model §20 t-37)', () => {
+  it('derives "available" for a not-started feature whose dependencies are all shipped', async () => {
+    featureFindFirst.mockResolvedValue(
+      featureRow({
+        status: 'planning',
+        dependencies: [
+          { dependsOn: { id: 'd1', slug: 'f-dep', title: 'Dependency', status: 'shipped' } },
+        ],
+      })
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.status).toBe('available');
+    expect(detail.waitingOn).toEqual([]);
+  });
+
+  it('derives "blocked" naming the unshipped dependency it is waiting on', async () => {
+    featureFindFirst.mockResolvedValue(
+      featureRow({
+        status: 'planning',
+        dependencies: [
+          { dependsOn: { id: 'd1', slug: 'f-dep', title: 'Dependency', status: 'in_flight' } },
+        ],
+      })
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.status).toBe('blocked');
+    expect(detail.waitingOn).toEqual([{ slug: 'f-dep', title: 'Dependency' }]);
+  });
+
+  it('passes in_flight/shipped status through unchanged, ignoring un-started deps', async () => {
+    featureFindFirst.mockResolvedValueOnce(
+      featureRow({
+        status: 'in_flight',
+        dependencies: [
+          { dependsOn: { id: 'd1', slug: null, title: 'Un-started dep', status: 'planning' } },
+        ],
+      })
+    );
+    let detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.status).toBe('in_flight');
+    expect(detail.waitingOn).toEqual([]);
+
+    featureFindFirst.mockResolvedValueOnce(featureRow({ status: 'shipped' }));
+    detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.status).toBe('shipped');
+  });
+
+  it('never surfaces the raw stored "planning" status on the payload', async () => {
+    featureFindFirst.mockResolvedValue(featureRow({ status: 'planning' }));
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.status).not.toBe('planning');
+  });
+
+  it('carries the stable feature number', async () => {
+    featureFindFirst.mockResolvedValue(featureRow({ number: 12 }));
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.number).toBe(12);
   });
 });

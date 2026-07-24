@@ -286,3 +286,88 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
     expect(plan.features.map((f) => f.id)).toEqual(['ship', 'plan']);
   });
 });
+
+describe('getProjectPlan — readiness-derived feature status (f-status-model §20 t-37)', () => {
+  it('derives "available" for a not-started feature whose dependencies are all shipped', async () => {
+    featureFindMany.mockResolvedValue([
+      row({ id: 'a', title: 'Foundation', status: 'shipped' }),
+      row({
+        id: 'b',
+        title: 'Built on it',
+        status: 'planning',
+        dependencies: [{ dependsOnFeatureId: 'a' }],
+      }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    const b = plan.features.find((f) => f.id === 'b')!;
+    expect(b.status).toBe('available');
+    expect(b.waitingOn).toEqual([]);
+  });
+
+  it('derives "blocked" naming the unshipped dependency the feature is waiting on', async () => {
+    featureFindMany.mockResolvedValue([
+      row({ id: 'a', slug: 'f-a', title: 'Foundation', status: 'in_flight' }),
+      row({
+        id: 'b',
+        title: 'Built on it',
+        status: 'planning',
+        dependencies: [{ dependsOnFeatureId: 'a' }],
+      }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    const b = plan.features.find((f) => f.id === 'b')!;
+    expect(b.status).toBe('blocked');
+    expect(b.waitingOn).toEqual([{ slug: 'f-a', title: 'Foundation' }]);
+  });
+
+  it("passes an in_flight (claimed) feature's status through unchanged, ignoring its deps", async () => {
+    featureFindMany.mockResolvedValue([
+      row({ id: 'a', title: 'Dep', status: 'planning' }), // still un-started, would block
+      row({
+        id: 'b',
+        title: 'Claimed feature',
+        status: 'in_flight',
+        dependencies: [{ dependsOnFeatureId: 'a' }],
+      }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    const b = plan.features.find((f) => f.id === 'b')!;
+    expect(b.status).toBe('in_flight');
+    expect(b.waitingOn).toEqual([]);
+  });
+
+  it("passes a shipped feature's status through unchanged", async () => {
+    featureFindMany.mockResolvedValue([row({ id: 'a', status: 'shipped' })]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(plan.features[0].status).toBe('shipped');
+  });
+
+  it('never surfaces the raw stored "planning" status on the payload', async () => {
+    featureFindMany.mockResolvedValue([row({ id: 'a', status: 'planning' })]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(plan.features.map((f) => f.status)).not.toContain('planning');
+  });
+
+  it('carries the stable feature number', async () => {
+    featureFindMany.mockResolvedValue([row({ id: 'a', number: 7 })]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(plan.features[0].number).toBe(7);
+  });
+
+  it('still orders by the STORED status, not the derived one (planOrder unaffected)', async () => {
+    // 'b' is stored `planning` but DERIVES to `blocked` (its dep is un-started);
+    // ordering must still band on the raw stored value the query returned.
+    featureFindMany.mockResolvedValue([
+      row({ id: 'a', status: 'planning' }),
+      row({
+        id: 'b',
+        status: 'planning',
+        dependencies: [{ dependsOnFeatureId: 'a' }],
+      }),
+      row({ id: 'c', status: 'shipped' }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    // Shipped bands first regardless of any feature's derived status.
+    expect(plan.features[0].id).toBe('c');
+  });
+});

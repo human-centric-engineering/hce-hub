@@ -82,6 +82,11 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
 
       <header className="mt-3 mb-8">
         <div className="flex flex-wrap items-center gap-2">
+          {feature.number != null && (
+            <span className="font-mono text-sm tabular-nums" style={{ color: 'var(--ink-faint)' }}>
+              §{feature.number}
+            </span>
+          )}
           {feature.slug && (
             <span className="font-mono text-sm" style={{ color: 'var(--ink-faint)' }}>
               {feature.slug}
@@ -98,6 +103,25 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
             </span>
           )}
         </div>
+        {/* Why this feature is blocked — the unshipped deps it waits on (§20 t-37). */}
+        {feature.status === 'blocked' && feature.waitingOn.length > 0 && (
+          <div
+            className="mt-2 flex flex-wrap items-center gap-1.5 text-xs"
+            style={{ color: 'var(--signal-blocked)' }}
+          >
+            <span>waiting on</span>
+            {feature.waitingOn.map((d) => (
+              <span
+                key={d.slug ?? d.title}
+                className="rounded px-1.5 py-0.5 font-mono"
+                style={{ backgroundColor: 'var(--signal-blocked-bg)' }}
+                title={d.title}
+              >
+                {d.slug ?? d.title}
+              </span>
+            ))}
+          </div>
+        )}
         <h1 className="mt-2 text-[26px] font-medium tracking-[-0.02em]">{feature.title}</h1>
 
         <div className="mt-3 flex items-center gap-2 text-sm" style={{ color: 'var(--ink-mute)' }}>

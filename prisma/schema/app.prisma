@@ -97,6 +97,7 @@ model Project {
   knowledgeTagId  String? // set by f-project-admin (Sunrise KnowledgeTag); no FK
   sidekickAgentId String? // set by f-sidekick (Sunrise AiAgent); no FK
   taskCounter     Int           @default(0) // monotonic source for project-wide Task.number (f-refs)
+  featureCounter  Int           @default(0) // monotonic source for project-wide Feature.number (f-status-model §20 t-37)
   createdAt       DateTime      @default(now())
 
   members         ProjectMember[]
@@ -126,6 +127,7 @@ model ProjectMember {
 model Feature {
   id            String               @id @default(cuid())
   projectId     String
+  number        Int? // project-wide stable ordinal, rendered "§N"; assigned via Project.featureCounter (f-status-model §20 t-37)
   slug          String? // authored short human key (e.g. "f-mcp"); per-project unique (f-refs)
   title         String
   description   String?              @db.Text

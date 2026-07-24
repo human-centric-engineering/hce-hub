@@ -37,11 +37,14 @@ const ctx = (userId: string | null = USER) => ({ userId, agentId: 'a1' });
 const txFeatureCreate = vi.fn();
 const txFeatureDepCreateMany = vi.fn();
 const txIndicativeCreateMany = vi.fn();
-function mockTxCreatesFeature(id = 'f-new', slug: string | null = null) {
+const txProjectUpdate = vi.fn();
+function mockTxCreatesFeature(id = 'f-new', slug: string | null = null, nextNumber = 3) {
   txFeatureCreate.mockResolvedValue({ id, slug });
+  txProjectUpdate.mockResolvedValue({ featureCounter: nextNumber });
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
+      project: { update: txProjectUpdate },
       feature: { create: txFeatureCreate },
       featureDependency: { createMany: txFeatureDepCreateMany },
       indicativeTask: { createMany: txIndicativeCreateMany },
@@ -102,7 +105,7 @@ describe('create_feature happy path', () => {
   });
 
   it('creates an unowned, indicative feature and journals feature_created', async () => {
-    mockTxCreatesFeature('f-new', 'f-mcp');
+    mockTxCreatesFeature('f-new', 'f-mcp', 3);
 
     const r = await cap.execute(
       { projectId: 'p1', title: 'MCP server', slug: 'f-mcp', doneWhen: 'tools list' },
@@ -137,6 +140,22 @@ describe('create_feature happy path', () => {
     expect(emit.mock.calls[0][0].feature.create).toBe(txFeatureCreate);
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'feature.create', entityId: 'f-new' })
+    );
+  });
+
+  it("bumps the project featureCounter and stamps the returned value as the new feature's number (f-status-model §20 t-37)", async () => {
+    mockTxCreatesFeature('f-new', 'f-mcp', 9);
+
+    await cap.execute({ projectId: 'p1', title: 'MCP server', slug: 'f-mcp' }, ctx());
+
+    expect(txProjectUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'p1' },
+        data: { featureCounter: { increment: 1 } },
+      })
+    );
+    expect(txFeatureCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ number: 9 }) })
     );
   });
 
