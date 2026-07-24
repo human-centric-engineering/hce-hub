@@ -23,6 +23,8 @@ import { CreateFeatureCapability } from '@/lib/projects/capabilities/create-feat
 import { ClaimFeatureCapability } from '@/lib/projects/capabilities/claim-feature';
 import { PlanFeatureCapability } from '@/lib/projects/capabilities/plan-feature';
 import { ShipFeatureCapability } from '@/lib/projects/capabilities/ship-feature';
+import { StartTaskCapability } from '@/lib/projects/capabilities/start-task';
+import { CompleteTaskCapability } from '@/lib/projects/capabilities/complete-task';
 
 export function initAppCapabilities(): void {
   // HCE Hub coordination tools (f-hub-capabilities). Each also needs an active
@@ -33,9 +35,14 @@ export function initAppCapabilities(): void {
   registerAppCapability(new NextTaskCapability()); // read (t-1)
   registerAppCapability(new CreateTaskCapability()); // write (t-2)
   registerAppCapability(new FlagHelpWantedCapability()); // write (t-2)
-  // Task progress (Start/Complete) is not a capability — you claim features, not
-  // tasks (f-status-model §20); the sheet drives `startTask`/`completeTask` over
-  // the consumer route. `claim_task` + `add_backlog` were retired here.
+  // Task lifecycle (f-status-model §20 t-38) — MCP-first: the primary way a repo
+  // session says "I'm starting/completing this task". You *claim* features (which
+  // cascades ownership to their tasks); these move an individual task through its
+  // lifecycle. They wrap the same `startTask`/`completeTask` core the task-sheet
+  // button and (later) f-github-sync also drive. `claim_task` + `add_backlog` (the
+  // retired per-task pull) are gone; take_over_task (reassign) comes later.
+  registerAppCapability(new StartTaskCapability()); // claimed → active (member)
+  registerAppCapability(new CompleteTaskCapability()); // → merged (member)
   // Journal authored verbs (f-journal §17 t-2) — free-text narrative into the
   // ProjectEvent stream; membership-scoped via the resolveEventScope funnel.
   registerAppCapability(new RecordDecisionCapability());

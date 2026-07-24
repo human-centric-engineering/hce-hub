@@ -152,6 +152,16 @@ All membership-scoped through the [[f-access]] funnel, audited, **MCP-exposed** 
 ungated; an **agent**-initiated call is wrapped by that agent's approval flow (Decisions log
 2026-07-13).
 
+> **MCP-first (principle, owner 2026-07-24).** Just as Sunrise is API-first, the Hub's
+> coordination surface is **MCP-first**: the verbs here are the *primary* workflow — the way a
+> repo Claude session drives delivery — and the UI is a convenience layer *over the same core*,
+> added for the parts a human wants to click (ultimately most of them). So **every** state
+> transition a human can do in the UI must also be an MCP verb. In particular, *claiming* is
+> feature-level (you claim a feature; ownership cascades to its tasks — the correction to the
+> original per-task-claim spec), but a task's own **lifecycle transitions are first-class MCP
+> verbs**: `start_task` ("I'm on it"), `complete_task` ("done"), and later `take_over_task`
+> ("taking this over"). "You claim features, not tasks" governs *ownership*, never the lifecycle.
+
 **Feature lifecycle** (new):
 - `create_feature(projectId, { title, slug?, description?, doneWhen?, references?, indicativeTasks?, dependsOn? })` —
   author one feature at `planningStage: indicative` (the high-level sketch). **The manual
@@ -168,9 +178,12 @@ ungated; an **agent**-initiated call is wrapped by that agent's approval flow (D
   summary, the close-out narrative). Soft-warns if tasks aren't all merged (done-when is
   human-judged, never a hard block — §5).
 
-**Task lifecycle:** `create_task` / `add_backlog` (exist), `claim_task` (exists),
-`link_pr(taskId, url)` (`→ in_pr`, emit `task_pr_linked`), `complete_task(taskId)`
-(`→ merged`, emit `task_merged` — later automatable by `f-github-sync`'s webhook).
+**Task lifecycle** (updated for the [[f-status-model]] §20 model — `claimed | active | merged`):
+`create_task` (exists; `add_backlog`/`claim_task` retired — a task is born `claimed`),
+`start_task(taskId)` (`claimed → active`, emit `task_claimed`) and `complete_task(taskId)`
+(`→ merged`, emit `task_merged` — later automatable by `f-github-sync`'s webhook) — **both built
+as MCP verbs, §20 t-38**. `take_over_task` (reassign an active task) + a `link_pr`/`set_pr` verb
+come later (PR-linking is a §14 `f-github-sync` gap today).
 
 **Narrative:** `record_decision({ featureId?, title, body, category? })` — a `decision`
 event, feature- or project-scoped; `add_note(...)` — a `note`.
