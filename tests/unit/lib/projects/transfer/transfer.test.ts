@@ -139,6 +139,7 @@ function makeSnapshot(): ProjectTransfer {
         knowledgeTagId: null,
         sidekickAgentId: null,
         taskCounter: 2,
+        featureCounter: 2,
         createdAt: '2026-07-01T00:00:00.000Z',
       },
       members: [
@@ -154,6 +155,7 @@ function makeSnapshot(): ProjectTransfer {
         {
           id: 'feat-a',
           projectId: 'p1',
+          number: 1,
           slug: 'f-a',
           title: 'Feature A',
           description: 'first',
@@ -168,6 +170,7 @@ function makeSnapshot(): ProjectTransfer {
         {
           id: 'feat-b',
           projectId: 'p1',
+          number: 2,
           slug: 'f-b',
           title: 'Feature B',
           description: null,
@@ -277,6 +280,11 @@ describe('project transfer round-trip', () => {
     expect(out.data.events.find((e) => e.id === 'ev-2')?.createdAt).toBe(
       '2020-01-02T03:04:05.000Z'
     );
+    // Explicit: the stable Feature.number + Project.featureCounter round-trip too
+    // (f-status-model §20 t-37) — not just implicitly via the `toEqual` above.
+    expect(out.data.project.featureCounter).toBe(2);
+    expect(out.data.features.find((f) => f.id === 'feat-a')?.number).toBe(1);
+    expect(out.data.features.find((f) => f.id === 'feat-b')?.number).toBe(2);
   });
 
   it('re-import is idempotent — second run updates in place, export still matches', async () => {
@@ -350,6 +358,7 @@ describe('project transfer round-trip', () => {
       knowledgeTagId: null,
       sidekickAgentId: null,
       taskCounter: 1,
+      featureCounter: 1,
       createdAt: d('2026-07-01T00:00:00.000Z'),
     });
     store.tables.projectMember.set('m2', {
@@ -362,6 +371,7 @@ describe('project transfer round-trip', () => {
     store.tables.feature.set('feat-x', {
       id: 'feat-x',
       projectId: 'p2',
+      number: 1,
       slug: null,
       title: 'X',
       description: null,

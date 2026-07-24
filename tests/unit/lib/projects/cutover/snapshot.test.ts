@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildCutoverSnapshot } from '@/lib/projects/cutover/snapshot';
 import { projectTransferSchema } from '@/lib/projects/transfer/schema';
-import { buildCutoverPlan, featureId } from '@/lib/projects/cutover/plan-data';
+import { buildCutoverPlan, featureId, planNumber } from '@/lib/projects/cutover/plan-data';
 import { buildCutoverHistory } from '@/lib/projects/cutover/history-data';
 
 const LEAD = 'user-lead-1';
@@ -34,6 +34,21 @@ describe('buildCutoverSnapshot', () => {
     expect(owner('f-selfhost-cutover')).toBe(LEAD);
     expect(owner('f-github-sync')).toBeNull(); // unowned backlog
     expect(owner('f-sidekick')).toBeNull();
+  });
+
+  it('numbers each feature by its AUTHORED plan §N (not build-order) and sets featureCounter to the count (f-status-model §20 t-37)', () => {
+    // The number is the plan §N via `planNumber(slug)`, so a build-order feature
+    // like f-refs (16th in the plan, shipped early) reads 16, not its array index.
+    for (const f of snap.data.features) {
+      if (f.slug) expect(f.number).toBe(planNumber(f.slug));
+    }
+    // f-refs is the canonical proof: §16 despite being the 12th row in build order.
+    const refs = snap.data.features.find((f) => f.slug === 'f-refs');
+    expect(refs?.number).toBe(16);
+    // The set of numbers is exactly 1..N (a permutation — no gaps, no dupes).
+    const numbers = snap.data.features.map((f) => f.number).sort((a, b) => (a ?? 0) - (b ?? 0));
+    expect(numbers).toEqual(Array.from({ length: snap.data.features.length }, (_, i) => i + 1));
+    expect(snap.data.project.featureCounter).toBe(snap.data.features.length);
   });
 
   it('numbers tasks 1..N project-wide in feature order', () => {

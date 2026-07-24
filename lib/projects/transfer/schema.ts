@@ -63,6 +63,7 @@ export const projectSnapshot = z.object({
   knowledgeTagId: z.string().nullable(),
   sidekickAgentId: z.string().nullable(),
   taskCounter: z.number().int(),
+  featureCounter: z.number().int(),
   createdAt: isoDate,
 });
 
@@ -87,6 +88,7 @@ export const memberSnapshot = z.object({
 export const featureSnapshot = z.object({
   id: z.string(),
   projectId: z.string(),
+  number: z.number().int().nullable(),
   slug: z.string().nullable(),
   title: z.string(),
   description: z.string().nullable(),
@@ -162,7 +164,10 @@ export const eventSnapshot = z.object({
 
 /**
  * Schema version history:
- *   v1 — the initial project-graph snapshot (§19 t-1).
+ *   v1 — the initial project-graph snapshot (§19 t-1). Pre-prod value-set/field
+ *        corrections stay v1 (no persisted snapshot exists to migrate): the
+ *        f-status-model §20 `taskStatus` collapse (t-36) and its `Project.featureCounter`
+ *        + `Feature.number` fields (t-37).
  */
 export const projectTransferSchema = z.object({
   schemaVersion: z.literal(1),

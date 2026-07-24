@@ -7,8 +7,18 @@
  */
 import type { UserRef } from '@/components/hub/projects/types';
 
-/** Stored feature status (`Feature.status`). */
-export type FeatureStatus = 'planning' | 'in_flight' | 'blocked' | 'shipped';
+/**
+ * A feature's *effective*, readiness-derived status (`computeFeatureStatus`) — the
+ * stored `planning` never reaches the client; it resolves to `available`/`blocked`
+ * from dependency readiness (f-status-model §20 t-37).
+ */
+export type FeatureStatus = 'available' | 'blocked' | 'in_flight' | 'shipped';
+
+/** A dependency a `blocked` feature is waiting on (not yet shipped). */
+export interface WaitingOnRef {
+  slug: string | null;
+  title: string;
+}
 
 /** Feature depth axis (`Feature.planningStage`) — sketch vs materialised tasks. */
 export type FeaturePlanningStage = 'indicative' | 'planned';
@@ -46,11 +56,15 @@ export interface PlanTask {
 /** A feature row in the Plan view. */
 export interface PlanFeature {
   id: string;
+  /** Project-wide stable ordinal, rendered `§N`; `null` until assigned. */
+  number: number | null;
   /** Authored short key (`f-mcp`); `null` until authored. */
   slug: string | null;
   title: string;
   description: string | null;
   status: FeatureStatus;
+  /** For a `blocked` feature: the unshipped dependencies it's waiting on. */
+  waitingOn: WaitingOnRef[];
   /** Depth axis: `indicative` sketch vs `planned` (real tasks) — §18. */
   planningStage: FeaturePlanningStage;
   helpWanted: boolean;
