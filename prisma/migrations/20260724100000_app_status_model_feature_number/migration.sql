@@ -12,9 +12,12 @@ ALTER TABLE "app_project" ADD COLUMN "featureCounter" INTEGER NOT NULL DEFAULT 0
 -- AlterTable
 ALTER TABLE "app_feature" ADD COLUMN "number" INTEGER;
 
--- Backfill Feature.number: a per-project 1-indexed rank by creation order — the
--- stable ordinal a feature keeps for life (= its plan.md §N). `id` breaks any
--- createdAt tie so the backfill is deterministic.
+-- Backfill Feature.number: a per-project 1-indexed rank by creation order. This
+-- is a GENERIC best-effort default for pre-existing rows — for the Hub itself the
+-- AUTHORED plan §N is carried by `import-plan` (cutover snapshot `planNumber`), not
+-- recovered here: features authored in one batch share a `createdAt`, so this rank
+-- can't reconstruct §N for them (the `id` tiebreak only makes it deterministic, not
+-- correct). A createdAt-distinct project (features authored one at a time) ranks fine.
 WITH ranked AS (
   SELECT
     "id",
