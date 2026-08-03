@@ -12,6 +12,7 @@ import type { FeatureDetailDTO } from '@/components/hub/projects/feature-view/ty
 const detail = (over: Partial<FeatureDetailDTO> = {}): FeatureDetailDTO => ({
   id: 'f1',
   projectId: 'p1',
+  projectSlug: 'hce-hub',
   projectName: 'HCE Hub',
   number: 3,
   slug: 'f-mcp',
@@ -50,12 +51,21 @@ describe('FeatureView', () => {
     expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
   });
 
-  it('links a valid reference target and the project back-link', () => {
+  it('links a valid reference target and the project back-link (by slug, §19)', () => {
     render(<FeatureView feature={detail()} />);
     expect(screen.getByRole('link', { name: 'spec' })).toHaveAttribute(
       'href',
       'https://example.com/spec'
     );
+    // The project back-link prefers the shareable slug over the cuid.
+    expect(screen.getByRole('link', { name: /HCE Hub/ })).toHaveAttribute(
+      'href',
+      '/projects/hce-hub'
+    );
+  });
+
+  it('falls back to the cuid projectId for the back-link when there is no project slug', () => {
+    render(<FeatureView feature={detail({ projectSlug: null })} />);
     expect(screen.getByRole('link', { name: /HCE Hub/ })).toHaveAttribute('href', '/projects/p1');
   });
 
@@ -69,8 +79,16 @@ describe('FeatureView', () => {
     expect(screen.queryByRole('link', { name: 'sneaky' })).not.toBeInTheDocument();
   });
 
-  it('links each dependency to its feature page', () => {
+  it('links each dependency to its feature page using the project slug (§19)', () => {
     render(<FeatureView feature={detail()} />);
+    expect(screen.getByRole('link', { name: 'f-access' })).toHaveAttribute(
+      'href',
+      '/projects/hce-hub/features/f-access'
+    );
+  });
+
+  it('falls back to the cuid projectId in dependency links when there is no project slug', () => {
+    render(<FeatureView feature={detail({ projectSlug: null })} />);
     expect(screen.getByRole('link', { name: 'f-access' })).toHaveAttribute(
       'href',
       '/projects/p1/features/f-access'

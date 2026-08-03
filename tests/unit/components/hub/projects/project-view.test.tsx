@@ -7,6 +7,7 @@ import type { ProjectBoardDTO } from '@/components/hub/projects/board/types';
 
 const planFixture: ProjectPlanDTO = {
   projectId: 'p1',
+  projectSlug: 'hce-hub',
   features: [
     {
       id: 'f1',
@@ -45,6 +46,7 @@ const boardFixture: ProjectBoardDTO = {
 function makeProject(overrides: Partial<ProjectViewDTO> = {}): ProjectViewDTO {
   return {
     id: 'p1',
+    slug: 'hce-hub',
     name: 'HCE Hub',
     hostPlatform: 'sunrise',
     status: 'active',
@@ -125,5 +127,25 @@ describe('ProjectView', () => {
     }));
     render(<ProjectView project={makeProject({ members, memberCount: 8 })} activeTab="plan" />);
     expect(screen.getByText('+3')).toBeInTheDocument(); // 8 - 5 shown
+  });
+
+  it('links the tabs off the project slug when present (§19)', () => {
+    render(<ProjectView project={makeProject()} activeTab="plan" />);
+    expect(screen.getByRole('tab', { name: 'Plan' })).toHaveAttribute(
+      'href',
+      '/projects/hce-hub?view=plan'
+    );
+    expect(screen.getByRole('tab', { name: 'Board' })).toHaveAttribute(
+      'href',
+      '/projects/hce-hub?view=board'
+    );
+  });
+
+  it('falls back to the cuid id for tab links when the project has no slug', () => {
+    render(<ProjectView project={makeProject({ slug: null })} activeTab="plan" />);
+    expect(screen.getByRole('tab', { name: 'Plan' })).toHaveAttribute(
+      'href',
+      '/projects/p1?view=plan'
+    );
   });
 });

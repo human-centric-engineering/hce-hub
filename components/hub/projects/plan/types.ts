@@ -80,5 +80,7 @@ export interface PlanFeature {
 /** The `/plan` payload — features already in `planOrder()`. */
 export interface ProjectPlanDTO {
   projectId: string;
+  /** The project's slug (`hce-hub`) — feature-page links prefer it; `null` → falls back to `projectId`. */
+  projectSlug: string | null;
   features: PlanFeature[];
 }

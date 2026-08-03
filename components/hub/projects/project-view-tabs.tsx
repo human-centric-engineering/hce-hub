@@ -14,7 +14,14 @@ const TABS: { key: ProjectTab; label: string }[] = [
  * with `f-plan-view` (§09), `f-board-view` (§10), and the journal Log
  * (`f-journal` §17).
  */
-export function ProjectViewTabs({ projectId, active }: { projectId: string; active: ProjectTab }) {
+export function ProjectViewTabs({
+  projectRef,
+  active,
+}: {
+  /** The project's slug (or cuid) for the tab URLs — the shareable ref, not the API id. */
+  projectRef: string;
+  active: ProjectTab;
+}) {
   return (
     <div className="border-b" role="tablist" aria-label="Project view">
       {TABS.map((t) => (
@@ -22,7 +29,7 @@ export function ProjectViewTabs({ projectId, active }: { projectId: string; acti
           key={t.key}
           role="tab"
           aria-selected={active === t.key}
-          href={`/projects/${projectId}?view=${t.key}`}
+          href={`/projects/${projectRef}?view=${t.key}`}
           className={cn(
             'focus-visible:ring-ring -mb-px inline-block border-b-2 px-4 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none',
             active === t.key

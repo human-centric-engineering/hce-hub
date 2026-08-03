@@ -11,7 +11,7 @@ export function ProjectCard({ project }: { project: ProjectCardData }) {
 
   return (
     <Link
-      href={`/projects/${project.id}`}
+      href={`/projects/${project.slug ?? project.id}`}
       className="bg-card hover:border-foreground/20 focus-visible:ring-ring block rounded-xl border p-5 transition-colors focus-visible:ring-2 focus-visible:outline-none"
     >
       <div className="flex items-start justify-between gap-3">

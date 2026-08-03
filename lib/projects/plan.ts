@@ -88,6 +88,8 @@ export interface PlanFeatureView {
 /** The Plan view's payload — features already in `planOrder()`. */
 export interface ProjectPlan {
   projectId: string;
+  /** The project's slug (`hce-hub`) — feature-page links prefer it; `null` → falls back to `projectId`. */
+  projectSlug: string | null;
   features: PlanFeatureView[];
 }
 
@@ -96,8 +98,9 @@ export interface ProjectPlan {
  * non-member or unknown id, via `getAccessibleProject`.
  */
 export async function getProjectPlan(userId: string, projectId: string): Promise<ProjectPlan> {
-  // Access decides visibility (deny ≡ 404). We only need the id it confirms.
-  await getAccessibleProject(userId, projectId);
+  // Access decides visibility (deny ≡ 404); reuse the project for its slug (the
+  // feature-page links the Plan renders prefer the human slug — §19).
+  const project = await getAccessibleProject(userId, projectId);
 
   const features = await prisma.feature.findMany({
     where: { projectId },
@@ -214,6 +217,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
 
   return {
     projectId,
+    projectSlug: project.slug,
     // `planOrder` returns the same ids it was given → every lookup resolves.
     features: ordered.map((o) => viewById.get(o.id)!),
   };

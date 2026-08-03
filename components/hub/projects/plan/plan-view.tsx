@@ -41,6 +41,8 @@ export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
             key={feature.id}
             feature={feature}
             projectId={plan.projectId}
+            // Slug for the feature-page link (the human URL), cuid for API calls.
+            projectRef={plan.projectSlug ?? plan.projectId}
             // Stable project-wide number (its plan §N), not the row position —
             // the list sorts by `planOrder` but each feature keeps its identity.
             ordinal={feature.number ?? i + 1}

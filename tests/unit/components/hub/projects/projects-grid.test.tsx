@@ -5,6 +5,7 @@ import type { ProjectCard } from '@/components/hub/projects/types';
 
 const card: ProjectCard = {
   id: 'p1',
+  slug: 'hce-hub',
   name: 'HCE Hub',
   hostPlatform: 'sunrise',
   status: 'active',

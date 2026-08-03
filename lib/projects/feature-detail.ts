@@ -9,8 +9,9 @@
  * The feature-scoped journal is a separate client read (`/events?featureId=`).
  *
  * Membership is the [[f-access]] funnel's: the load goes through
- * `getAccessibleProject` (a non-member or unknown project → 404, never 403), and
- * the feature is then resolved **scoped to that project** by its human `slug`
+ * `getAccessibleProjectByRef` (the project segment is a slug or cuid; a non-member
+ * or unknown project → 404, never 403), and the feature is then resolved
+ * **scoped to that project's canonical id** by its human `slug`
  * (the shareable key) or its cuid `id` — so a feature in another project, an
  * unknown slug, or a slug from a project the caller can't see is a 404 too. Task
  * status is the shared `computeEffectiveStatus` (so the page never diverges from
@@ -20,7 +21,7 @@
 import type { FeaturePlanningStage, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { NotFoundError } from '@/lib/api/errors';
-import { getAccessibleProject } from '@/lib/projects/access';
+import { getAccessibleProjectByRef } from '@/lib/projects/access';
 import { computeEffectiveStatus, type EffectiveStatus } from '@/lib/projects/task-status';
 import {
   computeFeatureStatus,
@@ -71,6 +72,8 @@ export interface FeatureDetailIndicativeTask {
 export interface FeatureDetail {
   id: string;
   projectId: string;
+  /** The parent project's slug (`hce-hub`) — for the shareable back-link; `null` → falls back to `projectId`. */
+  projectSlug: string | null;
   /** The parent project's name — for the feature page's breadcrumb + header. */
   projectName: string;
   /** Project-wide stable ordinal, rendered `§N`; `null` until assigned. */
@@ -119,25 +122,28 @@ function toReferences(json: Prisma.JsonValue | null): FeatureReference[] {
 }
 
 /**
- * Load one feature's full detail for a member of `projectId`, resolved by `key`
- * (its `slug` or cuid `id`). Throws `NotFoundError` (→ 404) for a non-member/
- * unknown project (via `getAccessibleProject`) or a feature that doesn't exist /
+ * Load one feature's full detail for a member of the project named by `projectRef`
+ * (its `slug` or cuid `id`), the feature itself resolved by `key` (its `slug` or
+ * cuid `id`). Throws `NotFoundError` (→ 404) for a non-member/unknown project (via
+ * `getAccessibleProjectByRef`) or a feature that doesn't exist /
  * lives in another project (the `projectId` scope + slug/id match).
  */
 export async function getFeatureDetail(
   userId: string,
-  projectId: string,
+  projectRef: string,
   key: string
 ): Promise<FeatureDetail> {
-  // Access decides visibility (deny ≡ 404); reuse the loaded project for its name
-  // (the feature page's breadcrumb + header) instead of a second read.
-  const project = await getAccessibleProject(userId, projectId);
+  // Access decides visibility (deny ≡ 404). The project segment is a **slug or
+  // cuid** (a feature page URL prefers the human project slug — §19), resolved to
+  // the canonical project here; reuse it for its name/slug (breadcrumb + header)
+  // instead of a second read.
+  const project = await getAccessibleProjectByRef(userId, projectRef);
 
-  // Scoped to the confirmed project and matched by slug OR cuid — a feature from
-  // another project (even one the caller belongs to) is not found here, and the
-  // human slug is the shareable key.
+  // Scoped to the confirmed project's **canonical id** and matched by slug OR cuid
+  // — a feature from another project (even one the caller belongs to) is not found
+  // here, and the human slug is the shareable key.
   const feature = await prisma.feature.findFirst({
-    where: { projectId, OR: [{ slug: key }, { id: key }] },
+    where: { projectId: project.id, OR: [{ slug: key }, { id: key }] },
     select: {
       id: true,
       number: true,
@@ -195,7 +201,8 @@ export async function getFeatureDetail(
 
   return {
     id: feature.id,
-    projectId,
+    projectId: project.id,
+    projectSlug: project.slug,
     projectName: project.name,
     number: feature.number,
     slug: feature.slug,

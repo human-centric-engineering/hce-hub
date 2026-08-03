@@ -1,22 +1,24 @@
 /**
  * Tests for `lib/projects/feature-detail.ts` — the feature-page read. Pins the
- * funnel (deny ≡ 404 via getAccessibleProject), slug-or-cuid resolution scoped to
- * the project (cross-project 404), the references JSON guard, effective task
- * status, null owner/claimer/assignee (never a deref), and the indicative sketch.
+ * funnel (deny ≡ 404 via getAccessibleProjectByRef), slug-or-cuid resolution of
+ * BOTH the project segment and the feature key, scoping to the resolved
+ * project's canonical id (cross-project 404), the references JSON guard,
+ * effective task status, null owner/claimer/assignee (never a deref), and the
+ * indicative sketch.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@/lib/projects/access', () => ({ getAccessibleProject: vi.fn() }));
+vi.mock('@/lib/projects/access', () => ({ getAccessibleProjectByRef: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({ prisma: { feature: { findFirst: vi.fn() } } }));
 vi.mock('@/lib/projects/user-refs', () => ({ fetchUsers: vi.fn() }));
 
-const { getAccessibleProject } = await import('@/lib/projects/access');
+const { getAccessibleProjectByRef } = await import('@/lib/projects/access');
 const { prisma } = await import('@/lib/db/client');
 const { fetchUsers } = await import('@/lib/projects/user-refs');
 const { NotFoundError } = await import('@/lib/api/errors');
 const { getFeatureDetail } = await import('@/lib/projects/feature-detail');
 
-const access = getAccessibleProject as ReturnType<typeof vi.fn>;
+const access = getAccessibleProjectByRef as ReturnType<typeof vi.fn>;
 const featureFindFirst = prisma.feature.findFirst as ReturnType<typeof vi.fn>;
 const users = fetchUsers as ReturnType<typeof vi.fn>;
 
@@ -42,7 +44,7 @@ const featureRow = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  access.mockResolvedValue({ id: 'p1', name: 'HCE Hub' });
+  access.mockResolvedValue({ id: 'p1', slug: 'hce-hub', name: 'HCE Hub' });
   users.mockResolvedValue(new Map());
 });
 
@@ -67,6 +69,27 @@ describe('getFeatureDetail funnel', () => {
       })
     );
   });
+
+  it('resolves a SLUG project segment via getAccessibleProjectByRef, scoping the feature lookup to the resolved canonical id (§19)', async () => {
+    access.mockResolvedValue({ id: 'p1', slug: 'hce-hub', name: 'HCE Hub' });
+    featureFindFirst.mockResolvedValue(featureRow());
+    await getFeatureDetail(USER, 'hce-hub', 'f-mcp');
+    // The raw ref goes to the access funnel; the feature query is scoped to the
+    // *resolved* canonical id, never the raw (possibly slug) ref.
+    expect(access).toHaveBeenCalledWith(USER, 'hce-hub');
+    expect(featureFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { projectId: 'p1', OR: [{ slug: 'f-mcp' }, { id: 'f-mcp' }] },
+      })
+    );
+  });
+
+  it('returns the canonical project.id as projectId, not the raw slug ref', async () => {
+    access.mockResolvedValue({ id: 'p1', slug: 'hce-hub', name: 'HCE Hub' });
+    featureFindFirst.mockResolvedValue(featureRow());
+    const detail = await getFeatureDetail(USER, 'hce-hub', 'f-mcp');
+    expect(detail.projectId).toBe('p1');
+  });
 });
 
 describe('getFeatureDetail mapping', () => {
@@ -79,11 +102,19 @@ describe('getFeatureDetail mapping', () => {
     );
     const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
     expect(detail.projectName).toBe('HCE Hub');
+    expect(detail.projectSlug).toBe('hce-hub');
     expect(detail.slug).toBe('f-mcp');
     expect(detail.planningStage).toBe('indicative');
     expect(detail.references).toEqual([{ label: 'spec', target: 'https://x.io' }]);
     expect(detail.indicativeTasks).toEqual([{ id: 'i1', order: 0, text: 'draft schema' }]);
     expect(detail.owner).toBeNull();
+  });
+
+  it('returns a null projectSlug when the project has none (back-link falls back to projectId)', async () => {
+    access.mockResolvedValue({ id: 'p1', slug: null, name: 'HCE Hub' });
+    featureFindFirst.mockResolvedValue(featureRow());
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.projectSlug).toBeNull();
   });
 
   it('drops malformed reference entries (JSON guard)', async () => {

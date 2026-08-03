@@ -14,6 +14,8 @@ export interface UserRef {
 /** A card in the member's projects grid (`GET /api/v1/projects`). */
 export interface ProjectCard {
   id: string;
+  /** Shareable human URL key (`hce-hub`); `null` until authored — links fall back to `id`. */
+  slug: string | null;
   name: string;
   hostPlatform: string;
   status: 'planning' | 'active' | 'archived';
@@ -32,6 +34,8 @@ export interface ProjectMemberRef {
 /** The project-view header (`GET /api/v1/projects/:id`). */
 export interface ProjectViewDTO {
   id: string;
+  /** Shareable human URL key (`hce-hub`); `null` until authored — links fall back to `id`. */
+  slug: string | null;
   name: string;
   hostPlatform: string;
   status: 'planning' | 'active' | 'archived';
