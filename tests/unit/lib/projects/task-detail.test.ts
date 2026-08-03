@@ -54,6 +54,7 @@ const taskRow = (o: Record<string, unknown> = {}) => ({
   number: 1,
   title: 'Do the thing',
   description: 'desc',
+  doneWhen: null,
   status: 'claimed',
   prUrl: null,
   filesScope: [],
@@ -88,16 +89,18 @@ describe('getTaskDetail', () => {
     );
   });
 
-  it('returns real content (description + file scope) and raw prUrl', async () => {
+  it('returns real content (description + done-when + file scope) and raw prUrl', async () => {
     taskFindFirst.mockResolvedValue(
       taskRow({
         description: 'implement the widget',
+        doneWhen: 'the widget renders',
         filesScope: ['lib/a.ts', 'lib/b.ts'],
         prUrl: 'javascript:alert(1)', // returned RAW — the component sanitizes
       })
     );
     const detail = await getTaskDetail('u1', 'p1', 't1');
     expect(detail.description).toBe('implement the widget');
+    expect(detail.doneWhen).toBe('the widget renders'); // selected + surfaced (§21 t-c)
     expect(detail.filesScope).toEqual(['lib/a.ts', 'lib/b.ts']);
     expect(detail.prUrl).toBe('javascript:alert(1)');
   });

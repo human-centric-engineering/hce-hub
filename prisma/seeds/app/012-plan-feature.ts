@@ -24,6 +24,10 @@ export const planFeatureFunctionDefinition = {
               description: 'A batch-local id (e.g. "t1") other tasks in this batch can depend on.',
             },
             title: { type: 'string', description: 'The task title.' },
+            description: {
+              type: 'string',
+              description: 'Full task detail (markdown) — what to build and why.',
+            },
             doneWhen: { type: 'string', description: "The task's acceptance contract." },
             filesScope: {
               type: 'array',

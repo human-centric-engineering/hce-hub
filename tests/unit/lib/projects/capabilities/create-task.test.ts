@@ -161,6 +161,37 @@ describe('create_task happy path (no deps)', () => {
     );
   });
 
+  it('persists description + doneWhen when supplied (f-authoring-fidelity §21 t-a)', async () => {
+    mockTxCreatesTask('t-1', 'claimed');
+    await cap.execute(
+      {
+        featureId: 'f1',
+        title: 'Ship it',
+        description: '## Detail\nBuild the thing.',
+        doneWhen: 'the thing builds',
+      },
+      ctx()
+    );
+    expect(txTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          description: '## Detail\nBuild the thing.',
+          doneWhen: 'the thing builds',
+        }),
+      })
+    );
+  });
+
+  it('defaults description + doneWhen to null when omitted', async () => {
+    mockTxCreatesTask('t-1', 'claimed');
+    await cap.execute({ featureId: 'f1', title: 'Ship it' }, ctx());
+    expect(txTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ description: null, doneWhen: null }),
+      })
+    );
+  });
+
   it('journals a task_created event inside the same transaction', async () => {
     mockTxCreatesTask('t-1', 'claimed');
     await cap.execute({ featureId: 'f1', title: 'Ship it' }, ctx());
@@ -180,14 +211,37 @@ describe('create_task happy path (no deps)', () => {
 });
 
 describe('create_task redactProvenance', () => {
-  it('redacts the free-text title on the durable provenance row', () => {
-    const args = { featureId: 'f1', title: 'secret title text', filesScope: ['api/'] };
+  it('redacts the free-text title / description / doneWhen on the durable provenance row', () => {
+    const args = {
+      featureId: 'f1',
+      title: 'secret title text',
+      description: 'secret description body',
+      doneWhen: 'secret acceptance contract',
+      filesScope: ['api/'],
+    };
     const out = cap.redactProvenance(args, {
       success: true,
       data: { taskId: 't', status: 'claimed', featureId: 'f1' },
     });
-    const redactedArgs = out.args as { title: string; featureId: string };
+    const redactedArgs = out.args as {
+      title: string;
+      description: string;
+      doneWhen: string;
+      featureId: string;
+    };
     expect(redactedArgs.featureId).toBe('f1');
     expect(redactedArgs.title).not.toContain('secret title text');
+    expect(redactedArgs.description).not.toContain('secret description body');
+    expect(redactedArgs.doneWhen).not.toContain('secret acceptance contract');
+  });
+
+  it('leaves description / doneWhen null in provenance when omitted', () => {
+    const out = cap.redactProvenance(
+      { featureId: 'f1', title: 't' },
+      { success: true, data: { taskId: 't', status: 'claimed', featureId: 'f1' } }
+    );
+    const redactedArgs = out.args as { description: string | null; doneWhen: string | null };
+    expect(redactedArgs.description).toBeNull();
+    expect(redactedArgs.doneWhen).toBeNull();
   });
 });

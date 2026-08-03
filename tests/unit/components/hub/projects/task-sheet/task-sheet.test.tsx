@@ -25,6 +25,7 @@ const detail = (over: Partial<TaskDetailDTO> = {}): TaskDetailDTO => ({
   number: 6,
   title: 'Wire the streaming handler',
   description: null,
+  doneWhen: null,
   status: 'claimed',
   prUrl: null,
   filesScope: [],
@@ -229,6 +230,24 @@ describe('TaskSheet body + actions', () => {
     expect(await screen.findByText('No description yet.')).toBeInTheDocument();
     expect(screen.getByText('No files declared.')).toBeInTheDocument();
     expect(screen.getByText('none — ready to start')).toBeInTheDocument();
+  });
+
+  it('renders the Done-when section + the description as markdown (§21 t-c)', async () => {
+    renderSheet({
+      detail: detail({ description: 'Build the **widget**.', doneWhen: 'it **renders**' }),
+    });
+    await screen.findByText('Wire the streaming handler');
+    // The description renders as markdown — bold becomes <strong>, no literal ** leaks.
+    expect(screen.getByText('widget').tagName).toBe('STRONG');
+    // A "Done when" section appears with its (markdown) contract.
+    expect(screen.getByText('Done when')).toBeInTheDocument();
+    expect(screen.getByText('renders').tagName).toBe('STRONG');
+  });
+
+  it('omits the Done-when section when the task has none', async () => {
+    renderSheet({ detail: detail({ doneWhen: null }) });
+    await screen.findByText('Wire the streaming handler');
+    expect(screen.queryByText('Done when')).not.toBeInTheDocument();
   });
 
   it('jumps to a dependency task when its row is clicked', async () => {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Link2, Play, Check, GitPullRequest, MessageSquare, Lock, Folder } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
+import { Markdown } from '@/components/hub/markdown';
 import { useSidekick } from '@/components/hub/sidekick-context';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
 import { TaskActivity } from '@/components/hub/projects/task-sheet/task-activity';
@@ -439,21 +440,29 @@ export function TaskSheet({
           )}
           {detail && (
             <div className="flex flex-col gap-6">
-              {/* Description */}
+              {/* Description — rendered as markdown (f-authoring-fidelity §21 t-c). */}
               <section className="flex flex-col gap-1.5">
                 <div className={sectionLabel} style={{ color: 'var(--ink-faint)' }}>
                   What this is
                 </div>
                 {detail.description ? (
-                  <p className="text-[13px] leading-relaxed" style={{ color: 'var(--ink-soft)' }}>
-                    {detail.description}
-                  </p>
+                  <Markdown content={detail.description} className="text-[13px]" />
                 ) : (
                   <p className="text-[13px]" style={{ color: 'var(--ink-faint)' }}>
                     No description yet.
                   </p>
                 )}
               </section>
+
+              {/* Done when — the acceptance contract (f-authoring-fidelity §21 t-c). */}
+              {detail.doneWhen && (
+                <section className="flex flex-col gap-1.5">
+                  <div className={sectionLabel} style={{ color: 'var(--ink-faint)' }}>
+                    Done when
+                  </div>
+                  <Markdown content={detail.doneWhen} className="text-[13px]" />
+                </section>
+              )}
 
               {/* Files in scope */}
               <section className="flex flex-col gap-1.5">

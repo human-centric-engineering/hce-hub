@@ -42,6 +42,11 @@ const taskSpec = z.object({
     .max(64)
     .describe('A batch-local id (e.g. "t1") other tasks in this batch can depend on.'),
   title: z.string().min(1).max(500).describe('The task title.'),
+  description: z
+    .string()
+    .max(10000)
+    .optional()
+    .describe('Full task detail (markdown) — what to build and why.'),
   doneWhen: z.string().max(2000).optional().describe("The task's acceptance contract."),
   filesScope: z
     .array(z.string())
@@ -89,6 +94,10 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
                   'A batch-local id (e.g. "t1") other tasks in this batch can depend on.',
               },
               title: { type: 'string', description: 'The task title.' },
+              description: {
+                type: 'string',
+                description: 'Full task detail (markdown) — what to build and why.',
+              },
               doneWhen: { type: 'string', description: "The task's acceptance contract." },
               filesScope: {
                 type: 'array',
@@ -117,14 +126,17 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
     args: Args,
     result: CapabilityResult<Data>
   ): { args: unknown; resultPreview: string } {
-    // Mask each task's free-text title + done-when; keep the structural fields
-    // (ref / deps / filesScope) that carry no user content.
+    // Mask each task's free-text title + description + done-when; keep the
+    // structural fields (ref / deps / filesScope) that carry no user content.
     return {
       args: {
         featureId: args.featureId,
         tasks: args.tasks.map((t) => ({
           ref: t.ref,
           title: redactedString(`title (${t.title.length} chars)`),
+          description: t.description
+            ? redactedString(`description (${t.description.length} chars)`)
+            : null,
           doneWhen: t.doneWhen ? redactedString(`doneWhen (${t.doneWhen.length} chars)`) : null,
           filesScope: t.filesScope ?? [],
           dependsOn: t.dependsOn ?? [],
@@ -216,6 +228,7 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
             featureId: args.featureId,
             number: taskCounter,
             title: spec.title,
+            description: spec.description ?? null,
             doneWhen: spec.doneWhen ?? null,
             // Born `claimed`, owned by the feature owner — you claim features, not
             // tasks (f-status-model §20). Both the assignee ("this is yours") and

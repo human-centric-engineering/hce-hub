@@ -164,7 +164,13 @@ describe('plan_feature materialise', () => {
       {
         featureId: 'f1',
         tasks: [
-          { ref: 't1', title: 'schema', doneWhen: 'migrates', filesScope: ['prisma/'] },
+          {
+            ref: 't1',
+            title: 'schema',
+            description: '## Schema\nAdd the column.',
+            doneWhen: 'migrates',
+            filesScope: ['prisma/'],
+          },
           { ref: 't2', title: 'verbs', dependsOn: ['t1', 'existing-1'] },
         ],
       },
@@ -180,6 +186,7 @@ describe('plan_feature materialise', () => {
 
     // First task: numbered from the counter, born claimed and owned by the
     // feature owner (f-status-model §20 — both assignee and held-by claimant).
+    // Carries its full detail (description + doneWhen — f-authoring-fidelity §21 t-a).
     expect(txTaskCreate).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -187,12 +194,20 @@ describe('plan_feature materialise', () => {
           featureId: 'f1',
           number: 11,
           title: 'schema',
+          description: '## Schema\nAdd the column.',
           doneWhen: 'migrates',
           status: 'claimed',
           filesScope: ['prisma/'],
           assigneeUserId: USER,
           claimedByUserId: USER,
         }),
+      })
+    );
+    // The detail-less second task defaults both to null.
+    expect(txTaskCreate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({ description: null, doneWhen: null }),
       })
     );
     // Deps resolve batch ref t1 → id-0, existing id passes through.
@@ -272,11 +287,19 @@ describe('plan_feature materialise', () => {
 });
 
 describe('plan_feature redactProvenance', () => {
-  it('masks each task title + done-when, keeps structural fields', () => {
+  it('masks each task title + description + done-when, keeps structural fields', () => {
     const out = cap.redactProvenance(
       {
         featureId: 'f1',
-        tasks: [{ ref: 't1', title: 'secret title', doneWhen: 'secret done', dependsOn: ['t0'] }],
+        tasks: [
+          {
+            ref: 't1',
+            title: 'secret title',
+            description: 'secret detail body',
+            doneWhen: 'secret done',
+            dependsOn: ['t0'],
+          },
+        ],
       },
       { success: true, data: { featureId: 'f1', taskIds: ['x'], planningStage: 'planned' } }
     );
@@ -284,6 +307,17 @@ describe('plan_feature redactProvenance', () => {
     expect(tasks[0].ref).toBe('t1');
     expect(tasks[0].dependsOn).toEqual(['t0']);
     expect(String(tasks[0].title)).not.toContain('secret title');
+    expect(String(tasks[0].description)).not.toContain('secret detail body');
     expect(String(tasks[0].doneWhen)).not.toContain('secret done');
+  });
+
+  it('leaves description / doneWhen null in provenance when omitted', () => {
+    const out = cap.redactProvenance(
+      { featureId: 'f1', tasks: [{ ref: 't1', title: 'a' }] },
+      { success: true, data: { featureId: 'f1', taskIds: ['x'], planningStage: 'planned' } }
+    );
+    const tasks = (out.args as { tasks: Record<string, unknown>[] }).tasks;
+    expect(tasks[0].description).toBeNull();
+    expect(tasks[0].doneWhen).toBeNull();
   });
 });
