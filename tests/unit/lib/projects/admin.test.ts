@@ -149,10 +149,25 @@ describe('createProject — slug derivation (§19 t-3)', () => {
     expect(tx.project.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ slug: 'custom-slug' }) })
     );
-    // A supplied slug is checked for collision, not re-derived from the name.
-    expect(projFindFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { slug: 'custom-slug' } })
+    // An explicit slug is used verbatim and NOT auto-deduped — a collision is a
+    // 409 (via @unique/P2002), matching updateProject; only derived slugs suffix.
+    expect(projFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('409s an explicit slug that collides (does not silently suffix it)', async () => {
+    userFindUnique.mockResolvedValue({ id: 'lead_1' });
+    runTx.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: '7' })
     );
+
+    await expect(
+      createProject(
+        { name: 'Anything', hostPlatform: 'sunrise', leadUserId: 'lead_1', slug: 'taken-slug' },
+        actor
+      )
+    ).rejects.toThrow(/already exists/i);
+    // The explicit slug was never dedup-probed — it went straight to the write.
+    expect(projFindFirst).not.toHaveBeenCalled();
   });
 
   it('appends -2 on a slug collision', async () => {

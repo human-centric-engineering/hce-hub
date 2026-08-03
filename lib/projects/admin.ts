@@ -202,11 +202,13 @@ export async function createProject(
 ): Promise<Project> {
   await requireUserExists(input.leadUserId);
 
-  // Resolve the shareable slug: an explicit one, else derived from the name
-  // (§19 t-3). Globally unique — de-duplicate with a numeric suffix on collision
-  // (the `@unique` index is the race backstop). A name with no alphanumerics
-  // derives to `null` → the project keeps cuid-only URLs.
-  const slug = await uniqueProjectSlug(input.slug ?? slugifyProjectName(input.name));
+  // Resolve the shareable slug (§19 t-3). An **explicit** slug is used as-is — a
+  // collision is a 409 (via the `@unique`/P2002 catch), matching `updateProject`;
+  // we don't silently hand back a slug the admin didn't ask for. A **derived**
+  // slug auto-dedupes with a numeric suffix (nobody typed it, so a suffix is
+  // fine). A name with no alphanumerics derives to `null` → cuid-only URLs.
+  const slug =
+    input.slug !== undefined ? input.slug : await uniqueProjectSlug(slugifyProjectName(input.name));
 
   const project = await executeTransaction(async (tx) => {
     const created = await tx.project.create({
