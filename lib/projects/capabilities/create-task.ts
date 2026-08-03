@@ -35,6 +35,12 @@ import { redactedString } from '@/lib/security/redact';
 const schema = z.object({
   featureId: z.string().describe('The feature to add the task to.'),
   title: z.string().min(1).max(500).describe('Short description of the task.'),
+  description: z
+    .string()
+    .max(10000)
+    .optional()
+    .describe('Full task detail (markdown) — what to build and why.'),
+  doneWhen: z.string().max(2000).optional().describe("The task's acceptance contract."),
   filesScope: z
     .array(z.string())
     .optional()
@@ -60,12 +66,17 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'create_task',
     description:
-      "Add a task to a feature you own (or lead): declares its title, optional file scope, and optional dependencies on existing tasks. The task is born claimed and owned by the feature owner (blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks.",
+      "Add a task to a feature you own (or lead): declares its title, optional description + acceptance contract (done-when), optional file scope, and optional dependencies on existing tasks. The task is born claimed and owned by the feature owner (blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks.",
     parameters: {
       type: 'object',
       properties: {
         featureId: { type: 'string', description: 'The feature to add the task to.' },
         title: { type: 'string', description: 'Short description of the task.' },
+        description: {
+          type: 'string',
+          description: 'Full task detail (markdown) — what to build and why.',
+        },
+        doneWhen: { type: 'string', description: "The task's acceptance contract." },
         filesScope: {
           type: 'array',
           items: { type: 'string' },
@@ -87,11 +98,18 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
     args: Args,
     result: CapabilityResult<Data>
   ): { args: unknown; resultPreview: string } {
-    // Redact the free-text title on the durable, broadly-visible message
-    // provenance row; the ids/paths are not sensitive. The result carries no
-    // free text (just ids + status).
+    // Redact the free-text title / description / done-when on the durable,
+    // broadly-visible message provenance row; the ids/paths are not sensitive.
+    // The result carries no free text (just ids + status).
     return {
-      args: { ...args, title: redactedString(`title (${args.title.length} chars)`) },
+      args: {
+        ...args,
+        title: redactedString(`title (${args.title.length} chars)`),
+        description: args.description
+          ? redactedString(`description (${args.description.length} chars)`)
+          : null,
+        doneWhen: args.doneWhen ? redactedString(`doneWhen (${args.doneWhen.length} chars)`) : null,
+      },
       resultPreview: JSON.stringify(result),
     };
   }
@@ -139,6 +157,8 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           featureId: args.featureId,
           number: taskCounter,
           title: args.title,
+          description: args.description ?? null,
+          doneWhen: args.doneWhen ?? null,
           // Born `claimed`, owned by the feature owner (f-status-model §20); its
           // effective status is `blocked` until its dependencies merge.
           status: 'claimed',
