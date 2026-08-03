@@ -12,6 +12,7 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   number: null,
   slug: null,
   title: 'Feature one',
+  summary: null,
   description: null,
   status: 'available',
   waitingOn: [],

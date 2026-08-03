@@ -117,9 +117,11 @@ export function FeatureRow({
             {feature.helpWanted && <HelpWantedPill />}
             {isIndicative && <IndicativeChip />}
           </Link>
-          {feature.description && (
+          {/* Plain one-line summary in the row; falls back to the (plain-rendered)
+              description until a summary is authored (§21 t-d). */}
+          {(feature.summary ?? feature.description) && (
             <span className="mt-1 block text-[13px]" style={{ color: 'var(--ink-mute)' }}>
-              {feature.description}
+              {feature.summary ?? feature.description}
             </span>
           )}
           {feature.dependsOn.length > 0 && (

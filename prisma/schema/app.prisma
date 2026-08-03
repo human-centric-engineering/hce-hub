@@ -131,7 +131,8 @@ model Feature {
   number        Int? // project-wide stable ordinal, rendered "§N"; assigned via Project.featureCounter (f-status-model §20 t-37)
   slug          String? // authored short human key (e.g. "f-mcp"); per-project unique (f-refs)
   title         String
-  description   String?              @db.Text
+  summary       String?              @db.Text // short plain one-liner for the plan row / compact views (f-authoring-fidelity §21 t-d)
+  description   String?              @db.Text // full markdown detail, rendered on the feature page
   doneWhen      String?              @db.Text // the feature's definition of done (f-feature-planning §18)
   references    Json? // cross-refs: a list of { label, target }, rendered as ref-chips (§18)
   ownerUserId   String? // hand-FK → "user" · ON DELETE SET NULL (retain the feature)

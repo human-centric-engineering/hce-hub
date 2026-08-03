@@ -63,6 +63,8 @@ export interface PlanFeatureView {
   /** Authored short key (`f-mcp`); `null` until authored. */
   slug: string | null;
   title: string;
+  /** Short plain one-liner for the row; falls back to `description` when unset (§21 t-d). */
+  summary: string | null;
   description: string | null;
   /** Readiness-derived status (via `computeFeatureStatus`) — never raw `planning`. */
   status: EffectiveFeatureStatus;
@@ -110,6 +112,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
       number: true,
       slug: true,
       title: true,
+      summary: true,
       description: true,
       status: true,
       planningStage: true,
@@ -185,6 +188,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
       number: f.number,
       slug: f.slug,
       title: f.title,
+      summary: f.summary,
       description: f.description,
       status: effectiveStatus,
       waitingOn,

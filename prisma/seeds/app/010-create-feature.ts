@@ -15,6 +15,10 @@ export const createFeatureFunctionDefinition = {
     properties: {
       projectId: { type: 'string', description: 'The project to create the feature in.' },
       title: { type: 'string', description: 'The feature title.' },
+      summary: {
+        type: 'string',
+        description: 'Short plain one-line summary for the plan row / compact views.',
+      },
       slug: {
         type: 'string',
         description: 'Optional short human key, unique within the project (e.g. "f-mcp").',

@@ -18,6 +18,7 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   number: null,
   slug: null,
   title: 'Feature one',
+  summary: null,
   description: null,
   status: 'available',
   waitingOn: [],
@@ -65,6 +66,17 @@ describe('FeatureRow', () => {
       feature: feature({ owner: { id: 'u1', name: 'Ada Lovelace', email: 'a@x.io', image: null } }),
     });
     expect(screen.getByText('Ada')).toBeInTheDocument();
+  });
+
+  it('shows the plain summary in the row when authored (§21 t-d)', () => {
+    renderRow({ feature: feature({ summary: 'the short version', description: 'the long one' }) });
+    expect(screen.getByText('the short version')).toBeInTheDocument();
+    expect(screen.queryByText('the long one')).not.toBeInTheDocument();
+  });
+
+  it('falls back to the description in the row until a summary is authored', () => {
+    renderRow({ feature: feature({ summary: null, description: 'the long one' }) });
+    expect(screen.getByText('the long one')).toBeInTheDocument();
   });
 
   it('links the slug/title to the feature page (slug key when authored)', () => {

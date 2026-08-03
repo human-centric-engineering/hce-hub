@@ -1,5 +1,7 @@
-'use client';
-
+// No `'use client'` — this wrapper is stateless, so it renders server-side in the
+// feature page (a server component) AND works inside the client task sheet. Keeping
+// it shared avoids shipping JS to render otherwise-static authored content.
+//
 // SECURITY: react-markdown escapes raw HTML by default, and only `remark-gfm`
 // (a parser-level extension — tables, task lists, strikethrough, autolinks; no
 // raw HTML) is enabled, so a raw `<script>` in the source renders as inert text.

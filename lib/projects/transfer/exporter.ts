@@ -106,6 +106,7 @@ export async function exportProject(
       number: f.number,
       slug: f.slug,
       title: f.title,
+      summary: f.summary,
       description: f.description,
       doneWhen: f.doneWhen,
       references: f.references ?? null,

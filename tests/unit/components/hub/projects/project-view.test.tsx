@@ -14,6 +14,7 @@ const planFixture: ProjectPlanDTO = {
       number: 1,
       slug: null,
       title: 'A real feature',
+      summary: null,
       description: null,
       status: 'available',
       waitingOn: [],
