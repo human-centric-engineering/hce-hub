@@ -182,12 +182,12 @@ describe('getFeatureDetail — readiness-derived feature status (f-status-model 
     expect(detail.waitingOn).toEqual([{ slug: 'f-dep', title: 'Dependency' }]);
   });
 
-  it('passes in_flight/shipped status through unchanged, ignoring un-started deps', async () => {
+  it('keeps in_flight/shipped through unchanged when there is nothing outstanding', async () => {
     featureFindFirst.mockResolvedValueOnce(
       featureRow({
         status: 'in_flight',
         dependencies: [
-          { dependsOn: { id: 'd1', slug: null, title: 'Un-started dep', status: 'planning' } },
+          { dependsOn: { id: 'd1', slug: 'f-done', title: 'Shipped dep', status: 'shipped' } },
         ],
       })
     );
@@ -198,6 +198,20 @@ describe('getFeatureDetail — readiness-derived feature status (f-status-model 
     featureFindFirst.mockResolvedValueOnce(featureRow({ status: 'shipped' }));
     detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
     expect(detail.status).toBe('shipped');
+  });
+
+  it('blocks a CLAIMED (in_flight) feature with an unshipped dep — the t-39 overlay', async () => {
+    featureFindFirst.mockResolvedValueOnce(
+      featureRow({
+        status: 'in_flight',
+        dependencies: [
+          { dependsOn: { id: 'd1', slug: 'f-dep', title: 'Un-started dep', status: 'planning' } },
+        ],
+      })
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.status).toBe('blocked');
+    expect(detail.waitingOn).toEqual([{ slug: 'f-dep', title: 'Un-started dep' }]);
   });
 
   it('never surfaces the raw stored "planning" status on the payload', async () => {

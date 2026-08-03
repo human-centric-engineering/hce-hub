@@ -320,9 +320,9 @@ describe('getProjectPlan — readiness-derived feature status (f-status-model §
     expect(b.waitingOn).toEqual([{ slug: 'f-a', title: 'Foundation' }]);
   });
 
-  it("passes an in_flight (claimed) feature's status through unchanged, ignoring its deps", async () => {
+  it('keeps an in_flight (claimed) feature in_flight when its deps are all shipped', async () => {
     featureFindMany.mockResolvedValue([
-      row({ id: 'a', title: 'Dep', status: 'planning' }), // still un-started, would block
+      row({ id: 'a', title: 'Dep', status: 'shipped' }),
       row({
         id: 'b',
         title: 'Claimed feature',
@@ -334,6 +334,23 @@ describe('getProjectPlan — readiness-derived feature status (f-status-model §
     const b = plan.features.find((f) => f.id === 'b')!;
     expect(b.status).toBe('in_flight');
     expect(b.waitingOn).toEqual([]);
+  });
+
+  it('blocks a CLAIMED (in_flight) feature with an unshipped dep — the t-39 overlay', async () => {
+    // A part-built feature can become blocked mid-flight (owner 2026-08-03).
+    featureFindMany.mockResolvedValue([
+      row({ id: 'a', slug: 'f-dep', title: 'Dep', status: 'in_flight' }), // unshipped
+      row({
+        id: 'b',
+        title: 'Claimed feature',
+        status: 'in_flight',
+        dependencies: [{ dependsOnFeatureId: 'a' }],
+      }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    const b = plan.features.find((f) => f.id === 'b')!;
+    expect(b.status).toBe('blocked');
+    expect(b.waitingOn).toEqual([{ slug: 'f-dep', title: 'Dep' }]);
   });
 
   it("passes a shipped feature's status through unchanged", async () => {

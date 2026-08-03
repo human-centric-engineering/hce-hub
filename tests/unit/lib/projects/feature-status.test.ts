@@ -1,5 +1,5 @@
 /**
- * Unit: readiness-derived feature status (f-status-model §20 t-37).
+ * Unit: readiness-derived feature status (f-status-model §20 t-37; blocked overlay t-39).
  * @see lib/projects/feature-status.ts
  */
 import { describe, it, expect } from 'vitest';
@@ -27,11 +27,26 @@ describe('computeFeatureStatus', () => {
     });
   });
 
-  it('passes in_flight straight through (a claimed feature is being worked)', () => {
-    expect(computeFeatureStatus('in_flight', [dep('planning')])).toEqual({
+  it('a claimed (in_flight) feature with every dependency shipped is in_flight', () => {
+    expect(computeFeatureStatus('in_flight', [dep('shipped'), dep('shipped')])).toEqual({
       status: 'in_flight',
       waitingOn: [],
     });
+  });
+
+  it('a claimed (in_flight) feature with no dependencies is in_flight', () => {
+    expect(computeFeatureStatus('in_flight', [])).toEqual({ status: 'in_flight', waitingOn: [] });
+  });
+
+  it('the blocked overlay (t-39): a CLAIMED feature with an unshipped dep is blocked, naming it', () => {
+    // Product work isn't linear — a claimed, part-built feature can discover it
+    // needs another piece shipped first and become blocked mid-flight (owner).
+    const result = computeFeatureStatus('in_flight', [
+      dep('shipped', 'f-done'),
+      dep('in_flight', 'f-wip'),
+    ]);
+    expect(result.status).toBe('blocked');
+    expect(result.waitingOn.map((w) => w.slug)).toEqual(['f-wip']);
   });
 
   it('a not-started feature with no dependencies is available', () => {
