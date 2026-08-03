@@ -367,4 +367,39 @@ describe('TaskSheet body + actions', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Ask sidekick/ }));
     expect(setSidekickOpen).toHaveBeenCalledWith(true);
   });
+
+  // Link-PR affordance (f-github-sync §14 t-1): a member can attach/replace a
+  // task's PR URL via an inline form that POSTs to `.../set-pr` (no status change).
+  it('links a PR via the inline form — POSTs the URL to set-pr', async () => {
+    renderSheet({
+      detail: detail({ status: 'claimed', prUrl: null }),
+      action: { taskId: 't1', status: 'claimed', warnings: [] },
+    });
+    // With no PR yet, the affordance reads "Link PR".
+    fireEvent.click(await screen.findByRole('button', { name: 'Link PR' }));
+    fireEvent.change(screen.getByLabelText('Pull request URL'), {
+      target: { value: 'https://github.com/o/r/pull/7' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/v1/projects/p1/tasks/t1/set-pr',
+        expect.objectContaining({ method: 'POST' })
+      )
+    );
+    const call = vi
+      .mocked(fetch)
+      .mock.calls.find((c) => typeof c[0] === 'string' && c[0].endsWith('/set-pr'));
+    expect(JSON.parse((call![1] as { body: string }).body).prUrl).toBe(
+      'https://github.com/o/r/pull/7'
+    );
+  });
+
+  it('shows Open PR + an Edit PR affordance when a PR is already linked', async () => {
+    renderSheet({ detail: detail({ prUrl: 'https://github.com/o/r/pull/9' }) });
+    await screen.findByText('Wire the streaming handler');
+    expect(screen.getByRole('button', { name: 'Edit PR' })).toBeInTheDocument();
+    expect(screen.getByRole('link')).toHaveAttribute('href', 'https://github.com/o/r/pull/9');
+  });
 });

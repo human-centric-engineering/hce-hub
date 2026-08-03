@@ -20,7 +20,7 @@ const { prisma } = await import('@/lib/db/client');
 const { logAdminAction } = await import('@/lib/orchestration/audit/admin-audit-logger');
 const { recordProjectEvent } = await import('@/lib/projects/project-event');
 const { NotFoundError } = await import('@/lib/api/errors');
-const { startTask, completeTask } = await import('@/lib/projects/task-actions');
+const { startTask, completeTask, setTaskPr } = await import('@/lib/projects/task-actions');
 
 const resolveTask = resolveTaskAccess as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
@@ -194,5 +194,51 @@ describe('completeTask', () => {
     expect(r).toEqual({ taskId: 't1', status: 'merged', warnings: [] });
     expect(runTx).not.toHaveBeenCalled();
     expect(emit).not.toHaveBeenCalled();
+  });
+});
+
+describe('setTaskPr', () => {
+  const PR = 'https://github.com/org/repo/pull/42';
+
+  it('throws NotFoundError for a non-member / unknown task (no write)', async () => {
+    resolveTask.mockResolvedValue({ ok: false, reason: 'not_found' });
+    await expect(setTaskPr(USER, 't1', PR)).rejects.toBeInstanceOf(NotFoundError);
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundError when the task is outside expectedProjectId (id-swap guard)', async () => {
+    resolveTask.mockResolvedValue(granted({ projectId: 'other' }));
+    await expect(setTaskPr(USER, 't1', PR, 'p1')).rejects.toBeInstanceOf(NotFoundError);
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('sets Task.prUrl + emits task_pr_linked, WITHOUT changing status', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed' }));
+
+    const r = await setTaskPr(USER, 't1', PR, 'p1');
+
+    // Status is unchanged — linking a PR is not merging it.
+    expect(r).toEqual({ taskId: 't1', status: 'claimed', warnings: [] });
+    expect(txTaskUpdate).toHaveBeenCalledWith({ where: { id: 't1' }, data: { prUrl: PR } });
+    // No status field in the update, and no claim lifecycle touched.
+    expect(txTaskUpdate.mock.calls[0][0].data.status).toBeUndefined();
+    expect(txClaimUpdateMany).not.toHaveBeenCalled();
+    expect(txClaimCreate).not.toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ taskId: 't1', kind: 'task_pr_linked', actorUserId: USER })
+    );
+    // Atomicity: the event uses the same tx client that updated the task.
+    expect(emit.mock.calls[0][0].task.update).toBe(txTaskUpdate);
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'task.set_pr', entityId: 't1' })
+    );
+  });
+
+  it('preserves the task status for an active or merged task (link is orthogonal to lifecycle)', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'merged' }));
+    const r = await setTaskPr(USER, 't1', PR);
+    expect(r.status).toBe('merged');
+    expect(txTaskUpdate).toHaveBeenCalledWith({ where: { id: 't1' }, data: { prUrl: PR } });
   });
 });

@@ -188,3 +188,50 @@ export async function completeTask(
 
   return { taskId: task.taskId, status: 'merged', warnings: [] };
 }
+
+/**
+ * Link `taskId` to its pull request (`f-github-sync` §14 t-1). Sets/replaces
+ * `Task.prUrl` and journals `task_pr_linked` — **no status change**: linking a PR
+ * is not merging it, and the 3-state model (`claimed | active | merged`) has no
+ * in-PR state. This is the "PR-URL declared by human in v1" groundwork; the §14
+ * webhook later drives `completeTask` (not this) on the *merge* event, so the two
+ * paths never fight over status.
+ *
+ * `prUrl` is expected already-validated (a member-facing http(s) URL — the
+ * `set_pr` capability's Zod boundary does that; the render layer also
+ * `sanitizeUrl`s it). Funnel-scoped like its siblings: a non-member, or a task in
+ * a project the caller can't see, is `NotFoundError` (→ 404, never 403); an
+ * optional `expectedProjectId` rejects a cross-project id-swap. Returns the
+ * task's *unchanged* status so callers can confirm the no-op on the lifecycle.
+ */
+export async function setTaskPr(
+  userId: string,
+  taskId: string,
+  prUrl: string,
+  expectedProjectId?: string
+): Promise<TaskActionResult> {
+  const task = await resolveScoped(userId, taskId, expectedProjectId);
+
+  await executeTransaction(async (tx) => {
+    await tx.task.update({ where: { id: task.taskId }, data: { prUrl } });
+    await recordProjectEvent(tx, {
+      projectId: task.projectId,
+      featureId: task.featureId,
+      taskId: task.taskId,
+      kind: 'task_pr_linked',
+      actorUserId: userId,
+      metadata: { prUrl },
+    });
+  });
+
+  logAdminAction({
+    userId,
+    action: 'task.set_pr',
+    entityType: 'app_task',
+    entityId: task.taskId,
+    metadata: { prUrl },
+  });
+
+  // No status change — return the current stored status so the no-op is explicit.
+  return { taskId: task.taskId, status: task.status, warnings: [] };
+}

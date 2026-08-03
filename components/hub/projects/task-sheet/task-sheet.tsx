@@ -108,6 +108,12 @@ export function TaskSheet({
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState(false);
   const [warnings, setWarnings] = useState<CollisionWarning[]>([]);
+  // Link-PR affordance (f-github-sync §14 t-1): a small inline form to set/replace
+  // the task's PR URL. The primary path is MCP `set_pr`; this is the UI convenience.
+  const [prFormOpen, setPrFormOpen] = useState(false);
+  const [prInput, setPrInput] = useState('');
+  const [savingPr, setSavingPr] = useState(false);
+  const [prError, setPrError] = useState(false);
   const asideRef = useRef<HTMLElement>(null);
 
   // Slide in on mount.
@@ -129,6 +135,8 @@ export function TaskSheet({
     setWarnings([]);
     setActionError(false);
     setDetail(null);
+    setPrFormOpen(false);
+    setPrError(false);
   }, [path]);
 
   // Fetch the detail on task change / after a claim (reloadKey). `detail` is left
@@ -189,6 +197,35 @@ export function TaskSheet({
     },
     [path]
   );
+
+  // Open the inline PR form, prefilled with the current link (Edit) or empty (Link).
+  const openPrForm = useCallback(() => {
+    setPrInput(detail?.prUrl ?? '');
+    setPrError(false);
+    setPrFormOpen(true);
+  }, [detail?.prUrl]);
+
+  // Link/replace the task's PR via the shared setTaskPr core. No status change.
+  const submitPr = useCallback(async () => {
+    const url = prInput.trim();
+    if (!url) return;
+    setSavingPr(true);
+    setPrError(false);
+    try {
+      const res = await fetch(`${path}/set-pr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prUrl: url }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setPrFormOpen(false);
+      setReloadKey((k) => k + 1); // refetch so the PR link reflects the change
+    } catch {
+      setPrError(true); // surface it (never a silent write failure) — retryable
+    } finally {
+      setSavingPr(false);
+    }
+  }, [path, prInput]);
 
   const ref = detail?.number != null ? `t-${detail.number}` : `t-${taskId.slice(-4)}`;
   const status = detail ? taskStatus(detail.status) : null;
@@ -315,10 +352,58 @@ export function TaskSheet({
                     {prLabel(prUrl)}
                   </a>
                 )}
+                {!prFormOpen && (
+                  <ActionButton icon={GitPullRequest} onClick={openPrForm}>
+                    {prUrl ? 'Edit PR' : 'Link PR'}
+                  </ActionButton>
+                )}
                 <ActionButton icon={MessageSquare} onClick={() => setSidekickOpen(true)}>
                   Ask sidekick
                 </ActionButton>
               </div>
+
+              {/* Inline set/replace-PR form (f-github-sync §14 t-1). Sets Task.prUrl
+                  via the shared core — no status change. */}
+              {prFormOpen && (
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="url"
+                    value={prInput}
+                    onChange={(e) => setPrInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void submitPr();
+                      if (e.key === 'Escape') setPrFormOpen(false);
+                    }}
+                    placeholder="https://github.com/…/pull/123"
+                    aria-label="Pull request URL"
+                    ref={(el) => el?.focus()}
+                    className="min-w-0 flex-1 rounded-md border bg-transparent px-2 py-1.5 font-mono text-xs outline-none focus:border-[var(--accent)]"
+                    style={{ borderColor: 'var(--line)' }}
+                  />
+                  <ActionButton
+                    icon={Check}
+                    primary
+                    onClick={() => void submitPr()}
+                    disabled={savingPr || !prInput.trim()}
+                  >
+                    {savingPr ? 'Saving…' : 'Save'}
+                  </ActionButton>
+                  <button
+                    type="button"
+                    onClick={() => setPrFormOpen(false)}
+                    className="text-xs"
+                    style={{ color: 'var(--ink-mute)' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              {prError && (
+                <p className="text-xs" style={{ color: 'var(--signal-blocked)' }}>
+                  Couldn&rsquo;t link the PR — check the URL and try again.
+                </p>
+              )}
 
               {actionError && (
                 <p className="text-xs" style={{ color: 'var(--signal-blocked)' }}>
