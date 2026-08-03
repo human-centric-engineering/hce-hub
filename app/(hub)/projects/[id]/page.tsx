@@ -72,13 +72,16 @@ export default async function ProjectViewPage({
   // client-fetched (filterable), so it needs no server payload here.
   const activeTab: ProjectTab = view === 'board' ? 'board' : view === 'log' ? 'log' : 'plan';
 
-  // Fetch the header and the active tab's payload in parallel — no waterfall.
-  const [project, plan, board] = await Promise.all([
-    getProject(id),
-    activeTab === 'plan' ? getPlan(id) : Promise.resolve(null),
-    activeTab === 'board' ? getBoard(id) : Promise.resolve(null),
-  ]);
+  // `id` may be a slug (the shareable URL) or a cuid. Resolve the header first —
+  // it accepts both and returns the canonical cuid — then drive the cuid-only
+  // sub-routes off `project.id` (§19 t-3). One extra hop when the URL is a slug.
+  const project = await getProject(id);
   if (!project) notFound();
+
+  const [plan, board] = await Promise.all([
+    activeTab === 'plan' ? getPlan(project.id) : Promise.resolve(null),
+    activeTab === 'board' ? getBoard(project.id) : Promise.resolve(null),
+  ]);
 
   return <ProjectView project={project} activeTab={activeTab} plan={plan} board={board} />;
 }

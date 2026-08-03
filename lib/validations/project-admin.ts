@@ -19,12 +19,28 @@ const hostPlatformSchema = z.string().trim().refine(isKnownHostPlatform, 'Unknow
 
 const repoUrlsSchema = z.array(urlSchema).max(20, 'At most 20 repo URLs');
 
+/**
+ * A project slug — the shareable, durable URL key (`hce-hub`): lowercase words
+ * joined by single hyphens, globally unique (§19 t-3). Optional on create
+ * (derived from the name when omitted); explicit-only on update (never re-derived
+ * on rename — a shared link must not break).
+ */
+const projectSlugSchema = z
+  .string()
+  .trim()
+  .regex(
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+    'lowercase words separated by single hyphens (e.g. "hce-hub")'
+  )
+  .max(100);
+
 /** POST /admin/projects — create a project (and seat its lead + knowledge tag). */
 export const createProjectSchema = z.object({
   name: nonEmptyStringSchema.max(200, 'Name too long'),
   hostPlatform: hostPlatformSchema,
   /** The lead is seated as a `role='lead'` ProjectMember row transactionally. */
   leadUserId: nonEmptyStringSchema,
+  slug: projectSlugSchema.optional(),
   repoUrls: repoUrlsSchema.optional(),
   status: projectStatusSchema.optional(),
 });
@@ -39,6 +55,8 @@ export const updateProjectSchema = z
     name: nonEmptyStringSchema.max(200, 'Name too long'),
     hostPlatform: hostPlatformSchema,
     leadUserId: nonEmptyStringSchema,
+    // Explicit only — a `name` change never re-derives the slug (§19 t-3).
+    slug: projectSlugSchema,
     repoUrls: repoUrlsSchema,
     status: projectStatusSchema,
   })

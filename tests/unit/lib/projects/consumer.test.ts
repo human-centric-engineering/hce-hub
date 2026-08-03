@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 vi.mock('@/lib/projects/access', () => ({
   accessibleProjectIds: vi.fn(),
-  getAccessibleProject: vi.fn(),
+  getAccessibleProjectByRef: vi.fn(),
 }));
 vi.mock('@/lib/db/client', () => ({
   prisma: {
@@ -22,13 +22,13 @@ vi.mock('@/lib/db/client', () => ({
   },
 }));
 
-const { accessibleProjectIds, getAccessibleProject } = await import('@/lib/projects/access');
+const { accessibleProjectIds, getAccessibleProjectByRef } = await import('@/lib/projects/access');
 const { prisma } = await import('@/lib/db/client');
 const { NotFoundError } = await import('@/lib/api/errors');
 const { listProjectsForUser, getProjectForUser } = await import('@/lib/projects/consumer');
 
 const scopeIds = accessibleProjectIds as ReturnType<typeof vi.fn>;
-const getAccessible = getAccessibleProject as ReturnType<typeof vi.fn>;
+const getAccessible = getAccessibleProjectByRef as ReturnType<typeof vi.fn>;
 const projFindMany = prisma.project.findMany as ReturnType<typeof vi.fn>;
 const memberFindMany = prisma.projectMember.findMany as ReturnType<typeof vi.fn>;
 const featureCount = prisma.feature.count as ReturnType<typeof vi.fn>;
@@ -143,5 +143,31 @@ describe('getProjectForUser', () => {
     getAccessible.mockRejectedValue(new NotFoundError('Project p9 not found'));
     await expect(getProjectForUser('u1', 'p9')).rejects.toBeInstanceOf(NotFoundError);
     expect(memberFindMany).not.toHaveBeenCalled();
+  });
+
+  it('resolves a slug ref and keys sub-queries off the canonical id, not the raw ref', async () => {
+    getAccessible.mockResolvedValue({
+      id: 'cuid-p1',
+      name: 'Hub',
+      hostPlatform: 'sunrise',
+      status: 'active',
+      repoUrls: [],
+      leadUserId: null,
+      createdAt: new Date(),
+    });
+    memberFindMany.mockResolvedValue([]);
+    featureCount.mockResolvedValue(0);
+    taskCount.mockResolvedValue(0);
+    userFindMany.mockResolvedValue([]);
+
+    const view = await getProjectForUser('u1', 'hce-hub');
+
+    expect(getAccessible).toHaveBeenCalledWith('u1', 'hce-hub');
+    expect(view.id).toBe('cuid-p1');
+    expect(memberFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { projectId: 'cuid-p1' } })
+    );
+    expect(featureCount).toHaveBeenCalledWith({ where: { projectId: 'cuid-p1' } });
+    expect(taskCount).toHaveBeenCalledWith({ where: { feature: { projectId: 'cuid-p1' } } });
   });
 });
