@@ -23,6 +23,7 @@ export interface TaskDetailDTO {
   number: number | null;
   title: string;
   description: string | null;
+  doneWhen: string | null;
   status: TaskEffectiveStatus;
   prUrl: string | null;
   filesScope: string[];

@@ -43,6 +43,8 @@ export interface TaskDetail {
   number: number | null;
   title: string;
   description: string | null;
+  /** The task's acceptance contract (markdown); `null` until authored. */
+  doneWhen: string | null;
   /** Effective status (drives the pill + the Start/Complete/Blocked action state). */
   status: EffectiveStatus;
   /** Raw human-declared PR url — sanitized at render (see file header). */
@@ -121,6 +123,7 @@ export async function getTaskDetail(
       number: true,
       title: true,
       description: true,
+      doneWhen: true,
       status: true,
       prUrl: true,
       filesScope: true,
@@ -143,6 +146,7 @@ export async function getTaskDetail(
     number: task.number,
     title: task.title,
     description: task.description,
+    doneWhen: task.doneWhen,
     status: computeEffectiveStatus(
       task,
       task.dependencies.map((d) => d.dependsOn)
