@@ -49,11 +49,12 @@ describe('GET /api/v1/projects/:id/features/:key', () => {
     expect((await featureGet(req(), params())).status).toBe(404);
   });
 
-  it('400s an invalid (non-cuid) project id before touching the loader', async () => {
+  it('passes a slug project segment through to the loader — no 400 (§19: the project segment is a slug OR cuid)', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
-    const res = await featureGet(req(), params('not-a-cuid'));
-    expect(res.status).toBe(400);
-    expect(detailMock).not.toHaveBeenCalled();
+    detailMock.mockResolvedValue({ id: 'f1', slug: 'f-mcp', title: 'MCP server' });
+    const res = await featureGet(req(), params('hce-hub'));
+    expect(res.status).toBe(200);
+    expect(detailMock).toHaveBeenCalledWith(expect.any(String), 'hce-hub', 'f-mcp');
   });
 
   it('404s an empty or over-long key without touching the loader', async () => {
@@ -61,6 +62,14 @@ describe('GET /api/v1/projects/:id/features/:key', () => {
     const long = 'x'.repeat(201);
     expect((await featureGet(req(), params(PID, long))).status).toBe(404);
     expect((await featureGet(req(), params(PID, '   '))).status).toBe(404);
+    expect(detailMock).not.toHaveBeenCalled();
+  });
+
+  it('404s an empty or over-long project ref without touching the loader', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
+    const long = 'x'.repeat(201);
+    expect((await featureGet(req(), params(long))).status).toBe(404);
+    expect((await featureGet(req(), params('   '))).status).toBe(404);
     expect(detailMock).not.toHaveBeenCalled();
   });
 });

@@ -43,7 +43,7 @@ const row = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getAccessible.mockResolvedValue({ id: 'p1' });
+  getAccessible.mockResolvedValue({ id: 'p1', slug: 'hce-hub' });
   userFindMany.mockResolvedValue([]);
 });
 
@@ -284,6 +284,22 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
     ]);
     const plan = await getProjectPlan('u1', 'p1');
     expect(plan.features.map((f) => f.id)).toEqual(['ship', 'plan']);
+  });
+});
+
+describe('getProjectPlan — project slug (f-selfhost-cutover §19)', () => {
+  it("carries the accessed project's slug for feature-page links", async () => {
+    getAccessible.mockResolvedValue({ id: 'p1', slug: 'hce-hub' });
+    featureFindMany.mockResolvedValue([]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(plan.projectSlug).toBe('hce-hub');
+  });
+
+  it('returns a null projectSlug when the project has none (link falls back to projectId)', async () => {
+    getAccessible.mockResolvedValue({ id: 'p1', slug: null });
+    featureFindMany.mockResolvedValue([]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(plan.projectSlug).toBeNull();
   });
 });
 

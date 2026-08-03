@@ -184,7 +184,7 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
               {feature.dependsOn.map((d) => (
                 <Link
                   key={d.id}
-                  href={`/projects/${feature.projectId}/features/${d.slug ?? d.id}`}
+                  href={`/projects/${feature.projectSlug ?? feature.projectId}/features/${d.slug ?? d.id}`}
                   className="inline-flex items-center rounded border px-2 py-0.5 font-mono text-xs hover:underline"
                   style={{ borderColor: 'var(--line)', color: 'var(--ink-mute)' }}
                   title={d.title}

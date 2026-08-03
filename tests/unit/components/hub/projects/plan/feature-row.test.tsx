@@ -33,12 +33,24 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
 
 const noop = () => {};
 
-/** Render a FeatureRow with the required projectId, plus any prop overrides. */
+/**
+ * Render a FeatureRow with the required projectId/projectRef, plus any prop
+ * overrides. Default projectRef matches projectId ('p1') so existing href
+ * assertions written before the slug/cuid split (§19) stay valid; tests that
+ * exercise the split pass distinct values explicitly.
+ */
 function renderRow(
   props: Partial<React.ComponentProps<typeof FeatureRow>> & { feature: PlanFeature }
 ) {
   return render(
-    <FeatureRow projectId="p1" ordinal={1} expanded={false} onToggle={noop} {...props} />
+    <FeatureRow
+      projectId="p1"
+      projectRef="p1"
+      ordinal={1}
+      expanded={false}
+      onToggle={noop}
+      {...props}
+    />
   );
 }
 
@@ -68,6 +80,16 @@ describe('FeatureRow', () => {
       'href',
       '/projects/p1/features/feat-x'
     );
+  });
+
+  it('uses projectRef (the project slug) for the feature-page link, distinct from the cuid projectId used elsewhere (§19)', () => {
+    renderRow({
+      projectId: 'cmxprojectcuid00000000001',
+      projectRef: 'hce-hub',
+      feature: feature({ slug: 'f-access', title: 'Membership funnel' }),
+    });
+    const link = screen.getByRole('link', { name: /Membership funnel/ });
+    expect(link).toHaveAttribute('href', '/projects/hce-hub/features/f-access');
   });
 
   it('renders dependency chips with the depended-on feature slug (title fallback)', () => {

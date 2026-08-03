@@ -52,12 +52,16 @@ function IndicativeChip() {
 export function FeatureRow({
   feature,
   projectId,
+  projectRef,
   ordinal,
   expanded,
   onToggle,
 }: {
   feature: PlanFeature;
+  /** Canonical cuid — for API calls (the claim button). */
   projectId: string;
+  /** Shareable slug (or cuid) — for the feature-page link URL (§19). */
+  projectRef: string;
   ordinal: number;
   expanded: boolean;
   onToggle: () => void;
@@ -69,8 +73,8 @@ export function FeatureRow({
   const status = featureStatus(feature.status);
   const { merged, total, live, blocked } = feature.progress;
   const pct = total > 0 ? Math.round((merged / total) * 100) : 0;
-  // The shareable feature page — keyed by the human slug when authored, else the id.
-  const featurePath = `/projects/${projectId}/features/${feature.slug ?? feature.id}`;
+  // The shareable feature page — human project slug + feature slug when authored.
+  const featurePath = `/projects/${projectRef}/features/${feature.slug ?? feature.id}`;
 
   const borderColor =
     feature.status === 'blocked'

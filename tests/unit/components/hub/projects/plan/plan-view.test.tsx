@@ -25,7 +25,11 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   ...over,
 });
 
-const plan = (features: PlanFeature[]): ProjectPlanDTO => ({ projectId: 'p1', features });
+const plan = (features: PlanFeature[], projectSlug: string | null = null): ProjectPlanDTO => ({
+  projectId: 'p1',
+  projectSlug,
+  features,
+});
 
 describe('PlanView rendering', () => {
   it('renders features in the given order and numbers them', () => {
@@ -166,6 +170,20 @@ describe('PlanView rendering', () => {
     // even though the first feature sorts earlier and is also non-shipped with tasks.
     expect(screen.getByText('active task')).toBeInTheDocument();
     expect(screen.queryByText('claimed task')).not.toBeInTheDocument();
+  });
+
+  it('links feature rows using the project slug for the page URL when present (§19)', () => {
+    render(
+      <PlanView plan={plan([feature({ slug: 'f-x', title: 'Slugged feature' })], 'hce-hub')} />
+    );
+    const link = screen.getByRole('link', { name: /Slugged feature/ });
+    expect(link).toHaveAttribute('href', '/projects/hce-hub/features/f-x');
+  });
+
+  it('falls back to the cuid projectId for feature links when the plan has no project slug', () => {
+    render(<PlanView plan={plan([feature({ slug: 'f-x', title: 'No slug project' })], null)} />);
+    const link = screen.getByRole('link', { name: /No slug project/ });
+    expect(link).toHaveAttribute('href', '/projects/p1/features/f-x');
   });
 
   it('renders the summary line', () => {

@@ -7,6 +7,7 @@ import type { ProjectBoardDTO } from '@/components/hub/projects/board/types';
 
 const planFixture: ProjectPlanDTO = {
   projectId: 'p1',
+  projectSlug: 'hce-hub',
   features: [
     {
       id: 'f1',

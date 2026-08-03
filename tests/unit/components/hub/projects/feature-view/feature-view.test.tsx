@@ -79,8 +79,16 @@ describe('FeatureView', () => {
     expect(screen.queryByRole('link', { name: 'sneaky' })).not.toBeInTheDocument();
   });
 
-  it('links each dependency to its feature page', () => {
+  it('links each dependency to its feature page using the project slug (§19)', () => {
     render(<FeatureView feature={detail()} />);
+    expect(screen.getByRole('link', { name: 'f-access' })).toHaveAttribute(
+      'href',
+      '/projects/hce-hub/features/f-access'
+    );
+  });
+
+  it('falls back to the cuid projectId in dependency links when there is no project slug', () => {
+    render(<FeatureView feature={detail({ projectSlug: null })} />);
     expect(screen.getByRole('link', { name: 'f-access' })).toHaveAttribute(
       'href',
       '/projects/p1/features/f-access'

@@ -15,22 +15,26 @@
 import { withAuth } from '@/lib/auth/guards';
 import { successResponse, errorResponse } from '@/lib/api/responses';
 import { getRouteLogger } from '@/lib/api/context';
-import { parseCuidParam } from '@/lib/api/route-params';
 import { getFeatureDetail } from '@/lib/projects/feature-detail';
 
 export const GET = withAuth<{ id: string; key: string }>(async (request, session, { params }) => {
   const log = await getRouteLogger(request);
   const { id: rawId, key: rawKey } = await params;
-  const id = parseCuidParam(rawId);
-  // `key` is a slug OR a cuid, so it isn't parseCuidParam'd; just bound its length
-  // (a match failure inside getFeatureDetail is the real 404).
+  // Both segments are a slug OR a cuid, so neither is parseCuidParam'd — the
+  // project segment prefers the human slug (§19), the feature `key` its slug; a
+  // resolution miss inside getFeatureDetail is the real 404. Just bound lengths.
+  const projectRef = rawId.trim();
   const key = rawKey.trim();
-  if (key.length === 0 || key.length > 200) {
+  if (projectRef.length === 0 || projectRef.length > 200 || key.length === 0 || key.length > 200) {
     return errorResponse('Feature not found', { code: 'NOT_FOUND', status: 404 });
   }
 
-  const feature = await getFeatureDetail(session.user.id, id, key);
+  const feature = await getFeatureDetail(session.user.id, projectRef, key);
 
-  log.info('Feature detail fetched', { userId: session.user.id, projectId: id, featureKey: key });
+  log.info('Feature detail fetched', {
+    userId: session.user.id,
+    projectId: feature.projectId,
+    featureKey: key,
+  });
   return successResponse(feature);
 });
