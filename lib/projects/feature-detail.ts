@@ -71,6 +71,8 @@ export interface FeatureDetailIndicativeTask {
 export interface FeatureDetail {
   id: string;
   projectId: string;
+  /** The parent project's slug (`hce-hub`) — for the shareable back-link; `null` → falls back to `projectId`. */
+  projectSlug: string | null;
   /** The parent project's name — for the feature page's breadcrumb + header. */
   projectName: string;
   /** Project-wide stable ordinal, rendered `§N`; `null` until assigned. */
@@ -196,6 +198,7 @@ export async function getFeatureDetail(
   return {
     id: feature.id,
     projectId,
+    projectSlug: project.slug,
     projectName: project.name,
     number: feature.number,
     slug: feature.slug,

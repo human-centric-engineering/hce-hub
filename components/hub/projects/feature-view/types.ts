@@ -50,6 +50,8 @@ export interface FeatureDetailIndicativeTaskDTO {
 export interface FeatureDetailDTO {
   id: string;
   projectId: string;
+  /** The parent project's slug (`hce-hub`) for the back-link; `null` → falls back to `projectId`. */
+  projectSlug: string | null;
   projectName: string;
   /** Project-wide stable ordinal, rendered `§N`; `null` until assigned. */
   number: number | null;

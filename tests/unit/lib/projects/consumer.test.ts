@@ -43,6 +43,7 @@ describe('listProjectsForUser', () => {
     projFindMany.mockResolvedValue([
       {
         id: 'p1',
+        slug: 'hce-hub',
         name: 'Hub',
         hostPlatform: 'sunrise',
         status: 'active',
@@ -57,9 +58,17 @@ describe('listProjectsForUser', () => {
 
     expect(scopeIds).toHaveBeenCalledWith('u1');
     expect(projFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: { in: ['p1'] } } })
+      expect.objectContaining({
+        where: { id: { in: ['p1'] } },
+        select: expect.objectContaining({ slug: true }),
+      })
     );
-    expect(cards[0]).toMatchObject({ memberCount: 2, featureCount: 5, lead: { name: 'Ada' } });
+    expect(cards[0]).toMatchObject({
+      slug: 'hce-hub',
+      memberCount: 2,
+      featureCount: 5,
+      lead: { name: 'Ada' },
+    });
   });
 
   it('short-circuits to [] with no DB hit when the user has no projects', async () => {
@@ -74,6 +83,7 @@ describe('listProjectsForUser', () => {
     projFindMany.mockResolvedValue([
       {
         id: 'p1',
+        slug: null,
         name: 'Hub',
         hostPlatform: 'sunrise',
         status: 'planning',
@@ -85,6 +95,7 @@ describe('listProjectsForUser', () => {
     userFindMany.mockResolvedValue([]);
     const cards = await listProjectsForUser('u1');
     expect(cards[0].lead).toBeNull();
+    expect(cards[0].slug).toBeNull(); // unauthored slug — card links fall back to id
     expect(userFindMany).not.toHaveBeenCalled();
   });
 });
@@ -93,6 +104,7 @@ describe('getProjectForUser', () => {
   it('returns the enriched view for a member (members + counts + null-user render)', async () => {
     getAccessible.mockResolvedValue({
       id: 'p1',
+      slug: 'hce-hub',
       name: 'Hub',
       hostPlatform: 'sunrise',
       status: 'active',
@@ -111,7 +123,12 @@ describe('getProjectForUser', () => {
     const view = await getProjectForUser('u1', 'p1');
 
     expect(getAccessible).toHaveBeenCalledWith('u1', 'p1');
-    expect(view).toMatchObject({ featureCount: 3, taskCount: 7, memberCount: 2 });
+    expect(view).toMatchObject({
+      slug: 'hce-hub',
+      featureCount: 3,
+      taskCount: 7,
+      memberCount: 2,
+    });
     expect(view.lead?.name).toBe('Ada');
     expect(view.members.find((m) => m.userId === 'erased')?.user).toBeNull();
   });
@@ -119,6 +136,7 @@ describe('getProjectForUser', () => {
   it('renders a null lead (erased) without a lead lookup id', async () => {
     getAccessible.mockResolvedValue({
       id: 'p1',
+      slug: null,
       name: 'Hub',
       hostPlatform: 'sunrise',
       status: 'active',
@@ -134,6 +152,7 @@ describe('getProjectForUser', () => {
     const view = await getProjectForUser('m1', 'p1');
 
     expect(view.lead).toBeNull();
+    expect(view.slug).toBeNull(); // unauthored slug — view falls back to id for links
     expect(userFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: { in: ['m1'] } } })
     );
@@ -148,6 +167,7 @@ describe('getProjectForUser', () => {
   it('resolves a slug ref and keys sub-queries off the canonical id, not the raw ref', async () => {
     getAccessible.mockResolvedValue({
       id: 'cuid-p1',
+      slug: 'hce-hub',
       name: 'Hub',
       hostPlatform: 'sunrise',
       status: 'active',
@@ -164,6 +184,7 @@ describe('getProjectForUser', () => {
 
     expect(getAccessible).toHaveBeenCalledWith('u1', 'hce-hub');
     expect(view.id).toBe('cuid-p1');
+    expect(view.slug).toBe('hce-hub');
     expect(memberFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { projectId: 'cuid-p1' } })
     );

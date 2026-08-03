@@ -5,6 +5,7 @@ import type { ProjectCard as ProjectCardData } from '@/components/hub/projects/t
 
 const base: ProjectCardData = {
   id: 'p1',
+  slug: 'hce-hub',
   name: 'HCE Hub',
   hostPlatform: 'sunrise',
   status: 'active',
@@ -15,9 +16,10 @@ const base: ProjectCardData = {
 };
 
 describe('ProjectCard', () => {
-  it('links to the project view and shows name, platform, counts, lead', () => {
+  it('links to the project view by slug and shows name, platform, counts, lead', () => {
     render(<ProjectCard project={base} />);
-    expect(screen.getByRole('link')).toHaveAttribute('href', '/projects/p1');
+    // The card navigates to the shareable human URL (§19), not the cuid.
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/projects/hce-hub');
     expect(screen.getByText('HCE Hub')).toBeInTheDocument();
     expect(screen.getByText('Sunrise')).toBeInTheDocument(); // slug → label
     expect(screen.getByText(/15 features · 3 members/)).toBeInTheDocument();
@@ -29,6 +31,11 @@ describe('ProjectCard', () => {
     render(<ProjectCard project={{ ...base, lead: null, memberCount: 1, featureCount: 1 }} />);
     expect(screen.getByText('Unassigned lead')).toBeInTheDocument();
     expect(screen.getByText(/1 feature · 1 member/)).toBeInTheDocument();
+  });
+
+  it('falls back to the cuid id when the project has no slug', () => {
+    render(<ProjectCard project={{ ...base, slug: null }} />);
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/projects/p1');
   });
 
   it('falls back to the raw slug for an unknown platform and renders a lead avatar image', () => {

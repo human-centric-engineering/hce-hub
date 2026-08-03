@@ -42,7 +42,7 @@ const featureRow = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  access.mockResolvedValue({ id: 'p1', name: 'HCE Hub' });
+  access.mockResolvedValue({ id: 'p1', slug: 'hce-hub', name: 'HCE Hub' });
   users.mockResolvedValue(new Map());
 });
 
@@ -79,11 +79,19 @@ describe('getFeatureDetail mapping', () => {
     );
     const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
     expect(detail.projectName).toBe('HCE Hub');
+    expect(detail.projectSlug).toBe('hce-hub');
     expect(detail.slug).toBe('f-mcp');
     expect(detail.planningStage).toBe('indicative');
     expect(detail.references).toEqual([{ label: 'spec', target: 'https://x.io' }]);
     expect(detail.indicativeTasks).toEqual([{ id: 'i1', order: 0, text: 'draft schema' }]);
     expect(detail.owner).toBeNull();
+  });
+
+  it('returns a null projectSlug when the project has none (back-link falls back to projectId)', async () => {
+    access.mockResolvedValue({ id: 'p1', slug: null, name: 'HCE Hub' });
+    featureFindFirst.mockResolvedValue(featureRow());
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.projectSlug).toBeNull();
   });
 
   it('drops malformed reference entries (JSON guard)', async () => {

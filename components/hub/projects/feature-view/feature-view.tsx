@@ -74,7 +74,7 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
   return (
     <div className="mx-auto max-w-3xl px-8 py-10">
       <Link
-        href={`/projects/${feature.projectId}`}
+        href={`/projects/${feature.projectSlug ?? feature.projectId}`}
         className="text-xs hover:underline"
         style={{ color: 'var(--ink-faint)' }}
       >

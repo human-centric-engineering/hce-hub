@@ -57,8 +57,11 @@ export function ProjectView({
   // handoff §3); the header + tabs align to the left edge, not centered.
   return (
     <div className="px-8 py-10">
-      {/* Replace the raw project-id breadcrumb leaf with the project name. */}
+      {/* Replace the raw project-segment breadcrumb leaf with the project name.
+          Register both the cuid and the slug so the label resolves whichever the
+          URL used (nav links now prefer the slug — §19). */}
       <BreadcrumbLabel segment={project.id} label={project.name} />
+      {project.slug && <BreadcrumbLabel segment={project.slug} label={project.name} />}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
@@ -78,7 +81,7 @@ export function ProjectView({
       {/* The task sheet opens (deep-linked via `?task=`) over whichever tab is
           active — mounted here so Plan rows and Board cards can open it. */}
       <TaskSheetProvider projectId={project.id}>
-        <ProjectViewTabs projectId={project.id} active={activeTab} />
+        <ProjectViewTabs projectRef={project.slug ?? project.id} active={activeTab} />
 
         <div className="py-8">
           {activeTab === 'plan' ? (

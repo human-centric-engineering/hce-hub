@@ -31,6 +31,8 @@ export interface ProjectMemberView {
 /** A row in the member's projects grid (`GET /api/v1/projects`). */
 export interface ProjectCard {
   id: string;
+  /** Shareable human URL key (`hce-hub`); `null` until authored — links fall back to `id`. */
+  slug: string | null;
   name: string;
   hostPlatform: string;
   status: Project['status'];
@@ -43,6 +45,8 @@ export interface ProjectCard {
 /** The project-view header (`GET /api/v1/projects/:id`). */
 export interface ProjectView {
   id: string;
+  /** Shareable human URL key (`hce-hub`); `null` until authored — links fall back to `id`. */
+  slug: string | null;
   name: string;
   hostPlatform: string;
   status: Project['status'];
@@ -71,6 +75,7 @@ export async function listProjectsForUser(userId: string): Promise<ProjectCard[]
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
+      slug: true,
       name: true,
       hostPlatform: true,
       status: true,
@@ -84,6 +89,7 @@ export async function listProjectsForUser(userId: string): Promise<ProjectCard[]
 
   return projects.map((p) => ({
     id: p.id,
+    slug: p.slug,
     name: p.name,
     hostPlatform: p.hostPlatform,
     status: p.status,
@@ -121,6 +127,7 @@ export async function getProjectForUser(userId: string, ref: string): Promise<Pr
 
   return {
     id: project.id,
+    slug: project.slug,
     name: project.name,
     hostPlatform: project.hostPlatform,
     status: project.status,
