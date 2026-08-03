@@ -24,6 +24,7 @@ import { executeTransaction } from '@/lib/db/utils';
 import { NotFoundError, ConflictError } from '@/lib/api/errors';
 import { logAdminAction, computeChanges } from '@/lib/orchestration/audit/admin-audit-logger';
 import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
+import { slugifyProjectName } from '@/lib/projects/project-slug';
 import type { CreateProjectInput, UpdateProjectInput } from '@/lib/validations/project-admin';
 
 /** The admin performing the action — carried into the audit log. */
@@ -163,6 +164,33 @@ export async function getProjectDetail(id: string): Promise<ProjectDetail> {
 // ─── Writes ──────────────────────────────────────────────────────────────────
 
 /**
+ * Resolve a globally-unique project slug from a candidate (or `null` when the
+ * name had no alphanumerics). Appends `-2`, `-3`, … on collision. `null` stays
+ * `null` (cuid-only URLs). Best-effort at write time; the `@unique` index is the
+ * definitive race backstop.
+ */
+async function uniqueProjectSlug(candidate: string | null): Promise<string | null> {
+  if (candidate === null) return null;
+  let slug = candidate;
+  for (let n = 2; await prisma.project.findFirst({ where: { slug }, select: { id: true } }); n++) {
+    slug = `${candidate}-${n}`;
+  }
+  return slug;
+}
+
+/**
+ * Map a `Project.slug` `@unique` violation (P2002) to a 409 `ConflictError`; the
+ * only user-controllable unique on a project write is its slug, so a P2002 here
+ * always means the slug is taken. Rethrows anything else unchanged.
+ */
+function rethrowSlugConflict(err: unknown): never {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    throw new ConflictError('A project with that slug already exists');
+  }
+  throw err;
+}
+
+/**
  * Create a project and, in one transaction, (a) seat its lead as a `role='lead'`
  * `ProjectMember` row (the invariant), and (b) create + attach a per-project
  * `KnowledgeTag` (`Project.knowledgeTagId`). Atomic: a failure at any step
@@ -174,9 +202,16 @@ export async function createProject(
 ): Promise<Project> {
   await requireUserExists(input.leadUserId);
 
+  // Resolve the shareable slug: an explicit one, else derived from the name
+  // (§19 t-3). Globally unique — de-duplicate with a numeric suffix on collision
+  // (the `@unique` index is the race backstop). A name with no alphanumerics
+  // derives to `null` → the project keeps cuid-only URLs.
+  const slug = await uniqueProjectSlug(input.slug ?? slugifyProjectName(input.name));
+
   const project = await executeTransaction(async (tx) => {
     const created = await tx.project.create({
       data: {
+        slug,
         name: input.name,
         hostPlatform: input.hostPlatform,
         leadUserId: input.leadUserId,
@@ -204,7 +239,7 @@ export async function createProject(
     });
 
     return withTag;
-  });
+  }).catch(rethrowSlugConflict);
 
   logAdminAction({
     userId: actor.userId,
@@ -242,9 +277,12 @@ export async function updateProject(
   if (patch.repoUrls !== undefined) data.repoUrls = patch.repoUrls;
   if (patch.status !== undefined) data.status = patch.status;
   if (patch.leadUserId !== undefined) data.leadUserId = patch.leadUserId;
+  // Slug is explicit-only — a `name` change never touches it (a shared link must
+  // not break, §19 t-3). A collision surfaces as the `@unique` ConflictError.
+  if (patch.slug !== undefined) data.slug = patch.slug;
 
-  const updated = reassigning
-    ? await executeTransaction(async (tx) => {
+  const write = reassigning
+    ? executeTransaction(async (tx) => {
         const u = await tx.project.update({ where: { id }, data });
         await tx.projectMember.upsert({
           where: { projectId_userId: { projectId: id, userId: patch.leadUserId as string } },
@@ -259,7 +297,8 @@ export async function updateProject(
         }
         return u;
       })
-    : await prisma.project.update({ where: { id }, data });
+    : prisma.project.update({ where: { id }, data });
+  const updated = await write.catch(rethrowSlugConflict);
 
   logAdminAction({
     userId: actor.userId,

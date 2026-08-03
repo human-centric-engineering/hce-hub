@@ -89,6 +89,7 @@ enum FeaturePlanningStage {
 
 model Project {
   id              String        @id @default(cuid())
+  slug            String?       @unique // shareable, durable human URL key (e.g. "hce-hub"); globally unique — projects are top-level (f-selfhost-cutover §19 t-3)
   name            String
   hostPlatform    String // e.g. "sunrise"; other platforms are stubbed (§7)
   status          ProjectStatus @default(planning)

@@ -73,10 +73,27 @@ describe('GET /api/v1/projects/:id', () => {
     expect(res.status).toBe(404);
   });
 
-  it('400s an invalid id', async () => {
+  it('passes a slug ref through to getProjectForUser (§19 t-3 — no longer cuid-only)', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
-    const res = await detailGet(detailReq(), params('not-a-cuid'));
-    expect(res.status).toBe(400);
+    detailMock.mockResolvedValue({ id: VALID_ID, name: 'Hub', members: [] });
+
+    const res = await detailGet(detailReq(), params('hce-hub'));
+
+    expect(res.status).toBe(200);
+    expect(detailMock).toHaveBeenCalledWith(expect.any(String), 'hce-hub');
+  });
+
+  it('404s an empty ref without calling getProjectForUser', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
+    const res = await detailGet(detailReq(), params('   '));
+    expect(res.status).toBe(404);
+    expect(detailMock).not.toHaveBeenCalled();
+  });
+
+  it('404s an over-long ref (>200 chars) without calling getProjectForUser', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
+    const res = await detailGet(detailReq(), params('a'.repeat(201)));
+    expect(res.status).toBe(404);
     expect(detailMock).not.toHaveBeenCalled();
   });
 });

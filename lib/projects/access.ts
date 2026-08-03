@@ -115,6 +115,29 @@ export async function getAccessibleProject(
 }
 
 /**
+ * Load a single project by its **slug OR cuid `id`** (`ref`), for the shareable
+ * project URL (`/projects/hce-hub`) — the one seam that accepts a slug; every
+ * project-scoped sub-route stays cuid-only and drives off the returned `id`
+ * (f-selfhost-cutover §19 t-3, mirroring `getFeatureDetail`'s slug-or-cuid resolve).
+ *
+ * The 404-not-403 contract holds on a slug miss: an unknown `ref` and a `ref` the
+ * caller can't access both throw `NotFoundError` — the existence check happens
+ * before the access check, but nothing is returned until access is granted, so
+ * neither reveals a project the caller shouldn't see.
+ */
+export async function getAccessibleProjectByRef(
+  userId: string,
+  ref: string,
+  need: ProjectAccessNeed = 'view'
+): Promise<Project> {
+  const project = await prisma.project.findFirst({ where: { OR: [{ id: ref }, { slug: ref }] } });
+  if (!project) throw new NotFoundError(`Project ${ref} not found`);
+  // Resolved to a real project — now gate on membership by its canonical id.
+  await requireProjectAccess(userId, project.id, need);
+  return project;
+}
+
+/**
  * The projects `userId` is a member of, newest first. The membership-scoped
  * list every "my projects" surface uses — never `prisma.project.findMany()`
  * unfiltered.

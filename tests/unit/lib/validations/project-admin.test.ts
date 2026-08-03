@@ -41,6 +41,16 @@ describe('createProjectSchema', () => {
       createProjectSchema.safeParse({ ...base, repoUrls: ['https://github.com/x/y'] }).success
     ).toBe(true);
   });
+
+  it('accepts a valid explicit slug', () => {
+    expect(createProjectSchema.safeParse({ ...base, slug: 'hce-hub' }).success).toBe(true);
+  });
+
+  it('rejects an invalid slug (uppercase, spaces, leading hyphen)', () => {
+    expect(createProjectSchema.safeParse({ ...base, slug: 'HCE-Hub' }).success).toBe(false);
+    expect(createProjectSchema.safeParse({ ...base, slug: 'hce hub' }).success).toBe(false);
+    expect(createProjectSchema.safeParse({ ...base, slug: '-hce-hub' }).success).toBe(false);
+  });
 });
 
 describe('updateProjectSchema', () => {
@@ -55,6 +65,16 @@ describe('updateProjectSchema', () => {
 
   it('rejects an invalid status', () => {
     expect(updateProjectSchema.safeParse({ status: 'done' }).success).toBe(false);
+  });
+
+  it('accepts a valid explicit slug', () => {
+    expect(updateProjectSchema.safeParse({ slug: 'hce-hub' }).success).toBe(true);
+  });
+
+  it('rejects an invalid slug (uppercase, spaces, leading hyphen)', () => {
+    expect(updateProjectSchema.safeParse({ slug: 'HCE-Hub' }).success).toBe(false);
+    expect(updateProjectSchema.safeParse({ slug: 'hce hub' }).success).toBe(false);
+    expect(updateProjectSchema.safeParse({ slug: '-hce-hub' }).success).toBe(false);
   });
 });
 

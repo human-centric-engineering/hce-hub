@@ -18,6 +18,7 @@ vi.mock('@/lib/db/client', () => ({
       findMany: vi.fn(),
     },
     project: {
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
       findMany: vi.fn(),
     },
@@ -35,6 +36,7 @@ const {
   canAccessProject,
   requireProjectAccess,
   getAccessibleProject,
+  getAccessibleProjectByRef,
   listAccessibleProjects,
   accessibleProjectIds,
   resolveFeatureAccess,
@@ -45,6 +47,7 @@ const { NotFoundError, ForbiddenError } = await import('@/lib/api/errors');
 
 const memberFindUnique = prisma.projectMember.findUnique as ReturnType<typeof vi.fn>;
 const memberFindMany = prisma.projectMember.findMany as ReturnType<typeof vi.fn>;
+const projectFindFirst = prisma.project.findFirst as ReturnType<typeof vi.fn>;
 const projectFindUnique = prisma.project.findUnique as ReturnType<typeof vi.fn>;
 const projectFindMany = prisma.project.findMany as ReturnType<typeof vi.fn>;
 const featureFindUnique = prisma.feature.findUnique as ReturnType<typeof vi.fn>;
@@ -144,6 +147,64 @@ describe('getAccessibleProject', () => {
     projectFindUnique.mockResolvedValue(null);
 
     await expect(getAccessibleProject(USER, PROJECT)).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe('getAccessibleProjectByRef (§19 t-3, slug-or-cuid resolve)', () => {
+  it('resolves by cuid id and returns the project once access is granted', async () => {
+    const project = { id: PROJECT, slug: 'hce-hub', name: 'Hub' };
+    projectFindFirst.mockResolvedValue(project);
+    memberFindUnique.mockResolvedValue({ role: 'member' });
+
+    await expect(getAccessibleProjectByRef(USER, PROJECT)).resolves.toEqual(project);
+    expect(projectFindFirst).toHaveBeenCalledWith({
+      where: { OR: [{ id: PROJECT }, { slug: PROJECT }] },
+    });
+    // Access is gated on the *resolved* canonical id.
+    expect(memberFindUnique).toHaveBeenCalledWith({
+      where: { projectId_userId: { projectId: PROJECT, userId: USER } },
+      select: { role: true },
+    });
+  });
+
+  it('resolves by slug identically', async () => {
+    const project = { id: PROJECT, slug: 'hce-hub', name: 'Hub' };
+    projectFindFirst.mockResolvedValue(project);
+    memberFindUnique.mockResolvedValue({ role: 'lead' });
+
+    await expect(getAccessibleProjectByRef(USER, 'hce-hub')).resolves.toEqual(project);
+    expect(projectFindFirst).toHaveBeenCalledWith({
+      where: { OR: [{ id: 'hce-hub' }, { slug: 'hce-hub' }] },
+    });
+    expect(memberFindUnique).toHaveBeenCalledWith({
+      where: { projectId_userId: { projectId: PROJECT, userId: USER } },
+      select: { role: true },
+    });
+  });
+
+  it('throws NotFoundError for an unknown ref without consulting membership', async () => {
+    projectFindFirst.mockResolvedValue(null);
+
+    await expect(getAccessibleProjectByRef(USER, 'ghost-slug')).rejects.toBeInstanceOf(
+      NotFoundError
+    );
+    expect(memberFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('propagates the funnel NotFoundError for a resolved project the caller cannot access', async () => {
+    projectFindFirst.mockResolvedValue({ id: PROJECT, slug: 'hce-hub', name: 'Hub' });
+    memberFindUnique.mockResolvedValue(null); // not a member
+
+    await expect(getAccessibleProjectByRef(USER, 'hce-hub')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('propagates ForbiddenError for a resolved project the member lacks the required role on', async () => {
+    projectFindFirst.mockResolvedValue({ id: PROJECT, slug: 'hce-hub', name: 'Hub' });
+    memberFindUnique.mockResolvedValue({ role: 'member' });
+
+    await expect(getAccessibleProjectByRef(USER, 'hce-hub', 'admin')).rejects.toBeInstanceOf(
+      ForbiddenError
+    );
   });
 });
 

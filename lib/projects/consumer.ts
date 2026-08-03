@@ -18,7 +18,7 @@
  */
 import type { Project, ProjectRole } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
-import { accessibleProjectIds, getAccessibleProject } from '@/lib/projects/access';
+import { accessibleProjectIds, getAccessibleProjectByRef } from '@/lib/projects/access';
 import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
 
 export interface ProjectMemberView {
@@ -95,11 +95,15 @@ export async function listProjectsForUser(userId: string): Promise<ProjectCard[]
 }
 
 /**
- * One project's view header for a member. Routes through `getAccessibleProject`,
- * so a non-member or unknown id throws `NotFoundError` (→ 404, never 403).
+ * One project's view header for a member, resolved by its **slug or cuid `id`**
+ * (`ref`) — the shareable project URL (`/projects/hce-hub`) resolves here to the
+ * canonical project, and every sub-query then keys off `project.id` (§19 t-3).
+ * Routes through `getAccessibleProjectByRef`, so an unknown ref or a non-member
+ * throws `NotFoundError` (→ 404, never 403).
  */
-export async function getProjectForUser(userId: string, projectId: string): Promise<ProjectView> {
-  const project = await getAccessibleProject(userId, projectId);
+export async function getProjectForUser(userId: string, ref: string): Promise<ProjectView> {
+  const project = await getAccessibleProjectByRef(userId, ref);
+  const projectId = project.id; // canonical cuid — the ref may have been a slug
 
   const [members, featureCount, taskCount] = await Promise.all([
     prisma.projectMember.findMany({ where: { projectId }, orderBy: { addedAt: 'asc' } }),

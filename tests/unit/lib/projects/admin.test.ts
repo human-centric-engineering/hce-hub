@@ -20,6 +20,7 @@ vi.mock('@/lib/db/client', () => ({
     user: { findUnique: vi.fn(), findMany: vi.fn() },
     project: {
       create: vi.fn(),
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
       findMany: vi.fn(),
       count: vi.fn(),
@@ -52,6 +53,7 @@ const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 const userFindUnique = prisma.user.findUnique as ReturnType<typeof vi.fn>;
 const userFindMany = prisma.user.findMany as ReturnType<typeof vi.fn>;
+const projFindFirst = prisma.project.findFirst as ReturnType<typeof vi.fn>;
 const projFindUnique = prisma.project.findUnique as ReturnType<typeof vi.fn>;
 const projUpdate = prisma.project.update as ReturnType<typeof vi.fn>;
 const memberCreate = prisma.projectMember.create as ReturnType<typeof vi.fn>;
@@ -80,6 +82,8 @@ const actor = { userId: 'admin_1', clientIp: '127.0.0.1' };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: the candidate slug is free (no collision) unless a test overrides it.
+  projFindFirst.mockResolvedValue(null);
 });
 
 describe('createProject — the invariant', () => {
@@ -114,6 +118,81 @@ describe('createProject — the invariant', () => {
       createProject({ name: 'Hub', hostPlatform: 'sunrise', leadUserId: 'ghost' }, actor)
     ).rejects.toThrow(/user not found/i);
     expect(runTx).not.toHaveBeenCalled();
+  });
+});
+
+describe('createProject — slug derivation (§19 t-3)', () => {
+  it('derives a slug from the name when none is supplied', async () => {
+    userFindUnique.mockResolvedValue({ id: 'lead_1' });
+    const tx = makeTx();
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    runTx.mockImplementation((cb: (t: unknown) => Promise<unknown>) => cb(tx));
+
+    await createProject({ name: 'HCE Hub', hostPlatform: 'sunrise', leadUserId: 'lead_1' }, actor);
+
+    expect(tx.project.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ slug: 'hce-hub' }) })
+    );
+  });
+
+  it('uses an explicit slug verbatim rather than deriving one', async () => {
+    userFindUnique.mockResolvedValue({ id: 'lead_1' });
+    const tx = makeTx();
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    runTx.mockImplementation((cb: (t: unknown) => Promise<unknown>) => cb(tx));
+
+    await createProject(
+      { name: 'HCE Hub', hostPlatform: 'sunrise', leadUserId: 'lead_1', slug: 'custom-slug' },
+      actor
+    );
+
+    expect(tx.project.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ slug: 'custom-slug' }) })
+    );
+    // A supplied slug is checked for collision, not re-derived from the name.
+    expect(projFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { slug: 'custom-slug' } })
+    );
+  });
+
+  it('appends -2 on a slug collision', async () => {
+    projFindFirst.mockResolvedValueOnce({ id: 'existing-project' }); // 'hce-hub' is taken
+    userFindUnique.mockResolvedValue({ id: 'lead_1' });
+    const tx = makeTx();
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    runTx.mockImplementation((cb: (t: unknown) => Promise<unknown>) => cb(tx));
+
+    await createProject({ name: 'HCE Hub', hostPlatform: 'sunrise', leadUserId: 'lead_1' }, actor);
+
+    expect(tx.project.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ slug: 'hce-hub-2' }) })
+    );
+  });
+
+  it('keeps a null slug (no alphanumerics in the name) — cuid-only URLs', async () => {
+    userFindUnique.mockResolvedValue({ id: 'lead_1' });
+    const tx = makeTx();
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    runTx.mockImplementation((cb: (t: unknown) => Promise<unknown>) => cb(tx));
+
+    await createProject({ name: '!!!', hostPlatform: 'sunrise', leadUserId: 'lead_1' }, actor);
+
+    expect(tx.project.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ slug: null }) })
+    );
+    // No candidate to check for collision — findFirst is never consulted.
+    expect(projFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('maps a P2002 slug-unique race to a 409 ConflictError', async () => {
+    userFindUnique.mockResolvedValue({ id: 'lead_1' });
+    runTx.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: '7' })
+    );
+
+    await expect(
+      createProject({ name: 'HCE Hub', hostPlatform: 'sunrise', leadUserId: 'lead_1' }, actor)
+    ).rejects.toThrow(/already exists/i);
   });
 });
 
@@ -157,6 +236,29 @@ describe('updateProject — lead reassignment', () => {
   it('404s an unknown project', async () => {
     projFindUnique.mockResolvedValue(null);
     await expect(updateProject('nope', { name: 'X' }, actor)).rejects.toThrow(/not found/i);
+  });
+});
+
+describe('updateProject — slug (§19 t-3, explicit only)', () => {
+  it('maps an explicit patch.slug to data.slug', async () => {
+    projFindUnique.mockResolvedValue({ id: 'p1', name: 'Hub', leadUserId: 'lead_1' });
+    projUpdate.mockResolvedValue({ id: 'p1', name: 'Hub', slug: 'new-slug', leadUserId: 'lead_1' });
+
+    await updateProject('p1', { slug: 'new-slug' }, actor);
+
+    expect(projUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'p1' }, data: { slug: 'new-slug' } })
+    );
+  });
+
+  it('a name-only patch never sets slug (a rename must not break a shared link)', async () => {
+    projFindUnique.mockResolvedValue({ id: 'p1', name: 'Hub', leadUserId: 'lead_1' });
+    projUpdate.mockResolvedValue({ id: 'p1', name: 'Renamed', leadUserId: 'lead_1' });
+
+    await updateProject('p1', { name: 'Renamed' }, actor);
+
+    const call = projUpdate.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(call.data).not.toHaveProperty('slug');
   });
 });
 

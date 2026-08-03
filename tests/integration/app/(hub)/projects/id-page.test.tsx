@@ -26,6 +26,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';
+import { logger } from '@/lib/logging';
 import ProjectViewPage from '@/app/(hub)/projects/[id]/page';
 
 // Typed to return promises so `mockImplementation` callbacks aren't flagged by
@@ -163,5 +164,115 @@ describe('ProjectViewPage', () => {
       })
     ).rejects.toThrow(/NEXT_NOT_FOUND/);
     expect(navMock.notFound).toHaveBeenCalled();
+  });
+
+  it('resolves a SLUG url and drives the sub-routes off the returned cuid (§19 t-35)', async () => {
+    // The header fetches the slug; the plan then fetches the canonical id the
+    // header returned (`view.id === 'p1'`), never `/projects/hce-hub/plan`.
+    wireOk();
+
+    render(
+      await ProjectViewPage({
+        params: Promise.resolve({ id: 'hce-hub' }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+    const urls = fetchMock.mock.calls.map((c) => c[0]);
+    expect(urls).toContain('/api/v1/projects/hce-hub'); // header off the slug
+    expect(urls).toContain('/api/v1/projects/p1/plan'); // plan off the returned cuid
+    expect(urls).not.toContain('/api/v1/projects/hce-hub/plan');
+    expect(screen.getByText('Fork + brand')).toBeInTheDocument();
+  });
+
+  it('calls notFound when the header fetch throws (network error)', async () => {
+    fetchMock.mockRejectedValue(new Error('network down'));
+
+    await expect(
+      ProjectViewPage({
+        params: Promise.resolve({ id: 'p1' }),
+        searchParams: Promise.resolve({}),
+      })
+    ).rejects.toThrow(/NEXT_NOT_FOUND/);
+    expect(navMock.notFound).toHaveBeenCalled();
+  });
+
+  it('logs (not 404) a header fetch that fails with a 500, then notFound', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 500, url: '/api/v1/projects/p1' });
+
+    await expect(
+      ProjectViewPage({
+        params: Promise.resolve({ id: 'p1' }),
+        searchParams: Promise.resolve({}),
+      })
+    ).rejects.toThrow(/NEXT_NOT_FOUND/);
+    expect(logger.error).toHaveBeenCalled();
+  });
+
+  it('renders a graceful message when the plan fetch throws (network error)', async () => {
+    fetchMock.mockImplementation((url: string) =>
+      url.endsWith('/plan') ? Promise.reject(new Error('boom')) : Promise.resolve({ ok: true, url })
+    );
+    parseMock.mockImplementation(() => Promise.resolve({ success: true, data: view }));
+
+    render(
+      await ProjectViewPage({
+        params: Promise.resolve({ id: 'p1' }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+    expect(screen.getByRole('heading', { name: 'HCE Hub' })).toBeInTheDocument();
+    expect(screen.getByText(/Couldn.t load the plan/i)).toBeInTheDocument();
+  });
+
+  it('logs (not 404) a board fetch that fails with a 500, then renders the header', async () => {
+    fetchMock.mockImplementation((url: string) =>
+      url.endsWith('/board')
+        ? Promise.resolve({ ok: false, status: 500, url })
+        : Promise.resolve({ ok: true, url })
+    );
+    parseMock.mockImplementation(() => Promise.resolve({ success: true, data: view }));
+
+    render(
+      await ProjectViewPage({
+        params: Promise.resolve({ id: 'p1' }),
+        searchParams: Promise.resolve({ view: 'board' }),
+      })
+    );
+    expect(screen.getByRole('heading', { name: 'HCE Hub' })).toBeInTheDocument();
+    expect(logger.error).toHaveBeenCalled();
+  });
+
+  it('honours ?view=log — fetches only the header (log is client-fetched)', async () => {
+    wireOk();
+
+    render(
+      await ProjectViewPage({
+        params: Promise.resolve({ id: 'p1' }),
+        searchParams: Promise.resolve({ view: 'log' }),
+      })
+    );
+    expect(screen.getByRole('tab', { name: 'Log' })).toHaveAttribute('aria-selected', 'true');
+    const urls = fetchMock.mock.calls.map((c) => c[0]);
+    expect(urls).toContain('/api/v1/projects/p1');
+    expect(urls).not.toContain('/api/v1/projects/p1/plan');
+    expect(urls).not.toContain('/api/v1/projects/p1/board');
+  });
+
+  it('renders the header even when the board fetch throws (graceful board)', async () => {
+    // Header ok; board fetch rejects → board=null, page still renders.
+    fetchMock.mockImplementation((url: string) =>
+      url.endsWith('/board')
+        ? Promise.reject(new Error('boom'))
+        : Promise.resolve({ ok: true, url })
+    );
+    parseMock.mockImplementation(() => Promise.resolve({ success: true, data: view }));
+
+    render(
+      await ProjectViewPage({
+        params: Promise.resolve({ id: 'p1' }),
+        searchParams: Promise.resolve({ view: 'board' }),
+      })
+    );
+    expect(screen.getByRole('heading', { name: 'HCE Hub' })).toBeInTheDocument();
   });
 });
