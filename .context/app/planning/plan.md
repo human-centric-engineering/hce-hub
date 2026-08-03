@@ -362,7 +362,7 @@ The dogfood switch: the Hub becomes its own system of record. A one-shot command
 *Done when:* running `app:project:import-plan` on a fresh Hub shows *this build* as a live, complete project (features at their real statuses, real task history, the decisions + work-completed timelines populated with backdated dates); `export`→`import` round-trips identically (survives `db:reset`, moves dev→prod); `006`/`007` no longer seed; `/projects/hce-hub` resolves; the docs-PR flow is retired; a new feature can be claimed→planned→shipped through the Hub end-to-end; gates green.
 
 ### 20 · `f-status-model` — readiness-derived feature + task status
-*Owner:* Simon · *Status:* **in flight** · *Depends on:* f-selfhost-cutover (t-2) · *~4 PRs* · *Detailed plan:* [[f-status-model]]
+*Owner:* Simon · *Status:* **shipped** (2026-08-03, over MCP) · *Depends on:* f-selfhost-cutover (t-2) · *4 PRs (#80, #83, #84, #88)* · *Detailed plan:* [[f-status-model]]
 
 A **corrective** feature (like [[f-refs]] §16), surfaced browser-validating the §19 cutover: the Hub's status labels don't reflect reality — a not-started feature reads "planning" (not available/blocked), a claimed+planned feature's tasks read "claimed"/"backlog" inconsistently, and a "blocked" feature shows only its satisfied dependencies. Make status **derived from readiness** at both levels. **Sequenced before the §19 close-out** (don't freeze a system-of-record that mislabels its own statuses); §19 t-3 (slugs) follows.
 
