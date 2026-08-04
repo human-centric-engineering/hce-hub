@@ -143,6 +143,26 @@ describe('create_feature happy path', () => {
     );
   });
 
+  it('persists a summary when supplied, defaults it to null otherwise (§21 t-d)', async () => {
+    mockTxCreatesFeature('f-new', 'f-mcp', 3);
+    await cap.execute(
+      { projectId: 'p1', title: 'MCP server', summary: 'the MCP server, briefly' },
+      ctx()
+    );
+    expect(txFeatureCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ summary: 'the MCP server, briefly' }),
+      })
+    );
+
+    vi.clearAllMocks();
+    mockTxCreatesFeature('f-new2', 'f-x', 4);
+    await cap.execute({ projectId: 'p1', title: 'X' }, ctx());
+    expect(txFeatureCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ summary: null }) })
+    );
+  });
+
   it("bumps the project featureCounter and stamps the returned value as the new feature's number (f-status-model §20 t-37)", async () => {
     mockTxCreatesFeature('f-new', 'f-mcp', 9);
 
@@ -194,6 +214,7 @@ describe('create_feature redactProvenance', () => {
       {
         projectId: 'p1',
         title: 'secret title',
+        summary: 'secret summary',
         description: 'secret desc',
         doneWhen: 'secret done',
         slug: 'f-mcp',
@@ -208,6 +229,7 @@ describe('create_feature redactProvenance', () => {
     expect(a.slug).toBe('f-mcp');
     expect(a.dependsOnFeatureIds).toEqual(['d1']);
     expect(String(a.title)).not.toContain('secret title');
+    expect(String(a.summary)).not.toContain('secret summary');
     expect(String(a.description)).not.toContain('secret desc');
     expect(String(a.doneWhen)).not.toContain('secret done');
   });

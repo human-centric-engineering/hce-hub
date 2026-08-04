@@ -233,6 +233,7 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
         number: f.number,
         slug: f.slug,
         title: f.title,
+        summary: f.summary,
         description: f.description,
         doneWhen: f.doneWhen,
         references: jsonInput(f.references),

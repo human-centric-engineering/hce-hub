@@ -54,6 +54,7 @@ export function buildCutoverSnapshot(
     number: planNumber(f.slug),
     slug: f.slug,
     title: f.title,
+    summary: f.summary ?? null,
     description: f.description,
     doneWhen: f.doneWhen ?? null,
     references: f.references ?? null,

@@ -51,6 +51,13 @@ describe('FeatureView', () => {
     expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
   });
 
+  it('renders the description as markdown, not literal syntax (§21 t-d)', () => {
+    render(<FeatureView feature={detail({ description: 'Expose the **tools** now' })} />);
+    // Bold becomes <strong>; no literal ** leaks into the page.
+    expect(screen.getByText('tools').tagName).toBe('STRONG');
+    expect(screen.queryByText(/\*\*tools\*\*/)).toBeNull();
+  });
+
   it('links a valid reference target and the project back-link (by slug, §19)', () => {
     render(<FeatureView feature={detail()} />);
     expect(screen.getByRole('link', { name: 'spec' })).toHaveAttribute(

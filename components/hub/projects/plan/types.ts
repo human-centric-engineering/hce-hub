@@ -61,6 +61,8 @@ export interface PlanFeature {
   /** Authored short key (`f-mcp`); `null` until authored. */
   slug: string | null;
   title: string;
+  /** Short plain one-liner for the row; falls back to `description` when unset (§21 t-d). */
+  summary: string | null;
   description: string | null;
   status: FeatureStatus;
   /** For a `blocked` feature: the unshipped dependencies it's waiting on. */

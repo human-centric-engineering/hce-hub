@@ -38,6 +38,11 @@ const referenceSpec = z.object({
 const schema = z.object({
   projectId: z.string().describe('The project to create the feature in.'),
   title: z.string().min(1).max(500).describe('The feature title.'),
+  summary: z
+    .string()
+    .max(500)
+    .optional()
+    .describe('Short plain one-line summary for the plan row / compact views.'),
   slug: z
     .string()
     .regex(
@@ -85,6 +90,10 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
       properties: {
         projectId: { type: 'string', description: 'The project to create the feature in.' },
         title: { type: 'string', description: 'The feature title.' },
+        summary: {
+          type: 'string',
+          description: 'Short plain one-line summary for the plan row / compact views.',
+        },
         slug: {
           type: 'string',
           description: 'Optional short human key, unique within the project (e.g. "f-mcp").',
@@ -132,6 +141,7 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
         slug: args.slug ?? null,
         dependsOnFeatureIds: args.dependsOnFeatureIds ?? [],
         title: redactedString(`title (${args.title.length} chars)`),
+        summary: args.summary ? redactedString(`summary (${args.summary.length} chars)`) : null,
         description: args.description
           ? redactedString(`description (${args.description.length} chars)`)
           : null,
@@ -197,6 +207,7 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
           number: featureCounter,
           title: args.title,
           slug: args.slug ?? null,
+          summary: args.summary ?? null,
           description: args.description ?? null,
           doneWhen: args.doneWhen ?? null,
           ...(args.references ? { references: args.references } : {}),

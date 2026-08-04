@@ -97,6 +97,8 @@ export interface CutoverTask {
 export interface CutoverFeature {
   slug: string;
   title: string;
+  /** Short plain one-liner for the plan row (§21 t-d); optional — falls back to `description`. */
+  summary?: string;
   description: string;
   status: FeatureStatus;
   dependsOn: string[];

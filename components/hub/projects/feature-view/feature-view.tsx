@@ -16,6 +16,7 @@ import { StatusPill } from '@/components/hub/projects/plan/status-pill';
 import { WaitingOnChips } from '@/components/hub/projects/plan/waiting-on-chips';
 import { featureStatus } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
+import { Markdown } from '@/components/hub/markdown';
 import { FeatureTaskList } from '@/components/hub/projects/feature-view/feature-task-list';
 import { FeatureActivity } from '@/components/hub/projects/feature-view/feature-activity';
 import { ClaimFeatureButton } from '@/components/hub/projects/feature-view/claim-feature-button';
@@ -139,26 +140,16 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
       </header>
 
       <div className="flex flex-col gap-8">
-        {feature.description && (
-          <p
-            className="text-[15px] leading-relaxed whitespace-pre-wrap"
-            style={{ color: 'var(--ink-soft)' }}
-          >
-            {feature.description}
-          </p>
-        )}
+        {/* Description + done-when render as markdown (§21 t-d) — no more leaked
+            literal `**`. Server-rendered (the Markdown wrapper is stateless). */}
+        {feature.description && <Markdown content={feature.description} className="text-[15px]" />}
 
         {feature.doneWhen && (
           <section className="flex flex-col gap-1.5">
             <div className={sectionLabel} style={{ color: 'var(--ink-faint)' }}>
               Done when
             </div>
-            <p
-              className="text-[14px] leading-relaxed whitespace-pre-wrap"
-              style={{ color: 'var(--ink-soft)' }}
-            >
-              {feature.doneWhen}
-            </p>
+            <Markdown content={feature.doneWhen} className="text-[14px]" />
           </section>
         )}
 

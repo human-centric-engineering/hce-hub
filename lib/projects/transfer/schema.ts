@@ -91,6 +91,7 @@ export const featureSnapshot = z.object({
   number: z.number().int().nullable(),
   slug: z.string().nullable(),
   title: z.string(),
+  summary: z.string().nullable(),
   description: z.string().nullable(),
   doneWhen: z.string().nullable(),
   references: jsonValue,
