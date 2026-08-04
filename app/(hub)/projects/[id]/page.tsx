@@ -7,9 +7,26 @@ import type { ProjectTab, ProjectViewDTO } from '@/components/hub/projects/types
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
 import type { ProjectBoardDTO } from '@/components/hub/projects/board/types';
 
-export const metadata: Metadata = {
-  title: 'Project',
-};
+/**
+ * Dynamic tab title — starts with the project name so a browser tab / bookmark
+ * reads "HCE Hub · Plan", not the generic "Project". Falls back to "Project" for
+ * a non-member / unknown id (the page then `notFound()`s). `getProject` is the
+ * same fetch the page runs; Next dedupes the GET within the request.
+ */
+export async function generateMetadata({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ view?: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const { view } = await searchParams;
+  const project = await getProject(id);
+  if (!project) return { title: 'Project' };
+  const tab = view === 'board' ? 'Board' : view === 'log' ? 'Log' : 'Plan';
+  return { title: `${project.name} · ${tab}` };
+}
 
 async function getProject(id: string): Promise<ProjectViewDTO | null> {
   try {

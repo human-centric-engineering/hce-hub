@@ -27,7 +27,7 @@ vi.mock('next/navigation', () => ({
 
 import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';
 import { logger } from '@/lib/logging';
-import ProjectViewPage from '@/app/(hub)/projects/[id]/page';
+import ProjectViewPage, { generateMetadata } from '@/app/(hub)/projects/[id]/page';
 
 // Typed to return promises so `mockImplementation` callbacks aren't flagged by
 // no-misused-promises; the loose payload shapes are what these tests need.
@@ -274,5 +274,46 @@ describe('ProjectViewPage', () => {
       })
     );
     expect(screen.getByRole('heading', { name: 'HCE Hub' })).toBeInTheDocument();
+  });
+});
+
+describe('ProjectViewPage generateMetadata', () => {
+  it('titles the tab with the project name + the active view (default Plan)', async () => {
+    wireOk();
+    const meta = await generateMetadata({
+      params: Promise.resolve({ id: 'p1' }),
+      searchParams: Promise.resolve({}),
+    });
+    // The template appends " - HCE Hub"; the title itself starts with the project name.
+    expect(meta.title).toBe('HCE Hub · Plan');
+  });
+
+  it('reflects ?view=board and ?view=log in the title', async () => {
+    wireOk();
+    expect(
+      (
+        await generateMetadata({
+          params: Promise.resolve({ id: 'p1' }),
+          searchParams: Promise.resolve({ view: 'board' }),
+        })
+      ).title
+    ).toBe('HCE Hub · Board');
+    expect(
+      (
+        await generateMetadata({
+          params: Promise.resolve({ id: 'p1' }),
+          searchParams: Promise.resolve({ view: 'log' }),
+        })
+      ).title
+    ).toBe('HCE Hub · Log');
+  });
+
+  it('falls back to "Project" for a non-member / unknown id (404)', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 404 });
+    const meta = await generateMetadata({
+      params: Promise.resolve({ id: 'gone' }),
+      searchParams: Promise.resolve({}),
+    });
+    expect(meta.title).toBe('Project');
   });
 });
