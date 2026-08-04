@@ -3,10 +3,17 @@
  *
  * Produces a stable `LOCKED CONTEXT` text block to splice into the
  * system prompt, given an entity `(contextType, contextId)` pair from
- * the chat request. Results are cached for 60 seconds per pair so
- * long-running conversations don't repeatedly re-fetch entities, and
- * the streaming handler calls `invalidateContext` after any capability
- * execution that could have mutated the underlying entity.
+ * the chat request. Results are cached for 60 seconds per
+ * `(type, id, userId)` so long-running conversations don't repeatedly
+ * re-fetch entities, and the streaming handler calls `invalidateContext`
+ * after any capability execution that could have mutated the underlying
+ * entity.
+ *
+ * Contributors receive the per-request `ContextRequest` (currently just an
+ * optional `userId`) so a fork can return **per-user** context, and the cache
+ * partitions by `userId` so one user's context never leaks to another. An
+ * empty `userId` is today's behaviour exactly — a single shared cache entry,
+ * shared context. The widening is generic and vocabulary-free.
  *
  * Core supports only `contextType = "pattern"` as a built-in because
  * that's the only entity we have a clean loader for (`getPatternDetail`).
@@ -31,6 +38,16 @@ import { initAppContextContributors } from '@/lib/app/context-contributors';
 const CONTEXT_CACHE_TTL_MS = 60 * 1000;
 const CONTEXT_CACHE_MAX_SIZE = 500;
 
+/**
+ * Per-request inputs threaded into `buildContext` and each contributor.
+ * Generic and vocabulary-free: today only `userId`, so a contributor can
+ * return per-user context and the cache can partition by user. Absent /
+ * empty `userId` = shared cache + shared context (today's behaviour).
+ */
+export interface ContextRequest {
+  userId?: string;
+}
+
 interface CacheEntry {
   value: string;
   expiresAt: number;
@@ -38,20 +55,49 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 
-function cacheKey(type: string, id: string): string {
-  return `${type}:${id}`;
+function cacheKey(type: string, id: string, userId?: string): string {
+  // Empty `userId` collapses to a single shared partition (`type:id:`), which
+  // is byte-for-byte the pre-widening key space.
+  return `${type}:${id}:${userId ?? ''}`;
 }
 
 /**
- * A prompt-context loader keyed by `contextType`. Returns the raw body
- * string to be framed as `LOCKED CONTEXT`; `buildContext` handles caching
- * and framing. Registered via `registerContextContributor`.
+ * A prompt-context loader keyed by `contextType`. Receives the entity `id`
+ * and the per-request `ContextRequest` (e.g. `userId` for per-user context),
+ * and returns the raw body string to be framed as `LOCKED CONTEXT`;
+ * `buildContext` handles caching and framing. Registered via
+ * `registerContextContributor`.
  */
-type ContextContributor = (id: string) => Promise<string>;
+type ContextContributor = (id: string, request: ContextRequest) => Promise<string>;
 
-const contributors = new Map<string, ContextContributor>();
+/**
+ * The contributor registry, backed by `globalThis`.
+ *
+ * Next 16 + Turbopack loads `instrumentation.ts` in a SEPARATE module graph
+ * from route handlers and RSC, so a plain module-scoped `Map` is a different
+ * object in each graph. A tier that registers only at boot (via
+ * `instrumentation.ts` -> `initApp()`) would then find an empty registry on the
+ * request path — silently, with no error: the agent simply lacks the context
+ * block. Core's own lazy `ensureAppContributorsInited()` masks this for the app
+ * tier, but nothing covers a framework tier sitting between core and the app.
+ *
+ * Backing the store with `globalThis` makes one registry visible to every
+ * graph, exactly as `lib/db/client.ts` already does for the Prisma client. It
+ * also means registrations survive a dev hot-reload.
+ */
+const globalForContributors = globalThis as unknown as {
+  sunriseChatContextContributors?: Map<string, ContextContributor>;
+};
 
-/** Whether the auto-wired app contributor init (`lib/app/context-contributors.ts`) has run. */
+const contributors: Map<string, ContextContributor> =
+  (globalForContributors.sunriseChatContextContributors ??= new Map<string, ContextContributor>());
+
+/**
+ * Whether the auto-wired app contributor init (`lib/app/context-contributors.ts`)
+ * has run. Deliberately module-scoped, NOT on `globalThis`: it is a per-graph
+ * "have I run the fork's init in THIS bundle yet" latch, and re-running an
+ * idempotent (register-by-type) init against the shared store is harmless.
+ */
 let appInited = false;
 
 /**
@@ -109,11 +155,18 @@ export function __resetContextContributorsForTests(): void {
 }
 
 /**
- * Load and frame context for the given entity, returning a string that
- * can be appended to the system prompt. Cached for 60 s per `(type, id)`.
+ * Load and frame context for the given entity, returning a string that can be
+ * appended to the system prompt. Cached for 60 s per `(type, id, userId)`.
+ * The optional `request` carries per-request inputs (currently `userId`);
+ * omitting it — or passing an empty `userId` — is the shared-cache behaviour
+ * from before the per-user widening.
  */
-export async function buildContext(type: string, id: string): Promise<string> {
-  const key = cacheKey(type, id);
+export async function buildContext(
+  type: string,
+  id: string,
+  request: ContextRequest = {}
+): Promise<string> {
+  const key = cacheKey(type, id, request.userId);
   const hit = cache.get(key);
   if (hit && hit.expiresAt > Date.now()) {
     return hit.value;
@@ -147,11 +200,13 @@ export async function buildContext(type: string, id: string): Promise<string> {
     default: {
       // No built-in case — fall back to a fork-registered contributor for
       // this type before giving up. Keeps core domain-agnostic while
-      // letting a fork add context types without editing this switch.
+      // letting a fork add context types without editing this switch. The
+      // contributor receives the per-request inputs so it can return per-user
+      // context (the cache key already partitions by `userId`).
       const contributor = contributors.get(type);
       if (contributor) {
         try {
-          body = await contributor(id);
+          body = await contributor(id, request);
         } catch (err) {
           // A contributor that throws must not fail the whole chat turn.
           // Degrade to the benign placeholder (uncached, so a transient
@@ -190,9 +245,13 @@ export async function buildContext(type: string, id: string): Promise<string> {
   return framed;
 }
 
-/** Drop the cache entry for a single entity. */
-export function invalidateContext(type: string, id: string): void {
-  cache.delete(cacheKey(type, id));
+/**
+ * Drop the cache entry for a single entity. Pass the same `request` (i.e. the
+ * same `userId`) supplied to `buildContext` so the matching per-user partition
+ * is invalidated.
+ */
+export function invalidateContext(type: string, id: string, request: ContextRequest = {}): void {
+  cache.delete(cacheKey(type, id, request.userId));
 }
 
 /** Wipe the entire context cache. Mainly for tests and admin hooks. */

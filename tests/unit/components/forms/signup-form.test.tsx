@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SignupForm } from '@/components/forms/signup-form';
+import { AUTH_LANDING_ROUTE } from '@/lib/auth-landing/route';
 
 // Mock dependencies
 vi.mock('@/lib/auth/client', () => ({
@@ -435,9 +436,9 @@ describe('components/forms/signup-form', () => {
       await user.type(confirmInput, 'Password123!');
       await user.click(submitButton);
 
-      // Assert
+      // Assert — the seam, not a hardcoded /dashboard (see lib/app/auth-landing.ts)
       await waitFor(() => {
-        expect(mockRouter.push).toHaveBeenCalledWith('/dashboard');
+        expect(mockRouter.push).toHaveBeenCalledWith(AUTH_LANDING_ROUTE);
       });
     });
 

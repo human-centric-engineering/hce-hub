@@ -41,6 +41,7 @@ vi.mock('@/components/admin/admin-header', () => ({
 
 import { redirect } from 'next/navigation';
 import { getServerSession } from '@/lib/auth/utils';
+import { AUTH_LANDING_ROUTE } from '@/lib/auth-landing/route';
 
 describe('AdminLayout', () => {
   beforeEach(() => {
@@ -59,15 +60,16 @@ describe('AdminLayout', () => {
     expect(redirect).toHaveBeenCalledTimes(1);
   });
 
-  it('redirects authenticated non-admin users to /dashboard', async () => {
+  it('redirects authenticated non-admin users to the auth landing route', async () => {
     // Arrange
     vi.mocked(getServerSession).mockResolvedValue(createMockSession({ user: { role: 'USER' } }));
 
-    // Act + Assert
+    // Act + Assert — reads the seam rather than hardcoding /dashboard, so a fork
+    // that fills lib/app/auth-landing.ts doesn't have to edit this assertion.
     await expect(AdminLayout({ children: <div>protected</div> })).rejects.toThrow(
-      'NEXT_REDIRECT:/dashboard'
+      `NEXT_REDIRECT:${AUTH_LANDING_ROUTE}`
     );
-    expect(redirect).toHaveBeenCalledWith('/dashboard');
+    expect(redirect).toHaveBeenCalledWith(AUTH_LANDING_ROUTE);
     expect(redirect).not.toHaveBeenCalledWith('/login');
   });
 
