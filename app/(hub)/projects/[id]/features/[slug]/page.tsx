@@ -7,9 +7,21 @@ import { TaskSheetProvider } from '@/components/hub/projects/task-sheet/task-she
 import { FeatureView } from '@/components/hub/projects/feature-view/feature-view';
 import type { FeatureDetailDTO } from '@/components/hub/projects/feature-view/types';
 
-export const metadata: Metadata = {
-  title: 'Feature',
-};
+/**
+ * Dynamic tab title — the feature's own name (e.g. "Membership funnel"), not the
+ * generic "Feature". Falls back to "Feature" for a non-member / unknown feature
+ * (the page then `notFound()`s). `getFeature` is the same fetch the page runs;
+ * Next dedupes the GET within the request.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string; slug: string }>;
+}): Promise<Metadata> {
+  const { id, slug } = await params;
+  const feature = await getFeature(id, slug);
+  return { title: feature ? feature.title : 'Feature' };
+}
 
 async function getFeature(id: string, key: string): Promise<FeatureDetailDTO | null> {
   try {

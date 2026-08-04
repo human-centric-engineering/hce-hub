@@ -23,7 +23,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';
-import FeaturePage from '@/app/(hub)/projects/[id]/features/[slug]/page';
+import FeaturePage, { generateMetadata } from '@/app/(hub)/projects/[id]/features/[slug]/page';
 
 const fetchMock = serverFetch as unknown as Mock<(url: string) => Promise<unknown>>;
 const parseMock = parseApiResponse as unknown as Mock<(res: unknown) => Promise<unknown>>;
@@ -72,5 +72,20 @@ describe('FeaturePage', () => {
       FeaturePage({ params: Promise.resolve({ id: 'p1', slug: 'gone' }) })
     ).rejects.toThrow(/NEXT_NOT_FOUND/);
     expect(navMock.notFound).toHaveBeenCalled();
+  });
+});
+
+describe('FeaturePage generateMetadata', () => {
+  it('titles the tab with the feature name (not the generic "Feature")', async () => {
+    fetchMock.mockResolvedValue({ ok: true });
+    parseMock.mockResolvedValue({ success: true, data: featureDetail });
+    const meta = await generateMetadata({ params: Promise.resolve({ id: 'p1', slug: 'f-mcp' }) });
+    expect(meta.title).toBe('MCP server');
+  });
+
+  it('falls back to "Feature" for a non-member / unknown feature (404)', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 404 });
+    const meta = await generateMetadata({ params: Promise.resolve({ id: 'p1', slug: 'gone' }) });
+    expect(meta.title).toBe('Feature');
   });
 });
