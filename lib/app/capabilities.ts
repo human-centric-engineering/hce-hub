@@ -27,6 +27,7 @@ import { StartTaskCapability } from '@/lib/projects/capabilities/start-task';
 import { CompleteTaskCapability } from '@/lib/projects/capabilities/complete-task';
 import { SetPrCapability } from '@/lib/projects/capabilities/set-pr';
 import { UpdateTaskCapability } from '@/lib/projects/capabilities/update-task';
+import { UpdateFeatureCapability } from '@/lib/projects/capabilities/update-feature';
 
 export function initAppCapabilities(): void {
   // HCE Hub coordination tools (f-hub-capabilities). Each also needs an active
@@ -53,6 +54,7 @@ export function initAppCapabilities(): void {
   // Hub, not the DB. update_task edits an existing task's authored fields
   // (title/description/doneWhen/filesScope); owner-tier, no status change.
   registerAppCapability(new UpdateTaskCapability()); // edit task fields (owner)
+  registerAppCapability(new UpdateFeatureCapability()); // edit feature fields/deps/owner (owner)
   // Journal authored verbs (f-journal §17 t-2) — free-text narrative into the
   // ProjectEvent stream; membership-scoped via the resolveEventScope funnel.
   registerAppCapability(new RecordDecisionCapability());
