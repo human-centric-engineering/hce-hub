@@ -13,10 +13,18 @@ import { SurfaceSync } from '@/components/surface-sync';
 import { DEFAULT_SURFACE } from '@/lib/app/surface';
 import { BRAND } from '@/lib/brand';
 
+// KEEP-MINE (platform-divergences): the vanilla title hardcodes "- Next.js
+// Starter" (and a starter-template description), leaking the starter identity
+// into a fork's every un-templated tab. Drive the title fully from the BRAND
+// seam instead: a bare `default` for the root, and a `%s - <brand>` template so
+// every page that sets a plain title (account, admin, auth) gets branded
+// consistently. Route groups with their own template (e.g. `(hub)`) still win.
 export const metadata: Metadata = {
-  title: `${BRAND.name} - Next.js Starter`,
-  description:
-    'A production-ready Next.js starter template designed for rapid application development',
+  title: {
+    default: BRAND.name,
+    template: `%s - ${BRAND.name}`,
+  },
+  description: `${BRAND.name} — internal operations platform.`,
 };
 
 export default async function RootLayout({
