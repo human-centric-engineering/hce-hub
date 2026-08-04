@@ -299,7 +299,33 @@ async function main(): Promise<void> {
       'meta summarises every source'
     );
     check(bundle.meta.excluded.length > 0, 'meta discloses the documented exclusions');
-    check(Object.keys(bundle.app).length === 0, 'app seam is empty in vanilla Sunrise');
+    // HCE Hub (fork): the app seam is FILLED — vanilla Sunrise's "is empty"
+    // premise no longer holds. Pinned to the Hub's declared sections rather than
+    // deleted, per the convention in tests/unit/lib/app/defaults.test.ts: a stray
+    // or renamed section still fails here. The subject is synthetic and owns no
+    // Hub rows, so every section must come back empty — which is the assertion
+    // that actually matters, since a non-empty one would mean the collector
+    // matched a stranger's rows.
+    const appSections = Object.keys(bundle.app).sort();
+    check(
+      JSON.stringify(appSections) ===
+        JSON.stringify(
+          [
+            'authoredEvents',
+            'featuresOwned',
+            'focusDirectives',
+            'projectMemberships',
+            'projectsLed',
+            'taskClaims',
+            'tasks',
+          ].sort()
+        ),
+      'app seam carries exactly the Hub subject-data sections'
+    );
+    check(
+      Object.values(bundle.app).every((rows) => Array.isArray(rows) && rows.length === 0),
+      'app seam returns no rows for a subject with no Hub data'
+    );
 
     // A missing subject is a distinct, catchable failure — not a silent empty bundle.
     let notFound = false;
