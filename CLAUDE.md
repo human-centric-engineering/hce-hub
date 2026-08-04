@@ -4,7 +4,8 @@
 >
 > This repository is **HCE Hub**, HCE Venture Studio's AI-native internal ops
 > platform, built **on** the Sunrise platform (`human-centric-engineering/sunrise`),
-> forked at Sunrise **v0.6.0**. You are **building on Sunrise, not developing
+> forked at Sunrise v0.6.0 and currently synced to **v0.8.0**. You are
+> **building on Sunrise, not developing
 > Sunrise itself.**
 >
 > Everything below this banner is **Sunrise's own platform documentation**. Its
@@ -33,12 +34,15 @@
 >   `admin-nav.ts`, `public-nav.ts`, `protected-routes.ts`,
 >   `knowledge-access-contributors.ts`, `rate-limit.ts`, `db-drift.ts`, …).
 >   Register into Sunrise's seams **from here**, driven by `initApp()`.
-> - `prisma/schema/app.prisma` — a **shared** app-domain schema file (Sunrise
->   ships its own app-tier models here too: `ContactSubmission`, `FeatureFlag`,
->   `AuthBootstrap`), so add HCE Hub models **alongside** them, `app_*`-prefixed
->   to namespace; `app_…` migrations touching only `app_*` tables. (Sunrise
->   [#429](https://github.com/human-centric-engineering/sunrise/issues/429)
->   tracks making this contract explicit upstream.)
+> - `prisma/schema/app.prisma` — **genuinely fork-reserved** as of Sunrise
+>   v0.8.0: Sunrise ships it empty and its own app-tier models
+>   (`ContactSubmission`, `FeatureFlag`, `AuthBootstrap`) now live in
+>   `platform.prisma`. Add HCE Hub models here; `app_…` migrations touching only
+>   `app_*` tables. The `app_*` prefix predates that split (it namespaced us
+>   while the file was shared) and is **kept** — it still distinguishes Hub
+>   tables in the database, and renaming would be a migration with no upside.
+>   Sunrise [#429](https://github.com/human-centric-engineering/sunrise/issues/429)
+>   — the ask that made this file fork-reserved — landed in v0.8.0.
 > - **`.context/app/`** — HCE Hub's own documentation tree (Sunrise never creates
 >   it → never conflicts)
 > - `app/brand-theme.css`, and HCE Hub identity: `package.json`, `README.md`,
