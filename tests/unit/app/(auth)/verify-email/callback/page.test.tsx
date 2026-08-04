@@ -25,6 +25,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VerifyCallbackClientContent } from '@/app/(auth)/verify-email/callback/verify-callback-content';
+import { AUTH_LANDING_LABEL, AUTH_LANDING_ROUTE } from '@/lib/auth-landing/route';
 
 // Mock next/navigation
 vi.mock('next/navigation', () => ({
@@ -116,10 +117,14 @@ describe('VerifyCallbackClientContent', () => {
       // Arrange & Act
       render(<VerifyCallbackClientContent />);
 
-      // Assert: Success message appears
+      // Assert: Success message appears. The destination is named from the seam
+      // (AUTH_LANDING_LABEL), not hardcoded "Dashboard", so a fork that renames
+      // its landing surface doesn't have to edit this assertion.
       await waitFor(() => {
         expect(screen.getByText(/email verified!/i)).toBeInTheDocument();
-        expect(screen.getByText(/redirecting to dashboard/i)).toBeInTheDocument();
+        expect(
+          screen.getByText(new RegExp(`redirecting to ${AUTH_LANDING_LABEL}`, 'i'))
+        ).toBeInTheDocument();
       });
     });
 
@@ -137,13 +142,14 @@ describe('VerifyCallbackClientContent', () => {
       });
     });
 
-    it('should redirect to dashboard when no error param', async () => {
+    it('should redirect to the auth landing route when no error param', async () => {
       // Arrange & Act
       render(<VerifyCallbackClientContent />);
 
-      // Assert: Router replace is called with /dashboard
+      // Assert: reads the seam rather than hardcoding /dashboard, so a fork that
+      // fills lib/app/auth-landing.ts doesn't have to edit this assertion.
       await waitFor(() => {
-        expect(mockRouter.replace).toHaveBeenCalledWith('/dashboard');
+        expect(mockRouter.replace).toHaveBeenCalledWith(AUTH_LANDING_ROUTE);
       });
     });
 

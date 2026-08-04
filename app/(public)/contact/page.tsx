@@ -5,17 +5,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ContactForm } from '@/components/forms/contact-form';
 import { BRAND } from '@/lib/brand';
 
+const description = `Get in touch with the ${BRAND.name} team. Questions, feedback, or just want to say hello? We would love to hear from you.`;
+
 export const metadata: Metadata = {
   title: 'Contact',
-  description: `Get in touch with the ${BRAND.name} team. Questions, feedback, or just want to say hello? We would love to hear from you.`,
+  description,
   openGraph: {
     title: `Contact - ${BRAND.name}`,
-    description: `Get in touch with the ${BRAND.name} team. Questions, feedback, or just want to say hello? We would love to hear from you.`,
+    description,
   },
   twitter: {
     card: 'summary_large_image',
     title: `Contact - ${BRAND.name}`,
-    description: `Get in touch with the ${BRAND.name} team. Questions, feedback, or just want to say hello? We would love to hear from you.`,
+    description,
   },
 };
 

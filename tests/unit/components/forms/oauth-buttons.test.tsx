@@ -25,6 +25,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { OAuthButtons } from '@/components/forms/oauth-buttons';
+import { AUTH_LANDING_ROUTE } from '@/lib/auth-landing/route';
 
 // Mock dependencies
 vi.mock('@/lib/auth/client', () => ({
@@ -129,12 +130,13 @@ describe('components/forms/oauth-buttons', () => {
       const button = screen.getByRole('button', { name: /continue with google/i });
       await user.click(button);
 
-      // Assert: Verify OAuth was initiated with default callback
+      // Assert: the default callback is the seam, not a hardcoded /dashboard
+      // (see lib/app/auth-landing.ts)
       await waitFor(() => {
         expect(authClient.signIn.social).toHaveBeenCalledWith(
           expect.objectContaining({
             provider: 'google',
-            callbackURL: '/dashboard',
+            callbackURL: AUTH_LANDING_ROUTE,
           })
         );
       });

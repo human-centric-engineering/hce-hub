@@ -1,17 +1,19 @@
 import type { Metadata } from 'next';
 import { BRAND } from '@/lib/brand';
 
+const description = `Terms of Service for ${BRAND.name}. Read our terms and conditions for using the service.`;
+
 export const metadata: Metadata = {
   title: 'Terms of Service',
-  description: `Terms of Service for ${BRAND.name}. Read our terms and conditions for using the service.`,
+  description,
   openGraph: {
     title: `Terms of Service - ${BRAND.name}`,
-    description: `Terms of Service for ${BRAND.name}. Read our terms and conditions for using the service.`,
+    description,
   },
   twitter: {
     card: 'summary',
     title: `Terms of Service - ${BRAND.name}`,
-    description: `Terms of Service for ${BRAND.name}. Read our terms and conditions for using the service.`,
+    description,
   },
 };
 

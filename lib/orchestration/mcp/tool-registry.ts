@@ -11,9 +11,6 @@
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { capabilityDispatcher } from '@/lib/orchestration/capabilities/dispatcher';
-// HCE Hub keep-mine (fix/mcp-capability-boot-registration): the MCP dispatch
-// path must warm the capability registry, like the chat + workflow paths do.
-// See the note at the top of `callMcpTool`. Filed upstream; delete on merge.
 import { registerBuiltInCapabilities } from '@/lib/orchestration/capabilities/registry';
 import { capabilityFunctionDefinitionSchema } from '@/lib/validations/orchestration';
 import type {
@@ -153,15 +150,6 @@ export async function callMcpTool(
   args: Record<string, unknown> | undefined,
   caller: { userId: string | null; scopedAgentId?: string | null; scope?: Record<string, string> }
 ): Promise<McpToolCallResult> {
-  // Warm the in-memory capability registry before dispatch. The chat
-  // (`streaming-handler`) and workflow (`agent-call`) paths both call this
-  // before dispatching; the MCP path did not, so a tool call on a process that
-  // had only ever served MCP hit an empty registry and failed `Unknown
-  // capability` for every capability (Hub tools AND core built-ins). Idempotent
-  // — a cheap boolean check once flushed. [HCE Hub keep-mine — Sunrise gap,
-  // filed upstream; this belongs in core. Delete on merge.]
-  registerBuiltInCapabilities();
-
   // Resolve the actual capability slug from tool name (custom names are
   // supported, so we look up by either). Resolve against the UNSCOPED global
   // list on purpose: a direct call to a tool disabled for the scoped agent
@@ -197,6 +185,23 @@ export async function callMcpTool(
 
   let result;
   try {
+    // Warm the in-memory capability registry before dispatching. `tools/list`
+    // reads `McpExposedTool` rows straight from the DB, so discovery works on a
+    // cold process while dispatch would not: on a server that has only ever
+    // served MCP — no chat or workflow request yet — the registry is empty and
+    // EVERY tool call fails with `Unknown capability`, built-ins included.
+    // Normal traffic masks it because a chat or workflow request usually warms
+    // the registry first; a pure-MCP workload hits it head-on.
+    //
+    // Idempotent (a cheap boolean once flushed), and this is the same thing the
+    // chat path (`streaming-handler.ts`) and the workflow path
+    // (`engine/executors/agent-call.ts`) already do before dispatching.
+    //
+    // NB: this must live on the DISPATCH path, not in `instrumentation.ts` /
+    // `initApp` — instrumentation and route handlers do not share a module
+    // graph, so warming at boot leaves the route-realm registry empty.
+    registerBuiltInCapabilities();
+
     result = await capabilityDispatcher.dispatch(tool.slug, args ?? {}, context);
   } catch (err) {
     logger.error('MCP tool call: dispatcher threw', {

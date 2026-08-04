@@ -21,26 +21,28 @@ vi.mock('@/lib/logging', () => ({
 vi.mock('@/lib/orchestration/capabilities/dispatcher', () => ({
   capabilityDispatcher: {
     dispatch: vi.fn(),
-    // `callMcpTool` now warms the registry (registerBuiltInCapabilities), which
-    // calls `capabilityDispatcher.register(...)` for each built-in — a no-op here.
-    register: vi.fn(),
   },
 }));
 
-// Partial mock: keep every real export (the capability registry that
-// `callMcpTool` now warms transitively pulls in `notificationToSchema`,
-// `workflowDefinitionSchema`, … via the engine executors) and override only the
-// schema this suite drives. (HCE Hub — adapted with the MCP registry-warming fix.)
-vi.mock('@/lib/validations/orchestration', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/validations/orchestration')>()),
+vi.mock('@/lib/validations/orchestration', () => ({
   capabilityFunctionDefinitionSchema: {
     safeParse: vi.fn(),
   },
 }));
 
+// `callMcpTool` warms the capability registry before dispatching (without it,
+// a process that has only ever served MCP has an empty in-memory registry and
+// every tool call fails with `Unknown capability`). Mock it as the collaborator
+// it is — importing the real one would drag every built-in capability, and
+// through `run_workflow` the whole engine-executor graph, into this unit test.
+vi.mock('@/lib/orchestration/capabilities/registry', () => ({
+  registerBuiltInCapabilities: vi.fn(),
+}));
+
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { capabilityDispatcher } from '@/lib/orchestration/capabilities/dispatcher';
+import { registerBuiltInCapabilities } from '@/lib/orchestration/capabilities/registry';
 import { capabilityFunctionDefinitionSchema } from '@/lib/validations/orchestration';
 import {
   listMcpTools,
@@ -409,6 +411,34 @@ describe('callMcpTool', () => {
     );
     expect(result.isError).toBeUndefined();
     expect(asText(result.content[0])).toContain('answer');
+  });
+
+  it('warms the capability registry BEFORE dispatching', async () => {
+    // On a process that has only ever served MCP — no chat or workflow request
+    // yet — the in-memory registry is empty, so every tool call fails with
+    // `Unknown capability`, built-ins included. `tools/list` still works
+    // (it reads McpExposedTool rows from the DB), so discovery and dispatch
+    // disagree. The chat and workflow dispatch paths already warm the registry;
+    // this one did not.
+    vi.mocked(prisma.mcpExposedTool.findMany).mockResolvedValue([makeExposedTool()] as never);
+    vi.mocked(capabilityFunctionDefinitionSchema.safeParse).mockReturnValue(
+      makeSuccessfulParse() as never
+    );
+    vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue({ id: 'agent-42' } as never);
+
+    const callOrder: string[] = [];
+    vi.mocked(registerBuiltInCapabilities).mockImplementation(() => {
+      callOrder.push('register');
+    });
+    vi.mocked(capabilityDispatcher.dispatch).mockImplementation(async () => {
+      callOrder.push('dispatch');
+      return { success: true, data: {} };
+    });
+
+    await callMcpTool('search_knowledge', {}, { userId: 'user-1' });
+
+    // Order is the whole point — warming after dispatch would fix nothing.
+    expect(callOrder).toEqual(['register', 'dispatch']);
   });
 
   it('serializes result data as JSON in content block', async () => {
