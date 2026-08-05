@@ -23,6 +23,25 @@ This doc is meant to evolve. Add ideas freely, let them mature, promote them upw
 
 The most compound-interest area. Sunrise is itself a project in the Hub, which means every fork built on it becomes part of a feedback loop. The more projects HCE builds on Sunrise, the more valuable Sunrise gets, and the more efficiently each fork inherits improvements.
 
+> **The manual process is now established (2026-08).** When this section was
+> written the release/sync loop was aspirational. It isn't any more: HCE Hub has
+> done a real, batched upstream sync (Sunrise v0.6.0 → v0.8.0), and the loop is
+> codified _in this repo_ — the [`platform-divergences.md`](../platform-divergences.md)
+> ledger (carried platform-file edits + fork-first upstream asks), the keep-mine
+> merge discipline and `git merge vX.Y.Z` cadence in the CLAUDE.md banner, and a
+> working upstream-issue workflow (a dozen issues filed and several already landed
+> upstream). So the items below are no longer "invent the loop" — they're
+> **"automate the loop we now run by hand,"** and they have a concrete spec to
+> automate: the divergence ledger + the open upstream issues.
+>
+> **Near-term move this unlocks (`[v1.x]` / strong V2 candidate):** make **Sunrise
+> an actual project in the Hub**, seeded from the platform-divergences ledger and
+> the open upstream issues as its features/tasks. That turns today's markdown
+> reconciliation surface into Hub-resident, sidekick-queryable data — a natural
+> real _second_ project and the first genuine dogfood of this bidirectional loop.
+> It needs no new architecture; `hostPlatform` and per-project membership already
+> support it.
+
 ### Cross-fork problem propagation `[v1.x]`
 
 When working on a Sunrise fork, you find a problem or improvement in the underlying Sunrise template. Push it into the Hub via MCP from Claude Code, or directly through the UI. An agent checks whether the issue is already solved in the fork (since the fork has likely diverged), and either:
@@ -151,6 +170,56 @@ The `next-task` recommendation favours features in the project's `active` phase 
 The `parked` status turns Phase into a structured ideas pool. "Things we want to do in six months" lives in a parked phase: visible, browseable, not polluting active views, easily promoted to `upcoming` when their moment comes. The sidekick can mine parked phases for "anything in here that's connected to what we're doing now?"
 
 *Why it matters:* HCE generates more ideas than it ships. Without a structured park, ideas live in brain-dumps and decay; with one, they remain reachable and the sidekick can surface them when adjacent work brings them back into relevance.
+
+### Frictionless idea capture — the parking gesture `[v1.x]`
+
+_Owner-flagged for V2 (2026-08-05)._ A low-friction way to **capture a new idea or
+tweak the moment it occurs, without leaving the current work** — then triage it
+later. Two scales, one gesture:
+
+- **A small tweak** — "that button should be aligned differently" spotted while
+  mid-flow on an unrelated feature. Jot it, keep working; don't context-switch to
+  file it properly.
+- **A futures-level idea** — a "what if the Hub could…" thought of the same
+  altitude as the entries in this doc. Capture it before it evaporates.
+
+Both land in a **park** and wait for triage: a captured item is later _promoted_
+into a real feature (through [[#Discovery → intake handoff|intake]]), _lifted_ into
+this futures doc, or _dropped_. This is the spiritual return of the `add-backlog`
+gesture the claim-model pivot removed — but at the **idea/feature** altitude, not
+the task altitude.
+
+**Where it lives:** the [[#Future-work parking `[v1.x]`|`parked` phase]] is the
+natural home for project-scoped ideas (a parked-phase feature stub in
+`planning`/sketch stage). Futures-level, cross-project ideas may want a lighter
+**studio-wide idea inbox** above any single project — worth deciding at build time
+whether that's a second parked scope or a distinct surface.
+
+**Capture channels:** an **MCP verb from Claude Code** (jot without leaving the dev
+session — the frictionless path that matters most when you're heads-down) and a
+**quick "jot" affordance** on any Hub surface (a keystroke, not a form). The
+sidekick can then mine the park: "anything parked that's connected to what we're
+doing now?"
+
+**Deliberately NOT GitHub issues.** HCE leans on GitHub issues heavily for
+Sunrise/fork _code_ work, and this is a different concept on purpose:
+
+| | GitHub issues | Hub idea capture |
+|---|---|---|
+| Altitude | code-level (a bug, a specific change) | plan-level (a feature, a direction, a tweak-to-triage) |
+| Scope | per-repo | cross-project + studio-wide |
+| Audience | often public (Sunrise is OSS) | internal, private to the studio |
+| Bound to | a codebase + dev workflow | the planning/intake/futures flow |
+| Fate | closed by a PR | promoted to a feature, lifted to futures, or dropped |
+
+The two coexist: a Sunrise code fix is still a GitHub issue (and, once "Sunrise as
+a Hub project" lands above, mirrored as a Hub task); a "the Hub should do X" idea
+is a Hub capture.
+
+*Why it matters:* the gap between _having_ an idea and _its surviving_ is where
+most studio ideas die. Capture-without-friction respects the human-centric agency
+principle — it never derails the work you're in, and nothing gets pushed at you;
+the park is pulled from, on your terms, when you're ready to triage.
 
 ### Cross-project phase visibility `[Module N]`
 
