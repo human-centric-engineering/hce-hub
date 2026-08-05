@@ -51,7 +51,7 @@ carrier that Sunrise 0.6.0 finished wiring across every dispatch site. The
 fork-owned registration points:
 
 - `lib/app/capabilities.ts` → `initAppCapabilities()` — register custom
-  capabilities (project lookup, GitHub reconcile, per-user brief, …).
+  capabilities (project lookup, per-user brief, …).
 - `lib/app/context-contributors.ts` → `initAppContextContributors()` — inject
   per-turn `LOCKED CONTEXT` for a project sidekick.
 - `lib/app/knowledge-access-contributors.ts` → widen a restricted agent's
@@ -60,8 +60,11 @@ fork-owned registration points:
   workers).
 - `lib/app/protected-routes.ts` / `lib/app/public-nav.ts` / `lib/app/admin-nav.ts`
   — route protection + navigation.
-- Inbound adapter registry — a GitHub webhook adapter whose `normalise()` derives
-  `scope` (e.g. `{ projectId }`) from the verified payload.
+- Inbound adapter registry — for _workflow-firing_ inbound webhooks (an adapter's
+  `normalise()` derives `scope`, e.g. `{ projectId }`, from the verified payload).
+  Note the **GitHub PR sync** webhook does _not_ use this: it's a deterministic
+  board reconcile, not a workflow, so it's a standalone route — see
+  [`github-sync.md`](./github-sync.md).
 
 Scope is a generic string map in core (`Record<string, string>`); HCE Hub maps it
 to `{ projectId, … }`. Core never names a scope key.
