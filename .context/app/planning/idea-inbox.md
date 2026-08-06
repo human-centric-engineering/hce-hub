@@ -52,3 +52,29 @@ work, so the dogfood value is mostly in the **capture → promote-to-current-pha
 flow, plus two `bug`-kind tasks. Timing call still open (owner): fix bugs #3/#5 as
 a quick standalone PR now, or hold them as the first captures once the machinery
 lands. Low priority either way (single-user for now).
+
+## Captured 2026-08-06 (engineering — deferred code-review findings)
+
+Debt surfaced by `/code-review` and consciously **not** fixed in the PR that found
+it (rationale in each PR's follow-up commit). Parked here so the deferral is a
+tracked decision, not a lost commit-body line. These are `bug`-kind tasks on the
+feature they belong to once [[bug-handling]] lands.
+
+7. **`read_only` project role would silently gain write** · `park` (security-adjacent) · from PR #107 (f-phases t1)
+   Member-tier Hub write verbs (`create_phase`, `update_phase`, `create_feature`, …)
+   gate on `canAccessProject` returning any membership (`basis !== null`), not on a
+   `contribute` tier. `ProjectRole` reserves `read_only` (`app.prisma`) but never
+   issues it, so there's no exposure **today** — but the day a `read_only` member row
+   exists, that user can write. Fix belongs in **`canAccessProject`** (one funnel,
+   all callers — not per-capability) at the same time `read_only` is actually
+   introduced; doing it per-verb now would be inconsistent and wouldn't even close it
+   (the funnel passes any member for `contribute`). Gate: introducing `read_only`.
+
+8. **Phase-delete race in `update_feature` → generic error, not `invalid_phase`** · `quick-win` · from PR #107 (f-phases t1)
+   `update_feature`'s `phaseId` (and its existing `dependsOnFeatureIds`) validate
+   existence with a `findFirst`/`findMany` *before* the transactional write, so a row
+   deleted in the window throws Prisma `P2025` out of `execute()` instead of the clean
+   `invalid_phase` / `invalid_dependency` result. Rare and non-harmful (a worse error
+   message on a delete-race), and consistent across both fields — so the fix is a
+   **central `P2025` → friendly-capability-error** helper covering both, not a
+   phase-only patch.
