@@ -35,7 +35,7 @@ describe('GET /api/v1/projects/:id/plan', () => {
 
   it('returns the plan for a member, scoped to the session user', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
-    planMock.mockResolvedValue({ projectId: VALID_ID, features: [] });
+    planMock.mockResolvedValue({ projectId: VALID_ID, projectSlug: null, phases: [] });
     const res = await planGet(req(), params());
     expect(res.status).toBe(200);
     expect(planMock).toHaveBeenCalledWith(expect.any(String), VALID_ID);

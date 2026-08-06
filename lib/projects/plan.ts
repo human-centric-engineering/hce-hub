@@ -15,7 +15,7 @@
  * "unassigned / former member" — carried f-data-model t-3 finding), never
  * dereferenced.
  */
-import type { FeaturePlanningStage } from '@prisma/client';
+import type { FeaturePlanningStage, PhaseStatus } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { getAccessibleProject } from '@/lib/projects/access';
 import { computeEffectiveStatus, type EffectiveStatus } from '@/lib/projects/task-status';
@@ -87,12 +87,34 @@ export interface PlanFeatureView {
   progress: { merged: number; total: number; live: number; blocked: number };
 }
 
-/** The Plan view's payload — features already in `planOrder()`. */
+/**
+ * A phase band on the Plan — a group of features filed under one phase (f-phases
+ * §22 t2). Features inside keep their project-wide `planOrder()`. The residual
+ * band (`id: null`) collects features not yet filed under any phase.
+ */
+export interface PlanPhaseBand {
+  /** Phase id, or `null` for the residual "no phase" band. */
+  id: string | null;
+  /** Phase name, or `null` for the residual band. */
+  name: string | null;
+  /** `null` for the residual band; `parked` bands are rendered collapsed. */
+  status: PhaseStatus | null;
+  /** Display position; `null` for the residual band. */
+  ordinal: number | null;
+  features: PlanFeatureView[];
+}
+
+/**
+ * The Plan view's payload — features grouped into phase bands (f-phases §22 t2).
+ * Band order: non-parked phases by ordinal, then the residual band (only if it
+ * has features), then parked phases last (collapsed by the client). A project
+ * with no phases yields a single residual band = the flat plan-ordered list.
+ */
 export interface ProjectPlan {
   projectId: string;
   /** The project's slug (`hce-hub`) — feature-page links prefer it; `null` → falls back to `projectId`. */
   projectSlug: string | null;
-  features: PlanFeatureView[];
+  phases: PlanPhaseBand[];
 }
 
 /**
@@ -118,6 +140,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
       planningStage: true,
       helpWanted: true,
       ownerUserId: true,
+      phaseId: true,
       dependencies: { select: { dependsOnFeatureId: true } },
       indicativeTasks: {
         orderBy: { order: 'asc' },
@@ -218,11 +241,70 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
     }))
   );
   const viewById = new Map(views.map((v) => [v.id, v]));
+  // `planOrder` returns the same ids it was given → every lookup resolves.
+  const orderedViews = ordered.map((o) => viewById.get(o.id)!);
+
+  // The project's phases, ordinal-ordered (tie → createdAt, per phases-service),
+  // and each feature's phase membership — the two inputs the grouping needs.
+  const phases = await prisma.phase.findMany({
+    where: { projectId },
+    orderBy: [{ ordinal: 'asc' }, { createdAt: 'asc' }],
+    select: { id: true, name: true, status: true, ordinal: true },
+  });
+  const phaseIdByFeature = new Map(features.map((f) => [f.id, f.phaseId]));
 
   return {
     projectId,
     projectSlug: project.slug,
-    // `planOrder` returns the same ids it was given → every lookup resolves.
-    features: ordered.map((o) => viewById.get(o.id)!),
+    phases: groupIntoPhaseBands(orderedViews, phaseIdByFeature, phases),
   };
+}
+
+/**
+ * Partition the plan-ordered features into phase bands. Non-parked phases come
+ * first (ordinal order), then the residual "no phase" band (only if it has
+ * features), then parked phases last (the client renders them collapsed). Empty
+ * real phases are kept so the roadmap skeleton stays visible; an empty residual
+ * is dropped. A feature whose `phaseId` points outside the loaded phase set (a
+ * mid-read delete) falls into the residual band — never dropped.
+ */
+function groupIntoPhaseBands(
+  orderedViews: PlanFeatureView[],
+  phaseIdByFeature: Map<string, string | null>,
+  phases: { id: string; name: string; status: PhaseStatus; ordinal: number }[]
+): PlanPhaseBand[] {
+  const known = new Set(phases.map((p) => p.id));
+  const byPhase = new Map<string, PlanFeatureView[]>();
+  const residual: PlanFeatureView[] = [];
+  for (const v of orderedViews) {
+    const pid = phaseIdByFeature.get(v.id) ?? null;
+    if (pid !== null && known.has(pid)) {
+      const arr = byPhase.get(pid);
+      if (arr) arr.push(v);
+      else byPhase.set(pid, [v]);
+    } else {
+      residual.push(v);
+    }
+  }
+
+  const bandFor = (p: {
+    id: string;
+    name: string;
+    status: PhaseStatus;
+    ordinal: number;
+  }): PlanPhaseBand => ({
+    id: p.id,
+    name: p.name,
+    status: p.status,
+    ordinal: p.ordinal,
+    features: byPhase.get(p.id) ?? [],
+  });
+
+  const bands: PlanPhaseBand[] = [];
+  for (const p of phases) if (p.status !== 'parked') bands.push(bandFor(p));
+  if (residual.length > 0) {
+    bands.push({ id: null, name: null, status: null, ordinal: null, features: residual });
+  }
+  for (const p of phases) if (p.status === 'parked') bands.push(bandFor(p));
+  return bands;
 }

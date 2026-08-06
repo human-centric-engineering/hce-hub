@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import {
   featureStatus,
   taskStatus,
+  phaseStatus,
   firstName,
   prLabel,
 } from '@/components/hub/projects/plan/presentation';
@@ -14,6 +15,13 @@ describe('featureStatus / taskStatus', () => {
   it('maps feature status to a signal tone + label', () => {
     expect(featureStatus('shipped')).toEqual({ tone: 'merged', label: 'shipped' });
     expect(featureStatus('in_flight')).toEqual({ tone: 'pr', label: 'in flight' });
+  });
+
+  it('maps a phase status to a tone, and returns null for parked (rendered muted)', () => {
+    expect(phaseStatus('active')).toEqual({ tone: 'active', label: 'active' });
+    expect(phaseStatus('upcoming')).toEqual({ tone: 'available', label: 'upcoming' });
+    expect(phaseStatus('complete')).toEqual({ tone: 'merged', label: 'complete' });
+    expect(phaseStatus('parked')).toBeNull();
   });
 
   it('maps task effective status, including computed blocked', () => {
