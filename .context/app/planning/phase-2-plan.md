@@ -80,8 +80,8 @@ calls into a shipped Sunrise registry) or pure app-tier work (`app.prisma` model
 | `f-phases` | `app.prisma` (Phase model **already exists**) + new capabilities via `lib/app/capabilities.ts` + `app/(hub)` UI | fork→core | none |
 | `f-bug-handling` | `app.prisma` **adds `Task.kind`** + `next_task`/`feature-status` mods + `app/(hub)` UI | fork→core | none |
 | `f-idea-capture` | new capabilities + `app/(hub)` UI (parked `Phase` exists) | fork→core | none |
-| `f-github-identity` | new satellite table `app_user_github` (hand-FK → `user`, like `leadUserId`) + a profile surface | fork→core | **watch A** |
-| `f-invite-provisioning` | Sunrise invite/signup flow (`SIGNUP_MODE=invite_only`) + `ProjectMember` pre-seed | fork→core? | **watch B** |
+| `f-github-identity` | new satellite table `app_user_github` (hand-FK → `user`, like `leadUserId`) + a section on the existing `/profile` + `/settings` | fork→core | **watch A** (seam) |
+| `f-invite-provisioning` | native Sunrise invites (exist) + extend project-add to pre-acceptance invitees | fork→core | **watch B** (data shape) |
 | `f-sunrise-project` | data seed (MCP/scripts) from `platform-divergences.md` + GitHub issues | — (data) | none |
 | `f-futures-in-hub` | data authoring (`futures.md` → parked-phase features) | — (data) | none |
 
@@ -89,15 +89,22 @@ calls into a shipped Sunrise registry) or pure app-tier work (`app.prisma` model
 through existing leaf-fork seams. Two build-time watch-items ([[planning-retro]]
 B17 — tier/upstream is a build-time finding, verified at claim not asserted here):
 
-- **Watch A · GitHub-connect profile surface.** No Hub user-profile page exists
-  (`app/(hub)` has none; account settings are Sunrise's). At claim, check the seam
-  catalog first ([[planning-retro]] HB5): is there a fork-owned way to add a
-  "GitHub" section to account settings, or does the Hub need its own small profile
-  surface? Possible (small) upstream ask if neither.
-- **Watch B · Invite mechanism.** No first-class invitation entity was found; the
-  Hub is `invite_only` via Sunrise auth. `f-invite-provisioning` needs recon into
-  how a user is invited and whether membership can be pre-seeded before acceptance
-  — the phase's biggest unknown. Confirm at claim from behaviour, not assumed.
+- **Watch A · profile-section seam** (narrowed 2026-08-06, owner). The pages
+  **exist** — `app/(protected)/profile/page.tsx` + `.../settings/page.tsx` (Sunrise,
+  fork-visible) — and that's where the GitHub-connect section goes. The open
+  question is the **injection seam**: is there a fork-owned profile/settings
+  section-contributor seam (grep the catalog first — HB5), or do we add one? Since
+  the pages are Sunrise-owned route-group files, a section seam is the clean path;
+  if none exists it's a **small upstream ask** (a profile-section contributor),
+  consistent with the leaf-fork model.
+- **Watch B · pre-acceptance membership** (narrowed 2026-08-06, owner). Invites are
+  **native Sunrise** — confirmed (`auth.prisma` invitation metadata + the
+  `user-created` hooks); not ours to build. The work is: today project-add only
+  accepts **already-accepted** users; extend it to **invited-but-not-yet-accepted**
+  ones. The single recon question is the **data shape**: does a pending invitee have
+  a `User` row a `ProjectMember` can reference (then it's an add-flow filter change),
+  or only an invitation record (then we need a pending-membership reconciled to
+  `userId` on accept)? Confirm from behaviour at claim.
 
 ## Features (epic: `phase-2`)
 
@@ -110,7 +117,7 @@ _hypothesis_, re-checked at `plan_feature` ([[plan-authoring-guide]] sizing).
 | 02 | `f-bug-handling` | f-phases | 2 | Bug = `bug`-kind Task: add `Task.kind`, `next_task` bias, kind-aware "shipped · N fixes" status, the active-fixes strip, the standing Platform/Maintenance feature |
 | 03 | `f-idea-capture` | f-phases | 2 | The parking gesture: capture + promote-to-phase verbs, a quick-jot UI affordance, the inbox view (parked phase / studio inbox) |
 | 04 | `f-github-identity` | — | 2 | Connect a GitHub login to a Hub user (`app_user_github` satellite + connect UI); unblocks §14 merge attribution + Sunrise-project authorship |
-| 05 | `f-invite-provisioning` | — | 1–2 | Pre-provision an invited user into projects so they see work on first login (recon-heavy — watch B) |
+| 05 | `f-invite-provisioning` | — | 1–2 | Extend project-add to **invited-but-not-yet-accepted** users (invites are native Sunrise) so first login isn't empty — supports onboarding John (watch B: data shape) |
 | 06 | `f-sunrise-project` | f-phases (·f-github-identity) | 2 | Onboard **Sunrise as the 2nd Hub project** (data): seed from the divergence ledger + open upstream issues; phase-as-release bands |
 | 07 | `f-futures-in-hub` | f-phases, f-idea-capture | 1 | Recreate `futures.md` as parked-phase features/ideas in the Hub (data) |
 
@@ -183,18 +190,24 @@ Let a user link their GitHub login. **Adds schema** (a satellite table, HB8) —
   ([[planning-retro]] B11: reference the `@@map` table `user`, apply via
   `db:migrate:deploy`); a connect/disconnect capability + API; add to
   `HUB_SUBJECT_TABLES`/data-export (GDPR obligation).
-- **t** — The connect UI. **Resolve watch A at claim** (HB5 — seam catalog first):
-  add a "GitHub" section to Sunrise account settings via a seam, or a small Hub
-  profile surface.
-*Done when:* a user can connect/disconnect a GitHub login; it's exported for the
-data subject; gates green; **browser-validated**. *Follow-on (optional, may defer):*
-wire `f-github-sync`'s reconcile actor to prefer the mapped user when present.
+- **t** — The connect UI: a "GitHub" section on the **existing `/profile` +
+  `/settings`** (`app/(protected)/**`). **Resolve watch A at claim** (HB5 — seam
+  catalog first): inject via a fork-owned profile/settings section-contributor seam
+  if one exists, else add that seam (small upstream ask) rather than editing the
+  Sunrise route-group pages directly.
+*Done when:* a user can connect/disconnect a GitHub login from `/profile` +
+`/settings`; it's exported for the data subject; gates green; **browser-validated**.
+*Follow-on (optional, may defer):* wire `f-github-sync`'s reconcile actor to prefer
+the mapped user when present.
 
-### 05 · `f-invite-provisioning` — invited users see work on first login
-*Depends on:* — · *~1–2 PRs (recon-heavy — watch B)*
-Pre-provision an invited-but-not-yet-accepted user into the projects they'll join,
-so first login isn't an empty Hub. **Claim opens with a recon** into the Sunrise
-invite/signup mechanism (watch B) — sizing firms up there ([[planning-retro]] B17).
+### 05 · `f-invite-provisioning` — add invited (pre-acceptance) users to projects
+*Depends on:* — · *~1–2 PRs (watch B — data shape)*
+Invites are **native Sunrise** (they exist). Today project-add only accepts
+**already-accepted** users; this extends it so you can add an
+**invited-but-not-yet-accepted** user, so their first login isn't an empty Hub.
+Directly supports onboarding John. **Claim opens with the watch-B recon** — the one
+open question, the pending-invitee data shape — which decides the shape below and
+firms up sizing ([[planning-retro]] B17).
 
 - **t** — Recon + pre-seed: how invitation resolves under `invite_only`; whether a
   `ProjectMember` can be seeded against a pending/`userId`-less identity, or needs a
@@ -230,9 +243,12 @@ later mine; the source doc is cross-linked; gates green.
 ## Captured quick-wins ([[idea-inbox]])
 
 Not features (task-sized — HB1). Homed as: **#6** board cap → `f-phases` t-2;
-**#4** Daybreak platform → `f-sunrise-project` t-1; **#3** logout + **#5** log
-markdown-render → `bug`-kind tasks once `f-bug-handling` lands (the dogfood), _or_
-a quick standalone fix now (owner's open timing call — low stakes, single-user).
+**#4** Daybreak platform → `f-sunrise-project` t-1; **#3** avatar/username menu →
+**logout + a link to `/profile` (and `/settings`)** (owner, 2026-08-06 — the
+existing pages) + **#5** log markdown-render → `bug`-kind tasks once
+`f-bug-handling` lands (the dogfood), _or_ a quick standalone fix now (owner's open
+timing call — low stakes, single-user). #3's profile link and `f-github-identity`
+land on the same `/profile` surface.
 
 ## Parked phases (future epics)
 
@@ -245,6 +261,11 @@ a quick standalone fix now (owner's open timing call — low stakes, single-user
 
 ## Decisions log (append-only, newest first)
 
+- **2026-08-06 · Watch-items narrowed (owner).** (A) Profile pages already exist
+  (`/profile` + `/settings`); `f-github-identity` extends them via a section seam
+  (add one if absent). (B) Invites are native Sunrise; `f-invite-provisioning` only
+  extends project-add to pre-acceptance invitees — the sole recon is the
+  pending-invitee data shape. Bug #3 (logout) gains a `/profile` link.
 - **2026-08-06 · Phase named "Self-Hosting the Roadmap"** (owner ask for a name +
   number). Bootstrap: features are authored here, created in the Hub's default
   phase, then assigned to `phase-2` once `f-phases` ships.

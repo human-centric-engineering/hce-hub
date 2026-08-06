@@ -31,8 +31,10 @@ the same markdown→Hub move as the chubproject cutover.
    relevant to onboarding John.
 
 3. **Can't log out without visiting admin** · `bug` (→ Platform feature)
-   Make the username/avatar in the side nav clickable → logout. Shell-level, so it
-   hangs on the standing "Platform / Maintenance" feature, not a specific feature.
+   Make the username/avatar in the side nav clickable → **logout + a link to
+   `/profile` (and `/settings`)** (owner, 2026-08-06). Shell-level, so it hangs on
+   the standing "Platform / Maintenance" feature. The profile link and
+   `f-github-identity` share the existing `/profile` surface.
 
 4. **Add Daybreak to host-platform options** · `quick-win`
    One option in the new-project form's platform list (`hostPlatform`).
