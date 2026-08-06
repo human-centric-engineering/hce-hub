@@ -23,6 +23,25 @@ This doc is meant to evolve. Add ideas freely, let them mature, promote them upw
 
 The most compound-interest area. Sunrise is itself a project in the Hub, which means every fork built on it becomes part of a feedback loop. The more projects HCE builds on Sunrise, the more valuable Sunrise gets, and the more efficiently each fork inherits improvements.
 
+> **The manual process is now established (2026-08).** When this section was
+> written the release/sync loop was aspirational. It isn't any more: HCE Hub has
+> done a real, batched upstream sync (Sunrise v0.6.0 → v0.8.0), and the loop is
+> codified _in this repo_ — the [`platform-divergences.md`](../platform-divergences.md)
+> ledger (carried platform-file edits + fork-first upstream asks), the keep-mine
+> merge discipline and `git merge vX.Y.Z` cadence in the CLAUDE.md banner, and a
+> working upstream-issue workflow (a dozen issues filed and several already landed
+> upstream). So the items below are no longer "invent the loop" — they're
+> **"automate the loop we now run by hand,"** and they have a concrete spec to
+> automate: the divergence ledger + the open upstream issues.
+>
+> **Near-term move this unlocks (`[v1.x]` / strong V2 candidate):** make **Sunrise
+> an actual project in the Hub**, seeded from the platform-divergences ledger and
+> the open upstream issues as its features/tasks. That turns today's markdown
+> reconciliation surface into Hub-resident, sidekick-queryable data — a natural
+> real _second_ project and the first genuine dogfood of this bidirectional loop.
+> It needs no new architecture; `hostPlatform` and per-project membership already
+> support it.
+
 ### Cross-fork problem propagation `[v1.x]`
 
 When working on a Sunrise fork, you find a problem or improvement in the underlying Sunrise template. Push it into the Hub via MCP from Claude Code, or directly through the UI. An agent checks whether the issue is already solved in the fork (since the fork has likely diverged), and either:
@@ -59,6 +78,38 @@ If a deployed project has monitoring (errors, performance, alerts), captured sig
 Agent notices that two Hub projects solve similar problems differently. "Lelanea and Wayframer both implemented X, differently — worth comparing?" Sometimes the right answer is "promote this pattern into Sunrise." Sometimes it's "Wayframer's approach is cleaner, consider porting." Sometimes it's "they're different for good reasons, leave alone."
 
 *Why it matters:* Pattern recognition is one of the things AI does well that humans struggle to do across multiple parallel projects. Closes the loop between Sunrise and its forks at a higher level than individual fixes.
+
+### Dedicated release + divergence modelling `[architectural]`
+
+_Deferred by design (2026-08-06 design experiment) — captured so it isn't
+re-litigated from scratch._ When Sunrise is onboarded as a Hub project (see
+[[next-phase-brief]]), releases are modelled as **phases** (`v0.8.0` = a phase;
+its adoption work + reconciled divergences = tasks/features under it) and the
+divergence ledger lives as **tasks under the release-phase**. That's deliberately
+enough for now. A dedicated model would add three things Phase can't carry:
+
+- **`Release`** — `platform`, `version`, `releasedAt` / `adoptedAt`, `status`
+  (available → adopting → adopted / skipped), `changelogUrl`. The "synced to
+  v0.8.0" fact becomes first-class and queryable.
+- **`Divergence`** — the [`platform-divergences.md`](../platform-divergences.md)
+  ledger as rows, with a real lifecycle (open → filed-upstream → landed →
+  retired) linked to the releases that introduce and retire each one.
+- **`AdoptionChecklist` (template → instance)** — the repeatable shape of a sync
+  (keep-mine conflicts, migrations, new seams, breaking changes, divergence
+  reconciliation, follow-ups) instantiated per release, so sync #N starts from a
+  known checklist instead of a hand-listed one.
+
+**Why it's deferred, not dismissed:** phase-as-release is per-project (Sunrise's
+phases = releases; the Hub's phases = epics — no collision) and **reversible** — a
+later `Release` model is a backfill from the release-named phases, not a rewrite.
+The genuinely-additive parts (the adoption *template*, the divergence *lifecycle*)
+depend on a shape we've only sampled **once** (the v0.8.0 sync); designing them now
+is guessing. **Promotion trigger:** ~2–3 syncs have stabilised the adoption
+checklist, *or* a second fork (e.g. Daybreak) makes per-fork release-impact real.
+
+*Why it matters:* the fork-sync/reconcile ritual is HCE's most repetitive
+platform chore; modelling it well is high-compound — but only once real usage has
+taught us the true shape, which the phase-as-release interim is designed to do.
 
 ---
 
@@ -151,6 +202,56 @@ The `next-task` recommendation favours features in the project's `active` phase 
 The `parked` status turns Phase into a structured ideas pool. "Things we want to do in six months" lives in a parked phase: visible, browseable, not polluting active views, easily promoted to `upcoming` when their moment comes. The sidekick can mine parked phases for "anything in here that's connected to what we're doing now?"
 
 *Why it matters:* HCE generates more ideas than it ships. Without a structured park, ideas live in brain-dumps and decay; with one, they remain reachable and the sidekick can surface them when adjacent work brings them back into relevance.
+
+### Frictionless idea capture — the parking gesture `[v1.x]`
+
+_Owner-flagged for V2 (2026-08-05)._ A low-friction way to **capture a new idea or
+tweak the moment it occurs, without leaving the current work** — then triage it
+later. Two scales, one gesture:
+
+- **A small tweak** — "that button should be aligned differently" spotted while
+  mid-flow on an unrelated feature. Jot it, keep working; don't context-switch to
+  file it properly.
+- **A futures-level idea** — a "what if the Hub could…" thought of the same
+  altitude as the entries in this doc. Capture it before it evaporates.
+
+Both land in a **park** and wait for triage: a captured item is later _promoted_
+into a real feature (through [[#Discovery → intake handoff|intake]]), _lifted_ into
+this futures doc, or _dropped_. This is the spiritual return of the `add-backlog`
+gesture the claim-model pivot removed — but at the **idea/feature** altitude, not
+the task altitude.
+
+**Where it lives:** the [[#Future-work parking `[v1.x]`|`parked` phase]] is the
+natural home for project-scoped ideas (a parked-phase feature stub in
+`planning`/sketch stage). Futures-level, cross-project ideas may want a lighter
+**studio-wide idea inbox** above any single project — worth deciding at build time
+whether that's a second parked scope or a distinct surface.
+
+**Capture channels:** an **MCP verb from Claude Code** (jot without leaving the dev
+session — the frictionless path that matters most when you're heads-down) and a
+**quick "jot" affordance** on any Hub surface (a keystroke, not a form). The
+sidekick can then mine the park: "anything parked that's connected to what we're
+doing now?"
+
+**Deliberately NOT GitHub issues.** HCE leans on GitHub issues heavily for
+Sunrise/fork _code_ work, and this is a different concept on purpose:
+
+| | GitHub issues | Hub idea capture |
+|---|---|---|
+| Altitude | code-level (a bug, a specific change) | plan-level (a feature, a direction, a tweak-to-triage) |
+| Scope | per-repo | cross-project + studio-wide |
+| Audience | often public (Sunrise is OSS) | internal, private to the studio |
+| Bound to | a codebase + dev workflow | the planning/intake/futures flow |
+| Fate | closed by a PR | promoted to a feature, lifted to futures, or dropped |
+
+The two coexist: a Sunrise code fix is still a GitHub issue (and, once "Sunrise as
+a Hub project" lands above, mirrored as a Hub task); a "the Hub should do X" idea
+is a Hub capture.
+
+*Why it matters:* the gap between _having_ an idea and _its surviving_ is where
+most studio ideas die. Capture-without-friction respects the human-centric agency
+principle — it never derails the work you're in, and nothing gets pushed at you;
+the park is pulled from, on your terms, when you're ready to triage.
 
 ### Cross-project phase visibility `[Module N]`
 

@@ -8,6 +8,67 @@ host_platform: sunrise
 
 > This document describes what the HCE Hub is, why we're building it, and the shape of v1. It is intended to be the brief carried into a Claude Code session in the Sunrise repository to plan the actual build.
 
+## 0. As-built reconciliation (2026-08-05)
+
+> **This is the canonical status.** The sections below are the original
+> pre-build brief, kept as intent/history. Where a specific enumeration below
+> (status values, capability names, mechanism) disagrees with this section, **this
+> section is right** — the model evolved during the build. V1 is shipped and
+> deployed at `hub.hce.studio`.
+
+**What shipped and is live.** The full non-AI coordination spine — projects,
+features, tasks, dependencies, membership/access, the plan + board + task-sheet +
+journal UI — plus the self-hosting arc that made the Hub its own record. Deployed
+to prod (Neon), with the Hub's own build (`chubproject`) as the live record.
+
+**The V1/V2 boundary was re-cut.** §8 below lists intake, sidekick, and the
+morning brief as v1 scope. In practice V1 = **everything non-AI**, and the three
+AI features are **V2**: `f-sidekick` (feature 12), `f-intake` (feature 13),
+`f-morning-brief` (feature 15). We deployed V1 deliberately early to unblock the
+GitHub webhook (needs a public URL). V2 also now targets an **idea/tweak capture**
+concept — see [[futures#Frictionless idea capture — the parking gesture `[v1.x]`|Futures: frictionless idea capture]].
+
+**The claim model pivoted: you claim _features_, not tasks.** A task is _born_
+`claimed` (owned by the feature owner) when its feature is planned; you then
+`start_task` (→ active) and `complete_task` (→ merged). The `claim-task` and
+`add-backlog` capabilities in §11 were **removed** (they linger only as dead rows
+in the long-lived dev DB). The real registered verb surface today:
+
+> `next_task` · `create_feature` · `claim_feature` · `plan_feature` ·
+> `ship_feature` · `create_task` · `start_task` · `complete_task` · `set_pr` ·
+> `update_task` · `update_feature` · `flag_help_wanted` · `record_decision` ·
+> `add_note`
+
+**Status models (canonical).** Task = `claimed | active | merged` with **blocked
+derived** (a task whose dependency isn't merged) — _not_ the §10 /§13.5
+`backlog / available / claimed / in-pr / merged`. Feature = `planning | in_flight
+| blocked | shipped` (matches §10), and feature status is itself **derived** from
+its tasks (`computeFeatureStatus`); a `FeaturePlanningStage` enum (from
+`f-feature-planning`) tracks the pre-task authoring stages.
+
+**The Hub is its own system of record (self-hosting arc, features 16–21).** Not in
+this brief at all, and the largest architectural addition: `f-refs` (16),
+`f-journal` (17, the `ProjectEvent` decision/activity stream — the capture half of
+the [[futures#Living decision log `[architectural]`|living decision log]]),
+`f-feature-planning` (18), `f-selfhost-cutover` (19), `f-status-model` (20),
+`f-authoring-fidelity` (21). The markdown-plan-as-record model this brief assumes
+is retired; the Hub records itself, authored over MCP.
+
+**GitHub sync (feature 14) was built differently than §9/§12 specify.** Not a
+`call_external_api` capability and not a workflow — a **standalone webhook route**
+(`app/api/v1/webhooks/github`) that receives GitHub's `X-Hub-Signature-256`
+delivery and drives the shared `completeTask` core. The intent matches
+(human-declared PR link via `set_pr`, reconcile-on-merge); only the mechanism
+differs, because Sunrise's inbound pipeline is workflow-bound and a board reconcile
+is not a workflow. See [`github-sync.md`](../github-sync.md). **Actor attribution =
+the task's own worker (`claimedByUserId`), never the webhook**; mapping GitHub's
+`merged_by` to a Hub user is a deferred later feature.
+
+**Futures scaffolding is all in the schema, as promised.** `Sprint`,
+`FocusDirective`, `Phase` + `Feature.phaseId`, `Project.knowledgeTagId` +
+`sidekickAgentId`, `hostPlatform` — all present and dormant. Every
+`[architectural]` future is buildable without a migration.
+
 ## 1. Context
 
 HCE Venture Studio (Simon Holmes + John Durrant) is co-developing multiple projects at AI pace, on Agentic Sunrise (`human-centric-engineering/sunrise`). Traditional project management tools (Trello, Linear, Jira) assume a slower, more linear cadence and can't keep up — plans go stale, parallelism is hard to reason about, and code collisions multiply.
@@ -102,6 +163,10 @@ Each project has a `hostPlatform` attribute (`sunrise`, `laravel-forge`, `nextjs
 
 ## 8. v1 scope
 
+> **Boundary re-cut — see §0.** As shipped, V1 = the non-AI coordination spine;
+> intake, sidekick, and the morning brief moved to **V2**. The MCP capability line
+> below also predates the claim-model pivot (`claim-task`/`add-backlog` dropped).
+
 In:
 
 - Project + feature + task data model (Prisma)
@@ -132,8 +197,8 @@ Out (deferred to v1.x or later):
 | Intake flow | Workflow DAG with `human_approval` step |
 | Project context for sidekick | Knowledge base + RAG, scoped per project via `knowledgeCategories` |
 | MCP capabilities for Claude Code | MCP server + registered capabilities |
-| GitHub state | `call_external_api` capability + webhook subscriptions |
-| "PR merged → reconcile" automation | Workflow triggered by webhook |
+| GitHub state | _As-built (§0): standalone webhook route, not `call_external_api` — the Hub receives GitHub's signed delivery, it never calls GitHub._ |
+| "PR merged → reconcile" automation | _As-built (§0): standalone route driving the `completeTask` core, **not** a workflow (the inbound/workflow pipeline is workflow-bound; a board reconcile isn't a workflow)._ |
 | Morning brief | Cron-scheduled workflow → email/notify |
 | Cost / budget | Built-in (per-agent monthly budgets, fallback chains) |
 | Multi-LLM with fallback | Built-in |
@@ -150,7 +215,7 @@ For the Sunrise-side Claude to refine. Indicative, not prescriptive:
 - **ProjectMember** — projectId, userId, role (`lead` / `member` for v1; `read-only` later), addedAt — controls per-project visibility and contribution rights; lets external devs be granted access to specific projects only without admin privileges
 - **Feature** — id, projectId, title, description, ownerUserId, status (`planning` / `in-flight` / `blocked` / `shipped`), helpWanted (bool), createdAt
 - **FeatureDependency** — featureId, dependsOnFeatureId
-- **Task** — id, featureId, title, filesScope (string[]), status (`backlog` / `available` / `claimed` / `in-pr` / `merged`), claimedByUserId (nullable), prUrl (nullable), createdAt
+- **Task** — id, featureId, title, filesScope (string[]), status (**as-built §0: `claimed` / `active` / `merged`, blocked derived**), claimedByUserId (nullable), prUrl (nullable), createdAt
 - **TaskDependency** — taskId, dependsOnTaskId
 - **TaskClaim** — taskId, userId, claimedAt, releasedAt (nullable) — for "John started something touching X an hour ago" warnings
 
@@ -173,6 +238,10 @@ The schema cost (one table + one nullable FK) is small now; retrofitting the col
 Existing Sunrise models (`AiAgent`, `AiWorkflow`, `AiKnowledgeCategory`, `AiCostLog`, `AiAdminAuditLog` etc.) are reused as-is.
 
 ## 11. Hub-specific capabilities (registered tools)
+
+> **Superseded by §0.** The claim model pivoted to _claim-features-not-tasks_, so
+> `claim-task`/`add-backlog` were dropped and the verb set is larger than below.
+> §0 carries the real registered surface; this is the original sketch.
 
 To be built and registered in Sunrise's capability registry:
 
@@ -241,7 +310,7 @@ The UI is the most visible expression of the human-centric principle. It should 
 **Anti-patterns (do not include):**
 - Red notification badges that demand attention.
 - Streaks, task-completion counts, gamified progress, or any "productivity score" framing.
-- "X overdue" guilt UX. Tasks have states (`backlog` / `available` / `claimed` / `in-pr` / `merged`), not deadlines that shame.
+- "X overdue" guilt UX. Tasks have states (`claimed` / `active` / `merged`, with _blocked_ derived — see §0), not deadlines that shame.
 - Celebratory animations on task claim or completion. Acknowledgement is fine; performance is not.
 - Auto-assignment cues. Recommendations are pulled, never pushed.
 - Counts of "tasks waiting for you" rendered as urgency signals. Counts as information, not pressure.
