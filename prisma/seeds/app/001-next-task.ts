@@ -21,8 +21,13 @@ import type { SeedUnit } from '@/prisma/runner';
  * Exposure posture: we pre-expose the Hub's own read tool (`isEnabled: true`),
  * but the MCP *server* ships disabled (`008-mcp-server`), so nothing is reachable
  * until an admin turns the server on — see `.context/app/mcp-claude-code.md`.
- * Idempotent — the `update` branch only re-pins `isSystem`, never overwriting
- * admin edits.
+ * Idempotent — the `update` branch re-pins `isSystem` **and re-syncs
+ * `functionDefinition`** (code-owned: it must track the capability class, per the
+ * `*.parity.test.ts` guards — so a schema change like a new field reaches the DB
+ * on re-seed, not only on first insert). Admin-editable display fields
+ * (`name` / `description` / `isActive`) and the MCP-exposure row are left
+ * untouched. (Before this, an existing row kept its original `functionDefinition`
+ * forever — `update_feature`'s `phaseId` never landed; f-phases §22 t2 fix.)
  */
 /**
  * The DB copy of `next_task`'s function definition (what the dispatcher loads
@@ -57,7 +62,7 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'next_task' },
-      update: { isSystem: true },
+      update: { isSystem: true, functionDefinition: nextTaskFunctionDefinition },
       create: {
         slug: 'next_task',
         name: 'Next Task',

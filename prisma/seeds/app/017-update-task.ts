@@ -37,7 +37,7 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'update_task' },
-      update: { isSystem: true },
+      update: { isSystem: true, functionDefinition: updateTaskFunctionDefinition },
       create: {
         slug: 'update_task',
         name: 'Update Task',
