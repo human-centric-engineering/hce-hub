@@ -93,6 +93,17 @@ Hub-resident, browseable, promotable roadmap data the (later) sidekick can mine.
 **Sequencing:** `f-phases` → then `f-idea-capture` and Sunrise-onboarding (largely
 parallel) → then futures-in-Hub (wants the parking gesture first).
 
+**Companion conventions:**
+
+- **Bug handling** ([[bug-handling]]) — a bug is a `bug`-kind **Task** on the
+  feature it broke (not a Feature), surfaced by `next_task` as a bias, with an
+  active-fixes strip and kind-aware "shipped · N fixes" status. Its one new
+  primitive — a task `kind` label — lands as a **small feature alongside
+  `f-phases`** (it shares the plan/board/status-derivation surfaces).
+- **Idea inbox** ([[idea-inbox]]) — the interim markdown holding pen for
+  ideas/tweaks/bugs captured before the machinery exists; becomes
+  `f-idea-capture`'s first real dataset, then retires.
+
 ## Decisions locked
 
 - **Roadmap home = the HCE Hub project** (chubproject). The Hub's futures are
