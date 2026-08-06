@@ -1,0 +1,54 @@
+/**
+ * Regression guard for the capability-seed sync bug (f-phases §22 t2 fix).
+ *
+ * A capability seed's `AiCapability` upsert must re-sync `functionDefinition` on
+ * the **update** branch, not only on create — otherwise a schema change to an
+ * already-seeded tool (like adding `phaseId` to `update_feature`) never reaches
+ * the DB, so the MCP tool list keeps advertising the stale schema. The parity
+ * tests pin class↔seed-constant; this pins seed-constant↔the update write.
+ */
+import { describe, it, expect, vi } from 'vitest';
+import type { SeedContext } from '@/prisma/runner';
+import updateFeatureUnit, {
+  updateFeatureFunctionDefinition,
+} from '@/prisma/seeds/app/018-update-feature';
+import nextTaskUnit, { nextTaskFunctionDefinition } from '@/prisma/seeds/app/001-next-task';
+import createPhaseUnit, {
+  createPhaseFunctionDefinition,
+} from '@/prisma/seeds/app/019-create-phase';
+
+function runContext() {
+  const upsert = vi.fn().mockResolvedValue({ id: 'cap1' });
+  const mcpUpsert = vi.fn().mockResolvedValue({ id: 'tool1' });
+  const ctx = {
+    prisma: { aiCapability: { upsert }, mcpExposedTool: { upsert: mcpUpsert } },
+    logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+  } as unknown as SeedContext;
+  return { ctx, upsert };
+}
+
+describe('capability seeds re-sync functionDefinition on update', () => {
+  it('018-update-feature: update branch writes the full definition, including phaseId', async () => {
+    const { ctx, upsert } = runContext();
+    await updateFeatureUnit.run(ctx);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ slug: 'update_feature' });
+    // The update branch — not just create — must carry the current schema.
+    expect(arg.update.functionDefinition).toEqual(updateFeatureFunctionDefinition);
+    expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('phaseId');
+  });
+
+  it('001-next-task: the sync is systemic, not a one-off for update_feature', async () => {
+    const { ctx, upsert } = runContext();
+    await nextTaskUnit.run(ctx);
+    expect(upsert.mock.calls[0][0].update.functionDefinition).toEqual(nextTaskFunctionDefinition);
+  });
+
+  it('019-create-phase: new capability seeds carry the sync too', async () => {
+    const { ctx, upsert } = runContext();
+    await createPhaseUnit.run(ctx);
+    expect(upsert.mock.calls[0][0].update.functionDefinition).toEqual(
+      createPhaseFunctionDefinition
+    );
+  });
+});
