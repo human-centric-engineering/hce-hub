@@ -79,6 +79,38 @@ Agent notices that two Hub projects solve similar problems differently. "Lelanea
 
 *Why it matters:* Pattern recognition is one of the things AI does well that humans struggle to do across multiple parallel projects. Closes the loop between Sunrise and its forks at a higher level than individual fixes.
 
+### Dedicated release + divergence modelling `[architectural]`
+
+_Deferred by design (2026-08-06 design experiment) — captured so it isn't
+re-litigated from scratch._ When Sunrise is onboarded as a Hub project (see
+[[next-phase-brief]]), releases are modelled as **phases** (`v0.8.0` = a phase;
+its adoption work + reconciled divergences = tasks/features under it) and the
+divergence ledger lives as **tasks under the release-phase**. That's deliberately
+enough for now. A dedicated model would add three things Phase can't carry:
+
+- **`Release`** — `platform`, `version`, `releasedAt` / `adoptedAt`, `status`
+  (available → adopting → adopted / skipped), `changelogUrl`. The "synced to
+  v0.8.0" fact becomes first-class and queryable.
+- **`Divergence`** — the [`platform-divergences.md`](../platform-divergences.md)
+  ledger as rows, with a real lifecycle (open → filed-upstream → landed →
+  retired) linked to the releases that introduce and retire each one.
+- **`AdoptionChecklist` (template → instance)** — the repeatable shape of a sync
+  (keep-mine conflicts, migrations, new seams, breaking changes, divergence
+  reconciliation, follow-ups) instantiated per release, so sync #N starts from a
+  known checklist instead of a hand-listed one.
+
+**Why it's deferred, not dismissed:** phase-as-release is per-project (Sunrise's
+phases = releases; the Hub's phases = epics — no collision) and **reversible** — a
+later `Release` model is a backfill from the release-named phases, not a rewrite.
+The genuinely-additive parts (the adoption *template*, the divergence *lifecycle*)
+depend on a shape we've only sampled **once** (the v0.8.0 sync); designing them now
+is guessing. **Promotion trigger:** ~2–3 syncs have stabilised the adoption
+checklist, *or* a second fork (e.g. Daybreak) makes per-fork release-impact real.
+
+*Why it matters:* the fork-sync/reconcile ritual is HCE's most repetitive
+platform chore; modelling it well is high-compound — but only once real usage has
+taught us the true shape, which the phase-as-release interim is designed to do.
+
 ---
 
 ## Dynamic focus and prioritisation
