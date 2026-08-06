@@ -19,6 +19,7 @@ vi.mock('@/lib/db/client', () => ({
   prisma: {
     feature: { findMany: vi.fn() },
     featureDependency: { findMany: vi.fn() },
+    phase: { findFirst: vi.fn() },
   },
 }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
@@ -34,6 +35,7 @@ const resolveFeature = resolveFeatureAccess as ReturnType<typeof vi.fn>;
 const canAccess = canAccessProject as ReturnType<typeof vi.fn>;
 const featureFindMany = prisma.feature.findMany as ReturnType<typeof vi.fn>;
 const depFindMany = prisma.featureDependency.findMany as ReturnType<typeof vi.fn>;
+const phaseFindFirst = prisma.phase.findFirst as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 
@@ -171,6 +173,39 @@ describe('update_feature ownership', () => {
   });
 });
 
+describe('update_feature phase assignment', () => {
+  it('files the feature under a phase in the same project', async () => {
+    phaseFindFirst.mockResolvedValue({ id: 'ph1' });
+    const r = await cap.execute({ featureId: 'f1', phaseId: 'ph1' }, ctx());
+    expect(r.data?.updated).toEqual(['phase']);
+    expect(phaseFindFirst).toHaveBeenCalledWith({
+      where: { id: 'ph1', projectId: 'p1' },
+      select: { id: true },
+    });
+    expect(txFeatureUpdate).toHaveBeenCalledWith({
+      where: { id: 'f1' },
+      data: { phase: { connect: { id: 'ph1' } } },
+    });
+  });
+
+  it('unfiles the feature with phaseId null (no phase lookup)', async () => {
+    const r = await cap.execute({ featureId: 'f1', phaseId: null }, ctx());
+    expect(r.data?.updated).toEqual(['phase']);
+    expect(phaseFindFirst).not.toHaveBeenCalled();
+    expect(txFeatureUpdate).toHaveBeenCalledWith({
+      where: { id: 'f1' },
+      data: { phase: { disconnect: true } },
+    });
+  });
+
+  it('rejects a phase from another project (invalid_phase, no write)', async () => {
+    phaseFindFirst.mockResolvedValue(null); // scoped lookup misses
+    const r = await cap.execute({ featureId: 'f1', phaseId: 'other' }, ctx());
+    expect(r.error?.code).toBe('invalid_phase');
+    expect(runTx).not.toHaveBeenCalled();
+  });
+});
+
 describe('update_feature dependency edges', () => {
   it('replaces the edge set when the targets exist and stay acyclic', async () => {
     featureFindMany.mockResolvedValue([{ id: 'd1' }, { id: 'd2' }]);
@@ -231,6 +266,7 @@ describe('update_feature redactProvenance', () => {
         references: [{ label: 'l', target: 't' }],
         dependsOnFeatureIds: ['d1'],
         ownerUserId: null,
+        phaseId: 'ph1',
       },
       { success: true, data: { featureId: 'f1', updated: ['title'] } }
     );
@@ -238,6 +274,7 @@ describe('update_feature redactProvenance', () => {
     expect(a.featureId).toBe('f1');
     expect(a.dependsOnFeatureIds).toEqual(['d1']);
     expect(a.ownerUserId).toBeNull();
+    expect(a.phaseId).toBe('ph1'); // structural id preserved (not free text)
     expect(a.description).toBeNull(); // explicit clear preserved
     expect(String(a.title)).not.toContain('secret title');
     expect(String(a.summary)).not.toContain('secret summary');
