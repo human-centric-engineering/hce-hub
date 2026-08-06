@@ -105,6 +105,15 @@ describe('createPhase', () => {
     expect(arg.startedAt).toBeInstanceOf(Date);
     expect(arg.completedAt).toBeNull();
   });
+
+  it('stamps BOTH startedAt and completedAt when created complete (never null-start)', async () => {
+    txAggregate.mockResolvedValue({ _max: { ordinal: null } });
+    txCreate.mockResolvedValue({ id: 'ph', ordinal: 0 });
+    await createPhase(USER, 'p1', { name: 'Done', status: 'complete' });
+    const arg = txCreate.mock.calls[0][0].data;
+    expect(arg.startedAt).toBeInstanceOf(Date);
+    expect(arg.completedAt).toBeInstanceOf(Date);
+  });
 });
 
 describe('updatePhase', () => {
@@ -171,9 +180,51 @@ describe('updatePhase', () => {
     expect(data.startedAt).toBeUndefined(); // not re-written
   });
 
-  it('stamps completedAt the first time status becomes complete', async () => {
+  it('stamps completedAt (and a missing startedAt) when status becomes complete', async () => {
+    // upcoming (never active) → complete must not leave an impossible null-start.
     await updatePhase(USER, 'ph1', { status: 'complete' });
     const data = phaseUpdate.mock.calls[0][0].data;
     expect(data.completedAt).toBeInstanceOf(Date);
+    expect(data.startedAt).toBeInstanceOf(Date); // back-fills the start it skipped
+  });
+
+  it('preserves an existing startedAt when completing an already-started phase', async () => {
+    const started = new Date('2026-02-01');
+    phaseFindUnique.mockResolvedValue({
+      projectId: 'p1',
+      status: 'active',
+      startedAt: started,
+      completedAt: null,
+    });
+    await updatePhase(USER, 'ph1', { status: 'complete' });
+    const data = phaseUpdate.mock.calls[0][0].data;
+    expect(data.completedAt).toBeInstanceOf(Date);
+    expect(data.startedAt).toBeUndefined(); // kept, not overwritten
+  });
+
+  it('clears completedAt when a completed phase is reopened (no stale "done")', async () => {
+    phaseFindUnique.mockResolvedValue({
+      projectId: 'p1',
+      status: 'complete',
+      startedAt: new Date('2026-02-01'),
+      completedAt: new Date('2026-03-01'),
+    });
+    await updatePhase(USER, 'ph1', { status: 'active' });
+    const data = phaseUpdate.mock.calls[0][0].data;
+    expect(data.status).toBe('active');
+    expect(data.completedAt).toBeNull(); // reopened → done stamp dropped
+    expect(data.startedAt).toBeUndefined(); // already started, kept
+  });
+
+  it('drops completedAt when a completed phase is parked', async () => {
+    phaseFindUnique.mockResolvedValue({
+      projectId: 'p1',
+      status: 'complete',
+      startedAt: new Date('2026-02-01'),
+      completedAt: new Date('2026-03-01'),
+    });
+    await updatePhase(USER, 'ph1', { status: 'parked' });
+    const data = phaseUpdate.mock.calls[0][0].data;
+    expect(data.completedAt).toBeNull();
   });
 });

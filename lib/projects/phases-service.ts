@@ -74,8 +74,11 @@ export async function createPhase(
   const now = new Date();
 
   const created = await executeTransaction(async (tx) => {
-    // Append to the end of the project's phase list unless a position is given.
-    // Computed inside the tx so concurrent creates don't collide on ordinal.
+    // Append after the project's current last phase unless a position is given.
+    // Best-effort: there is no unique(projectId, ordinal) constraint, so a rare
+    // concurrent create (or an explicit ordinal) can duplicate a position; reads
+    // break ties deterministically (ordinal, then createdAt). A hardened reorder
+    // with a uniqueness guarantee lands in t3.
     let ordinal = input.ordinal;
     if (ordinal === undefined) {
       const { _max } = await tx.phase.aggregate({
@@ -91,8 +94,11 @@ export async function createPhase(
         description: input.description ?? null,
         status,
         ordinal,
-        // Derive the lifecycle timestamps from the initial status.
-        startedAt: status === 'active' ? now : null,
+        // Derive the lifecycle timestamps from the initial status, keeping the
+        // invariant: completedAt set ⟺ complete, and startedAt set once the phase
+        // has begun — so a phase created straight into `complete` still records a
+        // start (never complete-with-null-start).
+        startedAt: status === 'active' || status === 'complete' ? now : null,
         completedAt: status === 'complete' ? now : null,
       },
       select: { id: true, ordinal: true },
@@ -148,9 +154,18 @@ export async function updatePhase(
   }
   if (input.status !== undefined) {
     data.status = input.status;
-    // Stamp the lifecycle timestamp the first time a phase enters that state.
-    if (input.status === 'active' && phase.startedAt === null) data.startedAt = new Date();
-    if (input.status === 'complete' && phase.completedAt === null) data.completedAt = new Date();
+    // Keep the lifecycle timestamps coherent with the resulting status:
+    //   completedAt set ⟺ status is complete (reopening clears it, no stale "done"),
+    //   startedAt persists once the phase has begun (stamped on the first
+    //   active/complete, never un-stamped) — so it's never complete-with-null-start.
+    const now = new Date();
+    if (input.status === 'complete') {
+      data.completedAt = phase.completedAt ?? now;
+      if (phase.startedAt === null) data.startedAt = now;
+    } else {
+      if (phase.completedAt !== null) data.completedAt = null; // reopened → drop the done stamp
+      if (input.status === 'active' && phase.startedAt === null) data.startedAt = now;
+    }
     updated.push('status');
   }
 
