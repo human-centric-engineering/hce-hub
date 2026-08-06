@@ -3,7 +3,8 @@
  * feature-level sibling of `update_task`: the verb that lets the record be
  * **corrected from the Hub**, not the DB. Edits the authored fields
  * (`title`/`summary`/`description`/`doneWhen`/`references`), **replaces the
- * dependency edges** (cycle-guarded), and **unclaims / reassigns** the owner.
+ * dependency edges** (cycle-guarded), **unclaims / reassigns** the owner, and
+ * **files the feature under a phase** (`phaseId`, in this project; null unfiles).
  *
  * Partial patch — only the fields you supply change; a `null`
  * summary/description/doneWhen/references clears it. `dependsOnFeatureIds`, when
@@ -77,6 +78,11 @@ const schema = z.object({
     .nullable()
     .optional()
     .describe('Reassign the owner to a project member, or null to unclaim.'),
+  phaseId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('File the feature under a phase in this project, or null to unfile it.'),
 });
 
 type Args = z.infer<typeof schema>;
@@ -94,7 +100,7 @@ export class UpdateFeatureCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'update_feature',
     description:
-      "Edit an existing feature: title, summary, description (markdown), done-when, references; replace its dependency edges (rejected if it would create a cycle); and unclaim (ownerUserId null) or reassign the owner (a project member). Only supplied fields change; a null summary/description/done-when/references clears it. Only the feature's owner or a project lead may edit it.",
+      "Edit an existing feature: title, summary, description (markdown), done-when, references; replace its dependency edges (rejected if it would create a cycle); unclaim (ownerUserId null) or reassign the owner (a project member); and file it under a phase (phaseId null to unfile). Only supplied fields change; a null summary/description/done-when/references clears it. Only the feature's owner or a project lead may edit it.",
     parameters: {
       type: 'object',
       properties: {
@@ -125,6 +131,10 @@ export class UpdateFeatureCapability extends BaseCapability<Args, Data> {
           type: 'string',
           description: 'Reassign the owner to a project member, or null to unclaim.',
         },
+        phaseId: {
+          type: 'string',
+          description: 'File the feature under a phase in this project, or null to unfile it.',
+        },
       },
       required: ['featureId'],
     },
@@ -153,6 +163,7 @@ export class UpdateFeatureCapability extends BaseCapability<Args, Data> {
               : redactedString(`${args.references.length} reference(s)`),
         dependsOnFeatureIds: args.dependsOnFeatureIds,
         ownerUserId: args.ownerUserId,
+        phaseId: args.phaseId,
       },
       resultPreview: JSON.stringify(result),
     };
@@ -214,6 +225,24 @@ export class UpdateFeatureCapability extends BaseCapability<Args, Data> {
         if (access.feature.status === 'planning') data.status = 'in_flight';
       }
       updated.push('owner');
+    }
+
+    // Phase assignment — file under a phase (must be in this project) or unfile.
+    // A relation FK, so Prisma's update input takes the nested connect/disconnect.
+    if (args.phaseId !== undefined) {
+      if (args.phaseId === null) {
+        data.phase = { disconnect: true };
+      } else {
+        const phase = await prisma.phase.findFirst({
+          where: { id: args.phaseId, projectId },
+          select: { id: true },
+        });
+        if (!phase) {
+          return this.error('That phase was not found in this project.', 'invalid_phase');
+        }
+        data.phase = { connect: { id: args.phaseId } };
+      }
+      updated.push('phase');
     }
 
     // Dependency-edge replacement — validate targets, prove the whole feature

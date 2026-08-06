@@ -10,7 +10,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const updateFeatureFunctionDefinition = {
   name: 'update_feature',
   description:
-    "Edit an existing feature: title, summary, description (markdown), done-when, references; replace its dependency edges (rejected if it would create a cycle); and unclaim (ownerUserId null) or reassign the owner (a project member). Only supplied fields change; a null summary/description/done-when/references clears it. Only the feature's owner or a project lead may edit it.",
+    "Edit an existing feature: title, summary, description (markdown), done-when, references; replace its dependency edges (rejected if it would create a cycle); unclaim (ownerUserId null) or reassign the owner (a project member); and file it under a phase (phaseId null to unfile). Only supplied fields change; a null summary/description/done-when/references clears it. Only the feature's owner or a project lead may edit it.",
   parameters: {
     type: 'object',
     properties: {
@@ -40,6 +40,10 @@ export const updateFeatureFunctionDefinition = {
       ownerUserId: {
         type: 'string',
         description: 'Reassign the owner to a project member, or null to unclaim.',
+      },
+      phaseId: {
+        type: 'string',
+        description: 'File the feature under a phase in this project, or null to unfile it.',
       },
     },
     required: ['featureId'],

@@ -28,6 +28,8 @@ import { CompleteTaskCapability } from '@/lib/projects/capabilities/complete-tas
 import { SetPrCapability } from '@/lib/projects/capabilities/set-pr';
 import { UpdateTaskCapability } from '@/lib/projects/capabilities/update-task';
 import { UpdateFeatureCapability } from '@/lib/projects/capabilities/update-feature';
+import { CreatePhaseCapability } from '@/lib/projects/capabilities/create-phase';
+import { UpdatePhaseCapability } from '@/lib/projects/capabilities/update-phase';
 
 export function initAppCapabilities(): void {
   // HCE Hub coordination tools (f-hub-capabilities). Each also needs an active
@@ -54,7 +56,12 @@ export function initAppCapabilities(): void {
   // Hub, not the DB. update_task edits an existing task's authored fields
   // (title/description/doneWhen/filesScope); owner-tier, no status change.
   registerAppCapability(new UpdateTaskCapability()); // edit task fields (owner)
-  registerAppCapability(new UpdateFeatureCapability()); // edit feature fields/deps/owner (owner)
+  registerAppCapability(new UpdateFeatureCapability()); // edit feature fields/deps/owner/phase (owner)
+  // Phase lifecycle (f-phases §22 t1) — activate the dormant Phase scaffolding.
+  // create_phase / update_phase are project-scoped roadmap bands (member-tier, no
+  // per-phase owner); feature→phase filing rides on update_feature's phaseId.
+  registerAppCapability(new CreatePhaseCapability()); // add a phase (member)
+  registerAppCapability(new UpdatePhaseCapability()); // edit a phase (member)
   // Journal authored verbs (f-journal §17 t-2) — free-text narrative into the
   // ProjectEvent stream; membership-scoped via the resolveEventScope funnel.
   registerAppCapability(new RecordDecisionCapability());
