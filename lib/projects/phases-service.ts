@@ -1,12 +1,12 @@
 /**
  * Shared phase-write service (f-phases §22 t1).
  *
- * The core of "create / update a phase" — the write logic behind the dormant
- * `Phase` scaffolding this feature activates (the model, `PhaseStatus` enum and
- * `Feature.phaseId` FK all pre-exist, so there is **no migration**). Extracted
- * here so **both** callers run identical logic with no drift: the
- * `create_phase` / `update_phase` MCP capabilities (t1) and t3's admin REST
- * routes — the same split as `claimFeature()` / `claimTask()`.
+ * The write logic behind the dormant `Phase` scaffolding this feature activates
+ * (the model, `PhaseStatus` enum and `Feature.phaseId` FK all pre-exist, so there
+ * is **no migration**): create / update a phase (t1), plus **reorder** phases and
+ * **assign** a feature to a phase (t3). Extracted here so **both** callers run
+ * identical logic with no drift: the `create_phase` / `update_phase` MCP
+ * capabilities and t3's REST routes — the same split as `claimFeature()`.
  *
  * A `Phase` is **project-scoped organisational structure** with no per-phase
  * owner, so authorization is the plain project-membership funnel
@@ -25,7 +25,7 @@ import type { PhaseStatus, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
-import { canAccessProject } from '@/lib/projects/access';
+import { canAccessProject, resolveFeatureAccess } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 
 /** The mutable fields of a phase (its lifecycle timestamps are derived, not set). */
@@ -127,13 +127,18 @@ export async function createPhase(
 export async function updatePhase(
   userId: string,
   phaseId: string,
-  input: UpdatePhaseInput
+  input: UpdatePhaseInput,
+  expectedProjectId?: string
 ): Promise<UpdatePhaseResult> {
   const phase = await prisma.phase.findUnique({
     where: { id: phaseId },
     select: { projectId: true, status: true, startedAt: true, completedAt: true },
   });
   if (!phase) throw new NotFoundError(`Phase ${phaseId} not found`);
+  // Scope to the route's project when asked (no cross-project id-swap).
+  if (expectedProjectId && phase.projectId !== expectedProjectId) {
+    throw new NotFoundError(`Phase ${phaseId} not found`);
+  }
 
   const { basis } = await canAccessProject(userId, phase.projectId);
   if (basis === null) throw new NotFoundError(`Phase ${phaseId} not found`); // non-member ≡ absent
@@ -184,4 +189,97 @@ export async function updatePhase(
   });
 
   return { phaseId, updated };
+}
+
+/**
+ * Reorder a project's phases (f-phases §22 t3). **Batch** by design: the caller
+ * supplies the complete, new order of the project's phase ids and the service
+ * reassigns ordinals `0..n-1` straight down the list in one transaction — so the
+ * sequence is always dense and collision-free (there is no
+ * `@@unique(projectId, ordinal)`, and this is why we don't need one). The list
+ * must be *exactly* the project's phases (every id, no strangers): a partial list
+ * would leave the unlisted phases with stale ordinals that collide with the new
+ * ones. Member-tier (any member may organise the roadmap); non-member → 404.
+ */
+export async function reorderPhases(
+  userId: string,
+  projectId: string,
+  orderedPhaseIds: string[]
+): Promise<{ projectId: string; count: number }> {
+  const { basis } = await canAccessProject(userId, projectId);
+  if (basis === null) throw new NotFoundError(`Project ${projectId} not found`);
+
+  const ordered = [...new Set(orderedPhaseIds)];
+  const existing = await prisma.phase.findMany({ where: { projectId }, select: { id: true } });
+  const existingIds = new Set(existing.map((p) => p.id));
+  // The list must be the project's exact phase set — same size, every id present.
+  const complete =
+    ordered.length === existingIds.size && ordered.every((id) => existingIds.has(id));
+  if (!complete) {
+    throw new ValidationError('The reorder must list exactly this project’s phases, once each.');
+  }
+
+  await executeTransaction(async (tx) => {
+    for (let i = 0; i < ordered.length; i++) {
+      await tx.phase.update({ where: { id: ordered[i] }, data: { ordinal: i } });
+    }
+  });
+
+  logAdminAction({
+    userId,
+    action: 'phase.reorder',
+    entityType: 'app_phase',
+    entityId: projectId,
+    metadata: { projectId, order: ordered },
+  });
+
+  return { projectId, count: ordered.length };
+}
+
+/**
+ * File a feature under a phase, or unfile it (`phaseId: null`) — f-phases §22 t3.
+ * **Member-tier**: filing is collaborative roadmap organisation (like
+ * `create_feature` and phase CRUD), NOT editing the feature's authored content,
+ * so any project member may file *any* feature — not just its owner. (The
+ * owner-tier `update_feature.phaseId` path stays for comprehensive edits.) The
+ * phase must belong to the feature's own project. `expectedProjectId`, when
+ * given, scopes the feature to that project so a REST route can reject a
+ * cross-project id-swap. Non-member / unknown feature → 404 (no enumeration).
+ */
+export async function assignFeatureToPhase(
+  userId: string,
+  featureId: string,
+  phaseId: string | null,
+  expectedProjectId?: string
+): Promise<{ featureId: string; phaseId: string | null }> {
+  const access = await resolveFeatureAccess(userId, featureId, 'member');
+  if (!access.ok) throw new NotFoundError(`Feature ${featureId} not found`);
+  const projectId = access.feature.projectId;
+  if (expectedProjectId && projectId !== expectedProjectId) {
+    throw new NotFoundError(`Feature ${featureId} not found`);
+  }
+
+  if (phaseId !== null) {
+    const phase = await prisma.phase.findFirst({
+      where: { id: phaseId, projectId },
+      select: { id: true },
+    });
+    if (!phase) throw new ValidationError('That phase was not found in this project.');
+  }
+
+  await prisma.feature.update({
+    where: { id: featureId },
+    // A relation FK — Prisma's update input takes the nested connect/disconnect.
+    data: { phase: phaseId === null ? { disconnect: true } : { connect: { id: phaseId } } },
+  });
+
+  logAdminAction({
+    userId,
+    action: 'feature.assign_phase',
+    entityType: 'app_feature',
+    entityId: featureId,
+    metadata: { projectId, phaseId },
+  });
+
+  return { featureId, phaseId };
 }
