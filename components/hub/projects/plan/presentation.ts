@@ -6,7 +6,11 @@
  * and rows can't drift. Tones are applied via inline `var(--signal-<tone>)` (a
  * dynamic token name can't be a static Tailwind class).
  */
-import type { FeatureStatus, TaskEffectiveStatus } from '@/components/hub/projects/plan/types';
+import type {
+  FeatureStatus,
+  TaskEffectiveStatus,
+  PhaseStatus,
+} from '@/components/hub/projects/plan/types';
 
 /** A resolved status presentation: the signal token base name + its label. */
 export interface StatusTone {
@@ -34,6 +38,20 @@ export function featureStatus(status: FeatureStatus): StatusTone {
 
 export function taskStatus(status: TaskEffectiveStatus): StatusTone {
   return TASK_TONE[status];
+}
+
+// Phase bands borrow the same signal tones (f-phases §22 t2). `parked` is the
+// dormant idea-park — deliberately no signal tone, so the band header renders it
+// as quiet muted text (see `phaseStatus` returning `null`).
+const PHASE_TONE: Record<Exclude<PhaseStatus, 'parked'>, StatusTone> = {
+  upcoming: { tone: 'available', label: 'upcoming' },
+  active: { tone: 'active', label: 'active' },
+  complete: { tone: 'merged', label: 'complete' },
+};
+
+/** A phase's band-header tone, or `null` for `parked` (rendered muted, no dot). */
+export function phaseStatus(status: PhaseStatus): StatusTone | null {
+  return status === 'parked' ? null : PHASE_TONE[status];
 }
 
 /** First name only — compact labels beside small avatars. */

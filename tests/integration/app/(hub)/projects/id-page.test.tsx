@@ -53,19 +53,28 @@ const view = {
 
 const planPayload = {
   projectId: 'p1',
-  features: [
+  // Phase-banded payload (f-phases §22 t2): no phases → one residual band.
+  phases: [
     {
-      id: 'f-fork',
-      number: 1,
-      title: 'Fork + brand',
-      description: null,
-      status: 'shipped',
-      waitingOn: [],
-      helpWanted: false,
-      owner: null,
-      dependsOn: [],
-      tasks: [],
-      progress: { merged: 1, total: 1, live: 0 },
+      id: null,
+      name: null,
+      status: null,
+      ordinal: null,
+      features: [
+        {
+          id: 'f-fork',
+          number: 1,
+          title: 'Fork + brand',
+          description: null,
+          status: 'shipped',
+          waitingOn: [],
+          helpWanted: false,
+          owner: null,
+          dependsOn: [],
+          tasks: [],
+          progress: { merged: 1, total: 1, live: 0 },
+        },
+      ],
     },
   ],
 };

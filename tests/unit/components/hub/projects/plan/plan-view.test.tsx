@@ -5,7 +5,11 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { PlanView } from '@/components/hub/projects/plan/plan-view';
-import type { PlanFeature, ProjectPlanDTO } from '@/components/hub/projects/plan/types';
+import type {
+  PlanFeature,
+  PlanPhaseBand,
+  ProjectPlanDTO,
+} from '@/components/hub/projects/plan/types';
 
 const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   id: 'f1',
@@ -26,10 +30,19 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   ...over,
 });
 
+// Wrap features in a single residual band — mirrors the server's no-phases output
+// (an empty residual is dropped), so these render exactly like the flat plan.
 const plan = (features: PlanFeature[], projectSlug: string | null = null): ProjectPlanDTO => ({
   projectId: 'p1',
   projectSlug,
-  features,
+  phases: features.length ? [{ id: null, name: null, status: null, ordinal: null, features }] : [],
+});
+
+// Build a plan from explicit phase bands (for the grouping/collapse tests).
+const banded = (phases: PlanPhaseBand[]): ProjectPlanDTO => ({
+  projectId: 'p1',
+  projectSlug: null,
+  phases,
 });
 
 describe('PlanView rendering', () => {
@@ -194,5 +207,135 @@ describe('PlanView rendering', () => {
     const summary = screen.getByText('features').closest('div')!;
     expect(within(summary).getByText('2')).toBeInTheDocument();
     expect(screen.getByText(/most ready to advance/i)).toBeInTheDocument();
+  });
+});
+
+describe('PlanView phase grouping (f-phases §22 t2)', () => {
+  it('shows a band header with the phase name and feature count when phases exist', () => {
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'ph1',
+            name: 'v0.9.0',
+            status: 'active',
+            ordinal: 0,
+            features: [feature({ id: 'a', title: 'Filed feature' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText('v0.9.0')).toBeInTheDocument();
+    expect(screen.getByText('1 feature')).toBeInTheDocument();
+    expect(screen.getByText('Filed feature')).toBeInTheDocument();
+  });
+
+  it('does not render band chrome when the plan is a single residual band', () => {
+    render(<PlanView plan={plan([feature({ id: 'a', title: 'Unfiled' })])} />);
+    expect(screen.getByText('Unfiled')).toBeInTheDocument();
+    expect(screen.queryByText('No phase')).not.toBeInTheDocument();
+  });
+
+  it('labels the residual band "No phase" with no status chip (not "parked")', () => {
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'ph1',
+            name: 'Active',
+            status: 'active',
+            ordinal: 0,
+            features: [feature({ id: 'a', title: 'Filed' })],
+          },
+          {
+            id: null,
+            name: null,
+            status: null,
+            ordinal: null,
+            features: [feature({ id: 'b', title: 'Unfiled' })],
+          },
+        ])}
+      />
+    );
+    const residual = screen.getByRole('button', { name: /No phase/ });
+    // Regression: a null-status residual band fell into the parked branch and
+    // rendered "parked". It must carry no status chip at all.
+    expect(within(residual).queryByText('parked')).not.toBeInTheDocument();
+    expect(within(residual).getByText('1 feature')).toBeInTheDocument();
+  });
+
+  it('collapses a complete phase by default (done history), open on click', () => {
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'done',
+            name: 'Foundations',
+            status: 'complete',
+            ordinal: 0,
+            features: [feature({ id: 'a', title: 'Shipped work', status: 'shipped' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.queryByText('Shipped work')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Foundations/ }));
+    expect(screen.getByText('Shipped work')).toBeInTheDocument();
+  });
+
+  it('forces a collapse-by-default band open when it holds the auto-expanded feature', () => {
+    // A complete phase collapses by default, but if it contains the feature the
+    // view opens on (an active task), the band must open so that work is visible.
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'done',
+            name: 'Foundations',
+            status: 'complete',
+            ordinal: 0,
+            features: [
+              feature({
+                id: 'a',
+                title: 'Live work in a complete phase',
+                status: 'in_flight',
+                tasks: [
+                  {
+                    id: 't1',
+                    number: null,
+                    title: 'active task',
+                    status: 'active',
+                    prUrl: null,
+                    claimer: null,
+                  },
+                ],
+                progress: { merged: 0, total: 1, live: 1, blocked: 0 },
+              }),
+            ],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText('active task')).toBeInTheDocument();
+  });
+
+  it('collapses a parked band by default and reveals it on click', () => {
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'ideas',
+            name: 'Idea park',
+            status: 'parked',
+            ordinal: 0,
+            features: [feature({ id: 'p1', title: 'Parked idea' })],
+          },
+        ])}
+      />
+    );
+    // Hidden until the parked band is opened.
+    expect(screen.queryByText('Parked idea')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Idea park/ }));
+    expect(screen.getByText('Parked idea')).toBeInTheDocument();
   });
 });

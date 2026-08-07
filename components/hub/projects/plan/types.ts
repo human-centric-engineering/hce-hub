@@ -79,10 +79,29 @@ export interface PlanFeature {
   progress: { merged: number; total: number; live: number; blocked: number };
 }
 
-/** The `/plan` payload — features already in `planOrder()`. */
+/** A phase's lifecycle status (mirrors Prisma `PhaseStatus`, f-phases §22). */
+export type PhaseStatus = 'upcoming' | 'active' | 'complete' | 'parked';
+
+/**
+ * A phase band on the Plan — features filed under one phase, keeping their
+ * `planOrder()` (f-phases §22 t2). `id: null` is the residual "no phase" band.
+ */
+export interface PlanPhaseBand {
+  id: string | null;
+  name: string | null;
+  /** `null` for the residual band; a `parked` band renders collapsed by default. */
+  status: PhaseStatus | null;
+  ordinal: number | null;
+  features: PlanFeature[];
+}
+
+/**
+ * The `/plan` payload — features grouped into phase bands (f-phases §22 t2).
+ * A project with no phases yields a single residual band = the flat plan list.
+ */
 export interface ProjectPlanDTO {
   projectId: string;
   /** The project's slug (`hce-hub`) — feature-page links prefer it; `null` → falls back to `projectId`. */
   projectSlug: string | null;
-  features: PlanFeature[];
+  phases: PlanPhaseBand[];
 }
