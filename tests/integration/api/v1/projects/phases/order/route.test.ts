@@ -64,4 +64,15 @@ describe('PUT /api/v1/projects/:id/phases/order', () => {
     reorderMock.mockRejectedValue(new NotFoundError('nope'));
     expect((await PUT(put({ phaseIds: ['a'] }), params)).status).toBe(404);
   });
+
+  it('400s a non-JSON body', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
+    const req = new NextRequest(url, {
+      method: 'PUT',
+      body: '{not json',
+      headers: { 'content-type': 'application/json' },
+    });
+    expect((await PUT(req, params)).status).toBe(400);
+    expect(reorderMock).not.toHaveBeenCalled();
+  });
 });

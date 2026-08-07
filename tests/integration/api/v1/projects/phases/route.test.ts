@@ -84,4 +84,14 @@ describe('POST /api/v1/projects/:id/phases', () => {
     createMock.mockRejectedValue(new NotFoundError('nope'));
     expect((await POST(post({ name: 'X' }), params)).status).toBe(404);
   });
+
+  it('400s a non-JSON body (request.json throws → null)', async () => {
+    const req = new NextRequest(url, {
+      method: 'POST',
+      body: '{not json',
+      headers: { 'content-type': 'application/json' },
+    });
+    expect((await POST(req, params)).status).toBe(400);
+    expect(createMock).not.toHaveBeenCalled();
+  });
 });

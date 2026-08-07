@@ -63,4 +63,15 @@ describe('PATCH /api/v1/projects/:id/phases/:phaseId', () => {
     updateMock.mockRejectedValue(new NotFoundError('nope'));
     expect((await PATCH(patch({ name: 'x' }), params)).status).toBe(404);
   });
+
+  it('400s a non-JSON body', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
+    const req = new NextRequest(url, {
+      method: 'PATCH',
+      body: '{not json',
+      headers: { 'content-type': 'application/json' },
+    });
+    expect((await PATCH(req, params)).status).toBe(400);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
 });
