@@ -89,7 +89,7 @@ export type PhaseStatus = 'upcoming' | 'active' | 'complete' | 'parked';
 export interface PlanPhaseBand {
   id: string | null;
   name: string | null;
-  /** `null` for the residual band; a `parked` band renders collapsed by default. */
+  /** `null` for the residual band; `parked`/`complete` bands collapse by default. */
   status: PhaseStatus | null;
   ordinal: number | null;
   features: PlanFeature[];
