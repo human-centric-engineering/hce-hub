@@ -126,6 +126,15 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
   // feature-page links the Plan renders prefer the human slug — §19).
   const project = await getAccessibleProject(userId, projectId);
 
+  // The feature tree and the project's phases are independent given the (already
+  // authorized) projectId, so dispatch the phases read now and let it run
+  // concurrently with the feature read below — one round-trip's latency, not two.
+  const phasesPromise = prisma.phase.findMany({
+    where: { projectId },
+    orderBy: [{ ordinal: 'asc' }, { createdAt: 'asc' }],
+    select: { id: true, name: true, status: true, ordinal: true },
+  });
+
   const features = await prisma.feature.findMany({
     where: { projectId },
     orderBy: { createdAt: 'asc' },
@@ -244,13 +253,9 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
   // `planOrder` returns the same ids it was given → every lookup resolves.
   const orderedViews = ordered.map((o) => viewById.get(o.id)!);
 
-  // The project's phases, ordinal-ordered (tie → createdAt, per phases-service),
-  // and each feature's phase membership — the two inputs the grouping needs.
-  const phases = await prisma.phase.findMany({
-    where: { projectId },
-    orderBy: [{ ordinal: 'asc' }, { createdAt: 'asc' }],
-    select: { id: true, name: true, status: true, ordinal: true },
-  });
+  // Await the phases dispatched up-front, and map each feature's membership —
+  // the two inputs the grouping needs (ordinal-ordered, tie → createdAt).
+  const phases = await phasesPromise;
   const phaseIdByFeature = new Map(features.map((f) => [f.id, f.phaseId]));
 
   return {
@@ -268,10 +273,13 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
  * is dropped. A feature whose `phaseId` points outside the loaded phase set (a
  * mid-read delete) falls into the residual band — never dropped.
  */
+/** The phase-row projection the grouping consumes (matches the `phases` select). */
+type PhaseRow = { id: string; name: string; status: PhaseStatus; ordinal: number };
+
 function groupIntoPhaseBands(
   orderedViews: PlanFeatureView[],
   phaseIdByFeature: Map<string, string | null>,
-  phases: { id: string; name: string; status: PhaseStatus; ordinal: number }[]
+  phases: PhaseRow[]
 ): PlanPhaseBand[] {
   const known = new Set(phases.map((p) => p.id));
   const byPhase = new Map<string, PlanFeatureView[]>();
@@ -287,12 +295,7 @@ function groupIntoPhaseBands(
     }
   }
 
-  const bandFor = (p: {
-    id: string;
-    name: string;
-    status: PhaseStatus;
-    ordinal: number;
-  }): PlanPhaseBand => ({
+  const bandFor = (p: PhaseRow): PlanPhaseBand => ({
     id: p.id,
     name: p.name,
     status: p.status,

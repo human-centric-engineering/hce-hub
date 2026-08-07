@@ -283,6 +283,42 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
     expect(screen.getByText('Shipped work')).toBeInTheDocument();
   });
 
+  it('forces a collapse-by-default band open when it holds the auto-expanded feature', () => {
+    // A complete phase collapses by default, but if it contains the feature the
+    // view opens on (an active task), the band must open so that work is visible.
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'done',
+            name: 'Foundations',
+            status: 'complete',
+            ordinal: 0,
+            features: [
+              feature({
+                id: 'a',
+                title: 'Live work in a complete phase',
+                status: 'in_flight',
+                tasks: [
+                  {
+                    id: 't1',
+                    number: null,
+                    title: 'active task',
+                    status: 'active',
+                    prUrl: null,
+                    claimer: null,
+                  },
+                ],
+                progress: { merged: 0, total: 1, live: 1, blocked: 0 },
+              }),
+            ],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText('active task')).toBeInTheDocument();
+  });
+
   it('collapses a parked band by default and reveals it on click', () => {
     render(
       <PlanView

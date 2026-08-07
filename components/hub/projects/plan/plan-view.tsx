@@ -18,15 +18,17 @@ export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
   // the default-expand pick, and the stable §N fallback.
   const allFeatures = plan.phases.flatMap((b) => b.features);
 
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
-    // Prefer the feature with a task actually being worked (an `active` task) —
-    // that's where attention is, even when an earlier-in-order in-flight feature
-    // sorts above it. Fall back to the first non-shipped feature with tasks.
-    const first =
-      allFeatures.find((f) => f.tasks.some((t) => t.status === 'active')) ??
-      allFeatures.find((f) => f.status !== 'shipped' && f.tasks.length > 0);
-    return first ? { [first.id]: true } : {};
-  });
+  // The feature the view opens on: the one being actively worked (an `active`
+  // task) — that's where attention is, even when an earlier-in-order in-flight
+  // feature sorts above it — else the first non-shipped feature with tasks.
+  const autoExpandId = (
+    allFeatures.find((f) => f.tasks.some((t) => t.status === 'active')) ??
+    allFeatures.find((f) => f.status !== 'shipped' && f.tasks.length > 0)
+  )?.id;
+
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
+    autoExpandId ? { [autoExpandId]: true } : {}
+  );
 
   if (allFeatures.length === 0) {
     return (
@@ -61,6 +63,9 @@ export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
             expanded={expanded}
             onToggle={toggle}
             ordinalFor={ordinalFor}
+            // Open the band that holds the auto-expanded feature even if it would
+            // otherwise collapse by default, so the view really "opens on" it.
+            forceOpen={autoExpandId != null && band.features.some((f) => f.id === autoExpandId)}
           />
         ))}
       </div>

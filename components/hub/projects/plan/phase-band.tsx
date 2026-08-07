@@ -26,6 +26,7 @@ export function PhaseBand({
   expanded,
   onToggle,
   ordinalFor,
+  forceOpen = false,
 }: {
   band: PlanPhaseBand;
   /** Suppressed when the project has no phases (residual band = the whole plan). */
@@ -37,13 +38,16 @@ export function PhaseBand({
   onToggle: (featureId: string) => void;
   /** Stable §N for a feature (its `number`, with a plan-position fallback). */
   ordinalFor: (featureId: string, featureNumber: number | null) => number;
+  /** Open regardless of status — this band holds the view's auto-expanded feature. */
+  forceOpen?: boolean;
 }) {
   const isParked = band.status === 'parked';
   // Collapsed by default when there's nothing to act on: `parked` (deliberately
   // set aside) and `complete` (done history). Active/upcoming phases and the
-  // residual "No phase" band (uncategorised but live work) open expanded.
+  // residual "No phase" band (uncategorised but live work) open expanded — as does
+  // any band holding the auto-expanded feature (forceOpen), so the view opens on it.
   const collapsedByDefault = isParked || band.status === 'complete';
-  const [open, setOpen] = useState(!collapsedByDefault);
+  const [open, setOpen] = useState(forceOpen || !collapsedByDefault);
 
   const rows = band.features.map((feature) => (
     <FeatureRow
