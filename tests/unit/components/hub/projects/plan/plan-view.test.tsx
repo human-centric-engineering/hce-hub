@@ -225,7 +225,9 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
         ])}
       />
     );
-    expect(screen.getByText('v0.9.0')).toBeInTheDocument();
+    // The band header is a button; the phase name also appears in the row's
+    // assign picker (a combobox), so target the header specifically.
+    expect(screen.getByRole('button', { name: /v0\.9\.0/ })).toBeInTheDocument();
     expect(screen.getByText('1 feature')).toBeInTheDocument();
     expect(screen.getByText('Filed feature')).toBeInTheDocument();
   });
