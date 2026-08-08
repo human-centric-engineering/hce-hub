@@ -163,8 +163,8 @@ export async function startTask(
  *   born task is), so the existing claimer-based plan/board display already shows
  *   the new person; the richer status-aware display is t2.
  *
- * Audit-logged, **no `ProjectEvent`** (keeps t1 migration-free — a `task_assigned`
- * journal kind would be a small enum-add, deferred). An optional
+ * Journals a `task_assigned` `ProjectEvent` (the handoff trail — who moved whose
+ * work, and when) inside the same tx, and audit-logs it. An optional
  * `expectedProjectId` rejects a cross-project id-swap.
  */
 export async function assignTask(
@@ -197,6 +197,15 @@ export async function assignTask(
     await tx.task.update({
       where: { id: task.taskId },
       data: { assigneeUserId, claimedByUserId: assigneeUserId, status: 'claimed' },
+    });
+    // Journal the handoff inside the same tx (an event iff the assignment commits).
+    await recordProjectEvent(tx, {
+      projectId: task.projectId,
+      featureId: task.featureId,
+      taskId: task.taskId,
+      kind: 'task_assigned',
+      actorUserId: userId,
+      metadata: { assigneeUserId, from: task.status },
     });
   });
 

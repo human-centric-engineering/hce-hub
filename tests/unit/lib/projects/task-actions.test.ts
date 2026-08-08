@@ -280,7 +280,7 @@ describe('assignTask (f-task-assignment t1)', () => {
     expect(runTx).not.toHaveBeenCalled();
   });
 
-  it('points a claimed task at the new assignee (assignee = claimant), no ProjectEvent', async () => {
+  it('points a claimed task at the new assignee (assignee = claimant) + journals task_assigned', async () => {
     resolveTask.mockResolvedValue(granted({ status: 'claimed', claimedByUserId: USER }));
 
     const r = await assignTask(USER, 't1', ASSIGNEE);
@@ -290,11 +290,19 @@ describe('assignTask (f-task-assignment t1)', () => {
       where: { id: 't1' },
       data: { assigneeUserId: ASSIGNEE, claimedByUserId: ASSIGNEE, status: 'claimed' },
     });
-    // Audit-logged, but no timeline event (t1 stays migration-free).
+    // Journals the handoff inside the same tx, and audit-logs it.
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        taskId: 't1',
+        kind: 'task_assigned',
+        actorUserId: USER,
+        metadata: { assigneeUserId: ASSIGNEE, from: 'claimed' },
+      })
+    );
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'task.assign', entityId: 't1' })
     );
-    expect(emit).not.toHaveBeenCalled();
   });
 
   it('reassigning an ACTIVE task resets it to claimed + releases the open claim (clean handoff)', async () => {

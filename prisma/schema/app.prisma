@@ -387,6 +387,9 @@ enum ProjectEventKind {
   // §22-02). Distinct from task_created so "which shipped work generates defects"
   // is directly queryable in the journal.
   bug_reported
+  // A task (re)assigned to a member via assign_task (f-task-assignment t1) — the
+  // handoff trail: who moved whose work, and when.
+  task_assigned
   // Membership.
   member_added
   // Authored narrative — record_decision / add_note (f-journal §17 t-2).
