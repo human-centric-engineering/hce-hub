@@ -7,7 +7,7 @@ operationalizes: v1-requirements.md (§4, §5, §10)
 	
 # Authoring an HCE-Hub-style plan
 
-> How to write a build plan in the HCE Hub model — a reusable convention and template. It **operationalizes** [[v1-requirements#4. Three layers of work|v1-requirements §4/§5]] (which defines the layers) with the sizing heuristics, authoring method, and anti-patterns we learned writing — and then *executing* — the [[plan|ConQuest]] and Daybreak (expert-led-framework) plans (the execution lessons are captured in [[planning-retro]] §A). Until the Hub exists, a plan is a markdown doc in the project repo; written to this convention, it ingests cleanly into the Hub when built.
+> How to write a build plan in the HCE Hub model — a reusable convention and template. It **operationalizes** [v1-requirements §4/§5](./design_handoff_hce_hub/v1-requirements.md#4-three-layers-of-work) (which defines the layers) with the sizing heuristics, authoring method, and anti-patterns we learned writing — and then *executing* — the [ConQuest](./plan.md) and Daybreak (expert-led-framework) plans (the execution lessons are captured in [planning-retro](./planning-retro.md) §A). Until the Hub exists, a plan is a markdown doc in the project repo; written to this convention, it ingests cleanly into the Hub when built.
 
 ## Why this exists
 
@@ -35,25 +35,25 @@ This guide pins the meanings and gives a repeatable method so neither happens ag
 - **Feature = ~2–5 tasks**, matching the grain the Hub's own project board uses. If a "feature" is really 1 task, it's a task — merge it up into a sibling. If it's pushing past ~6, consider splitting.
 - **Put a `~PRs` figure on each feature** so its size reads at a glance without decoding the task list.
 - **A task can honestly be larger than one PR occasionally** — say so explicitly (flag it), rather than pretending it's small or silently letting it balloon.
-- **Indicative sizing is a hypothesis, re-checked at promotion/build.** A task's real shape often only resolves when the owner builds it, and several Daybreak features split at build along predictable seams ([[planning-retro]] B1/B16/B22/B23/B25). Mark these as split candidates: a task whose name joins two concerns with "+" (a pure transform **+** an LLM/IO call; a proposal gate **+** its evaluation); a task spanning **a new endpoint and its consuming UI** (usually two PRs); "several typed kinds under one table" (size by each kind's *enforcement machinery* — fold pure-data kinds into the spine, don't do one-PR-per-kind); and a task leaning on **"reuse existing X"** (weight-check that X is the shape you need before committing to one PR). Conversely, fold a commit-sized sliver *up* into its dependent task.
+- **Indicative sizing is a hypothesis, re-checked at promotion/build.** A task's real shape often only resolves when the owner builds it, and several Daybreak features split at build along predictable seams ([planning-retro](./planning-retro.md) B1/B16/B22/B23/B25). Mark these as split candidates: a task whose name joins two concerns with "+" (a pure transform **+** an LLM/IO call; a proposal gate **+** its evaluation); a task spanning **a new endpoint and its consuming UI** (usually two PRs); "several typed kinds under one table" (size by each kind's *enforcement machinery* — fold pure-data kinds into the spine, don't do one-PR-per-kind); and a task leaning on **"reuse existing X"** (weight-check that X is the shape you need before committing to one PR). Conversely, fold a commit-sized sliver *up* into its dependent task.
 
 ## Dependencies are the spine
 
 - **Ordering is emergent from `depends on`, not prescribed.** Don't number features in execution order — that hides the dependency truth and freezes a sequence the work will deviate from. Give features semantic slugs, list their dependencies, and let the order fall out.
 - **Dependencies are what the Hub consumes** for prioritisation and work-sharing ("what's ready to pull right now?"). Make them explicit and accurate — this is the highest-value content in the plan.
 - **Name the critical path** so the spine is visible.
-- **Exploratory ordering is allowed** (the [[v1-requirements#3. Human-centric principles (binding)|human-centric principle]]): the plan proposes order; the human may deliberately work "out of order". The plan never gates.
+- **Exploratory ordering is allowed** (the [human-centric principle](./design_handoff_hce_hub/v1-requirements.md#3-human-centric-principles-binding)): the plan proposes order; the human may deliberately work "out of order". The plan never gates.
 
 ## Ground the plan in verified reality
 
-The plan describes work that hasn't happened yet — but it must not *assume* the ground it stands on. Two failure modes from executing the Daybreak plan ([[planning-retro]] A1–A3), both cheap to prevent at authoring time:
+The plan describes work that hasn't happened yet — but it must not *assume* the ground it stands on. Two failure modes from executing the Daybreak plan ([planning-retro](./planning-retro.md) A1–A3), both cheap to prevent at authoring time:
 
 - **Verify every "assumed done / landed upstream" dependency against actual state — with evidence.** The Daybreak plan asserted a foundational seam "already exists upstream"; it didn't, and the gap surfaced only because execution happened to start by checking it. Never assert external/upstream readiness from a spec or memo — grep the seam, check the tag/version, record what you found. Anything the plan itself doesn't build must be *verified*, not trusted.
 - **When the project sits on a host platform (Sunrise), model tier ownership and seams up front.** Two things the Daybreak plan got a tier off:
   - **How many tiers, and who owns/reserves what.** If the thing you're planning is *itself* a platform that downstream projects fork, it owns its own tier *and reserves the leaf surface* for its forks — don't assume a single "this project owns everything" tier. State, per tier, which code/doc/schema surface it owns vs. reserves.
   - **Enumerate every cross-boundary seam and tag it by direction.** *Fork→core* seams (the project calls into a platform registry) are cheap and fork-owned. *Core→fork* seams (the platform must call *out* to the project) can't be pure fork-owned — they need a generic upstream mechanism and carry sequencing/merge constraints. Flag core→fork seams as coordination risks in the plan, not surprises found at implementation.
 
-  Tier and seam classification can firm up at *build* — a feature that looked "pure, no upstream change" can turn out to need a generic core seam once you design from behaviour ([[planning-retro]] B17/B19). Write these as the plan's evidenced best hypothesis and expect features to re-confirm them.
+  Tier and seam classification can firm up at *build* — a feature that looked "pure, no upstream change" can turn out to need a generic core seam once you design from behaviour ([planning-retro](./planning-retro.md) B17/B19). Write these as the plan's evidenced best hypothesis and expect features to re-confirm them.
 
 ## Plan vs spec — board vs knowledge base
 
@@ -83,15 +83,15 @@ A design doc often includes a build sequence or its own "phases" (a suggested or
 
 - **Features:** semantic slugs — `f-engine`, `f-slots`, `f-bootstrap`. **Tasks:** `t-N` within their feature. (Avoid `F1.2`-style numbers — they smuggle a phase/order assumption back in.)
 - **Indicative vs promoted.** Task bullets in the plan are *indicative* — a sizing aid, not commitments. A task becomes **promoted** when the owner declares it with a `t-N` id, files-likely-to-touch, deps, and status. Promotion is the agency gesture (v1-requirements §4): nothing the team sees is implicit.
-- **Status vocabulary.** Features: `not started | in flight | blocked | shipped`. Tasks (promoted): `backlog | available | claimed → done`. **No "PR open" state** — flip straight to `done` when the PR merges. A two-step terminal status (`in-pr → done`) goes stale because the flip is forgotten; one transition, nothing to forget ([[planning-retro]] A5).
+- **Status vocabulary.** Features: `not started | in flight | blocked | shipped`. Tasks (promoted): `backlog | available | claimed → done`. **No "PR open" state** — flip straight to `done` when the PR merges. A two-step terminal status (`in-pr → done`) goes stale because the flip is forgotten; one transition, nothing to forget ([planning-retro](./planning-retro.md) A5).
 
 ## Definition of done, claiming & deferrals
 
 The plan owns the working model every feature inherits — set these once, up front:
 
-- **Gates before the PR opens, not after.** The task definition-of-done includes the standard gates (`/pre-pr`, `/security-review`, then `/code-review` on the open PR) as completion criteria — run *before* opening the PR, not prompted for afterwards ([[planning-retro]] A4). Every feature and task inherits this.
-- **Claim-first as a standalone docs PR — the moment there's more than one builder.** Set Owner + `in flight` and write the feature's detailed plan, then push both as one docs-only PR *before* any task work starts ([[planning-retro]] A6). A claim nobody can see doesn't stop two owners starting the same feature. Concurrent ownership is the Hub's normal condition, so make claim-first the default. (A strictly single-owner plan may still fold the plan into t-1.)
-- **Deferrals need a live, actionable home.** A cross-cutting "do this later" parked only in a shipped feature's own doc is abandoned — nobody re-reads a closed feature's plan ([[planning-retro]] B28). Promote cross-cutting follow-ups to a live board surface at close-out. The test: *will the person who actions this see it here after the feature ships, or is it a graveyard?*
+- **Gates before the PR opens, not after.** The task definition-of-done includes the standard gates (`/pre-pr`, `/security-review`, then `/code-review` on the open PR) as completion criteria — run *before* opening the PR, not prompted for afterwards ([planning-retro](./planning-retro.md) A4). Every feature and task inherits this.
+- **Claim-first as a standalone docs PR — the moment there's more than one builder.** Set Owner + `in flight` and write the feature's detailed plan, then push both as one docs-only PR *before* any task work starts ([planning-retro](./planning-retro.md) A6). A claim nobody can see doesn't stop two owners starting the same feature. Concurrent ownership is the Hub's normal condition, so make claim-first the default. (A strictly single-owner plan may still fold the plan into t-1.)
+- **Deferrals need a live, actionable home.** A cross-cutting "do this later" parked only in a shipped feature's own doc is abandoned — nobody re-reads a closed feature's plan ([planning-retro](./planning-retro.md) B28). Promote cross-cutting follow-ups to a live board surface at close-out. The test: *will the person who actions this see it here after the feature ships, or is it a graveyard?*
 
 ## Anti-patterns checklist
 
@@ -122,7 +122,7 @@ epic: <active phase name, e.g. v1>
 
 # <Project> — development plan
 
-> Build breakdown for <project>. Authoritative design: [[<spec>]]. Structured to the
+> Build breakdown for <project>. Authoritative design: <spec>. Structured to the
 > HCE Hub model (see hce-hub/plan-authoring-guide.md). This markdown is the system of
 > record until the Hub exists.
 
@@ -177,14 +177,14 @@ Promoted-task table (under a feature in flight):
 This is a living convention — bump `convention_version` and add a dated note below when it changes. When the Hub is built, these meanings become the data model's enforced shape (Phase/Feature/Task entities, the promotion gesture, dependency edges); until then, this doc is the shared agreement that keeps every plan Hub-ingestible and stops the vocabulary drifting.
 
 **Convention history**
-- v2 (2026-07-10) — folded in the Daybreak *execution* lessons ([[planning-retro]] §A + generalisable §B): verify assumed-landed deps with evidence; model tier ownership & seam direction on a host platform; gates-before-PR definition-of-done; claim-first docs PR under concurrent ownership; drop the in-PR task status; provisional/build-time sizing splits; deferrals need a live home. Prep for authoring the HCE Hub plan.
+- v2 (2026-07-10) — folded in the Daybreak *execution* lessons ([planning-retro](./planning-retro.md) §A + generalisable §B): verify assumed-landed deps with evidence; model tier ownership & seam direction on a host platform; gates-before-PR definition-of-done; claim-first docs PR under concurrent ownership; drop the in-PR task status; provisional/build-time sizing splits; deferrals need a live home. Prep for authoring the HCE Hub plan.
 - v1 (2026-06-24) — initial, distilled from the ConQuest and Daybreak (expert-led-framework) plans.
 
 ## References
 
-- [[v1-requirements]] — the Hub model this operationalizes (§4 layers, §5 the PR unit, §10 Phase-as-epic + `parked`).
-- [[futures]] — Phase/epic and coarse-grouping scaffolding.
-- [[feature-plan-authoring-guide]] — the **second tier**: how an owner authors a single feature's detailed plan (`<feature>.md`). This guide is the board; that one is the owner's build plan.
+- [v1-requirements](./design_handoff_hce_hub/v1-requirements.md) — the Hub model this operationalizes (§4 layers, §5 the PR unit, §10 Phase-as-epic + `parked`).
+- [futures](./futures.md) — Phase/epic and coarse-grouping scaffolding.
+- [feature-plan-authoring-guide](./feature-plan-authoring-guide.md) — the **second tier**: how an owner authors a single feature's detailed plan (`<feature>.md`). This guide is the board; that one is the owner's build plan.
 - `hce/projects/expert-led-apps/planning-retro.md` — the execution retro these v2 lessons distil (§A overall-plan authoring; §B feature-plan authoring).
 - `hce/projects/expert-led-apps/building-a-feature.md` — the per-feature execution rhythm that pairs with a plan authored to this convention.
 - `hce/projects/expert-led-apps/plan.md` — worked example: one epic, flat feature list, semantic slugs, dependency-ordered.

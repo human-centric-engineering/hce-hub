@@ -26,7 +26,7 @@ morning brief as v1 scope. In practice V1 = **everything non-AI**, and the three
 AI features are **V2**: `f-sidekick` (feature 12), `f-intake` (feature 13),
 `f-morning-brief` (feature 15). We deployed V1 deliberately early to unblock the
 GitHub webhook (needs a public URL). V2 also now targets an **idea/tweak capture**
-concept — see [[futures#Frictionless idea capture — the parking gesture `[v1.x]`|Futures: frictionless idea capture]].
+concept — see [Futures: frictionless idea capture](./futures.md#frictionless-idea-capture-the-parking-gesture-v1x).
 
 **The claim model pivoted: you claim _features_, not tasks.** A task is _born_
 `claimed` (owned by the feature owner) when its feature is planned; you then
@@ -49,7 +49,7 @@ its tasks (`computeFeatureStatus`); a `FeaturePlanningStage` enum (from
 **The Hub is its own system of record (self-hosting arc, features 16–21).** Not in
 this brief at all, and the largest architectural addition: `f-refs` (16),
 `f-journal` (17, the `ProjectEvent` decision/activity stream — the capture half of
-the [[futures#Living decision log `[architectural]`|living decision log]]),
+the [living decision log](./futures.md#living-decision-log-architectural)),
 `f-feature-planning` (18), `f-selfhost-cutover` (19), `f-status-model` (20),
 `f-authoring-fidelity` (21). The markdown-plan-as-record model this brief assumes
 is retired; the Hub records itself, authored over MCP.
@@ -219,21 +219,21 @@ For the Sunrise-side Claude to refine. Indicative, not prescriptive:
 - **TaskDependency** — taskId, dependsOnTaskId
 - **TaskClaim** — taskId, userId, claimedAt, releasedAt (nullable) — for "John started something touching X an hour ago" warnings
 
-**Architectural scaffolding for dynamic focus and prioritisation** (defined in v1, not actively consumed by v1 features — see [[futures#Dynamic focus and prioritisation|Futures: Dynamic focus and prioritisation]]):
+**Architectural scaffolding for dynamic focus and prioritisation** (defined in v1, not actively consumed by v1 features — see [Futures: Dynamic focus and prioritisation](./futures.md#dynamic-focus-and-prioritisation)):
 
 - **Sprint** — id, name, startDate, endDate, status (`upcoming` / `active` / `complete`), planMarkdown (nullable, for ingesting existing markdown sprint plans), createdAt
 - **FocusDirective** — id, projectId, sprintId (nullable), declaredByUserId, declaredAt, intent (string — e.g. `"push toward Friday demo"` or `"hold pending external"`), deadline (nullable timestamp), reason (nullable string — for hold states), status (`active` / `expired` / `superseded`)
 
 These two entities aren't used by v1 features (no UI surface, no capability uses them, no recommendation logic considers them yet). They exist in the schema so v1.x features — sprint-aligned prioritisation, conversational priority directives, project hold states, focus-aware morning briefs — can be built without a data-model migration. Keeping them additive in v1 is cheap; bolting them on later is not.
 
-**Architectural scaffolding for coarse work grouping** (defined in v1, not actively consumed by v1 features — see [[futures#Coarse work grouping — Phases / Epics|Futures: Coarse work grouping]]):
+**Architectural scaffolding for coarse work grouping** (defined in v1, not actively consumed by v1 features — see [Futures: Coarse work grouping](./futures.md#coarse-work-grouping-phases-epics)):
 
 - **Phase** — id, projectId, ordinal (Int, display order within project), name, description (nullable), status (`upcoming` / `active` / `complete` / `parked`), startedAt (nullable), completedAt (nullable), createdAt
 - **Feature.phaseId** — nullable FK column added to the `Feature` table above. Features without a phase remain valid; phase membership is optional throughout.
 
-Phase is the epic layer above Feature — a release-boundary or future-work-parking grouping. The `parked` status carries "ideas for v2 / six months from now" work without it cluttering active views. Phase is **coarse and organisational, not gating**: it does not constrain feature ordering and is not the unit of dependency (the [[#3. Human-centric principles (binding)|exploratory-ordering principle]] still holds at the feature level). As with Sprint and FocusDirective above, no v1 UI surface, no capability consumes it, and no recommendation logic considers it yet — it's in the schema so v1.x features (phase view, `assign-feature-to-phase` capability, phase-aware `next-task` bias, parked-phase suppression) land without a data-model migration.
+Phase is the epic layer above Feature — a release-boundary or future-work-parking grouping. The `parked` status carries "ideas for v2 / six months from now" work without it cluttering active views. Phase is **coarse and organisational, not gating**: it does not constrain feature ordering and is not the unit of dependency (the exploratory-ordering principle still holds at the feature level). As with Sprint and FocusDirective above, no v1 UI surface, no capability consumes it, and no recommendation logic considers it yet — it's in the schema so v1.x features (phase view, `assign-feature-to-phase` capability, phase-aware `next-task` bias, parked-phase suppression) land without a data-model migration.
 
-The schema cost (one table + one nullable FK) is small now; retrofitting the column once flat features have accumulated across multiple projects is the cost we're paying to avoid. **Precursor in active use:** the [[plan|Conversational Questionnaire project plan]] already uses informal `P0..P9` phase naming in advance of the Hub UI surfacing it; when v1.x phase UI lands those informal phases become real `Phase` rows.
+The schema cost (one table + one nullable FK) is small now; retrofitting the column once flat features have accumulated across multiple projects is the cost we're paying to avoid. **Precursor in active use:** the [Conversational Questionnaire project plan](./plan.md) already uses informal `P0..P9` phase naming in advance of the Hub UI surfacing it; when v1.x phase UI lands those informal phases become real `Phase` rows.
 
 Existing Sunrise models (`AiAgent`, `AiWorkflow`, `AiKnowledgeCategory`, `AiCostLog`, `AiAdminAuditLog` etc.) are reused as-is.
 
@@ -339,7 +339,7 @@ These need positions during the build but are not load-bearing on the requiremen
 
 ## 15. Out of scope for v1, but design accordingly
 
-See [[futures|HCE Hub Futures]] for the broader thinking on what the Hub becomes over time — including bidirectional Sunrise/fork flows, living decision logs, sprint retro auto-drafts, capability matching for new opportunities, and the future Sales / Support / Marketing / Finance modules. The futures doc flags which items need architectural support in v1.
+See [HCE Hub Futures](./futures.md) for the broader thinking on what the Hub becomes over time — including bidirectional Sunrise/fork flows, living decision logs, sprint retro auto-drafts, capability matching for new opportunities, and the future Sales / Support / Marketing / Finance modules. The futures doc flags which items need architectural support in v1.
 
 The shorter list of explicit v1 exclusions:
 

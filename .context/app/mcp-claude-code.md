@@ -1,6 +1,6 @@
 # Hub tools in Claude Code (MCP)
 
-HCE Hub's coordination tools — starting with **`next_task`** ([[f-hub-capabilities]]) — are
+HCE Hub's coordination tools — starting with **`next_task`** ([f-hub-capabilities](./planning/f-hub-capabilities.md)) — are
 registered Sunrise **capabilities**. They run in the same dispatcher the chat sidekick uses,
 and are exposed over Sunrise's **MCP server** so a developer can call them from Claude Code
 (or any MCP client) without leaving their dev session:
@@ -8,7 +8,7 @@ and are exposed over Sunrise's **MCP server** so a developer can call them from 
 > "What should I pick up next on the Lelanea project?" → `next_task`
 
 Everything is **membership-scoped**: a tool only ever sees projects you're a member of
-(enforced inside each capability via `canAccessProject` — [[f-access]]), so the MCP key just
+(enforced inside each capability via `canAccessProject` — [f-access](./planning/f-access.md)), so the MCP key just
 identifies _you_; it doesn't grant broader access.
 
 ## What ships seeded vs. what an operator turns on

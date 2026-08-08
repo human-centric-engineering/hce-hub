@@ -102,7 +102,7 @@ Additions to **`Feature`**:
   `*Done when:*` lines). First-class; shown in the feature detail.
 - **`description`** — *already in the schema* (`@db.Text`), just under-used. Populate it as
   human-readable markdown (the design shows a description line).
-- **`references`** — cross-refs for plan/build (the `[[v1-requirements#…]]` / design links).
+- **`references`** — cross-refs for plan/build (the `[v1-requirements](./design_handoff_hce_hub/v1-requirements.md#)` / design links).
   Start as `Json?` (a list of `{ label, target }`) rendered as ref-chips; promote to rows
   only if it needs querying.
 - **`planningStage FeaturePlanningStage @default(indicative)`** (`indicative | planned`) —
@@ -147,7 +147,7 @@ the schema has `in_pr`, and `link_pr` uses it).
 
 ## 3 · The capability set (the MCP verbs that replace the PR flow)
 
-All membership-scoped through the [[f-access]] funnel, audited, **MCP-exposed** (seeded
+All membership-scoped through the [f-access](./f-access.md) funnel, audited, **MCP-exposed** (seeded
 `AiCapability` + `McpExposedTool`), and each **emits its ProjectEvent(s)**. Human-initiated =
 ungated; an **agent**-initiated call is wrapped by that agent's approval flow (Decisions log
 2026-07-13).
@@ -172,13 +172,13 @@ ungated; an **agent**-initiated call is wrapped by that agent's approval flow (D
 - `claim_feature(featureId)` — owner = caller, `status → in_flight`; emit `feature_claimed`.
   *(The missing feature-level claim — today only tasks can be claimed.)*
 - `plan_feature(featureId, { doneWhen?, description?, tasks: [{ title, files?, deps? }] })` —
-  create the real `Task` rows (assignee = owner, `number` via the `taskCounter` bump — [[f-refs]]
+  create the real `Task` rows (assignee = owner, `number` via the `taskCounter` bump — [f-refs](./f-refs.md)
   invariant), `planningStage → planned`; emit `feature_planned` + `task_created`×N.
 - `ship_feature(featureId, summary)` — `status → shipped`; emit `feature_shipped` (body =
   summary, the close-out narrative). Soft-warns if tasks aren't all merged (done-when is
   human-judged, never a hard block — §5).
 
-**Task lifecycle** (updated for the [[f-status-model]] §20 model — `claimed | active | merged`):
+**Task lifecycle** (updated for the [f-status-model](./f-status-model.md) §20 model — `claimed | active | merged`):
 `create_task` (exists; `add_backlog`/`claim_task` retired — a task is born `claimed`),
 `start_task(taskId)` (`claimed → active`, emit `task_claimed`) and `complete_task(taskId)`
 (`→ merged`, emit `task_merged` — later automatable by `f-github-sync`'s webhook) — **both built
@@ -244,7 +244,7 @@ enter three ways, and the two "imports" differ by whether history must be backda
 - **Work completed** → `feature_shipped` events carrying the close-out narrative as `body`.
 
 After import: `plan.md`/`<feature>.md` **frozen** (optionally auto-exported from the Hub for
-git history); the MCP dev loop documented in [[mcp-claude-code]]. From here, every
+git history); the MCP dev loop documented in [mcp-claude-code](../mcp-claude-code.md). From here, every
 claim/plan/ship/decision is an MCP call.
 
 ## 6 · Feature breakdown & sequencing
@@ -296,7 +296,7 @@ model must too — decided here so they aren't lost at the §19 cutover:
   system of record.** Flattened into decision-event prose they lose their finding→decision
   shape — and that's fine: the *frozen markdown* stays the archive of the thinking; the Hub
   holds the *outcome*. We do not model recon lists or vitest plans.
-- **The `[[wikilink]]` graph** — `Feature.references` (Json) holds a curated top-level set;
+- **The `wikilink` graph** — `Feature.references` (Json) holds a curated top-level set;
   dense inline cross-refs become flat text in event/description markdown. Acceptable for v1
   unless in-Hub cross-navigation becomes a real need (then promote `references` to rows).
 
