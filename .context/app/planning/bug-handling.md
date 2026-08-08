@@ -8,7 +8,7 @@ parent: next-phase-brief.md
 
 How the Hub treats a genuine bug that arrives while planning or delivering a
 phase (or when no phase is active). Settled 2026-08-06; the primitives land as a
-small feature alongside [[next-phase-brief#The keystone: Phases|`f-phases`]]. The
+small feature alongside [`f-phases`](./next-phase-brief.md#the-keystone-phases). The
 guiding aim: keep bugs _in the flow_ and easy to prioritise **without importing
 Jira** — no urgency theatre, no history rewriting.
 
@@ -50,7 +50,7 @@ flow as any task).
 
 No `priority: high` flag, no nagging. The Hub is deliberately anti-urgency (no red
 badges, no "overdue", counts-as-information-not-pressure), and priority is
-_declared bias_, not a hard field (see [[futures#Dynamic focus and prioritisation]]).
+_declared bias_, not a hard field (see [futures](./futures.md#dynamic-focus-and-prioritisation)).
 So "make bugs a priority for next action" is implemented as: **`next_task` weights
 `bug`-kind tasks up.** Same effect as a `bug`-labelled issue floating up a triage
 view — but pulled, not assigned. `help-wanted` on a bug is the pressure-release
@@ -122,11 +122,11 @@ Phase 1 feature as history rather than dragging it into the present.
 
 ## Forward connections
 
-- **Converges with [[next-phase-brief#3. Onboard Sunrise as a Hub project|Sunrise-as-a-project]].**
+- **Converges with [Sunrise-as-a-project](./next-phase-brief.md#3-onboard-sunrise-as-a-hub-project).**
   Sunrise's real GitHub issues — some tagged `bug` — become `bug`-kind tasks when
   we onboard it. Same primitive serves both.
 - **A first-class `Issue`/`Bug` model** (standalone from features, à la GitHub
   issues) is the heavier alternative — a _defer-until-it-earns-it_ call, exactly
-  like the [[futures#Dedicated release + divergence modelling `[architectural]`|`Release` model]].
+  like the [`Release` model](./futures.md#dedicated-release-divergence-modelling-architectural).
   The task-kind label is the minimal step; onboarding Sunrise's issues is what will
   pressure-test whether a real Issue model is needed.

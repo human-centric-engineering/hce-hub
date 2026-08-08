@@ -1,7 +1,7 @@
 # GitHub PR sync
 
-[[f-github-sync]] closes the loop between a task and its pull request. `set_pr`
-([[f-status-model]]) lets a task carry its PR URL; this feature reconciles the
+[f-github-sync](./planning/f-github-sync.md) closes the loop between a task and its pull request. `set_pr`
+([f-status-model](./planning/f-status-model.md)) lets a task carry its PR URL; this feature reconciles the
 **merge** back onto the board: when a linked PR merges, every task that carries
 that PR URL moves to `merged` automatically, credited to the Hub worker who did
 the work.
@@ -47,7 +47,7 @@ the trigger/scope machinery for no gain.
 So this is a **standalone route** that reuses only the _idea_ of HMAC
 verification — not Sunrise's `verifyHookSignature`, because the two signing
 schemes differ (see below). Everything else (task lookup, status transition,
-audit, events) reuses the same [[f-status-model]] cores the MCP verbs and the
+audit, events) reuses the same [f-status-model](./planning/f-status-model.md) cores the MCP verbs and the
 task sheet already drive.
 
 ## Module layout
@@ -115,13 +115,13 @@ and drives each to `merged`:
   independently.
 - **Actor = the task's own `claimedByUserId`.** The worker who did the work is
   credited as the one who completed it — **never the webhook**. This is a
-  deliberate [[f-github-sync]] decision: mapping GitHub's `merged_by` to a Hub
+  deliberate [f-github-sync](./planning/f-github-sync.md) decision: mapping GitHub's `merged_by` to a Hub
   user is a proper later feature (it needs a GitHub-identity ↔ Hub-user table),
   not something to fake by attributing to a system account.
 - **Idempotent.** `completeTask` is a no-op on an already-`merged` task, so a
   re-delivered event (GitHub retries, or a manual redelivery) changes nothing.
 - **Resilient skips.** A matched task that is unclaimed, or whose claimant is no
-  longer a project member (the [[f-access]] funnel's 404), is **skipped with a
+  longer a project member (the [f-access](./planning/f-access.md) funnel's 404), is **skipped with a
   warning** rather than failing the whole delivery — one bad task never blocks
   the others.
 - **Unblocking is free.** Task/feature status is derived, so a merged task's
@@ -179,9 +179,9 @@ a configured repo — GitHub can't reach `.test`/localhost.
 
 ## Related docs
 
-- [[f-status-model]] — the `claimed | active | merged` model and the
+- [f-status-model](./planning/f-status-model.md) — the `claimed | active | merged` model and the
   `completeTask` core this drives; `set_pr` (which populates `Task.prUrl`).
-- [[f-access]] — the membership funnel whose 404 is the "claimant not resolvable"
+- [f-access](./planning/f-access.md) — the membership funnel whose 404 is the "claimant not resolvable"
   skip.
 - [inbound-triggers](../orchestration/inbound-triggers.md) — the workflow-bound pipeline this deliberately does _not_
   use, and why.

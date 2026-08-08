@@ -54,7 +54,7 @@ the next upstream merge.
 ## Upstream asks
 
 Requests filed against Sunrise from fork experience — **fork-first seams** (a generic seam
-carried _into_ a core file, awaiting an upstream issue + landing — the `[[upstream-asks]]`
+carried _into_ a core file, awaiting an upstream issue + landing — the `upstream-asks`
 concept from the feature-plan guide §8) **and** other clarifications the fork surfaced (docs,
 structure).
 

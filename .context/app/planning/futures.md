@@ -6,7 +6,7 @@ opened: 2026-05-09
 
 # HCE Hub — Futures
 
-This is the looser companion to [[v1-requirements|v1 requirements]]. It captures Hub possibilities that are out of v1 scope but worth thinking about now — because some are natural v1.x enhancements, some require architectural support in v1 to be possible later, and some are clearly future modules. Together they sketch what HCE's AI-native business operations platform could become.
+This is the looser companion to [v1 requirements](./design_handoff_hce_hub/v1-requirements.md). It captures Hub possibilities that are out of v1 scope but worth thinking about now — because some are natural v1.x enhancements, some require architectural support in v1 to be possible later, and some are clearly future modules. Together they sketch what HCE's AI-native business operations platform could become.
 
 This doc is meant to evolve. Add ideas freely, let them mature, promote them upward when they're ready.
 
@@ -65,7 +65,7 @@ When a fix or feature lands on Sunrise, downstream forks may want it. Per-projec
 
 *Why it matters:* Solves the classic "fork drift" problem where forks fall behind their upstream. Each fork gets curated, project-aware update suggestions instead of a noisy stream of upstream commits.
 
-*Requirements seed:* the manual version of this loop — release cadence, version-batching, and the fork-sync-and-reconcile process this feature would automate — is written up in [[release-and-sync-strategy]] (in the Sunrise project folder). That doc is the de-facto spec for what this item and [[#Cross-fork problem propagation `[v1.x]`|cross-fork problem propagation]] should implement.
+*Requirements seed:* the manual version of this loop — release cadence, version-batching, and the fork-sync-and-reconcile process this feature would automate — is written up in `release-and-sync-strategy` (in the Sunrise project folder). That doc is the de-facto spec for what this item and [cross-fork problem propagation](#cross-fork-problem-propagation-v1x) should implement.
 
 ### Monitoring-triggered task creation `[v1.x]`
 
@@ -83,7 +83,7 @@ Agent notices that two Hub projects solve similar problems differently. "Lelanea
 
 _Deferred by design (2026-08-06 design experiment) — captured so it isn't
 re-litigated from scratch._ When Sunrise is onboarded as a Hub project (see
-[[next-phase-brief]]), releases are modelled as **phases** (`v0.8.0` = a phase;
+[next-phase-brief](./next-phase-brief.md)), releases are modelled as **phases** (`v0.8.0` = a phase;
 its adoption work + reconciled divergences = tasks/features under it) and the
 divergence ledger lives as **tasks under the release-phase**. That's deliberately
 enough for now. A dedicated model would add three things Phase can't carry:
@@ -181,9 +181,9 @@ Focus history feeds:
 
 Projects accumulate features. Without a grouping layer above features, a long-running project's feature list becomes a flat soup — releases blur, "future enhancements" share a list with "shipping next week", and onboarding context disappears. **Phase** is the epic layer above Feature: release boundary, milestone, or parking lot for ideas that aren't current.
 
-Distinct from [[#Dynamic focus and prioritisation|focus/prioritisation]] above (which is temporal and conversational — sprint goals, "we're pushing Lelanea this week", hold states), Phase is *organisational and persistent*. The three layers compose: Phase tells you which release-band a feature belongs to; Sprint tells you which week of work; FocusDirective tells you the in-conversation push. All three feed `next-task`.
+Distinct from focus/prioritisation above (which is temporal and conversational — sprint goals, "we're pushing Lelanea this week", hold states), Phase is *organisational and persistent*. The three layers compose: Phase tells you which release-band a feature belongs to; Sprint tells you which week of work; FocusDirective tells you the in-conversation push. All three feed `next-task`.
 
-The schema for Phase + nullable `Feature.phaseId` is **scaffolded in v1** (see [[v1-requirements#10. Initial data model sketch]]) so v1.x can consume it without a migration. Same pattern v1 already uses for Sprint and FocusDirective.
+The schema for Phase + nullable `Feature.phaseId` is **scaffolded in v1** (see [v1-requirements](./design_handoff_hce_hub/v1-requirements.md#10-initial-data-model-sketch)) so v1.x can consume it without a migration. Same pattern v1 already uses for Sprint and FocusDirective.
 
 ### Phase as a Hub primitive `[v1.x]`
 
@@ -216,12 +216,12 @@ later. Two scales, one gesture:
   altitude as the entries in this doc. Capture it before it evaporates.
 
 Both land in a **park** and wait for triage: a captured item is later _promoted_
-into a real feature (through [[#Discovery → intake handoff|intake]]), _lifted_ into
+into a real feature (through intake), _lifted_ into
 this futures doc, or _dropped_. This is the spiritual return of the `add-backlog`
 gesture the claim-model pivot removed — but at the **idea/feature** altitude, not
 the task altitude.
 
-**Where it lives:** the [[#Future-work parking `[v1.x]`|`parked` phase]] is the
+**Where it lives:** the [`parked` phase](#future-work-parking-v1x) is the
 natural home for project-scoped ideas (a parked-phase feature stub in
 `planning`/sketch stage). Futures-level, cross-project ideas may want a lighter
 **studio-wide idea inbox** above any single project — worth deciding at build time
@@ -261,13 +261,13 @@ Once the Hub holds multiple projects, the phase view aggregates across them. "Wh
 
 ### Connections to other futures items
 
-- **[[#Sprint retro auto-draft `[v1.x]`|Sprint retro auto-draft]]** — phase progress within the sprint is part of the source material; "we advanced P3 from in-flight to shipped" is a real retro line.
-- **[[#Quarterly planning input `[v1.x]`|Quarterly planning input]]** — phases-completed-per-quarter is a coarser-grained version of the brain-dump archaeology, well-suited to retrospective summary.
-- **[[#Onboarding brief for new contributors `[v1.x]`|Onboarding brief for new contributors]]** — phase view gives a new dev the project's arc in one screen.
+- **[Sprint retro auto-draft](#sprint-retro-auto-draft-v1x)** — phase progress within the sprint is part of the source material; "we advanced P3 from in-flight to shipped" is a real retro line.
+- **[Quarterly planning input](#quarterly-planning-input-v1x)** — phases-completed-per-quarter is a coarser-grained version of the brain-dump archaeology, well-suited to retrospective summary.
+- **[Onboarding brief for new contributors](#onboarding-brief-for-new-contributors-v1x)** — phase view gives a new dev the project's arc in one screen.
 
 ### Precursor today
 
-The [[plan|Conversational Questionnaire project plan]] already uses informal `P0..P9` naming for phases — the doc shape this entry describes formalising. When v1.x ships Phase UI, those informal phases become `Phase` rows.
+The [Conversational Questionnaire project plan](./plan.md) already uses informal `P0..P9` naming for phases — the doc shape this entry describes formalising. When v1.x ships Phase UI, those informal phases become `Phase` rows.
 
 ---
 

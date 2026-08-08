@@ -12,27 +12,27 @@ epic: phase-2 · Self-Hosting the Roadmap
 
 > Build breakdown for the **second phase** of HCE Hub — the self-hosting arc's
 > second act (V1 made the Hub record its own _build_; this makes it **run its own
-> planning**). Authoritative intent: [[next-phase-brief]]; conventions:
-> [[bug-handling]], [[idea-inbox]]; horizon: [[futures]]. Structured to the
-> [[plan-authoring-guide|HCE Hub plan-authoring convention]] and reviewed through
-> [[planning-retro]]. **Named phase** (owner ask): _Self-Hosting the Roadmap_
+> planning**). Authoritative intent: [next-phase-brief](./next-phase-brief.md); conventions:
+> [bug-handling](./bug-handling.md), [idea-inbox](./idea-inbox.md); horizon: [futures](./futures.md). Structured to the
+> [HCE Hub plan-authoring convention](./plan-authoring-guide.md) and reviewed through
+> [planning-retro](./planning-retro.md). **Named phase** (owner ask): _Self-Hosting the Roadmap_
 > (rename freely).
 >
-> **This markdown is the authoring draft, not the record.** Since the [[plan|V1
-> self-hosting cutover]], **the Hub is the system of record.** This doc exists to
+> **This markdown is the authoring draft, not the record.** Since the
+> [V1 self-hosting cutover](./plan.md), **the Hub is the system of record.** This doc exists to
 > _author and review_ the breakdown before it's created in the Hub
 > (`create_feature`/`plan_feature`). Once created, the Hub is authoritative and
 > this file freezes into history — the same markdown→Hub move as the V1 cutover.
 
 ## How to read this — the working model (Hub-as-record)
 
-The [[plan-authoring-guide]] (convention v2) predates the self-hosting cutover;
+The [plan-authoring-guide](./plan-authoring-guide.md) (convention v2) predates the self-hosting cutover;
 its "claim-first **docs PR**" and `backlog|available|claimed→done` task vocab are
 **superseded** here. The current model:
 
 - **Task = one PR**, sized by **separability of value, not line count** — cohesive/
   homogeneous/sequential/unconsumed-until-complete work is one PR even when large
-  ([[planning-retro]] HB3). Not a commit.
+  ([planning-retro](./planning-retro.md) HB3). Not a commit.
 - **Feature = the unit of ownership** — one owner, a coherent capability, ~2–5
   tasks, explicit `depends on`. A flat list; order emerges from dependencies.
 - **Phase = an epic.** This whole breakdown is one epic: **`phase-2`**. (Meta-note:
@@ -42,16 +42,16 @@ its "claim-first **docs PR**" and `backlog|available|claimed→done` task vocab 
 - **Claim / close-out are Hub verbs, not docs PRs.** Claim = `claim_feature`
   (+ `plan_feature`) in the Hub (MCP or UI); close-out = `ship_feature`. Task
   status is the Hub's **`claimed | active | merged`** (blocked derived); feature
-  status is **derived**. No "PR open" state ([[planning-retro]] A5). Each task is
+  status is **derived**. No "PR open" state ([planning-retro](./planning-retro.md) A5). Each task is
   one pure-code PR; its status is driven by the Hub verbs (`start_task` /
   `complete_task` / `set_pr`), reconciled automatically on merge by `f-github-sync`.
 - **Gates before the PR:** every task's Done-when includes `/pre-pr` →
-  `/security-review` → `/code-review`, run before/at PR ([[planning-retro]] A4/B4).
+  `/security-review` → `/code-review`, run before/at PR ([planning-retro](./planning-retro.md) A4/B4).
 - **UI features browser-validate the live render** before close-out
-  ([[planning-retro]] HB6) — gates prove the code, not that the surface reads right.
+  ([planning-retro](./planning-retro.md) HB6) — gates prove the code, not that the surface reads right.
 - **Schema-vs-design gaps are owner decisions, surfaced — not settled silently**
-  ([[planning-retro]] HB8). Where a feature _adds_ schema, it's called out below.
-- **Bugs found mid-phase** follow [[bug-handling]]: a `bug`-kind Task on the
+  ([planning-retro](./planning-retro.md) HB8). Where a feature _adds_ schema, it's called out below.
+- **Bugs found mid-phase** follow [bug-handling](./bug-handling.md): a `bug`-kind Task on the
   feature it broke, `next_task`-biased, `help-wanted` as the valve.
 
 ## Phase & project
@@ -59,7 +59,7 @@ its "claim-first **docs PR**" and `backlog|available|claimed→done` task vocab 
 | Field | Value |
 |---|---|
 | Phase (epic) | **`phase-2` · Self-Hosting the Roadmap** — the Hub runs its own planning |
-| Spec | [[next-phase-brief]] (intent) · [[bug-handling]] · [[idea-inbox]] · [[futures]] |
+| Spec | [next-phase-brief](./next-phase-brief.md) (intent) · [bug-handling](./bug-handling.md) · [idea-inbox](./idea-inbox.md) · [futures](./futures.md) |
 | Host platform | Leaf fork of Sunrise **v0.8.0** (`app.prisma`, `lib/app/**`, `.context/app/`, `app/(hub)`) |
 | Record | The **Hub** (`chubproject` on `hub.hce.studio`) — this doc is the authoring draft |
 | Lead | Simon (builders: Simon + John) · owners assigned at `claim_feature` |
@@ -68,7 +68,7 @@ its "claim-first **docs PR**" and `backlog|available|claimed→done` task vocab 
 ## Relationship to Sunrise — tier & seam analysis
 
 *(Required by the convention: model tier + enumerate seams before sizing —
-[[planning-retro]] A2/A3.)*
+[planning-retro](./planning-retro.md) A2/A3.)*
 
 **Tier: single leaf fork** (unchanged from V1 — the Hub reserves nothing
 downstream). Every seam Phase 2 needs is an existing **fork→core** seam (the fork
@@ -86,7 +86,7 @@ calls into a shipped Sunrise registry) or pure app-tier work (`app.prisma` model
 | `f-futures-in-hub` | data authoring (`futures.md` → parked-phase features) | — (data) | none |
 
 **Headline: zero anticipated core→fork seams**, mirroring V1 — Phase 2 is buildable
-through existing leaf-fork seams. Two build-time watch-items ([[planning-retro]]
+through existing leaf-fork seams. Two build-time watch-items ([planning-retro](./planning-retro.md)
 B17 — tier/upstream is a build-time finding, verified at claim not asserted here):
 
 - **Watch A · profile-section seam** (narrowed 2026-08-06, owner). The pages
@@ -109,7 +109,7 @@ B17 — tier/upstream is a build-time finding, verified at claim not asserted he
 ## Features (epic: `phase-2`)
 
 Flat list, rough dependency order (most-ready first). `~PRs` is an indicative
-_hypothesis_, re-checked at `plan_feature` ([[plan-authoring-guide]] sizing).
+_hypothesis_, re-checked at `plan_feature` ([plan-authoring-guide](./plan-authoring-guide.md) sizing).
 
 | # | Feature | Depends on | ~PRs | Capability |
 |---|---|---|---|---|
@@ -143,14 +143,14 @@ Make the dormant `Phase` model real. Grounded: the `Phase` model + `Feature.phas
 - **t** — Phase UI: phase grouping on the Plan (bands, `complete` collapsed,
   `parked` suppressed until opened) + a phase management view. **Fold in inbox #6**
   — the board "merged" column caps at 5/person with a per-person show-more (same
-  board surface; [[idea-inbox]]).
+  board surface; [idea-inbox](./idea-inbox.md)).
 *Done when:* an owner can create phases, assign features, and see the plan/board
 grouped by phase with parked suppressed; the board merged column is capped; gates
 green; **browser-validated** (HB6).
 
-### 02 · `f-bug-handling` — bug = task-kind _(convention: [[bug-handling]])_
+### 02 · `f-bug-handling` — bug = task-kind _(convention: [bug-handling](./bug-handling.md))_
 *Depends on:* f-phases · *~2 PRs*
-Implement the [[bug-handling]] convention. **Adds schema** (`Task.kind`, surfaced
+Implement the [bug-handling](./bug-handling.md) convention. **Adds schema** (`Task.kind`, surfaced
 per HB8 — a new nullable enum defaulting to feature-work).
 
 - **t** — The primitive + logic: `Task.kind` (`feature-work | bug`) migration
@@ -168,7 +168,7 @@ refs; gates green; **browser-validated**.
 ### 03 · `f-idea-capture` — the parking gesture
 *Depends on:* f-phases · *~2 PRs*
 Low-friction capture of a tweak or a futures-level idea without leaving the current
-work; the `add_backlog` gesture returning at _idea_ altitude ([[next-phase-brief]]).
+work; the `add_backlog` gesture returning at _idea_ altitude ([next-phase-brief](./next-phase-brief.md)).
 
 - **t** — Capture + promote verbs: an MCP jot (`capture_idea` → a stub in a parked
   phase) and `promote_idea` (parked stub → a real feature in an active phase,
@@ -178,16 +178,16 @@ work; the `add_backlog` gesture returning at _idea_ altitude ([[next-phase-brief
   surfaces + the inbox view.
 *Done when:* an idea can be jotted from Claude Code and the UI, lands in a parked
 phase, and be promoted into an active phase; gates green; **browser-validated**.
-*First real dataset:* the [[idea-inbox]] six items.
+*First real dataset:* the [idea-inbox](./idea-inbox.md) six items.
 
 ### 04 · `f-github-identity` — connect GitHub to Hub users
 *Depends on:* — · *~2 PRs* · *(unblocks the deferred §14 attribution + f-sunrise-project authorship)*
 Let a user link their GitHub login. **Adds schema** (a satellite table, HB8) —
-**not** an edit to core `User` ([[idea-inbox]] #1 constraint).
+**not** an edit to core `User` ([idea-inbox](./idea-inbox.md) #1 constraint).
 
 - **t** — `app_user_github` satellite (`userId` hand-FK → `user`, ON DELETE
   Cascade; `githubLogin` unique) — mirror the `leadUserId` FK pattern
-  ([[planning-retro]] B11: reference the `@@map` table `user`, apply via
+  ([planning-retro](./planning-retro.md) B11: reference the `@@map` table `user`, apply via
   `db:migrate:deploy`); a connect/disconnect capability + API; add to
   `HUB_SUBJECT_TABLES`/data-export (GDPR obligation).
 - **t** — The connect UI: a "GitHub" section on the **existing `/profile` +
@@ -207,7 +207,7 @@ Invites are **native Sunrise** (they exist). Today project-add only accepts
 **invited-but-not-yet-accepted** user, so their first login isn't an empty Hub.
 Directly supports onboarding John. **Claim opens with the watch-B recon** — the one
 open question, the pending-invitee data shape — which decides the shape below and
-firms up sizing ([[planning-retro]] B17).
+firms up sizing ([planning-retro](./planning-retro.md) B17).
 
 - **t** — Recon + pre-seed: how invitation resolves under `invite_only`; whether a
   `ProjectMember` can be seeded against a pending/`userId`-less identity, or needs a
@@ -219,9 +219,9 @@ to; a non-accepted invite doesn't leak access; gates green.
 *Depends on:* f-phases · *benefits from f-github-identity* · *~2 PRs (mostly data)*
 Sunrise becomes the second Hub project — the first real multi-project exercise
 (`chubproject` proved the machinery) and the foundation for the
-[[futures#Sunrise as a Hub project — bidirectional flow|bidirectional-flow]]
+[bidirectional-flow](./futures.md#sunrise-as-a-hub-project-bidirectional-flow)
 futures. **Phase-as-release** (decided 2026-08-06 — dedicated `Release` model
-deferred; [[futures#Dedicated release + divergence modelling `[architectural]`]]).
+deferred; [futures](./futures.md#dedicated-release-divergence-modelling-architectural)).
 
 - **t** — Seed the project + release-phases: the Sunrise project, phases per
   release (`v0.8.0` = adopted, `v0.9.0` = upcoming), members. Includes inbox #4
@@ -240,7 +240,7 @@ Hub-resident, promotable roadmap data.
 *Done when:* the futures entries exist as parked-phase features the sidekick could
 later mine; the source doc is cross-linked; gates green.
 
-## Captured quick-wins ([[idea-inbox]])
+## Captured quick-wins ([idea-inbox](./idea-inbox.md))
 
 Not features (task-sized — HB1). Homed as: **#6** board cap → `f-phases` t-2;
 **#4** Daybreak platform → `f-sunrise-project` t-1; **#3** avatar/username menu →
@@ -253,11 +253,11 @@ land on the same `/profile` surface.
 ## Parked phases (future epics)
 
 - **V2 · AI layer** — `f-sidekick` (12), `f-intake` (13), `f-morning-brief` (15).
-  After this phase ([[next-phase-brief]]); intake pairs with idea-capture, the
+  After this phase ([next-phase-brief](./next-phase-brief.md)); intake pairs with idea-capture, the
   sidekick mines the now-Hub-resident roadmap + Sunrise project.
-- **Future modules** — Sales, Support, Marketing, Finance, Knowledge ([[futures]]).
+- **Future modules** — Sales, Support, Marketing, Finance, Knowledge ([futures](./futures.md)).
 - **Dedicated release/divergence modelling** `[architectural]` — promote once ~2–3
-  syncs stabilise the adoption template ([[futures#Dedicated release + divergence modelling `[architectural]`]]).
+  syncs stabilise the adoption template ([futures](./futures.md#dedicated-release-divergence-modelling-architectural)).
 
 ## Decisions log (append-only, newest first)
 
@@ -274,14 +274,14 @@ land on the same `/profile` surface.
   merged`, derived feature status) — the self-hosting cutover changed the record.
   _Guide is a candidate for a v3 bump._
 - **2026-08-06 · phase-as-release; dedicated Release model deferred** (design
-  experiment) — [[futures#Dedicated release + divergence modelling `[architectural]`]].
-- **2026-08-06 · Bug = task-kind, not a Feature or an Issue model** — [[bug-handling]].
+  experiment) — [futures](./futures.md#dedicated-release-divergence-modelling-architectural).
+- **2026-08-06 · Bug = task-kind, not a Feature or an Issue model** — [bug-handling](./bug-handling.md).
 - **2026-08-05 · Roadmap home = the HCE Hub project; AI features after this phase.**
 
 ## References
 
-- [[next-phase-brief]] — the phase's intent (spec).
-- [[bug-handling]] · [[idea-inbox]] — companion conventions + the seed dataset.
-- [[plan-authoring-guide]] · [[planning-retro]] — the convention + the learnings lens.
-- [[plan]] — the V1 plan (worked example; the format this follows).
-- [[futures]] — parked epics + the deferred release-modelling decision.
+- [next-phase-brief](./next-phase-brief.md) — the phase's intent (spec).
+- [bug-handling](./bug-handling.md) · [idea-inbox](./idea-inbox.md) — companion conventions + the seed dataset.
+- [plan-authoring-guide](./plan-authoring-guide.md) · [planning-retro](./planning-retro.md) — the convention + the learnings lens.
+- [plan](./plan.md) — the V1 plan (worked example; the format this follows).
+- [futures](./futures.md) — parked epics + the deferred release-modelling decision.

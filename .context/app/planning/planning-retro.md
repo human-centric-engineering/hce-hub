@@ -7,19 +7,19 @@ parent: plan.md
 # Planning-process feedback (retro)
 
 **Purpose.** This is _not_ a project decisions log (that lives in
-[[plan#Decisions log|plan.md]]). It is **feedback about the plan-_authoring_
+[plan.md](./plan.md#decisions-log)). It is **feedback about the plan-_authoring_
 process itself**, discovered while _executing_ the plan — to fold back into the
 agent instructions that generate plans.
 
 It is split by **which authoring agent** the lesson targets:
 
 - **§A — Overall-plan authoring** — the agent that produces the whole-project
-  breakdown ([[plan|plan.md]]: Project → Features → indicative tasks, the
+  breakdown ([plan.md](./plan.md): Project → Features → indicative tasks, the
   dependency graph, the working model, the decisions/work logs). **This is the
   priority section** — the overall-plan process is being baked into the **HCE
   Hub** (an internal tool built on Sunrise), so lessons here have the widest reuse.
 - **§B — Feature-plan authoring** — the agent that produces a single feature's
-  detailed build plan (e.g. [[f-bootstrap|f-bootstrap.md]]: reconciliation section,
+  detailed build plan (e.g. f-bootstrap.md: reconciliation section,
   promoted tasks, per-task done-when, open questions, upstream follow-ups).
 
 **How to use.** Append-only, newest at top, under the right section. Each entry is
@@ -116,14 +116,14 @@ both levels; each is filed at its primary home with a cross-reference. Mark an e
   both as one docs-only PR (skips security/code-review), merge, _then_ start t-1. For a strictly
   single-owner plan, folding into t-1 is still acceptable — the trigger is concurrent ownership, which
   is exactly the HCE Hub's normal condition. Cross-ref [A5] (board as the low-friction system of
-  record) and [[building-a-feature]] step 1. _Status: folded-in for plan.md + building-a-feature.md;
+  record) and [building-a-feature](./building-a-feature.md) step 1. _Status: folded-in for plan.md + building-a-feature.md;
   open for the Hub's plan-authoring instructions._
 
 ### A7 · Only feature-level docs PRs (claim + close-out) — task PRs are pure code; no per-task close-out PR
 
 - **Discovery.** `f-data-model` t-1 spawned **two** extra docs PRs after its code PR (#13): one carrying a `/code-review` finding to another feature (#14), one closing out t-1's board bookkeeping (#15). The owner corrected the model: *"We don't need task close-out PRs, only feature close-out PRs. It's unnecessary overhead. The claim and close-out PRs for features are to minimise the risk of multiple devs working on the same feature at the same time. Once a feature is claimed the same dev works on all tasks within it."*
 - **Impact.** Per-task docs PRs multiply ceremony for no coordination gain — the claim/close-out PRs exist to signal *feature* ownership (stop two devs colliding on one feature); once claimed, one dev owns every task, so intra-feature board updates coordinate nothing and don't need their own PR.
-- **Feedback.** The working model has exactly **two** feature-level docs PRs: the **claim** PR (Owner + `in flight` + `<feature>.md`, before task work — [A6]) and the **close-out** PR (feature → `shipped` + *all* deferred board bookkeeping batched: every `t-N` row → `done`, the work-completed entry, decisions-log entries, and cross-cutting carries — [B28]). **Each task is one pure-code PR**; its board row is flipped at feature close-out, **not** in a per-task docs PR. Cross-ref [A5] (no in-PR status), [A6] (claim-first), [[building-a-feature]] §3 (close-out). _Status: **folded-in** — [[building-a-feature]] step 5 + §3; open for the Hub's plan-authoring instructions._
+- **Feedback.** The working model has exactly **two** feature-level docs PRs: the **claim** PR (Owner + `in flight` + `<feature>.md`, before task work — [A6]) and the **close-out** PR (feature → `shipped` + *all* deferred board bookkeeping batched: every `t-N` row → `done`, the work-completed entry, decisions-log entries, and cross-cutting carries — [B28]). **Each task is one pure-code PR**; its board row is flipped at feature close-out, **not** in a per-task docs PR. Cross-ref [A5] (no in-PR status), [A6] (claim-first), [building-a-feature](./building-a-feature.md) §3 (close-out). _Status: **folded-in** — [building-a-feature](./building-a-feature.md) step 5 + §3; open for the Hub's plan-authoring instructions._
 
 ---
 
@@ -131,49 +131,49 @@ both levels; each is filed at its primary home with a cross-reference. Mark an e
 
 > **Provenance.** Entries `B1`–`B30` below are from executing the **Daybreak** plan.
 > Entries prefixed **`HB`** are from executing the **HCE Hub** plan (this fork) — the
-> first real test of these conventions, as [[feature-plan-authoring-guide]] anticipated.
+> first real test of these conventions, as [feature-plan-authoring-guide](./feature-plan-authoring-guide.md) anticipated.
 
 ### HB8 · When the design depends on something the schema lacks, that's a fork to **surface** for the owner's decision — not a reconciliation to settle silently in a feature doc (HCE Hub · f-plan-view → f-refs)
 
 - **Discovery.** The design (`design/data.jsx`, the Plan/Board card refs) treats a feature's **slug** (`f-mcp`) and a **task number** (`t-6`, project-wide) as first-class identifiers. `f-data-model` (§03) had modelled `Feature`/`Task` with cuid surrogate `id`s and **no** human-slug or task-number column (the spec's §10 sketch used `id` generically, so none was added). Building `f-plan-view` (§09), I hit that mismatch — and **resolved it unilaterally**: "no slug in schema → the title carries identity," filed as reconciliation bullet #5 and carried into §10. It *was* written down, but as a settled decision buried among a dozen reconciliations, not put to the owner. Two features later the owner caught it — *"they should definitely be in the schema. When/why were they dropped?"* — and it cost a whole corrective feature (`f-refs` §16: a migration + write-path + retrofit across two shipped surfaces). (Corollary bug: even the `t-N` §09 *did* render was per-feature **positional** — ephemeral — not the stable project-wide number the design intends.)
 - **Impact.** A consequential product/design decision (drop a core identifier) got made silently under the "reconciliation" banner. Reconciliation is meant to *adapt the plan to verified platform reality* (what exists, what a seam is) — **not** to quietly decide away a design requirement the schema doesn't yet support. The difference: "the platform has no `AiKnowledgeCategory`, so scope RAG by tag" is a genuine reconciliation (the design intent is *met* differently); "the design wants slugs the schema lacks, so drop them" **removes design intent** and should be an owner call. Doing it silently deferred the cost (schema-fix-after-two-features is far more expensive than adding the column in §03 or flagging it in §09) and eroded the "surface real forks for the owner's nod" contract.
-- **Feedback.** At build, sort every reconciliation into one of two buckets before writing it down: **(a) intent-preserving adaptation** (met differently via a real platform constraint/seam) → decide it, record it, move on; **(b) intent-removing gap** (the design/spec wants X, the schema/platform has no X, and you're about to *drop* X or fake it) → **stop and surface it as a decision** (schema addition? derive it? drop it?), don't settle it in a feature doc. The tell for bucket (b): you're writing "since there's no … we'll use …/drop …" about something the *design* shows as present. When in bucket (b), a one-line "the design uses feature slugs + task numbers the schema doesn't have — add them, or drop them?" at claim time is cheap; the silent drop is not. _Status: **applied** — `f-refs` §16 added `Feature.slug` + `Task.number` + `Project.taskCounter` and retrofitted §09/§10; recorded in [[f-refs]] + the plan's decisions log._
+- **Feedback.** At build, sort every reconciliation into one of two buckets before writing it down: **(a) intent-preserving adaptation** (met differently via a real platform constraint/seam) → decide it, record it, move on; **(b) intent-removing gap** (the design/spec wants X, the schema/platform has no X, and you're about to *drop* X or fake it) → **stop and surface it as a decision** (schema addition? derive it? drop it?), don't settle it in a feature doc. The tell for bucket (b): you're writing "since there's no … we'll use …/drop …" about something the *design* shows as present. When in bucket (b), a one-line "the design uses feature slugs + task numbers the schema doesn't have — add them, or drop them?" at claim time is cheap; the silent drop is not. _Status: **applied** — `f-refs` §16 added `Feature.slug` + `Task.number` + `Project.taskCounter` and retrofitted §09/§10; recorded in [f-refs](./f-refs.md) + the plan's decisions log._
 
 ### HB7 · When a fork *mirrors* a platform file and inherits its bug, fix the fork's own copy + raise the bug **and** (if it's duplication-driven) a seam proposal upstream — but confirm the bug is genuine before keep-mine-editing the platform copies (HCE Hub · f-shell)
 
 - **Discovery.** `f-shell`'s new `app/(hub)/error.tsx` was written to *mirror* the platform route-group error boundaries (`(protected)`/`(public)`/`admin` `error.tsx`) for consistency. `/code-review` then found the mirrored file carried a real bug present in **all four**: `isSessionExpired` is set inside the logging `useEffect`'s async `checkSession()` **and** listed in its deps, so a session-expiry re-fires the effect → a duplicate `logger.error` + Sentry event. The fork was the **first to add a route group**, so it was also the first to feel the ~90-line-near-duplicate `error.tsx` friction — a seam signal.
 - **Impact.** Positive: caught before shipping the new boundary buggy, and it surfaced a platform bug + a composability gap that affect every fork. But it posed a process question — the bug lives in *platform* files the fork would otherwise never touch, and a keep-mine fix to three of them is real merge surface. The owner's steer resolved it: *"if it should definitely be fixed, fix in fork + raise the issue — but make sure it's genuine before editing core files."*
-- **Feedback.** For a bug in a platform file the fork **mirrored** (not one it needs to change for the feature): (1) **confirm it's genuinely a bug**, not intentional, from the fork-app perspective — the gate before any core edit; (2) **fix the fork's own copy** (no ambiguity — you own it) so the new file ships correct and becomes the *reference* implementation the issue points to; (3) **raise the upstream bug** (referencing that reference); (4) if the bug is **duplication-driven** — the same code copied N times — also **raise a seam proposal** so it's fixed once (here [sunrise#434](https://github.com/human-centric-engineering/sunrise/issues/434), a shared `<RouteErrorBoundary>`); (5) **defer keep-mine-editing the platform copies** when a seam proposal may refactor them away or the bug is minor — let the upstream fix land. This *narrows* [[#HB6]]'s "incidental platform bug → own fix PR + upstream issue": when the bug is in a *mirrored* platform file and duplication is the root, the fork fixes only its own instance and the upstream fix (ideally the seam) handles the rest. *Corollary (the other direction of HB6):* `/code-review` caught this **latent** bug (and the breadcrumb `Object.prototype`-key crash) that browser-validation never would — the two checks are complementary, not redundant. _Status: **applied** — `(hub)/error.tsx` corrected; sunrise#433 (bug) + #434 (seam) filed; 3 platform boundaries deferred; recorded in [[f-shell]] + the plan's decisions log._
+- **Feedback.** For a bug in a platform file the fork **mirrored** (not one it needs to change for the feature): (1) **confirm it's genuinely a bug**, not intentional, from the fork-app perspective — the gate before any core edit; (2) **fix the fork's own copy** (no ambiguity — you own it) so the new file ships correct and becomes the *reference* implementation the issue points to; (3) **raise the upstream bug** (referencing that reference); (4) if the bug is **duplication-driven** — the same code copied N times — also **raise a seam proposal** so it's fixed once (here [sunrise#434](https://github.com/human-centric-engineering/sunrise/issues/434), a shared `<RouteErrorBoundary>`); (5) **defer keep-mine-editing the platform copies** when a seam proposal may refactor them away or the bug is minor — let the upstream fix land. This *narrows* 's "incidental platform bug → own fix PR + upstream issue": when the bug is in a *mirrored* platform file and duplication is the root, the fork fixes only its own instance and the upstream fix (ideally the seam) handles the rest. *Corollary (the other direction of HB6):* `/code-review` caught this **latent** bug (and the breadcrumb `Object.prototype`-key crash) that browser-validation never would — the two checks are complementary, not redundant. _Status: **applied** — `(hub)/error.tsx` corrected; sunrise#433 (bug) + #434 (seam) filed; 3 platform boundaries deferred; recorded in [f-shell](./f-shell.md) + the plan's decisions log._
 
 ### HB6 · A UI/branding feature's DoD includes browser-validating the live render — green gates prove the code is correct, not that the surface reads right; an incidental platform bug found there gets its own fix PR + upstream issue (HCE Hub · f-theme)
 
 - **Discovery.** `f-theme` (#28) passed every gate — type-check, lint, format, full suite (20,237), `/security-review`, `/code-review` — twice. Then the owner opened `/settings` in a browser to check the theme and found the browser tab still read **"… - Sunrise"** while every other surface read "HCE Hub". Root cause was a **pre-existing Sunrise bug unrelated to the theme**: `SETTINGS_TAB_TITLES`/`KNOWLEDGE_TAB_TITLES` hardcode "Sunrise" and `useUrlTabs` writes them to `document.title`, *overriding* the (correct, `BRAND`-templated) page metadata — plus the `(public)` legal-page metadata hardcodes it too. **No automated gate could catch it:** the code is type-correct, lint-clean, and no test asserted the literal; only rendering the actual page revealed it.
-- **Impact.** Positive — caught before it mattered, and it exposed a whole class of `BRAND`-seam-bypassing strings the fork now owns clean. But it only surfaced because a human looked at the rendered page; a headless "gates green → ship" flow would have shipped a mis-branded tab title. The fix was handled as a **separate** PR (#29) — *not* folded into the theme PR (#28), which stayed a clean token-layer change — with a `[[platform-divergences]]` keep-mine row (11) **and** an upstream issue ([sunrise#432](https://github.com/human-centric-engineering/sunrise/issues/432)) so every fork gets it. (A downstream cost of two concurrent branches each appending a numbered ledger row: they both claimed "row 10" and collided on merge — a trivial renumber to 11, but worth knowing numbered-ledger rows conflict by construction when branches run in parallel.)
-- **Feedback.** For a **theme / branding / any user-visible-surface feature**, add an explicit Done-when line: **"browser-validate the live render — light + dim, the key pages — before close-out."** Gates are necessary, not sufficient: they verify the code, not the rendered result (brand strings, contrast, layout, font load, a client `document.title` clobbering server metadata). And when that validation turns up an **incidental platform bug** (one not caused by the feature), **fix it as its own PR + file the upstream issue** — don't bolt it onto the feature PR (keeps the feature diff clean and the bug's provenance honest). _Status: **applied** — f-theme close-out; a "browser-validate the render" Done-when line is now standing for every UI-spine feature (`f-shell`/`f-projects`/boards/sheet/sidekick/brief). Candidate for [[feature-plan-authoring-guide]] §3 (a UI-feature DoD addendum)._
+- **Impact.** Positive — caught before it mattered, and it exposed a whole class of `BRAND`-seam-bypassing strings the fork now owns clean. But it only surfaced because a human looked at the rendered page; a headless "gates green → ship" flow would have shipped a mis-branded tab title. The fix was handled as a **separate** PR (#29) — *not* folded into the theme PR (#28), which stayed a clean token-layer change — with a `[platform-divergences](../platform-divergences.md)` keep-mine row (11) **and** an upstream issue ([sunrise#432](https://github.com/human-centric-engineering/sunrise/issues/432)) so every fork gets it. (A downstream cost of two concurrent branches each appending a numbered ledger row: they both claimed "row 10" and collided on merge — a trivial renumber to 11, but worth knowing numbered-ledger rows conflict by construction when branches run in parallel.)
+- **Feedback.** For a **theme / branding / any user-visible-surface feature**, add an explicit Done-when line: **"browser-validate the live render — light + dim, the key pages — before close-out."** Gates are necessary, not sufficient: they verify the code, not the rendered result (brand strings, contrast, layout, font load, a client `document.title` clobbering server metadata). And when that validation turns up an **incidental platform bug** (one not caused by the feature), **fix it as its own PR + file the upstream issue** — don't bolt it onto the feature PR (keeps the feature diff clean and the bug's provenance honest). _Status: **applied** — f-theme close-out; a "browser-validate the render" Done-when line is now standing for every UI-spine feature (`f-shell`/`f-projects`/boards/sheet/sidekick/brief). Candidate for [feature-plan-authoring-guide](./feature-plan-authoring-guide.md) §3 (a UI-feature DoD addendum)._
 
 ### HB5 · Check the seam catalog before honouring a plan-time "this might need a platform edit" watch-item — a purpose-built fork-owned seam may close it with zero platform touch (HCE Hub · f-theme)
 
 - **Discovery.** `f-theme`'s plan carried **watch-item A** ("theme sync-safety"): a full re-theme was hypothesised to need a *keep-mine* edit to the platform `app/globals.css` (`@theme`/`.dark` tokens), flagged as a *possible* small upstream ask. Reconciliation against the actual tree found Sunrise had shipped a **purpose-built, fork-owned theming seam** — `app/brand-theme.css` (ships empty, imported after `globals.css`) + `lib/app/surface.ts` + the `data-surface` proxy/`<SurfaceSync>` plumbing (upstream #355) — designed for exactly this. The **entire** theme landed in that fork-owned file with `globals.css` **untouched**: no keep-mine, no platform edit, no upstream ask. The watch-item's hypothesis was strictly more expensive than reality.
 - **Impact.** Positive, and larger than it looks: the "keep-mine `globals.css`" path would have created a **permanent merge-conflict surface** on every upstream sync (the whole point of the seam is to avoid exactly that). The plan's hypothesis was reasonable *when written* — but the seam catalog had moved on (Sunrise added #355 after the plan was drafted). The recon's job was to notice.
-- **Feedback.** A plan-time watch-item that hypothesises *"this may require editing a platform file"* is a **prompt to search the seam catalog first**, not a licence to make the edit. The reconciliation's opening move should be: *"is there now a fork-owned seam that does this cleanly?"* — grep `lib/app/*`, the fork-owned `app/*` scaffolds (`brand-theme.css`), and `.context/*/` for the capability, and check recent upstream releases. Platform is a living dependency: a seam the plan couldn't assume may exist by build time. Generalises the leaf-fork golden rule ("extend through the seams") into a **recon step**: never accept a hypothesised platform edit without first proving no seam covers it. _Status: **applied** — watch-item A closed with zero platform edit; recorded in [[f-theme]] + the plan's decisions log. The theme model ("fill `brand-theme.css`, never touch `globals.css`") is the template for any future re-theming._
+- **Feedback.** A plan-time watch-item that hypothesises *"this may require editing a platform file"* is a **prompt to search the seam catalog first**, not a licence to make the edit. The reconciliation's opening move should be: *"is there now a fork-owned seam that does this cleanly?"* — grep `lib/app/*`, the fork-owned `app/*` scaffolds (`brand-theme.css`), and `.context/*/` for the capability, and check recent upstream releases. Platform is a living dependency: a seam the plan couldn't assume may exist by build time. Generalises the leaf-fork golden rule ("extend through the seams") into a **recon step**: never accept a hypothesised platform edit without first proving no seam covers it. _Status: **applied** — watch-item A closed with zero platform edit; recorded in [f-theme](./f-theme.md) + the plan's decisions log. The theme model ("fill `brand-theme.css`, never touch `globals.css`") is the template for any future re-theming._
 
 ### HB4 · A planned guard can protect a failure mode the feature's own usage can't reach — verify the trigger exists at build (B26 in the Hub) (HCE Hub · f-hub-capabilities)
 
 - **Discovery.** `f-hub-capabilities` t-2's plan had `create_task` build + call a dependency-cycle validator (`assertAcyclic`), carried from an `f-data-model` `/code-review` finding. Building it, the trigger evaporated: `create_task` creates a **new** task whose edges are **outgoing-only** (it depends on existing tasks), so nothing points back at it and it can neither self-loop (its id doesn't exist when the caller forms the request) nor close a multi-node cycle. The guard would have run a project-wide edge query on every create to prove an invariant that always holds.
 - **Impact.** Positive — caught at build, not shipped as dead code + a wasted query. But the plan (and the carried finding's "`create-task` enforces acyclicity here") had to be reconciled: the guard was **re-homed** to the flows that connect two *existing* items (`persist-features`, `propose-dependencies`), where cycles genuinely can form. The tell was in the finding all along — "edge **creation**" was read as "any capability that writes an edge", when only *edges among existing nodes* can cycle.
-- **Feedback.** This is [[#B26 · A safety guard copied from a sibling by analogy may protect against a failure mode the new usage structurally can't have — check the triggering condition exists before building it|B26]]'s first HCE Hub instance: when a plan carries a guard/validator into a task, **identify the exact state it detects and confirm this task's data-flow can reach it** before building. For a graph guard specifically, ask "does this operation create an edge whose endpoints *both already exist*?" — if not (a new leaf node), it can't cycle. Re-home the guard to the operation that can. _Status: **applied** — validator dropped from `f-hub-capabilities` t-2, re-homed to `f-intake`/`f-sidekick`; recorded in both plans' decisions logs._
+- **Feedback.** This is B26's first HCE Hub instance: when a plan carries a guard/validator into a task, **identify the exact state it detects and confirm this task's data-flow can reach it** before building. For a graph guard specifically, ask "does this operation create an edge whose endpoints *both already exist*?" — if not (a new leaf node), it can't cycle. Re-home the guard to the operation that can. _Status: **applied** — validator dropped from `f-hub-capabilities` t-2, re-homed to `f-intake`/`f-sidekick`; recorded in both plans' decisions logs._
 
 ### HB3 · Size by separability of value, not line count — homogeneous, sequential, unconsumed-until-complete work is one PR even when large (HCE Hub · f-data-model)
 
 - **Discovery.** `f-data-model` shipped as **three** task PRs — Project domain (#13), Task domain (#16), futures scaffolding (#17). The owner flagged all three as too small: *"each felt too small for a PR … it could arguably all have been done in one PR."* This is the **second** over-decomposition flag (HB1 was `f-fork`). The three tasks were the *same mechanical recipe* three times (add `app_*` models → hand-strip the `migrate dev` spurious drops → add drift probes → extend the erasure smoke → extend the probe test), all pure schema, **sequential** (t-2/t-3 both depend on t-1), **same file** (`app.prisma` + one migration + `db-drift.ts`), one author, no parallelism, and **unconsumed until the whole model exists** (shipping t-1 alone delivered nothing usable).
-- **Impact.** 3× the ceremony — pre-pr, security-review, code-review, db:reset-consent, PR bodies — for one cohesive unit, with the 2nd and 3rd reviews adding almost no insight the 1st didn't. Worse for *review quality*: a schema is most reviewable **whole** (you can't see Task↔Project or the full cascade/erasure topology until every model is in one diff). The gate that greenlit the split — [[feature-plan-authoring-guide]] §2's old *"<~150 lines = one task"* line — was the wrong heuristic: it weighed size and "distinct domain," missing that the split added no review, parallelism, or integration value.
-- **Feedback.** The size gate is **separability of value, not line count.** A task earns its own PR only when splitting *adds* a different review surface, a parallelism opportunity, or an integration checkpoint (land it, see it work, then build on it). Homogeneous/sequential/same-file/unconsumed-until-complete work → **one PR, even a large one**; line count is a weak signal (a cohesive 600-line schema reviews fine whole). Balance against grab-bag PRs, but **default to fewer, cohesive** PRs. Generalises [[#HB1 · Don't split a feature into tasks by conceptual seam when each piece is commit-sized — size by changed surface (HCE Hub · f-fork)|HB1]] from "don't split *tiny*-by-purity" to "don't split *cohesive-mechanical* work at all." _Status: **folded-in** — [[feature-plan-authoring-guide]] §2 (the line-count heuristic replaced by the value-separability gate); the old <150-line rule struck. **Confirmed on f-access** — planned + shipped as one PR (indicative sketch was 3); the owner endorsed the 1-PR call ("no way that should have been more than 1 PR"). The gate is working: apply it at promotion._
+- **Impact.** 3× the ceremony — pre-pr, security-review, code-review, db:reset-consent, PR bodies — for one cohesive unit, with the 2nd and 3rd reviews adding almost no insight the 1st didn't. Worse for *review quality*: a schema is most reviewable **whole** (you can't see Task↔Project or the full cascade/erasure topology until every model is in one diff). The gate that greenlit the split — [feature-plan-authoring-guide](./feature-plan-authoring-guide.md) §2's old *"<~150 lines = one task"* line — was the wrong heuristic: it weighed size and "distinct domain," missing that the split added no review, parallelism, or integration value.
+- **Feedback.** The size gate is **separability of value, not line count.** A task earns its own PR only when splitting *adds* a different review surface, a parallelism opportunity, or an integration checkpoint (land it, see it work, then build on it). Homogeneous/sequential/same-file/unconsumed-until-complete work → **one PR, even a large one**; line count is a weak signal (a cohesive 600-line schema reviews fine whole). Balance against grab-bag PRs, but **default to fewer, cohesive** PRs. Generalises HB1 from "don't split *tiny*-by-purity" to "don't split *cohesive-mechanical* work at all." _Status: **folded-in** — [feature-plan-authoring-guide](./feature-plan-authoring-guide.md) §2 (the line-count heuristic replaced by the value-separability gate); the old <150-line rule struck. **Confirmed on f-access** — planned + shipped as one PR (indicative sketch was 3); the owner endorsed the 1-PR call ("no way that should have been more than 1 PR"). The gate is working: apply it at promotion._
 
 ### HB2 · Filling a `lib/app/*` seam breaks a Sunrise "ships-empty" default test — make adapting it a Done-when line (HCE Hub · f-fork, f-data-model)
 
 - **Discovery.** Three features running now, four hits: filling the **eslint** seam and the **public-nav** seam (`f-fork`) and the **db-drift** seam (`f-data-model` t-1) each falsified a Sunrise-owned "scaffold ships empty / uses the default" assertion — `defaults.test.ts` (twice), `public-nav.test.tsx`, `public-footer.test.tsx`, `drift-probes.test.ts`. Every one surfaced as a **full-suite failure in CI/pre-pr AFTER** the feature work looked finished.
-- **Impact.** Each was a re-run + a reactive test edit + a [[platform-divergences]] row, discovered late instead of planned. The pattern is now systematic, not incidental. (Only **content/effect** default assertions break — a non-null list, a config array, a probe set; **return-void** seams like `initApp` / `initAppCapabilities` survive a fill untouched.)
-- **Feedback.** When a task fills a `lib/app/*` seam that carries a *content-or-effect* default, the feature plan must **list "adapt the seam's Sunrise default test + add a `platform-divergences.md` row" as an explicit Done-when line** — a standing step like [B13]'s migration strip, not a surprise. At promotion, grep `tests/**` for the seam's export to find the assertion. _Status: **folded-in** — [[feature-plan-authoring-guide]] §3 (convention v3)._
+- **Impact.** Each was a re-run + a reactive test edit + a [platform-divergences](../platform-divergences.md) row, discovered late instead of planned. The pattern is now systematic, not incidental. (Only **content/effect** default assertions break — a non-null list, a config array, a probe set; **return-void** seams like `initApp` / `initAppCapabilities` survive a fill untouched.)
+- **Feedback.** When a task fills a `lib/app/*` seam that carries a *content-or-effect* default, the feature plan must **list "adapt the seam's Sunrise default test + add a `platform-divergences.md` row" as an explicit Done-when line** — a standing step like [B13]'s migration strip, not a surprise. At promotion, grep `tests/**` for the seam's export to find the assertion. _Status: **folded-in** — [feature-plan-authoring-guide](./feature-plan-authoring-guide.md) §3 (convention v3)._
 
 ### HB1 · Don't split a feature into tasks by conceptual seam when each piece is commit-sized — size by changed surface (HCE Hub · f-fork)
 
@@ -195,7 +195,7 @@ both levels; each is filed at its primary home with a cross-reference. Mark an e
   <~150 lines across ≤2 files is one task**, even when it spans two concerns. The inverse of
   [B23] (shed a separable concern only when it's *heavy*): here the second concern was
   featherweight, so it should have stayed folded in. _Status: **folded-in** —
-  [[feature-plan-authoring-guide]] §2 now carries the "don't split tiny-by-purity" size gate
+  [feature-plan-authoring-guide](./feature-plan-authoring-guide.md) §2 now carries the "don't split tiny-by-purity" size gate
   (convention v2)._
 
 ### B1 · Sizing self-check when promoting tasks: fold commit-sized slivers
@@ -385,14 +385,14 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
 - **Discovery.** `f-journey-state` t-2 built `canRead` / `subjectScope` as a fork-first seam that must
   _delegate to Sunrise #367/#366 and delete the shim_ once that resolver lands. Under the fork-first model
   ([B5]/[B7]) that "delegate when it lands" trigger existed only as prose scattered across the feature plan
-  and the decisions log — nothing an upstream-sync ([[CUSTOMIZATION]] §9) would actually _read_. On the next
+  and the decisions log — nothing an upstream-sync (CUSTOMIZATION §9) would actually _read_. On the next
   `git merge vX.Y.Z` it would be easy to pull a Sunrise that shipped #367 and never notice a fork shim now
   needs retiring, leaving two parallel scope-checks — the exact drift X2 exists to prevent.
 - **Impact.** The upstream-informing half of the fork-first model was write-only: we file the issue (B7) but
   had no durable, greppable index of _which fork code is waiting on it_, so adoption is a manual re-read of
   every feature plan.
 - **Feedback.** Any feature that builds a fork-first seam composing with an open Sunrise issue should add a
-  row to **[[upstream-asks|`.context/framework/upstream-asks.md`]]** (seam file · upstream issue(s) ·
+  row to **`.context/framework/upstream-asks.md`** (seam file · upstream issue(s) ·
   owning feature · the concrete delegate-when-it-lands action · status) as a **Done-when deliverable**,
   alongside filing/​updating the upstream note (B7). The ledger is the checklist the upstream-sync step reads;
   the feature plan and Work-completed log stay the narrative. Distinguish it from a _boundary-breach_ log
@@ -507,7 +507,7 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   content would leak across users. The first instinct (recorded in the earlier plan decision) was "that's a
   forbidden core edit — defer to an upstream ask." That framing was **incomplete**: f-module-bindings t-4 had
   already established the opposite precedent (#53) — a _generic seam added inside a Sunrise-core file_
-  (`registerAgentAccessContributor`), carried in the fork, tracked in [[upstream-asks]], with "empty registry =
+  (`registerAgentAccessContributor`), carried in the fork, tracked in `upstream-asks`, with "empty registry =
   prior behaviour" and boundary CI green. So the widening was done the same way: `buildContext` /
   `ContextContributor` gained a generic `ContextRequest { userId? }` + a user-aware cache key — a minimal,
   framework-agnostic core edit.
@@ -519,7 +519,7 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   **not** binary "seam exists → extend / no seam → defer." There is a **third, sanctioned option**: add the
   _generic_ seam **in the core file**, carried as a fork edit, if and only if it is (a) **generic** — no
   framework vocabulary in core (the boundary vocab-scan must stay green), (b) **behaviour-neutral at rest** —
-  the empty/absent state reproduces prior behaviour exactly, and (c) **ledgered** in [[upstream-asks]] with the
+  the empty/absent state reproduces prior behaviour exactly, and (c) **ledgered** in `upstream-asks` with the
   delete-when-it-lands action. Reach for it when the alternative is a worse contortion (a hacky framework shim,
   or shipping a feature crippled). Don't reach for it when a registry-style seam already exists (use it) or the
   edit would drag a framework concept into core (that fails the vocab scan — find another shape). Generalises
@@ -541,13 +541,13 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   clear default derivable from the spec, the shipped code, or the "ship-nothing-a-fork-deletes / keep-it-simple"
   disciplines, **resolve it inline with a one-line rationale** rather than deferring it. Reserve a flagged
   "needs the owner" list for the genuine product-scope forks (e.g. the seed-the-family-vs-mechanism call in
-  [[f-facilitation-agents]]) — decisions where guessing risks the wrong build, not decisions with a
+  `f-facilitation-agents`) — decisions where guessing risks the wrong build, not decisions with a
   conventional right answer. A plan that resolves its own tractable questions is build-ready; one that parks
   them all just moves the work later. _Status: open._
 
 ### B21 · A family-of-agents feature is mechanism-only by default — ship the binding + surface + role→cap reference, not seeded personas
 
-- **Discovery.** [[f-facilitation-agents]]'s board sketch and the rev-16 spec both implied a **seeded** facilitation
+- **Discovery.** `f-facilitation-agents`'s board sketch and the rev-16 spec both implied a **seeded** facilitation
   family (six `isSystem:false` agents + role→cap grants + bindings, the #303 scaffold). But the spec's own framing —
   "they are `AiAgent` rows" — makes an agent **per-deployment config** (persona, model, voice, guardrails). Seeding a
   family imposes Daybreak's persona/model choices on every fork, is demo-ish content the fork immediately re-personas,
@@ -562,13 +562,13 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
 - **Feedback.** When a feature's deliverable is "a family of agents" (facilitation, emergence judges, any seeded
   persona set), **default the plan to mechanism-only**: the binding + the role/seat vocabulary + the surface + a
   documented role→capability reference. Treat "seed a default family" as a **separate, conditional, owner-gated** task
-  (a product-content decision, per [[#B20 · Resolve a plan's open design questions inline, not via a separate refinement pass|B20]]'s
+  (a product-content decision, per B20's
   "genuine product-scope fork" carve-out), not a promoted one — and if the owner declines it, drop it rather than
   carrying dead scope. Agents are config; the framework ships the machinery, the fork brings the personas. _Status: open._
 
 ### B22 · Size "typed kinds under one table" by each kind's enforcement machinery, not one-per-kind
 
-- **Discovery.** [[f-policies]] is a `FacilitationPolicy` table with four typed kinds (auto-approval,
+- **Discovery.** `f-policies` is a `FacilitationPolicy` table with four typed kinds (auto-approval,
   relevance-gating, guard-minimums, escalation). The naïve sizing is one task per kind (4 PRs). But the
   kinds have wildly uneven build cost: **auto-approval** is a stored value with no runtime consumer (pure
   data), **relevance-gating** enforces at the facilitation surface, **guard-minimums** needs a fork-carried
@@ -588,20 +588,20 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   kind need, and where does it live?_ Fold **pure-data / no-consumer kinds into the spine** (they prove the
   pattern cheaply); give **each kind with distinct enforcement machinery its own PR** (especially one that
   touches a different tier — a core seam, a hot path); and treat a **deferrable kind as an explicit carve-out**
-  flagged at close-out, per [[#B20 · Resolve a plan's open design questions inline, not via a separate refinement pass|B20]].
+  flagged at close-out, per B20.
   The table spine is one task; the kinds are as many tasks as their machinery is distinct — not a fixed
   one-per-kind. _Status: open._
 
 ### B23 · When a large feature grows a separable second concern, shed it into its own feature at close-out rather than carry a heavy tail
 
-- **Discovery.** [[f-emergence]] (18) was planned as one feature spanning three concerns — escalation
+- **Discovery.** `f-emergence` (18) was planned as one feature spanning three concerns — escalation
   (F15), the F17 proposal gate, and evaluation wiring — and flagged at plan time as "large (~5 PRs)".
   The first three tasks (escalation + propose + approve/publish) delivered a **coherent, shippable
   whole**: the emergence _gate_. The eval thread (ex-t-4/t-5) was governance _observability_ —
   scoring/supervising conversations — that shared **no code** with the gate, and reconnaissance had
   shown it was the heaviest, most-gap-laden part (no conversation-native scorer, framework convos emit
   no eval logs, the #303 seed scaffold didn't exist). Rather than finish it as a tail of an
-  already-large feature, at close-out it was **split into its own claimable feature** ([[f-eval]], 20),
+  already-large feature, at close-out it was **split into its own claimable feature** (`f-eval`, 20),
   with the reconnaissance carried across intact.
 - **Impact.** Positive. f-emergence closed at a clean conceptual boundary (F15 + F17, 3 PRs) instead
   of dragging on; the eval thread gets its own claim + plan pass (and its own owner) instead of
@@ -612,13 +612,13 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   coherent whole and the remaining tasks (a) share little/no code with them and (b) are heavy enough
   to warrant their own plan, **split the remainder into a new feature at close-out** rather than carry
   it. The tell is a feature whose name lists two "+"-joined concerns (here "proposal pipeline **+**
-  evaluation wiring") — a candidate seam. Sibling to [[#B22 · Size "typed kinds under one table" by each kind's enforcement machinery, not one-per-kind|B22]]
+  evaluation wiring") — a candidate seam. Sibling to B22
   (size by the real seam) applied at the _feature_ grain, and to the deferral discipline in
-  [[#B20 · Resolve a plan's open design questions inline, not via a separate refinement pass|B20]]. _Status: open._
+  B20. _Status: open._
 
 ### B24 · Copying a workflow-shaped core primitive into a new domain: the adapter must re-check what the primitive's contract silently assumes about the _shape_ of its inputs
 
-- **Discovery.** [[f-eval]] t-2 reused Sunrise-core `runSupervisorAssessment` — built for workflow
+- **Discovery.** `f-eval` t-2 reused Sunrise-core `runSupervisorAssessment` — built for workflow
   executions (`stepOutputs`/`inputData`/`outputData`) — over a framework _conversation_ by projecting
   turns into its shape. Type-checking passed and the tests (with the core mocked) were green, but
   `/code-review` surfaced three defects that only bite because the _input shape_ differs from what the
@@ -643,19 +643,19 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   primitive's silent assumptions still hold. Corollary: don't unit-test such an adapter with the core
   fully mocked and stop there — either exercise the real primitive over representative data, or add a
   test asserting the specific contract (here: "a prose quote spanning a newline still validates").
-  Sibling to [[#B18 · A precedent borrowed for its shape can carry a rationale that doesn't transfer — re-derive it from the new domain|B18]]
+  Sibling to B18
   (a borrowed _precedent_ can carry a rationale that doesn't transfer; this is the same hazard for a
   borrowed _primitive_). _Status: open._
 
 ### B25 · A task pairing a new endpoint with its consuming UI — or leaning on an assumed reuse — is provisionally one PR; size it at build by the machinery you'll actually write
 
-- **Discovery.** [[f-ops-views]] promoted t-4 (binding tabs) and t-5 (journey explorer) as one task each; **both split at build** — t-4 into a/b/c (one per binding kind), t-5 into a/b (read API vs UI) — along the same _UI-over-shipped-API vs builds-one-new-endpoint_ seam the feature already used for its top-level split. t-5's split was forced by a **reuse assumption that didn't survive contact**: the plan said "reuse the workflow-builder canvas in read-only mode," but build-time recon found its node/edge types render workflow-step config (not reusable) and there is **no layout library** in the deps — so the canvas was a genuine build (own Kahn-longest-path mapper + node components + replay reducer), machinery wholly distinct from the read API it consumes. Neither half was a foldable sliver ([[#B1|B1]]).
+- **Discovery.** `f-ops-views` promoted t-4 (binding tabs) and t-5 (journey explorer) as one task each; **both split at build** — t-4 into a/b/c (one per binding kind), t-5 into a/b (read API vs UI) — along the same _UI-over-shipped-API vs builds-one-new-endpoint_ seam the feature already used for its top-level split. t-5's split was forced by a **reuse assumption that didn't survive contact**: the plan said "reuse the workflow-builder canvas in read-only mode," but build-time recon found its node/edge types render workflow-step config (not reusable) and there is **no layout library** in the deps — so the canvas was a genuine build (own Kahn-longest-path mapper + node components + replay reducer), machinery wholly distinct from the read API it consumes. Neither half was a foldable sliver (B1).
 - **Impact.** Positive — each split kept a PR reviewable and gave the UI a **reviewed, stable API contract** to mount on (the CLAUDE.md API-first rule falls out for free) — but the plan's "task = one PR" sizing was wrong for these two tasks in the same way, twice.
-- **Feedback.** Two provisional-sizing smells to catch at plan time and re-check at build: **(1)** a task that spans **a new endpoint _and_ its consuming UI** is usually two PRs, not one — the API is a self-contained, testable, security-relevant slice and the UI is another; size each by its own machinery, not by the user-facing feature. **(2)** a task whose sizing leans on **"reuse existing X"** must have that reuse **weight-checked before committing to one PR** — is X actually the shape you need, or merely adjacent? (The workflow canvas was adjacent: same library, wrong node vocabulary.) Extends [[#B22 · Size "typed kinds under one table" by each kind's enforcement machinery, not one-per-kind|B22]] (size by machinery) to the **API↔UI axis**, and [[#B17 · "Pure framework-tier / no upstream issue" is a build-time finding, not a plan-time fact — correct-behaviour-first can reveal a needed core seam|B17]] (a build-time finding, not a plan-time fact) to **reuse-weight**. _Status: open._
+- **Feedback.** Two provisional-sizing smells to catch at plan time and re-check at build: **(1)** a task that spans **a new endpoint _and_ its consuming UI** is usually two PRs, not one — the API is a self-contained, testable, security-relevant slice and the UI is another; size each by its own machinery, not by the user-facing feature. **(2)** a task whose sizing leans on **"reuse existing X"** must have that reuse **weight-checked before committing to one PR** — is X actually the shape you need, or merely adjacent? (The workflow canvas was adjacent: same library, wrong node vocabulary.) Extends B22 (size by machinery) to the **API↔UI axis**, and B17 (a build-time finding, not a plan-time fact) to **reuse-weight**. _Status: open._
 
 ### B26 · A safety guard copied from a sibling by analogy may protect against a failure mode the new usage structurally can't have — check the triggering condition exists before building it
 
-- **Discovery.** [[f-overlays]]'s plan prescribed, for the pgvector similarity query, mirroring knowledge
+- **Discovery.** `f-overlays`'s plan prescribed, for the pgvector similarity query, mirroring knowledge
   search's **dimension drift-guard** (`assertActiveModelMatchesStoredVectors` — fail loudly with "re-embed"
   rather than crash on a `$N::vector` cast when the active embedding model's dimension no longer matches the
   stored vectors). It's a real, load-bearing guard **in knowledge search**, because there a _fresh query
@@ -666,7 +666,7 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   shipped without it (documented in the PR); the guard would have been dead code guarding an unreachable state.
 - **Impact.** Small and positive — a planned mechanism _correctly dropped_ at build, saving code that would
   have implied a risk that doesn't exist (and mislead the next reader into thinking node embeddings can drift
-  mid-query). But like [[#B18 · A precedent borrowed for its shape can carry a rationale that doesn't transfer — re-derive it from the new domain|B18]], it was **plan-prescribed**, so the feature doc's task row had to be
+  mid-query). But like B18, it was **plan-prescribed**, so the feature doc's task row had to be
   reconciled at close-out ("no dimension drift-guard needed — same-sync-run"). The tell was available at plan
   time: the plan copied the guard from the sibling without asking _what two things the guard compares, and
   whether the new usage compares them at all._
@@ -676,13 +676,13 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   contingent on a _failure mode_, and a different data-flow may not have that mode. Concretely: ask "what
   divergent inputs does this guard reconcile, and does my code ever hold those two inputs at once?" For
   query-vs-stored embeddings the answer is yes (guard needed); for same-run node-to-node it's no (guard is
-  dead code). This is [[#B18 · A precedent borrowed for its shape can carry a rationale that doesn't transfer — re-derive it from the new domain|B18]] applied to **defensive code specifically** — the shape (a pgvector
+  dead code). This is B18 applied to **defensive code specifically** — the shape (a pgvector
   query) transfers; the _guard's justification_ (a drift that can occur) must be re-checked against the new
-  data-flow, and here it evaporates. Same family as [[#B25 · A task pairing a new endpoint with its consuming UI — or leaning on an assumed reuse — is provisionally one PR; size it at build by the machinery you'll actually write|B25]]'s reuse-weight check, at the level of an individual guard. _Status: open._
+  data-flow, and here it evaporates. Same family as B25's reuse-weight check, at the level of an individual guard. _Status: open._
 
 ### B27 · An "instrumentation" feature's real deliverable is often wiring a shipped-but-dormant seam an earlier feature left for it — find the unwired receiver at recon, make it the anchor
 
-- **Discovery.** [[f-engagement]] read on the board like three additive surfaces (an event stream, a feedback
+- **Discovery.** `f-engagement` read on the board like three additive surfaces (an event stream, a feedback
   cap, a stats page). But recon found that the load-bearing deliverable was elsewhere: **f-module-bindings (07)
   had shipped `runModuleWorkflowBindings` deliberately unwired** — its own header said _"Nothing calls this yet …
   f-engagement wires the real event later"_ — so an operator's "when X happens in this module, run workflow Y"
@@ -703,12 +703,12 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   load-bearing test on the wiring, not the new surface. This is the producer-side complement to the coordination
   notes this plan already writes ("whichever of 07/08 lands the shared emit point owns it") — those flag the
   seam; this says _the feature that lands the producer should treat that as its spine._ Generalises the
-  [[#B14 · A fork-first seam that composes with an upstream issue needs a live ledger, not just plan prose|B14]]
+  B14
   "dormant seam needs a live tracker" instinct from cross-repo seams to _intra-repo_ ones. _Status: open._
 
 ### B28 · A cross-cutting deferral parked in a feature's own doc is abandoned once that feature ships — promote it to the active board at close-out
 
-- **Discovery.** [[f-atlas]] accrued three "own-PR-later" deferrals across its tasks (a shared read-only-canvas
+- **Discovery.** `f-atlas` accrued three "own-PR-later" deferrals across its tasks (a shared read-only-canvas
   primitive at rule-of-three, a shared `stitchById` reader helper, region-container nodes). Each was dutifully
   recorded in the feature's own **Follow-ups** section — the correct home _while the feature is in flight_. But at
   close-out the feature doc becomes a **graveyard**: nobody re-reads a shipped feature's plan, so a cross-cutting
@@ -723,7 +723,7 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
 
 ### B29 · In a UI-over-shipped-backend feature, the bugs cluster in client↔server state coordination — budget a review-fix commit per dialog/local-mirror task, and reset cached view-state on open/close
 
-- **Discovery.** [[f-map-editor]] was, as the recon predicted, almost entirely UI over an already-shipped
+- **Discovery.** `f-map-editor` was, as the recon predicted, almost entirely UI over an already-shipped
   backend — so it wrote very little logic that _could_ be wrong in the classic sense. Yet `/code-review`
   found a real defect on **three consecutive tasks** (t-3/t-4/t-5), and every one was **client-state
   coordination**, not backend logic: (t-4) `handleRollback` optimistically set `hasDraft = false`, but the
@@ -741,14 +741,14 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   was computed from — the fix is to **clear it on open/close** (and at the start of a re-run), and to keep
   dialog-open state in the parent that owns the mutation so it can close on success directly.
 - **Feedback.** For a UI feature that mirrors server state or caches computed views, **`/code-review` is
-  where it pays for itself** — the same way [[planning-retro#B15|B15]] found for the deterministic engine, but
+  where it pays for itself** — the same way [B15](./planning-retro.md#b15) found for the deterministic engine, but
   the failure domain is different (state coordination, not algorithm correctness). Budget a review-fix commit
   per task that adds a dialog, a local mirror of a server field, or a cached result. And carry two standing
   checklist items into any such task: _does every local mirror of server state get reconciled from the
   server after a mutation?_ and _does every cached view-state reset when its dialog/panel closes or its
   inputs change?_ Catching these at build (not review) is cheaper; the recurrence within one feature shows
   they're systematic, not incidental. _Status: open._
-- **Corroboration ([[f-admin-surfaces]] t-4, a second feature).** The pattern recurred outside f-map-editor,
+- **Corroboration (`f-admin-surfaces` t-4, a second feature).** The pattern recurred outside f-map-editor,
   confirming it's a property of UI-over-shipped-backend features generally, not one feature. t-4's polish task
   (searchable roster pickers) wrote almost no backend logic, yet `/code-review` found two real defects, both
   **cached view-state not reset on open/close** — the exact anti-pattern (2) above: the roster hook cached its
@@ -763,7 +763,7 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
 
 ### B30 · Reusing a sibling write-service by name isn't reuse of its _semantics_ — check the effect at the read side, and beware the squash-merge that races a review-fix commit
 
-- **Discovery ([[f-governance-plus]] t-1).** The plan chose, for the new `policy` proposal subject, to apply
+- **Discovery (`f-governance-plus` t-1).** The plan chose, for the new `policy` proposal subject, to apply
   approvals via `createFacilitationPolicy` — the same write-service the direct policy-admin route uses — and
   called the result "last-writer-wins." Three independent `/code-review` finders converged on the same defect:
   `createFacilitationPolicy` only ever **inserts**, `FacilitationPolicy` has **no unique-on-kind**, and every
@@ -779,8 +779,8 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
 - **Lesson.** When a feature reuses a write primitive to "change X," trace X to its **reader/enforcer** and confirm
   the write actually alters what the reader returns. A create into an accumulate-on-read table is not an edit. Add
   a recon check: _for every reused write-fn, who reads its rows and how do they combine multiple?_ — a
-  create-vs-update decision hides there. Corollary to [[planning-retro#B26]] (a copied guard may not fit) and
-  [[planning-retro#B24]] (an adapter must re-check a primitive's silent assumptions): here the silent assumption
+  create-vs-update decision hides there. Corollary to [planning-retro](./planning-retro.md#b26) (a copied guard may not fit) and
+  [planning-retro](./planning-retro.md#b24) (an adapter must re-check a primitive's silent assumptions): here the silent assumption
   was on the _read_ side of the same table.
 - **Process hazard (same task).** The t-1 PR (#131) **squash-merged at its _first_ commit** while the review-fix
   commit was still landing on the PR head — a GitHub PR head-sync/Actions delivery hiccup meant the branch ref had
@@ -794,14 +794,14 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
 
 ### B31 · A design affordance whose _mechanism_ doesn't exist (not a data gap) has three honest options — omit / minimal-stub / build-the-mechanism — settle it with the owner at claim, and don't ship a plausible-looking stand-in
 
-- **Discovery ([[f-task-sheet]] t-3).** The design's task-sheet action row showed an **"Open in Claude Code"** button.
+- **Discovery ([f-task-sheet](./f-task-sheet.md) t-3).** The design's task-sheet action row showed an **"Open in Claude Code"** button.
   At build it turned out the Hub↔Claude Code integration is **MCP** (config + `smcp_` key + natural-language tool
-  calls, [[mcp-claude-code]]) — there is **no `claudecode://` deep-link scheme**, and no way for a web page to open a
+  calls, [mcp-claude-code](../mcp-claude-code.md)) — there is **no `claudecode://` deep-link scheme**, and no way for a web page to open a
   terminal in the right folder on a developer's machine. So the "link" the design implied cannot exist. I shipped a
   reasonable-looking stand-in (a button that copies a ready-to-paste `claim_task` prompt) and flagged it for a nod —
   the owner's answer was **"that's not a real thing; remove it."** The button + `lib/projects/claude-code-link.ts`
   came back out.
-- **Lesson.** This is the sibling of [[planning-retro#HB8]] (surface a **schema** gap the design assumes) but one
+- **Lesson.** This is the sibling of [planning-retro](./planning-retro.md#hb8) (surface a **schema** gap the design assumes) but one
   layer up: here the gap is a **capability/affordance** the platform structurally can't provide. When the design shows
   an action whose _mechanism_ you can't find at recon, the honest options are exactly three — **(a) omit it, (b) ship
   a minimal honest stub, (c) build the missing mechanism** — and which one is an **owner call to make at claim time**,
@@ -819,7 +819,7 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
 
 ### B32 · A shared client component that gains a `next/navigation` hook breaks every test that _self-mocks_ the module — a targeted local run won't catch it; the full sharded CI will
 
-- **Discovery ([[f-feature-planning]] t-4).** t-4 added a `ClaimFeatureButton` (a client component calling
+- **Discovery ([f-feature-planning](./f-feature-planning.md) t-4).** t-4 added a `ClaimFeatureButton` (a client component calling
   `useRouter`) into two **widely-rendered** components — the Plan `feature-row` and the feature-page `feature-view`.
   My targeted local run (the button's own test + the unit component tests) was green, but the full sharded **CI went
   red**: `No "useRouter" export is defined on the "next/navigation" mock`. Cause: the global `tests/setup.ts` mocks
@@ -832,6 +832,6 @@ startsWith "module:"`), never a blanket `notIn`; and (c) **key the "did registra
   the blast radius is **every test that self-mocks `next/navigation`** and transitively renders it — not just the
   component's own test. **Before pushing such a change, run the FULL `npm run test`** (not a targeted subset), or
   `grep -rl "vi.mock('next/navigation'" tests/` and add the new hook to each self-mocker that could render the
-  component. The green-targeted-run ≠ green-CI trap is the same shape as [[planning-retro#HB6]] (green gates ≠ working
+  component. The green-targeted-run ≠ green-CI trap is the same shape as [planning-retro](./planning-retro.md#hb6) (green gates ≠ working
   surface), but here it's **test isolation**: a local module mock shadows the global `setup.ts` one, so "passes for me"
   depends on _which_ files ran. Fix was one line per self-mocker: `useRouter: () => ({ refresh: vi.fn() })`.

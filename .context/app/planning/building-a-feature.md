@@ -47,7 +47,7 @@ stop two owners starting the same feature.
      Classify each seam live/dormant and confirm the feature's tier/upstream hypotheses
      _from behaviour_ (guide §1, §8).
    - **A promoted-tasks table** — `t-N`, files-likely-to-touch, deps, **Done-when**, status,
-     PR. **Size by separability of *value*, not line count** (guide §2, [[planning-retro]] HB3):
+     PR. **Size by separability of *value*, not line count** (guide §2, [planning-retro](./planning-retro.md) HB3):
      a task earns its own PR only if splitting adds a different review surface, a parallelism
      opportunity, or an integration checkpoint. Homogeneous/sequential/same-file work that's
      unconsumed until the set is complete (e.g. a multi-model schema) is **one PR even when
@@ -79,7 +79,7 @@ A **task is one PR** (~200–600 lines; cohesive, reviewable). For each:
    seam, a correct data model), do that now — don't ship a review-passing-but-wrong version
    and defer the correct one. **Extend through the seam; never fork-and-edit a platform file**
    (every Sunrise-owned file you touch becomes a merge conflict on the next upstream pull —
-   see [`CUSTOMIZATION.md`](../../CUSTOMIZATION.md) and the [`CLAUDE.md`](../../CLAUDE.md) banner).
+   see [`CUSTOMIZATION.md`](../../../CUSTOMIZATION.md) and the [`CLAUDE.md`](../../../CLAUDE.md) banner).
 3. **Run the gates, in this order:**
 
    ```
@@ -108,10 +108,10 @@ A **task is one PR** (~200–600 lines; cohesive, reviewable). For each:
    dev). The row flip to `done #<PR>`, decisions, and any cross-cutting carries are **batched into
    the single feature close-out PR** (§3). Do **not** track an "in-PR" status — one transition,
    nothing to forget. (The only feature-level docs PRs are the **claim** and the **close-out** —
-   [[planning-retro]] A7.)
+   [planning-retro](./planning-retro.md) A7.)
 
-Every task inherits the repo rules in [`CLAUDE.md`](../../CLAUDE.md) and
-[`CUSTOMIZATION.md`](../../CUSTOMIZATION.md): `logger` not `console`; the `@/` alias, never
+Every task inherits the repo rules in [`CLAUDE.md`](../../../CLAUDE.md) and
+[`CUSTOMIZATION.md`](../../../CUSTOMIZATION.md): `logger` not `console`; the `@/` alias, never
 relative imports (no sibling exception); validate external input with Zod; a new model with a
 `userId`/`createdBy` FK to core `User` needs an explicit `onDelete` policy _and_ a drift probe
 (`lib/app/db-drift.ts`) — route account deletion through `eraseUser()`, never
@@ -146,7 +146,7 @@ to `main` — but they skip `/security-review` and `/code-review`.
   `.context/app/`, and new app files anywhere (`app/`, `components/`). **Do not fill the
   `/framework` tier** (`lib/framework/`, `.context/framework/`, `framework_*`) — that's
   reserved for framework-layer forks like Daybreak; HCE Hub does not use it. Full ownership
-  boundary: [`.context/app/README.md`](../README.md) and [`CUSTOMIZATION.md`](../../CUSTOMIZATION.md).
+  boundary: [`.context/app/README.md`](../README.md) and [`CUSTOMIZATION.md`](../../../CUSTOMIZATION.md).
 - **Register through the seams, driven by `initApp()`.** The `lib/app/*` scaffolds Sunrise
   ships empty are the fork's extension points — capabilities, context contributors,
   knowledge-access contributors, protected routes, admin/public nav, drift probes, env,
@@ -171,5 +171,5 @@ to `main` — but they skip `/security-review` and `/code-review`.
 - [`design_handoff_hce_hub/README.md`](./design_handoff_hce_hub/README.md) — the binding UI design.
 - [`futures.md`](./futures.md) — forward constraints; source of the parked phases and v1 scaffolding.
 - [`.context/app/README.md`](../README.md) — the fork playbook + ownership boundary.
-- [`CUSTOMIZATION.md`](../../CUSTOMIZATION.md) — the leaf-fork model, seams, and merge discipline.
-- [`CLAUDE.md`](../../CLAUDE.md) — repo rules every task inherits (fork banner at the top).
+- [`CUSTOMIZATION.md`](../../../CUSTOMIZATION.md) — the leaf-fork model, seams, and merge discipline.
+- [`CLAUDE.md`](../../../CLAUDE.md) — repo rules every task inherits (fork banner at the top).

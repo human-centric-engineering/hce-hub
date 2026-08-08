@@ -11,7 +11,7 @@ spec: .context/app/planning/self-hosting.md
 
 # f-authoring-fidelity — the MCP authoring path captures + renders the full record
 
-*Feature 21 on [[plan]] — a **corrective** feature (the fourth dogfood-surfaced correction, after [[f-refs]] §16 and [[f-status-model]] §20). Surfaced authoring §20 into the Hub over MCP: the write verbs are **lossy**, so a feature authored over MCP comes out as skeleton tasks and you can't pull the next task's detail from the Hub — you fall back to the MD. This makes the [[f-selfhost-cutover]] §19 promise ("the Hub becomes its own system of record") only half-true: the one-time **cutover** is faithful (we pulled the detail across into `plan-data.ts`), but the **ongoing authoring path** loses it. This feature closes that gap. It is **authored INTO the Hub over MCP** (create_feature → claim_feature → plan_feature) as a re-test of §5 path B — and its own tasks land detail-thin, demonstrating exactly the gap it fixes; the MD below is the backup record until [[f-authoring-fidelity]] itself ships.*
+*Feature 21 on [plan](./plan.md) — a **corrective** feature (the fourth dogfood-surfaced correction, after [f-refs](./f-refs.md) §16 and [f-status-model](./f-status-model.md) §20). Surfaced authoring §20 into the Hub over MCP: the write verbs are **lossy**, so a feature authored over MCP comes out as skeleton tasks and you can't pull the next task's detail from the Hub — you fall back to the MD. This makes the [f-selfhost-cutover](./f-selfhost-cutover.md) §19 promise ("the Hub becomes its own system of record") only half-true: the one-time **cutover** is faithful (we pulled the detail across into `plan-data.ts`), but the **ongoing authoring path** loses it. This feature closes that gap. It is **authored INTO the Hub over MCP** (create_feature → claim_feature → plan_feature) as a re-test of §5 path B — and its own tasks land detail-thin, demonstrating exactly the gap it fixes; the MD below is the backup record until [f-authoring-fidelity](./f-authoring-fidelity.md) itself ships.*
 
 > **This MD is FROZEN — the Hub is the record.** With §21 shipped (2026-08-04) the authoring path is faithful: the Hub (`chubproject`) carries + renders the full task/feature detail, and the edit verbs (`update_task` / `update_feature`) correct it in place. **This is the last docs-PR close-out** — the parallel docs-PR workflow retires here (the deferred half of §19 t-2). This file is kept for git history; the live record is the Hub.
 
@@ -52,7 +52,7 @@ Make the authoring path **faithful** — the Hub holds and shows the full task/f
 
 ## Test strategy
 
-vitest = happy-dom, no live DB ([[planning-retro]] B9): mock `@/lib/db/client`/`tx`; capabilities via their execute() (funnel deny, field validation, redaction); components via `@testing-library/react`; the migration proven by `db:drift-check` + `app:project:import-plan` re-run.
+vitest = happy-dom, no live DB ([planning-retro](./planning-retro.md) B9): mock `@/lib/db/client`/`tx`; capabilities via their execute() (funnel deny, field validation, redaction); components via `@testing-library/react`; the migration proven by `db:drift-check` + `app:project:import-plan` re-run.
 
 - **t-a:** `plan_feature`/`create_task` persist `description`/`doneWhen`; parity green; redaction masks free text.
 - **t-b:** `update_task` edits each field; owner-tier (`forbidden`/`not_found`); no-op on unknown task; audit-logged.

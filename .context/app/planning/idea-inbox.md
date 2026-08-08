@@ -8,21 +8,21 @@ parent: next-phase-brief.md
 
 The lossless holding pen for ideas, tweaks, and bugs captured **before**
 `f-idea-capture` and the `bug`-kind task exist. This is the **markdown-first
-prototype of the studio idea inbox** the [[next-phase-brief]] flags as an open
+prototype of the studio idea inbox** the [next-phase-brief](./next-phase-brief.md) flags as an open
 fork — captured here so nothing's lost, and to be the **first real dataset** when
 the machinery lands: ideas become captures (then promote-to-current-phase), bugs
-become `bug`-kind tasks ([[bug-handling]]). Once migrated in, this file retires —
+become `bug`-kind tasks ([bug-handling](./bug-handling.md)). Once migrated in, this file retires —
 the same markdown→Hub move as the chubproject cutover.
 
 **Triage key:** `phase-feature` (a real feature for this phase) · `quick-win`
-(small, do soon) · `bug` (a defect → `bug`-kind task per [[bug-handling]]) ·
+(small, do soon) · `bug` (a defect → `bug`-kind task per [bug-handling](./bug-handling.md)) ·
 `park` (genuinely later).
 
 ## Captured 2026-08-06 (Simon's post-it)
 
 1. **Add GitHub to user profiles → connect activity** · `phase-feature`
    This _is_ the deferred §14 identity mapping (`merged_by → Hub user`), and it's
-   load-bearing for [[next-phase-brief#3. Onboard Sunrise as a Hub project|Sunrise-as-a-project]]
+   load-bearing for [Sunrise-as-a-project](./next-phase-brief.md#3-onboard-sunrise-as-a-hub-project)
    (issues/PRs have GitHub authors). **Constraint:** don't edit Sunrise's core
    `User` — use a fork-owned satellite (`app_user_github`: `userId → githubLogin`).
 
@@ -58,7 +58,7 @@ lands. Low priority either way (single-user for now).
 Debt surfaced by `/code-review` and consciously **not** fixed in the PR that found
 it (rationale in each PR's follow-up commit). Parked here so the deferral is a
 tracked decision, not a lost commit-body line. These are `bug`-kind tasks on the
-feature they belong to once [[bug-handling]] lands.
+feature they belong to once [bug-handling](./bug-handling.md) lands.
 
 7. **`read_only` project role would silently gain write** · `park` (security-adjacent) · from PR #107 (f-phases t1)
    Member-tier Hub write verbs (`create_phase`, `update_phase`, `create_feature`, …)
@@ -78,3 +78,12 @@ feature they belong to once [[bug-handling]] lands.
    message on a delete-race), and consistent across both fields — so the fix is a
    **central `P2025` → friendly-capability-error** helper covering both, not a
    phase-only patch.
+
+9. **A feature stays `in_flight` when all its tasks are `merged` — no auto-close** · `enhancement` · from f-phases close-out
+   A feature doesn't transition to `shipped` when its last task merges; `ship_feature`
+   is a manual, deliberate close-out (it writes the ship narrative). Owner noted it
+   "should automatically close." Recommendation: surface a **"shippable" signal /
+   prompt** — a derived "all tasks merged, ready to ship" state (e.g. in `next_task`
+   or a dashboard list, or a soft nudge) — rather than silently auto-shipping, which
+   would skip the narrative. The narrative is the point of the manual step, so
+   assist the close-out, don't remove it.

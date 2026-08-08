@@ -6,8 +6,8 @@ parent: v1-requirements.md
 
 # HCE Hub — next phase: the Hub runs its own planning
 
-> The brief for the phase after V1. Companion to [[v1-requirements]] (what V1 is)
-> and [[futures]] (the long horizon). Sits at v1-requirements' altitude — the
+> The brief for the phase after V1. Companion to [v1-requirements](./design_handoff_hce_hub/v1-requirements.md) (what V1 is)
+> and [futures](./futures.md) (the long horizon). Sits at v1-requirements' altitude — the
 > "what and why" of this phase — not the task-level plan. Detailed task
 > breakdowns are done per feature at claim time (pressure-tested before
 > `plan_feature`, per the sizing discipline).
@@ -64,7 +64,7 @@ current work**: an MCP jot (the path that matters most when heads-down in Claude
 Code) and a quick UI "jot" affordance → a lightweight stub in a **parked phase**,
 plus a promote-to-real-feature flow. The `add_backlog` gesture the claim-model
 pivot removed, returning at _idea_ altitude. Full concept:
-[[futures#Frictionless idea capture — the parking gesture `[v1.x]`]].
+[futures](./futures.md#frictionless-idea-capture-the-parking-gesture-v1x).
 
 _Open design fork (settle at claim time):_ do cross-project, futures-level ideas
 live in a per-project parked phase, or a lighter **studio-wide idea inbox** above
@@ -74,7 +74,7 @@ any single project?
 
 Sunrise becomes the **second** Hub project — the first real exercise of the
 multi-project machinery, and the foundation for the
-[[futures#Sunrise as a Hub project — bidirectional flow|bidirectional-flow]]
+[bidirectional-flow](./futures.md#sunrise-as-a-hub-project-bidirectional-flow)
 futures. Seeded from the [`platform-divergences.md`](../platform-divergences.md)
 ledger + the open upstream issues. Releases are **phases** (`v0.8.0` = adopted,
 `v0.9.0` = upcoming); the **adoption workload and the divergence ledger are
@@ -95,12 +95,12 @@ parallel) → then futures-in-Hub (wants the parking gesture first).
 
 **Companion conventions:**
 
-- **Bug handling** ([[bug-handling]]) — a bug is a `bug`-kind **Task** on the
+- **Bug handling** ([bug-handling](./bug-handling.md)) — a bug is a `bug`-kind **Task** on the
   feature it broke (not a Feature), surfaced by `next_task` as a bias, with an
   active-fixes strip and kind-aware "shipped · N fixes" status. Its one new
   primitive — a task `kind` label — lands as a **small feature alongside
   `f-phases`** (it shares the plan/board/status-derivation surfaces).
-- **Idea inbox** ([[idea-inbox]]) — the interim markdown holding pen for
+- **Idea inbox** ([idea-inbox](./idea-inbox.md)) — the interim markdown holding pen for
   ideas/tweaks/bugs captured before the machinery exists; becomes
   `f-idea-capture`'s first real dataset, then retires.
 
@@ -119,7 +119,7 @@ parallel) → then futures-in-Hub (wants the parking gesture first).
   The genuinely-additive model depends on a shape only one sync has sampled, so
   it's deferred until ~2–3 syncs stabilise the adoption checklist (or a second
   fork makes cross-fork release-impact real). Captured:
-  [[futures#Dedicated release + divergence modelling `[architectural]`]].
+  [futures](./futures.md#dedicated-release-divergence-modelling-architectural).
 
 ## Explicitly not this phase
 
