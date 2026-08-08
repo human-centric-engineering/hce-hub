@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FieldHelp } from '@/components/ui/field-help';
 import {
   Select,
   SelectTrigger,
@@ -168,8 +169,24 @@ export function ManagePhasesDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Manage phases</DialogTitle>
-          <DialogDescription>
-            Create, rename, drag to reorder, or park this project&rsquo;s phases.
+          <DialogDescription className="flex items-center gap-1">
+            <span>
+              Create, rename, drag to reorder, or set the status of this project&rsquo;s phases.
+            </span>
+            <FieldHelp title="Phase status" ariaLabel="What the phase statuses mean">
+              <p>
+                <strong>upcoming</strong> / <strong>active</strong> — on the live roadmap; shown
+                expanded in the plan.
+              </p>
+              <p>
+                <strong>complete</strong> — done work; collapsed by default in the plan.
+              </p>
+              <p>
+                <strong>parked</strong> — set aside (an idea pool); hidden from active views,
+                collapsed by default. Setting <em>active</em>/<em>complete</em> also stamps the
+                phase&rsquo;s start / finish time.
+              </p>
+            </FieldHelp>
           </DialogDescription>
         </DialogHeader>
 
