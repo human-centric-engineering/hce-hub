@@ -89,7 +89,9 @@ export function ProjectView({
             is the history stream, so the strip doesn't belong over it. */}
         {activeTab !== 'log' && (
           <div className="pt-8">
-            <ActiveFixesStrip fixes={project.activeFixes} />
+            {/* Default the list defensively — a missing field on the payload
+                should hide the strip, never crash the whole project view. */}
+            <ActiveFixesStrip fixes={project.activeFixes ?? []} />
           </div>
         )}
 
