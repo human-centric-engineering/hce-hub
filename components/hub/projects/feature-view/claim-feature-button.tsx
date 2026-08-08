@@ -39,6 +39,20 @@ export function ClaimFeatureButton({
         { method: 'POST' }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // A soft refusal (e.g. the feature is already shipped — f-task-assignment t1)
+      // returns 200 with `claimed: false` and changes nothing; surface it rather
+      // than a misleading no-op refresh. (The button is gated off shipped features,
+      // so this is defensive — the shape is here, so we handle it.)
+      const body: unknown = await res.json();
+      if (
+        body !== null &&
+        typeof body === 'object' &&
+        'data' in body &&
+        (body as { data?: { claimed?: boolean } }).data?.claimed === false
+      ) {
+        setError(true);
+        return;
+      }
       // Re-render the server surface so the new owner + in_flight status show.
       startTransition(() => router.refresh());
     } catch {

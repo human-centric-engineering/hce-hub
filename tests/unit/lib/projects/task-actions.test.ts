@@ -305,21 +305,41 @@ describe('assignTask (f-task-assignment t1)', () => {
     );
   });
 
-  it('reassigning an ACTIVE task resets it to claimed + releases the open claim (clean handoff)', async () => {
+  it('handing off an ACTIVE task to a DIFFERENT person resets to claimed, releases the claim, and warns', async () => {
     resolveTask.mockResolvedValue(granted({ status: 'active', claimedByUserId: 'someone' }));
 
     const r = await assignTask(USER, 't1', ASSIGNEE);
 
     expect(r.status).toBe('claimed'); // reset from active
-    // The prior active-work claim is released...
+    // The displaced worker's active-work claim is released...
     expect(txClaimUpdateMany).toHaveBeenCalledWith({
       where: { taskId: 't1', releasedAt: null },
       data: { releasedAt: expect.any(Date) },
     });
-    // ...and the task points at the new assignee, back in the claimed state.
+    // ...the task points at the new assignee, back in the claimed state...
     expect(txTaskUpdate).toHaveBeenCalledWith({
       where: { id: 't1' },
       data: { assigneeUserId: ASSIGNEE, claimedByUserId: ASSIGNEE, status: 'claimed' },
+    });
+    // ...and the displaced worker is surfaced as a soft warning (never a block).
+    expect(r.warnings).toEqual([
+      expect.objectContaining({ kind: 'already_claimed', userId: 'someone', taskId: 't1' }),
+    ]);
+  });
+
+  it('assigning an ACTIVE task to the person already working it is a no-op on status/claim (no knock-out)', async () => {
+    // The active worker IS the new assignee — a double-fire / self-assign must not
+    // release their claim or bump them back to `claimed`.
+    resolveTask.mockResolvedValue(granted({ status: 'active', claimedByUserId: ASSIGNEE }));
+
+    const r = await assignTask(USER, 't1', ASSIGNEE);
+
+    expect(r.status).toBe('active'); // preserved
+    expect(r.warnings).toEqual([]);
+    expect(txClaimUpdateMany).not.toHaveBeenCalled(); // claim NOT released
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { assigneeUserId: ASSIGNEE, claimedByUserId: ASSIGNEE, status: 'active' },
     });
   });
 });

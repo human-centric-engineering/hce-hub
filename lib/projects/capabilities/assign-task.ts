@@ -21,6 +21,7 @@ import type {
 } from '@/lib/orchestration/capabilities/types';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { assignTask } from '@/lib/projects/task-actions';
+import type { CollisionWarning } from '@/lib/projects/collision';
 import type { TaskStatus } from '@prisma/client';
 
 const schema = z.object({
@@ -39,6 +40,8 @@ type Args = z.infer<typeof schema>;
 interface Data {
   taskId: string;
   status: TaskStatus;
+  /** Soft heads-up when a reassignment displaced someone's active work — never a block. */
+  warnings: CollisionWarning[];
 }
 
 export class AssignTaskCapability extends BaseCapability<Args, Data> {
@@ -76,7 +79,11 @@ export class AssignTaskCapability extends BaseCapability<Args, Data> {
 
     try {
       const result = await assignTask(userId, args.taskId, args.assigneeUserId, args.projectId);
-      return this.success({ taskId: result.taskId, status: result.status });
+      return this.success({
+        taskId: result.taskId,
+        status: result.status,
+        warnings: result.warnings,
+      });
     } catch (err) {
       // Funnel 404 for a non-member caller / unknown / cross-project task.
       if (err instanceof NotFoundError) {

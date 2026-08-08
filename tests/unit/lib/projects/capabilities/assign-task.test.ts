@@ -37,13 +37,17 @@ describe('assign_task capability', () => {
     expect(r.error?.code).toBe('invalid_assignee');
   });
 
-  it('returns taskId + status on success, forwarding the caller + project scope', async () => {
-    assign.mockResolvedValue({ taskId: 't1', status: 'claimed', warnings: [] });
+  it('returns taskId + status + warnings on success, forwarding the caller + project scope', async () => {
+    const warning = { kind: 'already_claimed', userId: 'displaced', taskId: 't1', message: 'w' };
+    assign.mockResolvedValue({ taskId: 't1', status: 'claimed', warnings: [warning] });
     const r = await cap.execute(
       { taskId: 't1', assigneeUserId: 'u2', projectId: 'p1' },
       ctx('caller')
     );
-    expect(r).toEqual({ success: true, data: { taskId: 't1', status: 'claimed' } });
+    expect(r).toEqual({
+      success: true,
+      data: { taskId: 't1', status: 'claimed', warnings: [warning] },
+    });
     expect(assign).toHaveBeenCalledWith('caller', 't1', 'u2', 'p1');
   });
 });

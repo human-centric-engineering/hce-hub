@@ -157,8 +157,11 @@ export async function startTask(
  * Semantics:
  * - **Merged is a no-op** — completed work credits its doer (`claimedByUserId`);
  *   you don't reassign finished tasks (call 3 rider).
- * - **Active hands off cleanly** (call 1a): the open `TaskClaim` is released and
- *   the status reset `active → claimed`, so the new assignee starts fresh.
+ * - **Active hands off cleanly** (call 1a): reassigning an active task to a
+ *   *different* person releases the displaced worker's open `TaskClaim`, resets
+ *   `active → claimed` so the new assignee starts fresh, and returns a soft
+ *   heads-up. Re-assigning an active task to the person already working it is a
+ *   no-op on status/claim — it can't knock the active worker back to `claimed`.
  * - `claimedByUserId` is synced to the new assignee in the `claimed` state (as a
  *   born task is), so the existing claimer-based plan/board display already shows
  *   the new person; the richer status-aware display is t2.
@@ -186,19 +189,43 @@ export async function assignTask(
     throw new ValidationError('The assignee must be a member of this project.');
   }
 
+  // Handing off ACTIVE work to a *different* person resets it to `claimed` so they
+  // start fresh (call 1a) and releases the displaced worker's claim — so surface a
+  // soft heads-up that in-progress work was interrupted. Re-assigning an active
+  // task to the person already working it is NOT a handoff: leave their in-progress
+  // work untouched (no reset, no claim release), so a double-fire / self-assign
+  // can't silently knock the active worker back to `claimed`.
+  const displacedWorker =
+    task.status === 'active' && task.claimedByUserId && task.claimedByUserId !== assigneeUserId
+      ? task.claimedByUserId
+      : null;
+  const warnings: CollisionWarning[] = displacedWorker
+    ? [
+        {
+          kind: 'already_claimed',
+          userId: displacedWorker,
+          taskId: task.taskId,
+          message:
+            'Heads-up: this task was actively being worked by someone else — their claim was released on reassignment.',
+        },
+      ]
+    : [];
+  const nextStatus: TaskStatus = displacedWorker ? 'claimed' : task.status;
+
   await executeTransaction(async (tx) => {
-    // Release any open active-work claim (a no-op when the task hasn't started),
-    // then point the task at the new assignee in the `claimed` state — resetting
-    // an `active` task so the new person starts fresh (call 1a).
-    await tx.taskClaim.updateMany({
-      where: { taskId: task.taskId, releasedAt: null },
-      data: { releasedAt: new Date() },
-    });
+    // Only a genuine handoff (to a different person than the active worker) releases
+    // the open active-work claim.
+    if (displacedWorker) {
+      await tx.taskClaim.updateMany({
+        where: { taskId: task.taskId, releasedAt: null },
+        data: { releasedAt: new Date() },
+      });
+    }
     await tx.task.update({
       where: { id: task.taskId },
-      data: { assigneeUserId, claimedByUserId: assigneeUserId, status: 'claimed' },
+      data: { assigneeUserId, claimedByUserId: assigneeUserId, status: nextStatus },
     });
-    // Journal the handoff inside the same tx (an event iff the assignment commits).
+    // Journal the (re)assignment inside the same tx (an event iff it commits).
     await recordProjectEvent(tx, {
       projectId: task.projectId,
       featureId: task.featureId,
@@ -217,7 +244,7 @@ export async function assignTask(
     metadata: { assigneeUserId, from: task.status },
   });
 
-  return { taskId: task.taskId, status: 'claimed', warnings: [] };
+  return { taskId: task.taskId, status: nextStatus, warnings };
 }
 
 /**

@@ -22,13 +22,14 @@ import { resolveFeatureAccess } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 
-/** Advisory, never a block — mirrors the claim_task collision warnings. */
-export interface ClaimFeatureWarning {
-  kind: 'already_owned' | 'already_shipped';
-  /** Present for `already_owned` (the prior live owner). */
-  ownerUserId?: string;
-  message: string;
-}
+/**
+ * Advisory, never a block — mirrors the claim_task collision warnings. A
+ * discriminated union so `ownerUserId` is required exactly where it exists (the
+ * prior live owner, `already_owned`) and absent for `already_shipped`.
+ */
+export type ClaimFeatureWarning =
+  | { kind: 'already_owned'; ownerUserId: string; message: string }
+  | { kind: 'already_shipped'; message: string };
 
 export interface ClaimFeatureResult {
   featureId: string;
