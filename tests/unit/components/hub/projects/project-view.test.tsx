@@ -74,6 +74,7 @@ function makeProject(overrides: Partial<ProjectViewDTO> = {}): ProjectViewDTO {
     memberCount: 2,
     featureCount: 15,
     taskCount: 12,
+    activeFixes: [],
     ...overrides,
   };
 }
@@ -96,6 +97,28 @@ describe('ProjectView', () => {
   it('shows a graceful message on the plan tab when the plan failed to load', () => {
     render(<ProjectView project={makeProject()} activeTab="plan" plan={null} />);
     expect(screen.getByText(/Couldn.t load the plan/i)).toBeInTheDocument();
+  });
+
+  it('mounts the active-fixes strip above the work body when there are open bugs (§22-02 t2)', () => {
+    const project = makeProject({
+      activeFixes: [
+        {
+          taskId: 'bug-1',
+          taskNumber: 7,
+          title: 'A defect to fix',
+          feature: { slug: 'f-x', title: 'Feature X' },
+          phaseName: 'V1',
+        },
+      ],
+    });
+    render(<ProjectView project={project} activeTab="plan" plan={null} />);
+    expect(screen.getByText(/Active fixes · 1/)).toBeInTheDocument();
+    expect(screen.getByText('A defect to fix')).toBeInTheDocument();
+  });
+
+  it('renders no active-fixes strip when there are none (self-hiding)', () => {
+    render(<ProjectView project={makeProject({ activeFixes: [] })} activeTab="plan" plan={null} />);
+    expect(screen.queryByText(/Active fixes/)).not.toBeInTheDocument();
   });
 
   it('mounts the Board view on the board tab when a board is supplied', () => {

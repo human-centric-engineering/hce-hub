@@ -17,7 +17,7 @@ vi.mock('@/lib/db/client', () => ({
     project: { findMany: vi.fn() },
     projectMember: { findMany: vi.fn() },
     feature: { count: vi.fn() },
-    task: { count: vi.fn() },
+    task: { count: vi.fn(), findMany: vi.fn() },
     user: { findMany: vi.fn() },
   },
 }));
@@ -33,9 +33,15 @@ const projFindMany = prisma.project.findMany as ReturnType<typeof vi.fn>;
 const memberFindMany = prisma.projectMember.findMany as ReturnType<typeof vi.fn>;
 const featureCount = prisma.feature.count as ReturnType<typeof vi.fn>;
 const taskCount = prisma.task.count as ReturnType<typeof vi.fn>;
+const taskFindMany = prisma.task.findMany as ReturnType<typeof vi.fn>;
 const userFindMany = prisma.user.findMany as ReturnType<typeof vi.fn>;
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Default: no open bug tasks → an empty active-fixes strip. Tests that assert
+  // the strip override this.
+  taskFindMany.mockResolvedValue([]);
+});
 
 describe('listProjectsForUser', () => {
   it('scopes to the funnel ids and enriches lead + counts', async () => {
@@ -131,6 +137,63 @@ describe('getProjectForUser', () => {
     });
     expect(view.lead?.name).toBe('Ada');
     expect(view.members.find((m) => m.userId === 'erased')?.user).toBeNull();
+    expect(view.activeFixes).toEqual([]); // default mock: no open bugs → empty strip
+  });
+
+  it('maps open bug tasks into the active-fixes strip with an origin breadcrumb (§22-02 t2)', async () => {
+    getAccessible.mockResolvedValue({
+      id: 'p1',
+      slug: 'hce-hub',
+      name: 'Hub',
+      hostPlatform: 'sunrise',
+      status: 'active',
+      repoUrls: [],
+      leadUserId: null,
+      createdAt: new Date(),
+    });
+    memberFindMany.mockResolvedValue([]);
+    featureCount.mockResolvedValue(2);
+    taskCount.mockResolvedValue(9);
+    userFindMany.mockResolvedValue([]);
+    taskFindMany.mockResolvedValue([
+      {
+        id: 'bug-1',
+        number: 42,
+        title: 'Log decisions render raw',
+        feature: { slug: 'f-journal', title: 'Journal', phase: { name: 'Foundations' } },
+      },
+      {
+        id: 'bug-2',
+        number: null,
+        title: 'Logout missing in nav',
+        feature: { slug: null, title: 'Platform', phase: null }, // unfiled feature → no phase
+      },
+    ]);
+
+    const view = await getProjectForUser('u1', 'p1');
+
+    // Query scoped to open bugs in this project only.
+    expect(taskFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { feature: { projectId: 'p1' }, kind: 'bug', status: { not: 'merged' } },
+      })
+    );
+    expect(view.activeFixes).toEqual([
+      {
+        taskId: 'bug-1',
+        taskNumber: 42,
+        title: 'Log decisions render raw',
+        feature: { slug: 'f-journal', title: 'Journal' },
+        phaseName: 'Foundations',
+      },
+      {
+        taskId: 'bug-2',
+        taskNumber: null,
+        title: 'Logout missing in nav',
+        feature: { slug: null, title: 'Platform' },
+        phaseName: null,
+      },
+    ]);
   });
 
   it('renders a null lead (erased) without a lead lookup id', async () => {
