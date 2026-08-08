@@ -124,7 +124,7 @@ describe('ProjectView', () => {
   it('mounts the Board view on the board tab when a board is supplied', () => {
     render(<ProjectView project={makeProject()} activeTab="board" board={boardFixture} />);
     expect(screen.getByText('Ada')).toBeInTheDocument(); // the lane member
-    expect(screen.getByText('Claimed')).toBeInTheDocument(); // a column header
+    expect(screen.getByText('Assigned')).toBeInTheDocument(); // a column header
   });
 
   it('shows a graceful message on the board tab when the board failed to load', () => {

@@ -26,12 +26,12 @@ const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
 
 const USER = 'user-1';
 
-const granted = (ownerUserId: string | null, projectId = 'p1') => ({
+const granted = (ownerUserId: string | null, projectId = 'p1', status = 'planning') => ({
   ok: true,
   feature: {
     projectId,
     ownerUserId,
-    status: 'planning',
+    status,
     planningStage: 'indicative',
     helpWanted: false,
     basis: 'member',
@@ -113,5 +113,20 @@ describe('claimFeature write', () => {
     resolveFeature.mockResolvedValue(granted(USER));
     const r = await claimFeature(USER, 'f1');
     expect(r.warnings).toEqual([]);
+  });
+});
+
+describe('claimFeature shipped-guard (f-task-assignment t1)', () => {
+  it('refuses to claim a shipped feature (no reopen): claimed=false + already_shipped, no write', async () => {
+    resolveFeature.mockResolvedValue(granted('someone-else', 'p1', 'shipped'));
+
+    const r = await claimFeature(USER, 'f1');
+
+    // Soft refusal — the feature is NOT reopened.
+    expect(r.claimed).toBe(false);
+    expect(r.warnings).toEqual([expect.objectContaining({ kind: 'already_shipped' })]);
+    expect(runTx).not.toHaveBeenCalled(); // no status flip back to in_flight
+    expect(emit).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
   });
 });

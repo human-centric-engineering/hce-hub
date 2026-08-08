@@ -17,6 +17,7 @@ import createPhaseUnit, {
   createPhaseFunctionDefinition,
 } from '@/prisma/seeds/app/019-create-phase';
 import createTaskUnit, { createTaskFunctionDefinition } from '@/prisma/seeds/app/002-create-task';
+import assignTaskUnit, { assignTaskFunctionDefinition } from '@/prisma/seeds/app/021-assign-task';
 
 function runContext() {
   const upsert = vi.fn().mockResolvedValue({ id: 'cap1' });
@@ -61,5 +62,14 @@ describe('capability seeds re-sync functionDefinition on update', () => {
     expect(arg.update.functionDefinition).toEqual(createTaskFunctionDefinition);
     // The f-bug-handling addition must reach the DB copy the MCP tool list serves.
     expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('kind');
+  });
+
+  it('021-assign-task: the new capability seed re-syncs on the update branch', async () => {
+    const { ctx, upsert } = runContext();
+    await assignTaskUnit.run(ctx);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ slug: 'assign_task' });
+    expect(arg.update.functionDefinition).toEqual(assignTaskFunctionDefinition);
+    expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('assigneeUserId');
   });
 });

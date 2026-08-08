@@ -81,7 +81,7 @@ describe('TaskSheet', () => {
     expect(await screen.findByText('Wire the streaming handler')).toBeInTheDocument();
     expect(screen.getByText('t-6')).toBeInTheDocument();
     expect(screen.getByText('f-mcp')).toBeInTheDocument();
-    expect(screen.getByText('claimed')).toBeInTheDocument();
+    expect(screen.getByText('assigned')).toBeInTheDocument(); // effective `claimed` reads "assigned" (f-task-assignment t1)
     expect(screen.getByText('unassigned')).toBeInTheDocument();
   });
 

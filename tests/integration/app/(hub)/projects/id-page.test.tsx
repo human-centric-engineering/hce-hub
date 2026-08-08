@@ -145,7 +145,7 @@ describe('ProjectViewPage', () => {
     expect(urls).not.toContain('/api/v1/projects/p1/plan');
     // The board rendered its lane + column headers.
     expect(screen.getByText('Ada')).toBeInTheDocument();
-    expect(screen.getByText('Claimed')).toBeInTheDocument();
+    expect(screen.getByText('Assigned')).toBeInTheDocument();
   });
 
   it('renders a graceful message if the plan fetch fails but the project loads', async () => {

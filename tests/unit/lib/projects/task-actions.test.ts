@@ -8,21 +8,26 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@/lib/projects/access', () => ({ resolveTaskAccess: vi.fn() }));
+vi.mock('@/lib/projects/access', () => ({
+  resolveTaskAccess: vi.fn(),
+  canAccessProject: vi.fn(),
+}));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({ prisma: { taskClaim: { findMany: vi.fn() } } }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
 vi.mock('@/lib/projects/project-event', () => ({ recordProjectEvent: vi.fn() }));
 
-const { resolveTaskAccess } = await import('@/lib/projects/access');
+const { resolveTaskAccess, canAccessProject } = await import('@/lib/projects/access');
 const { executeTransaction } = await import('@/lib/db/utils');
 const { prisma } = await import('@/lib/db/client');
 const { logAdminAction } = await import('@/lib/orchestration/audit/admin-audit-logger');
 const { recordProjectEvent } = await import('@/lib/projects/project-event');
-const { NotFoundError } = await import('@/lib/api/errors');
-const { startTask, completeTask, setTaskPr } = await import('@/lib/projects/task-actions');
+const { NotFoundError, ValidationError } = await import('@/lib/api/errors');
+const { startTask, completeTask, setTaskPr, assignTask } =
+  await import('@/lib/projects/task-actions');
 
 const resolveTask = resolveTaskAccess as ReturnType<typeof vi.fn>;
+const canAccess = canAccessProject as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const findClaims = prisma.taskClaim.findMany as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
@@ -70,6 +75,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockTx();
   findClaims.mockResolvedValue([]);
+  canAccess.mockResolvedValue({ ok: true, basis: 'member' }); // assignee is a member by default
 });
 
 describe('startTask funnel', () => {
@@ -240,5 +246,72 @@ describe('setTaskPr', () => {
     const r = await setTaskPr(USER, 't1', PR);
     expect(r.status).toBe('merged');
     expect(txTaskUpdate).toHaveBeenCalledWith({ where: { id: 't1' }, data: { prUrl: PR } });
+  });
+});
+
+describe('assignTask (f-task-assignment t1)', () => {
+  const ASSIGNEE = 'user-2';
+
+  it('throws NotFoundError for a non-member caller / unknown task (no write)', async () => {
+    resolveTask.mockResolvedValue({ ok: false, reason: 'not_found' });
+    await expect(assignTask(USER, 't1', ASSIGNEE)).rejects.toBeInstanceOf(NotFoundError);
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundError when the task is outside expectedProjectId (id-swap guard)', async () => {
+    resolveTask.mockResolvedValue(granted({ projectId: 'other' }));
+    await expect(assignTask(USER, 't1', ASSIGNEE, 'p1')).rejects.toBeInstanceOf(NotFoundError);
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('rejects an assignee who is not a member of the project (ValidationError, no write)', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed' }));
+    canAccess.mockResolvedValue({ ok: false, basis: null }); // assignee not a member
+    await expect(assignTask(USER, 't1', 'stranger')).rejects.toBeInstanceOf(ValidationError);
+    expect(canAccess).toHaveBeenCalledWith('stranger', 'p1');
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op for a merged task (credits the doer — never reassigns finished work)', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'merged' }));
+    const r = await assignTask(USER, 't1', ASSIGNEE);
+    expect(r).toEqual({ taskId: 't1', status: 'merged', warnings: [] });
+    expect(canAccess).not.toHaveBeenCalled(); // short-circuits before validating the assignee
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('points a claimed task at the new assignee (assignee = claimant), no ProjectEvent', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed', claimedByUserId: USER }));
+
+    const r = await assignTask(USER, 't1', ASSIGNEE);
+
+    expect(r).toEqual({ taskId: 't1', status: 'claimed', warnings: [] });
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { assigneeUserId: ASSIGNEE, claimedByUserId: ASSIGNEE, status: 'claimed' },
+    });
+    // Audit-logged, but no timeline event (t1 stays migration-free).
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'task.assign', entityId: 't1' })
+    );
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('reassigning an ACTIVE task resets it to claimed + releases the open claim (clean handoff)', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'active', claimedByUserId: 'someone' }));
+
+    const r = await assignTask(USER, 't1', ASSIGNEE);
+
+    expect(r.status).toBe('claimed'); // reset from active
+    // The prior active-work claim is released...
+    expect(txClaimUpdateMany).toHaveBeenCalledWith({
+      where: { taskId: 't1', releasedAt: null },
+      data: { releasedAt: expect.any(Date) },
+    });
+    // ...and the task points at the new assignee, back in the claimed state.
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { assigneeUserId: ASSIGNEE, claimedByUserId: ASSIGNEE, status: 'claimed' },
+    });
   });
 });

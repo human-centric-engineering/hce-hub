@@ -25,7 +25,7 @@ const board = (over: Partial<ProjectBoardDTO> = {}): ProjectBoardDTO => ({
 describe('BoardView', () => {
   it('renders the column headers with their counts', () => {
     render(<BoardView board={board()} />);
-    expect(screen.getByText('Claimed')).toBeInTheDocument();
+    expect(screen.getByText('Assigned')).toBeInTheDocument();
     expect(screen.getByText('Merged')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument(); // claimed total
     expect(screen.getByText('5')).toBeInTheDocument(); // merged total
