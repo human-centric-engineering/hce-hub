@@ -36,6 +36,16 @@ describe('TaskRow', () => {
     expect(screen.getByText('blocked')).toBeInTheDocument();
   });
 
+  it('marks a bug-kind task with a distinct "bug" tag (§22-02)', () => {
+    render(<TaskRow task={task({ kind: 'bug' })} ordinal={1} />);
+    expect(screen.getByText('bug')).toBeInTheDocument();
+  });
+
+  it('shows no bug tag on a feature-work task', () => {
+    render(<TaskRow task={task({ kind: 'feature_work' })} ordinal={1} />);
+    expect(screen.queryByText('bug')).not.toBeInTheDocument();
+  });
+
   it('opens the task sheet with the task id on click', () => {
     const open = vi.fn();
     render(

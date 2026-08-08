@@ -44,7 +44,18 @@ export function TaskRow({ task, ordinal }: { task: PlanTask; ordinal: number }) 
       <span className="font-mono text-xs" style={{ color: 'var(--ink-faint)' }}>
         t-{task.number ?? ordinal}
       </span>
-      <span style={{ color: 'var(--ink-soft)' }}>{task.title}</span>
+      <span className="flex min-w-0 items-center gap-1.5" style={{ color: 'var(--ink-soft)' }}>
+        {task.kind === 'bug' && (
+          // A quiet cue (not red-alert — anti-urgency): a bug is a fix, not a crisis.
+          <span
+            className="shrink-0 rounded px-1 text-[10px] font-medium tracking-wide uppercase"
+            style={{ color: 'var(--signal-blocked)', backgroundColor: 'var(--bg-tint)' }}
+          >
+            bug
+          </span>
+        )}
+        <span className="truncate">{task.title}</span>
+      </span>
 
       {task.claimer ? (
         <span className="flex items-center gap-1.5">
