@@ -16,6 +16,7 @@ import nextTaskUnit, { nextTaskFunctionDefinition } from '@/prisma/seeds/app/001
 import createPhaseUnit, {
   createPhaseFunctionDefinition,
 } from '@/prisma/seeds/app/019-create-phase';
+import createTaskUnit, { createTaskFunctionDefinition } from '@/prisma/seeds/app/002-create-task';
 
 function runContext() {
   const upsert = vi.fn().mockResolvedValue({ id: 'cap1' });
@@ -50,5 +51,15 @@ describe('capability seeds re-sync functionDefinition on update', () => {
     expect(upsert.mock.calls[0][0].update.functionDefinition).toEqual(
       createPhaseFunctionDefinition
     );
+  });
+
+  it('002-create-task: the update branch carries the current schema, including kind', async () => {
+    const { ctx, upsert } = runContext();
+    await createTaskUnit.run(ctx);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ slug: 'create_task' });
+    expect(arg.update.functionDefinition).toEqual(createTaskFunctionDefinition);
+    // The f-bug-handling addition must reach the DB copy the MCP tool list serves.
+    expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('kind');
   });
 });

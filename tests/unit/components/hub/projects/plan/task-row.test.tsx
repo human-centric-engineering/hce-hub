@@ -13,6 +13,7 @@ const task = (over: Partial<PlanTask> = {}): PlanTask => ({
   number: null,
   title: 'A task',
   status: 'claimed',
+  kind: 'feature_work',
   prUrl: null,
   claimer: null,
   ...over,

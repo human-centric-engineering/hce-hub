@@ -72,7 +72,7 @@ const planPayload = {
           owner: null,
           dependsOn: [],
           tasks: [],
-          progress: { merged: 1, total: 1, live: 0 },
+          progress: { merged: 1, total: 1, live: 0, blocked: 0, openFixes: 0 },
         },
       ],
     },

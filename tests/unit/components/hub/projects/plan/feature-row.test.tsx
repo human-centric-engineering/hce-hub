@@ -28,7 +28,7 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   dependsOn: [],
   tasks: [],
   indicativeTasks: [],
-  progress: { merged: 0, total: 0, live: 0, blocked: 0 },
+  progress: { merged: 0, total: 0, live: 0, blocked: 0, openFixes: 0 },
   ...over,
 });
 
@@ -72,6 +72,40 @@ describe('FeatureRow', () => {
     renderRow({ feature: feature({ summary: 'the short version', description: 'the long one' }) });
     expect(screen.getByText('the short version')).toBeInTheDocument();
     expect(screen.queryByText('the long one')).not.toBeInTheDocument();
+  });
+
+  describe('open-fixes label (f-bug-handling §22-02)', () => {
+    const withFixes = (openFixes: number) =>
+      feature({
+        status: 'shipped',
+        tasks: [
+          {
+            id: 't1',
+            number: 1,
+            title: 'built',
+            status: 'merged',
+            kind: 'feature_work',
+            prUrl: null,
+            claimer: null,
+          },
+        ],
+        progress: { merged: 1, total: 1, live: 0, blocked: 0, openFixes },
+      });
+
+    it('surfaces multiple open bug fixes as "· N open fixes"', () => {
+      renderRow({ feature: withFixes(2) });
+      expect(screen.getByText(/open fixes/)).toBeInTheDocument();
+    });
+
+    it('uses the singular "· 1 open fix" for a single fix', () => {
+      renderRow({ feature: withFixes(1) });
+      expect(screen.getByText(/open fix$/)).toBeInTheDocument();
+    });
+
+    it('shows no open-fixes label when there are none', () => {
+      renderRow({ feature: withFixes(0) });
+      expect(screen.queryByText(/open fix/)).not.toBeInTheDocument();
+    });
   });
 
   it('falls back to the description in the row until a summary is authored', () => {
@@ -128,9 +162,17 @@ describe('FeatureRow', () => {
     renderRow({
       feature: feature({
         tasks: [
-          { id: 't1', number: null, title: 'x', status: 'merged', prUrl: null, claimer: null },
+          {
+            id: 't1',
+            number: null,
+            title: 'x',
+            status: 'merged',
+            kind: 'feature_work',
+            prUrl: null,
+            claimer: null,
+          },
         ],
-        progress: { merged: 1, total: 3, live: 1, blocked: 1 },
+        progress: { merged: 1, total: 3, live: 1, blocked: 1, openFixes: 0 },
       }),
       onToggle,
     });
@@ -180,11 +222,12 @@ describe('FeatureRow', () => {
             number: null,
             title: 'Expanded task',
             status: 'claimed',
+            kind: 'feature_work',
             prUrl: null,
             claimer: null,
           },
         ],
-        progress: { merged: 0, total: 1, live: 0, blocked: 0 },
+        progress: { merged: 0, total: 1, live: 0, blocked: 0, openFixes: 0 },
       }),
       expanded: true,
     });
@@ -198,8 +241,18 @@ describe('FeatureRow', () => {
       feature: feature({
         id: 'feat-9',
         title: 'MCP server',
-        tasks: [{ id: 't1', number: 1, title: 'x', status: 'claimed', prUrl: null, claimer: null }],
-        progress: { merged: 0, total: 1, live: 0, blocked: 0 },
+        tasks: [
+          {
+            id: 't1',
+            number: 1,
+            title: 'x',
+            status: 'claimed',
+            kind: 'feature_work',
+            prUrl: null,
+            claimer: null,
+          },
+        ],
+        progress: { merged: 0, total: 1, live: 0, blocked: 0, openFixes: 0 },
       }),
       expanded: true,
     });

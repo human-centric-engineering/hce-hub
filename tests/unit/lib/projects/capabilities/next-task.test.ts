@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { TaskStatus } from '@prisma/client';
+import type { TaskStatus, TaskKind } from '@prisma/client';
 
 vi.mock('@/lib/db/client', () => ({
   prisma: { task: { findMany: vi.fn() } },
@@ -35,6 +35,7 @@ const ctx = (userId: string | null = USER) => ({ userId, agentId: 'agent-1' });
 function task(opts: {
   id: string;
   status?: TaskStatus;
+  kind?: TaskKind;
   claimedByUserId?: string | null;
   deps?: TaskStatus[];
   projectId?: string;
@@ -46,6 +47,7 @@ function task(opts: {
     filesScope: [],
     prUrl: null,
     status: opts.status ?? 'claimed',
+    kind: opts.kind ?? 'feature_work',
     claimedByUserId: opts.claimedByUserId ?? null,
     feature: { projectId: opts.projectId ?? 'proj-1' },
     dependencies: (opts.deps ?? []).map((status) => ({ dependsOn: { status } })),
@@ -165,6 +167,24 @@ describe('next_task readiness selection', () => {
     findMany.mockResolvedValue([task({ id: 'blocked', deps: ['claimed'] })]);
     const r = await cap.execute({}, ctx());
     expect(r.data).toEqual({ task: null, consideredCount: 1 });
+  });
+
+  it('prefers a ready bug over a ready feature-work task that sorts ahead of it (§22-02 bias)', async () => {
+    findMany.mockResolvedValue([
+      task({ id: 'work', status: 'claimed', deps: ['merged'] }), // ready feature-work, first
+      task({ id: 'bug', status: 'claimed', kind: 'bug', deps: ['merged'] }), // ready bug, second
+    ]);
+    const r = await cap.execute({}, ctx());
+    expect(r.data?.task?.id).toBe('bug');
+  });
+
+  it('never lets the bias override readiness: a blocked bug yields to a ready feature-work task', async () => {
+    findMany.mockResolvedValue([
+      task({ id: 'blocked-bug', status: 'claimed', kind: 'bug', deps: ['active'] }), // bug, but blocked
+      task({ id: 'ready-work', status: 'claimed', deps: ['merged'] }), // the only pullable one
+    ]);
+    const r = await cap.execute({}, ctx());
+    expect(r.data?.task?.id).toBe('ready-work');
   });
 
   it('shapes the recommended task with its project id and file scope', async () => {

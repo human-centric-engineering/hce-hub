@@ -202,11 +202,39 @@ describe('create_task happy path (no deps)', () => {
       taskId: 't-1',
       kind: 'task_created',
       actorUserId: USER,
-      metadata: { status: 'claimed' },
+      metadata: { status: 'claimed', kind: 'feature_work' },
     });
     // Atomicity: the event is written with the *transaction* client (the same
     // object carrying the task create), so it commits iff the task does.
     expect(emit.mock.calls[0][0].task.create).toBe(txTaskCreate);
+  });
+
+  it('defaults an unspecified kind to feature_work', async () => {
+    mockTxCreatesTask('t-1', 'claimed');
+    await cap.execute({ featureId: 'f1', title: 'x' }, ctx());
+    expect(txTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ kind: 'feature_work' }) })
+    );
+  });
+
+  it('records a bug-kind task with kind on the row and journals bug_reported (§22-02)', async () => {
+    mockTxCreatesTask('t-1', 'claimed');
+    await cap.execute({ featureId: 'f1', title: 'Log renders raw', kind: 'bug' }, ctx());
+
+    // The task carries its kind…
+    expect(txTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ kind: 'bug' }) })
+    );
+    // …and the journal distinguishes it as bug_reported, not task_created, so
+    // "which shipped work generates defects" stays queryable.
+    expect(emit).toHaveBeenCalledWith(expect.anything(), {
+      projectId: 'p1',
+      featureId: 'f1',
+      taskId: 't-1',
+      kind: 'bug_reported',
+      actorUserId: USER,
+      metadata: { status: 'claimed', kind: 'bug' },
+    });
   });
 });
 

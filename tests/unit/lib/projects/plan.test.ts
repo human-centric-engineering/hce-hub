@@ -234,7 +234,60 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
     ]);
     userFindMany.mockResolvedValue([{ id: 'u1', name: 'Ada', email: 'a@x.io', image: null }]);
     const plan = await getProjectPlan('u1', 'p1');
-    expect(flat(plan)[0].progress).toEqual({ merged: 1, total: 3, live: 1, blocked: 0 });
+    expect(flat(plan)[0].progress).toEqual({
+      merged: 1,
+      total: 3,
+      live: 1,
+      blocked: 0,
+      openFixes: 0,
+    });
+  });
+
+  it('excludes a bug task from completion and reports it as an open fix (§22-02)', async () => {
+    // A shipped feature: its two feature-work tasks are merged (reads 2/2), plus
+    // one open bug that must NOT drag it to 2/3 — it surfaces as openFixes.
+    featureFindMany.mockResolvedValue([
+      row({
+        status: 'shipped',
+        tasks: [
+          {
+            id: 'w1',
+            title: 'built',
+            status: 'merged',
+            kind: 'feature_work',
+            prUrl: null,
+            claimedByUserId: null,
+            dependencies: [],
+          },
+          {
+            id: 'w2',
+            title: 'built',
+            status: 'merged',
+            kind: 'feature_work',
+            prUrl: null,
+            claimedByUserId: null,
+            dependencies: [],
+          },
+          {
+            id: 'bug1',
+            title: 'a defect',
+            status: 'active',
+            kind: 'bug',
+            prUrl: null,
+            claimedByUserId: null,
+            dependencies: [],
+          },
+        ],
+      }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(flat(plan)[0].progress).toEqual({
+      merged: 2,
+      total: 2, // NOT 3 — the bug is off the completion axis
+      live: 0, // the worked bug is not "live" feature-work
+      blocked: 0,
+      openFixes: 1,
+    });
   });
 
   it('carries planningStage + the ordered indicative sketch (§18)', async () => {
@@ -286,7 +339,13 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
     userFindMany.mockResolvedValue([]);
     const plan = await getProjectPlan('u1', 'p1');
     expect(flat(plan)[0].tasks[1].status).toBe('blocked');
-    expect(flat(plan)[0].progress).toEqual({ merged: 0, total: 2, live: 1, blocked: 1 });
+    expect(flat(plan)[0].progress).toEqual({
+      merged: 0,
+      total: 2,
+      live: 1,
+      blocked: 1,
+      openFixes: 0,
+    });
   });
 
   it('returns features in planOrder (shipped before planning)', async () => {
