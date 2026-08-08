@@ -21,7 +21,7 @@ const fix = (over: Partial<ActiveFixDTO> = {}): ActiveFixDTO => ({
 function renderStrip(fixes: ActiveFixDTO[], open = vi.fn()) {
   render(
     <TaskSheetControlsProvider value={{ open, close: vi.fn() }}>
-      <ActiveFixesStrip fixes={fixes} />
+      <ActiveFixesStrip fixes={fixes} projectId="proj-1" />
     </TaskSheetControlsProvider>
   );
   return open;
@@ -30,13 +30,22 @@ function renderStrip(fixes: ActiveFixDTO[], open = vi.fn()) {
 describe('ActiveFixesStrip', () => {
   beforeEach(() => localStorage.clear()); // the collapse pref persists — isolate each test
 
-  it('renders nothing when there are no open fixes (self-hiding)', () => {
+  it('renders nothing (no element, no spacing) when there are no open fixes', () => {
     const { container } = render(
       <TaskSheetControlsProvider value={{ open: vi.fn(), close: vi.fn() }}>
-        <ActiveFixesStrip fixes={[]} />
+        <ActiveFixesStrip fixes={[]} projectId="proj-1" />
       </TaskSheetControlsProvider>
     );
+    // Fully empty — the top spacing rides the section, so an empty strip leaves
+    // no residual gap above the work body.
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('scopes the collapse preference to the project (no cross-project leak)', () => {
+    localStorage.setItem('hub:active-fixes-collapsed:other-project', 'true');
+    renderStrip([fix()]); // renders under projectId "proj-1"
+    // Collapsed in another project → this project's strip is still expanded.
+    expect(screen.getByText('Log decisions render raw')).toBeInTheDocument();
   });
 
   it('shows the count and each fix with its origin breadcrumb', () => {

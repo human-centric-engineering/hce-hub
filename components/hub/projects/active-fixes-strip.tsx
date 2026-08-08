@@ -19,15 +19,28 @@ import { useLocalStorage } from '@/lib/hooks/use-local-storage';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
 import type { ActiveFixDTO } from '@/components/hub/projects/types';
 
-export function ActiveFixesStrip({ fixes }: { fixes: ActiveFixDTO[] }) {
+export function ActiveFixesStrip({
+  fixes,
+  projectId,
+}: {
+  fixes: ActiveFixDTO[];
+  projectId: string;
+}) {
   const { open } = useTaskSheet();
-  const [collapsed, setCollapsed] = useLocalStorage('hub:active-fixes-collapsed', false);
+  // Project-keyed so the collapse choice is per-project (the strip is
+  // project-scoped everywhere else); collapsing project A doesn't collapse B.
+  const [collapsed, setCollapsed] = useLocalStorage(
+    `hub:active-fixes-collapsed:${projectId}`,
+    false
+  );
   if (fixes.length === 0) return null;
 
   return (
+    // `mt-8` (not a wrapper div in the parent) so the spacing lives with the
+    // null-guarded element — no empty gap when there are no fixes.
     <section
       aria-label="Active fixes"
-      className="rounded-lg border px-4 py-3"
+      className="mt-8 rounded-lg border px-4 py-3"
       style={{ borderColor: 'var(--line)', backgroundColor: 'var(--bg-tint)' }}
     >
       <button
