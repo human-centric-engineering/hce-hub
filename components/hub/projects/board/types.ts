@@ -6,7 +6,7 @@
  * `Date`s, so these are exact structural mirrors.
  */
 import type { UserRef } from '@/components/hub/projects/types';
-import type { TaskEffectiveStatus } from '@/components/hub/projects/plan/types';
+import type { TaskEffectiveStatus, TaskKind } from '@/components/hub/projects/plan/types';
 
 /** The board's status columns (effective `blocked` folds into `claimed` server-side). */
 export type BoardColumn = 'claimed' | 'active' | 'merged';
@@ -22,6 +22,8 @@ export interface BoardTaskCard {
   featureSlug: string | null;
   featureTitle: string;
   status: TaskEffectiveStatus;
+  /** `bug` (a defect, marked distinctly) vs `feature_work` (f-bug-handling §22-02). */
+  kind: TaskKind;
   column: BoardColumn;
   prUrl: string | null;
   /** `null` when unclaimed or the claimant was erased. */

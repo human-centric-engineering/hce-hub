@@ -42,6 +42,22 @@ export interface ProjectCard {
   lead: UserRef | null;
 }
 
+/**
+ * An open `bug`-kind task, surfaced in the project-scoped active-fixes strip
+ * (f-bug-handling §22-02 t2). A reference to a fix + a breadcrumb to the feature
+ * (and phase) it lives in — it never pulls the origin feature forward.
+ */
+export interface ActiveFix {
+  taskId: string;
+  /** Project-wide stable ordinal, rendered `t-N`; `null` until assigned. */
+  taskNumber: number | null;
+  title: string;
+  /** The origin feature the bug lives on (its slug drives the breadcrumb). */
+  feature: { slug: string | null; title: string };
+  /** The origin phase's name for the breadcrumb, or `null` if the feature is unfiled. */
+  phaseName: string | null;
+}
+
 /** The project-view header (`GET /api/v1/projects/:id`). */
 export interface ProjectView {
   id: string;
@@ -58,6 +74,8 @@ export interface ProjectView {
   memberCount: number;
   featureCount: number;
   taskCount: number;
+  /** Open bug-kind tasks across the project — the active-fixes strip; `[]` when none. */
+  activeFixes: ActiveFix[];
 }
 
 /** The projects `userId` is a member of, newest first, enriched for the card grid. */
@@ -111,10 +129,23 @@ export async function getProjectForUser(userId: string, ref: string): Promise<Pr
   const project = await getAccessibleProjectByRef(userId, ref);
   const projectId = project.id; // canonical cuid — the ref may have been a slug
 
-  const [members, featureCount, taskCount] = await Promise.all([
+  const [members, featureCount, taskCount, bugTasks] = await Promise.all([
     prisma.projectMember.findMany({ where: { projectId }, orderBy: { addedAt: 'asc' } }),
     prisma.feature.count({ where: { projectId } }),
     prisma.task.count({ where: { feature: { projectId } } }),
+    // Open bug-kind tasks anywhere in the project — the active-fixes strip
+    // (f-bug-handling §22-02 t2). Cross-phase by design, so scoped to the project,
+    // not a phase; ordered oldest-fix-first (stable t-N, then creation).
+    prisma.task.findMany({
+      where: { feature: { projectId }, kind: 'bug', status: { not: 'merged' } },
+      orderBy: [{ number: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+      select: {
+        id: true,
+        number: true,
+        title: true,
+        feature: { select: { slug: true, title: true, phase: { select: { name: true } } } },
+      },
+    }),
   ]);
 
   const memberIds = members.map((m) => m.userId);
@@ -143,5 +174,12 @@ export async function getProjectForUser(userId: string, ref: string): Promise<Pr
     memberCount: members.length,
     featureCount,
     taskCount,
+    activeFixes: bugTasks.map((t) => ({
+      taskId: t.id,
+      taskNumber: t.number,
+      title: t.title,
+      feature: { slug: t.feature.slug, title: t.feature.title },
+      phaseName: t.feature.phase?.name ?? null,
+    })),
   };
 }

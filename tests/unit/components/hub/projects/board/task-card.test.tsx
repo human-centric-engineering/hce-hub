@@ -16,6 +16,7 @@ const card = (over: Partial<BoardTaskCard> = {}): BoardTaskCard => ({
   featureSlug: null,
   featureTitle: 'Feature one',
   status: 'claimed',
+  kind: 'feature_work',
   column: 'claimed',
   prUrl: null,
   claimer: null,
@@ -35,6 +36,17 @@ describe('TaskCard', () => {
     render(<TaskCard card={card({ featureSlug: 'f-mcp', number: 6 })} />);
     expect(screen.getByText('f-mcp')).toBeInTheDocument();
     expect(screen.getByText(/·\s*t-6/)).toBeInTheDocument();
+  });
+
+  it('marks a bug-kind card with a distinct "bug" cue (§22-02 t2)', () => {
+    render(<TaskCard card={card({ kind: 'bug' })} />);
+    expect(screen.getByText('bug')).toBeInTheDocument();
+    expect(screen.getByTitle(/A bug — a fix/)).toBeInTheDocument();
+  });
+
+  it('shows no bug cue on a feature-work card', () => {
+    render(<TaskCard card={card({ kind: 'feature_work' })} />);
+    expect(screen.queryByText('bug')).not.toBeInTheDocument();
   });
 
   it('opens the task sheet with the task id on click', () => {

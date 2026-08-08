@@ -49,6 +49,7 @@ const view = {
   memberCount: 1,
   featureCount: 15,
   taskCount: 12,
+  activeFixes: [],
 };
 
 const planPayload = {

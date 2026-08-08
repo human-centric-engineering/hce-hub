@@ -7,6 +7,7 @@ import { BreadcrumbLabel } from '@/components/hub/breadcrumb-label';
 import { PlanView } from '@/components/hub/projects/plan/plan-view';
 import { BoardView } from '@/components/hub/projects/board/board-view';
 import { LogView } from '@/components/hub/projects/log/log-view';
+import { ActiveFixesStrip } from '@/components/hub/projects/active-fixes-strip';
 import { TaskSheetProvider } from '@/components/hub/projects/task-sheet/task-sheet-host';
 import type { ProjectTab, ProjectViewDTO } from '@/components/hub/projects/types';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
@@ -82,6 +83,15 @@ export function ProjectView({
           active — mounted here so Plan rows and Board cards can open it. */}
       <TaskSheetProvider projectId={project.id}>
         <ProjectViewTabs projectRef={project.slug ?? project.id} active={activeTab} />
+
+        {/* The active-fixes strip sits above the work body (Plan/Board) — a
+            different axis (fixes from any phase), self-hiding when empty (it
+            carries its own top spacing, so an empty strip leaves no gap). The Log
+            is the history stream, so the strip doesn't belong over it. The list is
+            defaulted defensively — a missing field should hide the strip, not crash. */}
+        {activeTab !== 'log' && (
+          <ActiveFixesStrip fixes={project.activeFixes ?? []} projectId={project.id} />
+        )}
 
         <div className="py-8">
           {activeTab === 'plan' ? (

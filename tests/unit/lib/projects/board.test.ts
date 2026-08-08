@@ -40,6 +40,7 @@ const task = (o: Record<string, unknown> & { deps?: string[] }) => ({
   title: o.title ?? o.id,
   featureId: o.featureId,
   status: o.status ?? 'claimed',
+  kind: o.kind ?? 'feature_work',
   prUrl: o.prUrl ?? null,
   claimedByUserId: o.claimedByUserId ?? null,
   dependencies: (o.deps ?? []).map((s: string) => ({ dependsOn: { status: s } })),
@@ -163,6 +164,22 @@ describe('getProjectBoard — carried f-data-model findings', () => {
     const un = laneOf(board, 'unassigned')!;
     expect(un.member).toBeNull();
     expect(un.tasks[0]).toMatchObject({ id: 't1' });
+  });
+
+  it('carries a task kind onto the card so bugs can be marked (§22-02 t2)', async () => {
+    setup({
+      members: [member('u1')],
+      features: [feature('f1', 'u1')],
+      tasks: [
+        task({ id: 'bug', featureId: 'f1', status: 'active', claimedByUserId: 'u1', kind: 'bug' }),
+        task({ id: 'work', featureId: 'f1', status: 'active', claimedByUserId: 'u1' }),
+      ],
+      users: [userRow('u1')],
+    });
+    const board = await getProjectBoard('u1', 'p1');
+    const cards = laneOf(board, 'u1')!.tasks;
+    expect(cards.find((c) => c.id === 'bug')?.kind).toBe('bug');
+    expect(cards.find((c) => c.id === 'work')?.kind).toBe('feature_work');
   });
 
   it('t-3: a task owned by a non-member → the Unassigned lane', async () => {
