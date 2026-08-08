@@ -241,6 +241,11 @@ function PhaseRow({
     opacity: isDragging ? 0.5 : 1,
   };
   const [name, setName] = useState(phase.name);
+  // Adopt the server name whenever it changes (own save landed, or another client
+  // renamed) so a stale local value can't clobber it on the next blur (lost update).
+  // Only fires when `phase.name` actually changes, so in-progress typing survives a
+  // refresh triggered by a *different* row.
+  useEffect(() => setName(phase.name), [phase.name]);
   const dirty = name.trim().length > 0 && name.trim() !== phase.name;
   const saveName = () => {
     if (dirty) onRename(phase.id, name.trim());

@@ -85,6 +85,22 @@ describe('ManagePhasesDialog', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('adopts an external rename instead of clobbering it on blur (lost-update guard)', () => {
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const one: ManagedPhase[] = [
+      { id: 'ph1', name: 'Alpha', status: 'active', ordinal: 0, featureCount: 0 },
+    ];
+    const { rerender } = render(<ManagePhasesDialog projectId="p1" phases={one} />);
+    open();
+    expect(screen.getByDisplayValue('Alpha')).toBeInTheDocument();
+    // The server renamed Alpha → Beta (another client, or an own save landing);
+    // the row must adopt it, not keep the stale local value.
+    rerender(<ManagePhasesDialog projectId="p1" phases={[{ ...one[0], name: 'Beta' }]} />);
+    fireEvent.blur(screen.getByDisplayValue('Beta'));
+    expect(fetchMock).not.toHaveBeenCalled(); // no stale "Alpha" PATCH
+  });
+
   it('renders a keyboard-accessible drag handle per phase', () => {
     render(<ManagePhasesDialog projectId="p1" phases={phases} />);
     open();

@@ -11,7 +11,7 @@
  * The current phase is the band the row renders in (`currentPhaseId`), so no extra
  * field on the feature payload is needed.
  */
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Layers } from 'lucide-react';
 import {
@@ -38,11 +38,21 @@ export function PhasePicker({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Optimistic selection — the trigger shows the picked phase immediately (no
+  // snap-back to the old value while the PATCH + refresh run). Re-adopt the server
+  // value once the write settles; on failure it reverts (below).
+  const [selected, setSelected] = useState<string | null>(currentPhaseId);
+  useEffect(() => {
+    if (!busy && !pending) setSelected(currentPhaseId);
+  }, [currentPhaseId, busy, pending]);
 
   const assign = async (value: string) => {
     const phaseId = value === NONE ? null : value;
-    if (phaseId === currentPhaseId) return; // no-op
+    if (phaseId === selected) return; // no-op
+    setSelected(phaseId);
+    setBusy(true);
     setFailed(false);
     try {
       const res = await fetch(
@@ -56,12 +66,19 @@ export function PhasePicker({
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       startTransition(() => router.refresh());
     } catch {
-      setFailed(true); // controlled Select reverts to currentPhaseId; flag it, never silent
+      setSelected(currentPhaseId); // revert the optimistic pick
+      setFailed(true); // never silent
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
-    <Select value={currentPhaseId ?? NONE} onValueChange={(v) => void assign(v)} disabled={pending}>
+    <Select
+      value={selected ?? NONE}
+      onValueChange={(v) => void assign(v)}
+      disabled={busy || pending}
+    >
       <SelectTrigger
         className="text-muted-foreground hover:text-foreground h-7 w-auto max-w-[12rem] gap-1.5 text-xs"
         aria-label="Phase"
