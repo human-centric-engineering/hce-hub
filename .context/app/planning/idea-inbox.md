@@ -87,3 +87,15 @@ feature they belong to once [bug-handling](./bug-handling.md) lands.
    or a dashboard list, or a soft nudge) — rather than silently auto-shipping, which
    would skip the narrative. The narrative is the point of the manual step, so
    assist the close-out, don't remove it.
+
+## Captured 2026-08-08 (dogfooding f-bug-handling)
+
+10. **`create_feature` should take an optional `phaseId`** · `quick-win` · from f-task-assignment setup
+    Creating a feature and filing it into a phase currently needs two calls
+    (`create_feature` then `update_feature { phaseId }`). Add an optional `phaseId`
+    to `create_feature` (same-project validation, like `update_feature`'s) so a
+    feature can be born filed. **Companion gap (the deeper one):** there's **no MCP
+    verb to _read_ phase ids**, so an agent can't discover a phase to file into at
+    all — filing via MCP is impossible without the id, forcing the UI. A
+    `list_phases` (or phases on a project-read) is the real fix; the `phaseId` param
+    is only useful once ids are discoverable. Both surfaced filing `f-task-assignment`.
