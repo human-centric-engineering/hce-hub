@@ -22,9 +22,9 @@
  */
 import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
-import { NotFoundError } from '@/lib/api/errors';
+import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import type { TaskStatus } from '@prisma/client';
-import { resolveTaskAccess } from '@/lib/projects/access';
+import { resolveTaskAccess, canAccessProject } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 import { detectFileOverlapWarnings, type CollisionWarning } from '@/lib/projects/collision';
@@ -142,6 +142,73 @@ export async function startTask(
   });
 
   return { taskId: task.taskId, status: 'active', warnings };
+}
+
+/**
+ * Assign `taskId` to `assigneeUserId` (f-task-assignment §f-ta t1) — the missing
+ * verb that re-sets the dormant `assigneeUserId` (born = feature owner, never
+ * re-set until now). Self = "take/claim it", another = "reassign" — one verb.
+ *
+ * **Any project member may (re)assign** (call 2 — open/trusting; the caller's
+ * membership is the `resolveTaskAccess` funnel's, deny ≡ 404). The **assignee**
+ * must be a member of the task's project (else `ValidationError`). Decoupled from
+ * feature ownership (call 4): never touches `Feature.ownerUserId`.
+ *
+ * Semantics:
+ * - **Merged is a no-op** — completed work credits its doer (`claimedByUserId`);
+ *   you don't reassign finished tasks (call 3 rider).
+ * - **Active hands off cleanly** (call 1a): the open `TaskClaim` is released and
+ *   the status reset `active → claimed`, so the new assignee starts fresh.
+ * - `claimedByUserId` is synced to the new assignee in the `claimed` state (as a
+ *   born task is), so the existing claimer-based plan/board display already shows
+ *   the new person; the richer status-aware display is t2.
+ *
+ * Audit-logged, **no `ProjectEvent`** (keeps t1 migration-free — a `task_assigned`
+ * journal kind would be a small enum-add, deferred). An optional
+ * `expectedProjectId` rejects a cross-project id-swap.
+ */
+export async function assignTask(
+  userId: string,
+  taskId: string,
+  assigneeUserId: string,
+  expectedProjectId?: string
+): Promise<TaskActionResult> {
+  const task = await resolveScoped(userId, taskId, expectedProjectId);
+
+  // Can't reassign finished work — a merged task credits its doer; lenient no-op.
+  if (task.status === 'merged') {
+    return { taskId: task.taskId, status: 'merged', warnings: [] };
+  }
+
+  // The assignee must be a member of the task's project (deny ≡ not a member).
+  const { basis } = await canAccessProject(assigneeUserId, task.projectId);
+  if (basis === null) {
+    throw new ValidationError('The assignee must be a member of this project.');
+  }
+
+  await executeTransaction(async (tx) => {
+    // Release any open active-work claim (a no-op when the task hasn't started),
+    // then point the task at the new assignee in the `claimed` state — resetting
+    // an `active` task so the new person starts fresh (call 1a).
+    await tx.taskClaim.updateMany({
+      where: { taskId: task.taskId, releasedAt: null },
+      data: { releasedAt: new Date() },
+    });
+    await tx.task.update({
+      where: { id: task.taskId },
+      data: { assigneeUserId, claimedByUserId: assigneeUserId, status: 'claimed' },
+    });
+  });
+
+  logAdminAction({
+    userId,
+    action: 'task.assign',
+    entityType: 'app_task',
+    entityId: task.taskId,
+    metadata: { assigneeUserId, from: task.status },
+  });
+
+  return { taskId: task.taskId, status: 'claimed', warnings: [] };
 }
 
 /**
