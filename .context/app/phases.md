@@ -131,10 +131,7 @@ once) — a partial list would leave unlisted phases with stale, colliding ordin
 
 - **Delete a phase** — parking replaces deletion (a parked phase is hidden, not
   destroyed); no delete verb/route.
-- **A dedicated `Release`
-
-  / divergence model** — phase-as-release is deliberate
-      for now; see [[futures#Dedicated release + divergence modelling `[architectural]`]].
-
+- **A dedicated `Release` / divergence model** — phase-as-release is deliberate
+  for now; see the "Dedicated release + divergence modelling" entry in [[futures]].
 - **GitHub-author → Hub-user mapping** for the (later) Sunrise-as-a-project
   onboarding — [[next-phase-brief]].
