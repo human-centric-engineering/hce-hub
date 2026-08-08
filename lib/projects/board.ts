@@ -23,7 +23,7 @@
  * Membership is the [[f-access]] funnel's: the load goes through
  * `getAccessibleProject`, so a non-member or unknown id is a 404, never a 403.
  */
-import type { ProjectRole } from '@prisma/client';
+import type { ProjectRole, TaskKind } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { getAccessibleProject } from '@/lib/projects/access';
 import { computeEffectiveStatus, type EffectiveStatus } from '@/lib/projects/task-status';
@@ -46,6 +46,8 @@ export interface BoardTaskCard {
   featureTitle: string;
   /** Effective status (drives the column; kept for the card pill). */
   status: EffectiveStatus;
+  /** `bug` (a defect, marked distinctly) vs `feature_work` (f-bug-handling §22-02). */
+  kind: TaskKind;
   column: BoardColumn;
   prUrl: string | null;
   /** `null` when unclaimed or the claimant was erased. */
@@ -104,6 +106,7 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
         title: true,
         featureId: true,
         status: true,
+        kind: true,
         prUrl: true,
         claimedByUserId: true,
         dependencies: { select: { dependsOn: { select: { status: true } } } },
@@ -171,6 +174,7 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
       featureSlug: feature.slug,
       featureTitle: feature.title,
       status: effective,
+      kind: t.kind,
       column,
       prUrl: t.prUrl,
       claimer: t.claimedByUserId ? (users.get(t.claimedByUserId) ?? null) : null,

@@ -12,7 +12,7 @@
  * deep-linkable task sheet (f-task-sheet §11); the PR link stops propagation so
  * it opens the PR, not the sheet.
  */
-import { Lock } from 'lucide-react';
+import { Lock, Bug } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
@@ -32,6 +32,21 @@ function BlockedMark() {
     >
       <Lock className="h-2.5 w-2.5" aria-hidden />
       blocked
+    </span>
+  );
+}
+
+/** A quiet marker for a bug-kind task — a fix, not a crisis (anti-urgency): no
+ *  red, no pulse, just a small tag so a defect reads apart from feature-work. */
+function BugMark() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 font-mono text-[9.5px] tracking-wide"
+      style={{ color: 'var(--signal-blocked)' }}
+      title="A bug — a fix on the feature it broke"
+    >
+      <Bug className="h-2.5 w-2.5" aria-hidden />
+      bug
     </span>
   );
 }
@@ -95,8 +110,13 @@ export function TaskCard({ card }: { card: BoardTaskCard }) {
         {card.featureSlug ?? card.featureTitle}
         {card.number != null && <span> · t-{card.number}</span>}
       </span>
-      {(card.claimer || card.collision || prUrl || card.status === 'blocked') && (
+      {(card.claimer ||
+        card.collision ||
+        prUrl ||
+        card.status === 'blocked' ||
+        card.kind === 'bug') && (
         <div className="flex flex-wrap items-center gap-2">
+          {card.kind === 'bug' && <BugMark />}
           {card.status === 'blocked' && <BlockedMark />}
           {card.claimer && (
             <span className="flex items-center gap-1">
