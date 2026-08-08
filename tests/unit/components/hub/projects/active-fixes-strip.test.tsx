@@ -3,7 +3,7 @@
  * open bug fixes. Self-hides when empty; each row shows the bug + an origin
  * breadcrumb (feature slug/title · phase) and opens its fix task on click.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ActiveFixesStrip } from '@/components/hub/projects/active-fixes-strip';
 import { TaskSheetControlsProvider } from '@/components/hub/projects/task-sheet/task-sheet-context';
@@ -28,6 +28,8 @@ function renderStrip(fixes: ActiveFixDTO[], open = vi.fn()) {
 }
 
 describe('ActiveFixesStrip', () => {
+  beforeEach(() => localStorage.clear()); // the collapse pref persists — isolate each test
+
   it('renders nothing when there are no open fixes (self-hiding)', () => {
     const { container } = render(
       <TaskSheetControlsProvider value={{ open: vi.fn(), close: vi.fn() }}>
@@ -62,5 +64,17 @@ describe('ActiveFixesStrip', () => {
     const open = renderStrip([fix({ taskId: 'bug-xyz' })]);
     fireEvent.click(screen.getByText('Log decisions render raw'));
     expect(open).toHaveBeenCalledWith('bug-xyz');
+  });
+
+  it('collapses and re-expands the list via the header toggle, keeping the count visible', () => {
+    renderStrip([fix()]);
+    expect(screen.getByText('Log decisions render raw')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide active fixes' }));
+    expect(screen.queryByText('Log decisions render raw')).not.toBeInTheDocument();
+    expect(screen.getByText(/Active fixes · 1/)).toBeInTheDocument(); // count stays
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show active fixes' }));
+    expect(screen.getByText('Log decisions render raw')).toBeInTheDocument();
   });
 });
