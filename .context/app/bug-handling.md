@@ -1,0 +1,101 @@
+# Bug handling
+
+[Phase 2](./planning/phase-2-plan.md)'s second feature. A bug is a **`bug`-kind
+`Task` on the feature it broke** — surfaced by `next_task` as a bias, kept off the
+feature's completion axis, and glanceable in a project-scoped active-fixes strip.
+No Jira, no urgency theatre: a bug is a fix to _pull_, not a crisis. The settled
+convention (why a Task, not a Feature or an `Issue` model) lives in
+[planning/bug-handling.md](./planning/bug-handling.md); this documents what shipped.
+
+> A bug surfaces while you're mid-phase. You `create_task { kind: 'bug' }` on the
+> feature it broke — it doesn't reopen that shipped feature, it floats up your
+> `next_task`, and it shows in a pinned "Active fixes" band above the board with a
+> breadcrumb back to its origin. Fix it, merge the PR, the task closes — same flow
+> as any task.
+
+## The model (`prisma/schema/app.prisma`)
+
+- **`enum TaskKind { feature_work bug }`** + `Task.kind TaskKind @default(feature_work)`
+  — non-null, so existing rows backfill. A **behavioural discriminator** (it drives
+  `next_task` and progress), deliberately a **closed enum, not a free-form label**:
+  every value earns code, so an unknown one would silently do nothing. A future
+  organizational-label system (many-per-task, behaviour-free) would be a separate
+  model.
+- **`ProjectEventKind.bug_reported`** — a reported bug journals distinctly from
+  `task_created`, so "which shipped work generates defects" stays queryable.
+
+`Task.kind` round-trips through the project transfer export/import (defaulted so
+pre-`kind` backups still import) and the cutover snapshot.
+
+## Enforcement — three surfaces
+
+- **`next_task` bias** (`lib/projects/next-task-pick.ts` · `pickBiasedTask`) — among
+  the caller's _pullable_ tasks (deps merged, oldest-ready order) a `bug` is
+  preferred over feature-work of **equal readiness**. A bias, never an override: a
+  dependency-blocked bug isn't pullable, so it's never chosen. Pulled, not pushed.
+- **Kind-aware completion** (`lib/projects/feature-progress.ts` ·
+  `computeFeatureProgress`) — `bug` tasks are **excluded** from a feature's
+  `merged/total/live/blocked` and tallied separately as **`openFixes`**. So a shipped
+  feature with an open bug reads "N/N · _M open fixes_", not "N-1/N".
+  _Reconciliation:_ a bug **can't** un-ship a feature anyway — `computeFeatureStatus`
+  reads stored status + deps only, and `ship_feature` sets `shipped` with nothing
+  recomputing it from tasks — so the fix was the _progress count_, not the status
+  derivation.
+- **Ship warning** (`lib/projects/capabilities/ship-feature.ts`) — the soft
+  "unmerged tasks" heads-up counts feature-work only (`kind: { not: 'bug' }`), so it
+  agrees with the progress bar.
+
+## Surfaces
+
+### MCP / write (t1)
+
+- **`create_task { kind }`** — optional; `'bug'` files a defect, defaulting to
+  `'feature_work'`. Owner-tier via the [f-access](./planning/f-access.md) funnel; the
+  seed's `functionDefinition` re-syncs on the update branch so MCP advertises `kind`.
+
+### Journal
+
+- A `bug` fires **`bug_reported`** ("reported a bug"); feature-work stays
+  `task_created`. Rendered by `describeEvent` across the Log, feature-activity, and
+  task-sheet timelines (`components/hub/projects/log/presentation.ts`).
+
+### Plan (t1)
+
+- Each feature row shows **"· N open fixes"** when a shipped/worked feature carries
+  open bugs (`components/hub/projects/plan/feature-row.tsx`).
+- A `bug`-kind task in a feature's inset table gets a quiet **"bug"** tag
+  (`components/hub/projects/plan/task-row.tsx`).
+
+### Active-fixes strip (t2)
+
+- A **pinned, project-scoped, self-hiding** band above the Plan/Board body
+  (`components/hub/projects/active-fixes-strip.tsx`, mounted in `project-view.tsx`),
+  listing every open bug across the project with an origin breadcrumb
+  (`f-journal · Foundations ↩`) and a click-through to the fix task. A **reference**
+  band on a different axis (fixes from any phase) — it never pulls the origin feature
+  forward, and being project-scoped it survives the no-active-phase case.
+- **Read:** rides the always-loaded project payload
+  (`getProjectForUser.activeFixes`, `lib/projects/consumer.ts`) rather than a new
+  endpoint — the strip shows on both Plan and Board, whose own payloads are
+  tab-specific.
+
+### Board (t2)
+
+- A `bug` card shows a quiet **bug** cue (a muted glyph, no red, no pulse — a fix, not
+  a crisis) in the card meta row (`components/hub/projects/board/task-card.tsx`). The
+  card already carries its origin feature ref, so a bug reads apart from feature-work.
+
+## The standing "Platform / Maintenance" feature
+
+An orphan/infra bug (a shell/nav defect belonging to no single feature) hangs on a
+**standing "Platform / Maintenance" feature** per project — a plain feature, no
+schema, **adopted on demand** (created when the first orphan bug appears), not
+seeded.
+
+## Not (yet) here
+
+- A **first-class `Issue`/`Bug` model** (standalone from features) is the heavier
+  alternative — deferred until it earns it. Onboarding Sunrise's real GitHub issues
+  (some tagged `bug`) is what will pressure-test whether it's needed.
+- **Priority as a hard field.** Priority is a `next_task` bias, not a stored flag;
+  `help-wanted` is the escape valve when an owner can't get to a bug.
