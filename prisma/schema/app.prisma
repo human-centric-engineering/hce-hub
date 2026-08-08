@@ -178,6 +178,17 @@ enum TaskStatus {
   merged
 }
 
+// A task's *kind* — a behavioural discriminator, not a free-form label
+// (f-bug-handling §22-02). `bug` = a defect on the feature it broke: `next_task`
+// biases it up and it's excluded from the feature's completion progress (an open
+// bug never makes a shipped feature read "3/4 merged"). A closed enum on purpose:
+// every value drives code, so an unknown value would silently do nothing. Future
+// organizational tagging (many-per-task, behaviour-free) would be a separate model.
+enum TaskKind {
+  feature_work
+  bug
+}
+
 model Task {
   id              String     @id @default(cuid())
   featureId       String
@@ -186,6 +197,7 @@ model Task {
   description     String?    @db.Text
   doneWhen        String?    @db.Text // per-task acceptance contract (f-feature-planning §18)
   status          TaskStatus @default(claimed)
+  kind            TaskKind   @default(feature_work) // behavioural discriminator (f-bug-handling): `bug` is biased up by next_task + kept out of feature-completion progress
   filesScope      String[]   @default([]) // paths/globs a claim expects to touch — soft-collision hint
   assigneeUserId  String? // hand-FK → "user" · ON DELETE SET NULL — "this is yours" (defaults to feature owner at plan time; distinct from the pull-claim)
   claimedByUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the task, drop the claimant)
@@ -371,6 +383,10 @@ enum ProjectEventKind {
   task_pr_linked
   task_merged
   help_wanted
+  // A defect reported as a `bug`-kind task on the feature it broke (f-bug-handling
+  // §22-02). Distinct from task_created so "which shipped work generates defects"
+  // is directly queryable in the journal.
+  bug_reported
   // Membership.
   member_added
   // Authored narrative — record_decision / add_note (f-journal §17 t-2).
