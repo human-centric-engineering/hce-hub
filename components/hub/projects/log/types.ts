@@ -18,6 +18,7 @@ export type ProjectEventKindDTO =
   | 'task_claimed'
   | 'task_pr_linked'
   | 'task_merged'
+  | 'bug_reported'
   | 'help_wanted'
   | 'member_added'
   | 'decision'

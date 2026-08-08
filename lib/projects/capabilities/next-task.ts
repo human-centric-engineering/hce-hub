@@ -27,6 +27,7 @@ import type {
 import { prisma } from '@/lib/db/client';
 import { canAccessProject, accessibleProjectIds } from '@/lib/projects/access';
 import { computeEffectiveStatus } from '@/lib/projects/task-status';
+import { pickBiasedTask } from '@/lib/projects/next-task-pick';
 
 const schema = z.object({
   projectId: z
@@ -124,6 +125,7 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
         filesScope: true,
         prUrl: true,
         status: true,
+        kind: true,
         claimedByUserId: true,
         feature: { select: { projectId: true } },
         dependencies: { select: { dependsOn: { select: { status: true } } } },
@@ -131,13 +133,17 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
       orderBy: [{ feature: { createdAt: 'asc' } }, { createdAt: 'asc' }],
     });
 
-    const pick = candidates.find(
+    // Pullable = every dependency merged (effective `claimed`), in oldest-ready
+    // order. Among them, prefer a bug — the f-bug-handling §22-02 bias (a bug
+    // floats above feature-work of equal readiness, never overriding deps).
+    const pullable = candidates.filter(
       (t) =>
         computeEffectiveStatus(
           t,
           t.dependencies.map((d) => d.dependsOn)
         ) === 'claimed'
     );
+    const pick = pickBiasedTask(pullable);
 
     return this.success({
       task: pick

@@ -280,6 +280,7 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
         description: t.description,
         doneWhen: t.doneWhen,
         status: t.status,
+        kind: t.kind,
         filesScope: t.filesScope,
         assigneeUserId: resolveNullable(t.assigneeUserId, 'task assignee'),
         claimedByUserId: resolveNullable(t.claimedByUserId, 'task claimant'),

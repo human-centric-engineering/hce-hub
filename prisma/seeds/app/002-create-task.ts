@@ -29,6 +29,12 @@ export const createTaskFunctionDefinition = {
         items: { type: 'string' },
         description: 'Optional ids of existing tasks in the same project this task depends on.',
       },
+      kind: {
+        type: 'string',
+        enum: ['feature_work', 'bug'],
+        description:
+          "Optional task kind — 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of the feature's completion progress); defaults to 'feature_work'.",
+      },
     },
     required: ['featureId', 'title'],
   },

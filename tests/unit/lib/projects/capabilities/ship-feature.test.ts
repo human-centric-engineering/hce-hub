@@ -111,8 +111,10 @@ describe('ship_feature close-out', () => {
     ]);
     // Never blocks — the status flip happened.
     expect(txFeatureUpdate).toHaveBeenCalled();
+    // Counts only unmerged FEATURE-WORK — bugs are off the completion axis
+    // (f-bug-handling §22-02), so the warning agrees with the Plan's progress.
     expect(taskCount).toHaveBeenCalledWith({
-      where: { featureId: 'f1', status: { not: 'merged' } },
+      where: { featureId: 'f1', status: { not: 'merged' }, kind: { not: 'bug' } },
     });
   });
 });

@@ -33,6 +33,9 @@ export interface PlanIndicativeTask {
 /** A task's *effective* status (`computeEffectiveStatus`) — includes computed `blocked`. */
 export type TaskEffectiveStatus = 'claimed' | 'active' | 'merged' | 'blocked';
 
+/** A task's kind (mirrors Prisma `TaskKind`, f-bug-handling §22-02). */
+export type TaskKind = 'feature_work' | 'bug';
+
 /** A depended-on feature, for the "depends on …" chips. */
 export interface PlanDependencyRef {
   id: string;
@@ -48,6 +51,8 @@ export interface PlanTask {
   number: number | null;
   title: string;
   status: TaskEffectiveStatus;
+  /** `bug` vs `feature_work` (f-bug-handling §22-02). */
+  kind: TaskKind;
   prUrl: string | null;
   /** `null` when unclaimed or the claimant was erased. */
   claimer: UserRef | null;
@@ -76,7 +81,7 @@ export interface PlanFeature {
   tasks: PlanTask[];
   /** The high-level sketch, shown while `indicative` (empty once planned). */
   indicativeTasks: PlanIndicativeTask[];
-  progress: { merged: number; total: number; live: number; blocked: number };
+  progress: { merged: number; total: number; live: number; blocked: number; openFixes: number };
 }
 
 /** A phase's lifecycle status (mirrors Prisma `PhaseStatus`, f-phases §22). */

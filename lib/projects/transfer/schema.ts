@@ -36,6 +36,9 @@ const projectRole = z.enum(['lead', 'member']);
 const featureStatus = z.enum(['planning', 'in_flight', 'blocked', 'shipped']);
 const planningStage = z.enum(['indicative', 'planned']);
 const taskStatus = z.enum(['claimed', 'active', 'merged']);
+// Defaulted so snapshots exported before f-bug-handling (no `kind`) still import
+// as feature-work — a backup that predates the column round-trips cleanly.
+const taskKind = z.enum(['feature_work', 'bug']).default('feature_work');
 const projectEventKind = z.enum([
   'feature_created',
   'feature_claimed',
@@ -48,6 +51,7 @@ const projectEventKind = z.enum([
   'task_pr_linked',
   'task_merged',
   'help_wanted',
+  'bug_reported',
   'member_added',
   'decision',
   'note',
@@ -128,6 +132,7 @@ export const taskSnapshot = z.object({
   description: z.string().nullable(),
   doneWhen: z.string().nullable(),
   status: taskStatus,
+  kind: taskKind,
   filesScope: z.array(z.string()),
   assigneeUserId: z.string().nullable(),
   claimedByUserId: z.string().nullable(),

@@ -29,6 +29,9 @@ describe('describeEvent', () => {
     // notable event is being actively taken (f-status-model §20).
     expect(describeEvent(ev({ kind: 'task_claimed' }))).toBe('started the task');
     expect(describeEvent(ev({ kind: 'task_merged' }))).toBe('completed the task');
+    // A bug filed via create_task{kind:'bug'} journals as bug_reported — it must
+    // read as "reported a bug", not fall through to the generic label (§22-02).
+    expect(describeEvent(ev({ kind: 'bug_reported' }))).toBe('reported a bug');
   });
 
   it('labels task_created unconditionally (no backlog branch — every task is born claimed)', () => {

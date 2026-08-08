@@ -94,9 +94,12 @@ export class ShipFeatureCapability extends BaseCapability<Args, Data> {
         : this.error('Only the feature owner or a project lead can ship a feature.', 'forbidden');
     }
 
-    // Soft signal: how many tasks aren't merged yet. Never blocks the ship.
+    // Soft signal: how many *feature-work* tasks aren't merged yet. Never blocks
+    // the ship. Bug-kind tasks are off the completion axis (f-bug-handling §22-02
+    // — they're open fixes, not unfinished build-out), so they don't count here,
+    // matching computeFeatureProgress and the Plan's "N/N + · N open fixes".
     const unmergedCount = await prisma.task.count({
-      where: { featureId: args.featureId, status: { not: 'merged' } },
+      where: { featureId: args.featureId, status: { not: 'merged' }, kind: { not: 'bug' } },
     });
     const warnings: ShipFeatureWarning[] = [];
     if (unmergedCount > 0) {

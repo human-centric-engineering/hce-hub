@@ -15,10 +15,11 @@
  * "unassigned / former member" — carried f-data-model t-3 finding), never
  * dereferenced.
  */
-import type { FeaturePlanningStage, PhaseStatus } from '@prisma/client';
+import type { FeaturePlanningStage, PhaseStatus, TaskKind } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { getAccessibleProject } from '@/lib/projects/access';
 import { computeEffectiveStatus, type EffectiveStatus } from '@/lib/projects/task-status';
+import { computeFeatureProgress } from '@/lib/projects/feature-progress';
 import {
   computeFeatureStatus,
   type EffectiveFeatureStatus,
@@ -43,6 +44,8 @@ export interface PlanTaskView {
   title: string;
   /** Effective status (via `computeEffectiveStatus`) — matches the §10 Board. */
   status: EffectiveStatus;
+  /** `bug` (a defect, styled distinctly + surfaced as a fix) vs `feature_work` (f-bug-handling §22-02). */
+  kind: TaskKind;
   prUrl: string | null;
   /** `null` when unclaimed or the claimant was erased. */
   claimer: UserRef | null;
@@ -82,9 +85,11 @@ export interface PlanFeatureView {
   /**
    * Progress off *effective* status (so a feature's counts match its task rows):
    * `merged`/`total`, `live` (actively being worked — effective `active`) and
-   * `blocked` (a claimed task waiting on an unmerged dependency).
+   * `blocked` (a claimed task waiting on an unmerged dependency). Kind-aware:
+   * `bug`-kind tasks are excluded from these completion counts and tallied
+   * separately as `openFixes` (f-bug-handling §22-02).
    */
-  progress: { merged: number; total: number; live: number; blocked: number };
+  progress: { merged: number; total: number; live: number; blocked: number; openFixes: number };
 }
 
 /**
@@ -165,6 +170,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
           number: true,
           title: true,
           status: true,
+          kind: true,
           prUrl: true,
           claimedByUserId: true,
           dependencies: { select: { dependsOn: { select: { status: true } } } },
@@ -196,18 +202,17 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
         t,
         t.dependencies.map((d) => d.dependsOn)
       ),
+      kind: t.kind,
       prUrl: t.prUrl,
       claimer: t.claimedByUserId ? (users.get(t.claimedByUserId) ?? null) : null,
     }));
 
     // Progress reads off the SAME effective status the rows render (§09 carry):
     // a dep-blocked task counts as `blocked`, never `live`, so a feature's
-    // summary can't disagree with its own task table. `live` = actively worked
-    // (`active`); claimed-but-ready tasks are pending, neither live nor blocked.
-    const total = tasks.length;
-    const merged = tasks.filter((t) => t.status === 'merged').length;
-    const blocked = tasks.filter((t) => t.status === 'blocked').length;
-    const live = tasks.filter((t) => t.status === 'active').length;
+    // summary can't disagree with its own task table. Kind-aware: `bug` tasks
+    // are excluded from completion and tallied as `openFixes` (f-bug-handling
+    // §22-02) — an open bug must not make a shipped feature read "3/4 merged".
+    const progress = computeFeatureProgress(tasks);
 
     // Readiness-derived feature status: `planning` becomes `available`/`blocked`
     // from the loaded dependency statuses (`in_flight`/`shipped` pass through).
@@ -236,7 +241,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
         .filter((d): d is PlanDependencyRef => d !== null),
       tasks,
       indicativeTasks: f.indicativeTasks,
-      progress: { merged, total, live, blocked },
+      progress,
     };
   });
 
