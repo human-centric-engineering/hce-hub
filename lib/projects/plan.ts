@@ -106,9 +106,10 @@ export interface PlanPhaseBand {
 
 /**
  * The Plan view's payload — features grouped into phase bands (f-phases §22 t2).
- * Band order: non-parked phases by ordinal, then the residual band (only if it
- * has features), then parked phases last (collapsed by the client). A project
- * with no phases yields a single residual band = the flat plan-ordered list.
+ * Band order: every real phase in ordinal order (the manage dialog's order — a
+ * `parked` phase sits where its ordinal puts it, just collapsed), then the
+ * residual "no phase" band last (only if it has features). A project with no
+ * phases yields a single residual band = the flat plan-ordered list.
  */
 export interface ProjectPlan {
   projectId: string;
@@ -267,11 +268,12 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
 
 /**
  * Partition the plan-ordered features into phase bands. Non-parked phases come
- * first (ordinal order), then the residual "no phase" band (only if it has
- * features), then parked phases last (the client renders them collapsed). Empty
- * real phases are kept so the roadmap skeleton stays visible; an empty residual
- * is dropped. A feature whose `phaseId` points outside the loaded phase set (a
- * mid-read delete) falls into the residual band — never dropped.
+ * in **true ordinal order** (`parked` ones sit where their ordinal puts them —
+ * the client still collapses them by default — so the manage dialog's reorder is
+ * honoured exactly), then the residual "no phase" catch-all **last** (only if it
+ * has features). Empty real phases are kept so the roadmap skeleton stays visible;
+ * an empty residual is dropped. A feature whose `phaseId` points outside the loaded
+ * phase set (a mid-read delete) falls into the residual band — never dropped.
  */
 /** The phase-row projection the grouping consumes (matches the `phases` select). */
 type PhaseRow = { id: string; name: string; status: PhaseStatus; ordinal: number };
@@ -295,19 +297,18 @@ function groupIntoPhaseBands(
     }
   }
 
-  const bandFor = (p: PhaseRow): PlanPhaseBand => ({
+  // Real phases in ordinal order (the `phases` query is already sorted), then the
+  // residual catch-all last. No parked-to-bottom reshuffle — the plan mirrors the
+  // dialog's order, and `parked`/`complete` are hidden via the band's collapse.
+  const bands: PlanPhaseBand[] = phases.map((p) => ({
     id: p.id,
     name: p.name,
     status: p.status,
     ordinal: p.ordinal,
     features: byPhase.get(p.id) ?? [],
-  });
-
-  const bands: PlanPhaseBand[] = [];
-  for (const p of phases) if (p.status !== 'parked') bands.push(bandFor(p));
+  }));
   if (residual.length > 0) {
     bands.push({ id: null, name: null, status: null, ordinal: null, features: residual });
   }
-  for (const p of phases) if (p.status === 'parked') bands.push(bandFor(p));
   return bands;
 }

@@ -11,12 +11,36 @@
 import { useState } from 'react';
 import { PhaseBand } from '@/components/hub/projects/plan/phase-band';
 import { PlanSummary } from '@/components/hub/projects/plan/plan-summary';
+import {
+  ManagePhasesDialog,
+  type ManagedPhase,
+} from '@/components/hub/projects/plan/manage-phases-dialog';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
 
 export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
   // The plan-ordered flat list (bands are a partition of it) — for the summary,
   // the default-expand pick, and the stable §N fallback.
   const allFeatures = plan.phases.flatMap((b) => b.features);
+
+  // The real phases (drop the residual null-id band), ordinal-ordered — what the
+  // manage dialog edits. The conditional narrows the nullable band fields.
+  const managedPhases: ManagedPhase[] = plan.phases
+    .flatMap((b) =>
+      b.id !== null && b.name !== null && b.status !== null && b.ordinal !== null
+        ? [
+            {
+              id: b.id,
+              name: b.name,
+              status: b.status,
+              ordinal: b.ordinal,
+              featureCount: b.features.length,
+            },
+          ]
+        : []
+    )
+    .sort((a, b) => a.ordinal - b.ordinal);
+  // Light {id,name} list for the per-row assign picker.
+  const assignablePhases = managedPhases.map((p) => ({ id: p.id, name: p.name }));
 
   // The feature the view opens on: the one being actively worked (an `active`
   // task) — that's where attention is, even when an earlier-in-order in-flight
@@ -51,7 +75,10 @@ export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
 
   return (
     <div>
-      <PlanSummary features={allFeatures} />
+      <div className="flex items-start justify-between gap-4">
+        <PlanSummary features={allFeatures} />
+        <ManagePhasesDialog projectId={plan.projectId} phases={managedPhases} />
+      </div>
       <div className="mt-6 space-y-4">
         {plan.phases.map((band) => (
           <PhaseBand
@@ -66,6 +93,7 @@ export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
             // Open the band that holds the auto-expanded feature even if it would
             // otherwise collapse by default, so the view really "opens on" it.
             forceOpen={autoExpandId != null && band.features.some((f) => f.id === autoExpandId)}
+            assignablePhases={assignablePhases}
           />
         ))}
       </div>

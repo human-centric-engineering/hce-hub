@@ -1,7 +1,8 @@
 /**
  * `update_phase` — edit an existing phase (f-phases §22 t1). The sibling of
- * `create_phase`: rename it, change its description, move it (`ordinal`), or
- * advance its lifecycle `status` (upcoming → active → complete, or park it).
+ * `create_phase`: rename it, change its description, or advance its lifecycle
+ * `status` (upcoming → active → complete, or park it). Reordering is a separate,
+ * collision-free operation (batch reorder), so there is no raw `ordinal` here.
  * Partial patch — only the fields you supply change; at least one must
  * (`nothing_to_update` otherwise). A transition into `active`/`complete` stamps
  * the matching timestamp the first time (idempotent thereafter).
@@ -38,7 +39,6 @@ const schema = z.object({
     .enum(['upcoming', 'active', 'complete', 'parked'])
     .optional()
     .describe('New lifecycle status. "parked" hides it from active views.'),
-  ordinal: z.number().int().min(0).optional().describe('New display position.'),
 });
 
 type Args = z.infer<typeof schema>;
@@ -56,7 +56,7 @@ export class UpdatePhaseCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'update_phase',
     description:
-      'Edit an existing phase: rename it, change its description, move it (ordinal), or advance its status (upcoming → active → complete, or park it). Only supplied fields change; a null description clears it. Any project member may edit a phase.',
+      'Edit an existing phase: rename it, change its description, or advance its status (upcoming → active → complete, or park it). Only supplied fields change; a null description clears it. Any project member may edit a phase. (Reordering is a separate batch operation.)',
     parameters: {
       type: 'object',
       properties: {
@@ -71,7 +71,6 @@ export class UpdatePhaseCapability extends BaseCapability<Args, Data> {
           enum: ['upcoming', 'active', 'complete', 'parked'],
           description: 'New lifecycle status. "parked" hides it from active views.',
         },
-        ordinal: { type: 'number', description: 'New display position.' },
       },
       required: ['phaseId'],
     },
@@ -87,7 +86,6 @@ export class UpdatePhaseCapability extends BaseCapability<Args, Data> {
       args: {
         phaseId: args.phaseId,
         status: args.status,
-        ordinal: args.ordinal,
         name:
           typeof args.name === 'string'
             ? redactedString(`name (${args.name.length} chars)`)
@@ -112,7 +110,6 @@ export class UpdatePhaseCapability extends BaseCapability<Args, Data> {
         name: args.name,
         description: args.description,
         status: args.status,
-        ordinal: args.ordinal,
       });
       return this.success(result);
     } catch (err) {

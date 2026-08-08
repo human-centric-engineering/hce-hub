@@ -22,6 +22,7 @@ import { featureStatus, firstName } from '@/components/hub/projects/plan/present
 import { initials } from '@/components/hub/projects/presentation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ClaimFeatureButton } from '@/components/hub/projects/feature-view/claim-feature-button';
+import { PhasePicker } from '@/components/hub/projects/plan/phase-picker';
 import type { PlanFeature } from '@/components/hub/projects/plan/types';
 
 /** Small clay pill flagging a feature that wants help (§5, §13.5). */
@@ -56,6 +57,8 @@ export function FeatureRow({
   ordinal,
   expanded,
   onToggle,
+  phases = [],
+  currentPhaseId = null,
 }: {
   feature: PlanFeature;
   /** Canonical cuid — for API calls (the claim button). */
@@ -65,6 +68,10 @@ export function FeatureRow({
   ordinal: number;
   expanded: boolean;
   onToggle: () => void;
+  /** The project's phases, for the assign picker; empty → no picker (f-phases §22 t3). */
+  phases?: { id: string; name: string }[];
+  /** The band this row is in — its current phase (null = residual "No phase"). */
+  currentPhaseId?: string | null;
 }) {
   const hasTasks = feature.tasks.length > 0;
   const isIndicative = feature.planningStage === 'indicative';
@@ -202,6 +209,14 @@ export function FeatureRow({
                   ? 'no tasks yet'
                   : '—'}
             </span>
+          )}
+          {phases.length > 0 && (
+            <PhasePicker
+              projectId={projectId}
+              featureId={feature.id}
+              currentPhaseId={currentPhaseId}
+              phases={phases}
+            />
           )}
         </span>
 

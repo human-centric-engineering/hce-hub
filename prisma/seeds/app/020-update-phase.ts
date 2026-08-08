@@ -10,7 +10,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const updatePhaseFunctionDefinition = {
   name: 'update_phase',
   description:
-    'Edit an existing phase: rename it, change its description, move it (ordinal), or advance its status (upcoming → active → complete, or park it). Only supplied fields change; a null description clears it. Any project member may edit a phase.',
+    'Edit an existing phase: rename it, change its description, or advance its status (upcoming → active → complete, or park it). Only supplied fields change; a null description clears it. Any project member may edit a phase. (Reordering is a separate batch operation.)',
   parameters: {
     type: 'object',
     properties: {
@@ -25,7 +25,6 @@ export const updatePhaseFunctionDefinition = {
         enum: ['upcoming', 'active', 'complete', 'parked'],
         description: 'New lifecycle status. "parked" hides it from active views.',
       },
-      ordinal: { type: 'number', description: 'New display position.' },
     },
     required: ['phaseId'],
   },

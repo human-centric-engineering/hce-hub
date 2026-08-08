@@ -27,6 +27,7 @@ export function PhaseBand({
   onToggle,
   ordinalFor,
   forceOpen = false,
+  assignablePhases,
 }: {
   band: PlanPhaseBand;
   /** Suppressed when the project has no phases (residual band = the whole plan). */
@@ -40,6 +41,8 @@ export function PhaseBand({
   ordinalFor: (featureId: string, featureNumber: number | null) => number;
   /** Open regardless of status — this band holds the view's auto-expanded feature. */
   forceOpen?: boolean;
+  /** The project's phases, for each row's assign picker (f-phases §22 t3). */
+  assignablePhases: { id: string; name: string }[];
 }) {
   const isParked = band.status === 'parked';
   // Collapsed by default when there's nothing to act on: `parked` (deliberately
@@ -58,6 +61,8 @@ export function PhaseBand({
       ordinal={ordinalFor(feature.id, feature.number)}
       expanded={!!expanded[feature.id]}
       onToggle={() => onToggle(feature.id)}
+      phases={assignablePhases}
+      currentPhaseId={band.id}
     />
   ));
 

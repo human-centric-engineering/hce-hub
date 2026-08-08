@@ -9,36 +9,60 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 
-vi.mock('@/lib/projects/access', () => ({ canAccessProject: vi.fn() }));
+vi.mock('@/lib/projects/access', () => ({
+  canAccessProject: vi.fn(),
+  resolveFeatureAccess: vi.fn(),
+}));
 vi.mock('@/lib/db/client', () => ({
   prisma: {
-    phase: { findUnique: vi.fn(), update: vi.fn(), aggregate: vi.fn(), create: vi.fn() },
+    phase: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      aggregate: vi.fn(),
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+    },
+    feature: { update: vi.fn() },
   },
 }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
 
-const { canAccessProject } = await import('@/lib/projects/access');
+const { canAccessProject, resolveFeatureAccess } = await import('@/lib/projects/access');
 const { prisma } = await import('@/lib/db/client');
 const { executeTransaction } = await import('@/lib/db/utils');
 const { logAdminAction } = await import('@/lib/orchestration/audit/admin-audit-logger');
-const { createPhase, updatePhase } = await import('@/lib/projects/phases-service');
+const { createPhase, updatePhase, reorderPhases, assignFeatureToPhase } =
+  await import('@/lib/projects/phases-service');
 
 const canAccess = canAccessProject as ReturnType<typeof vi.fn>;
+const resolveFeature = resolveFeatureAccess as ReturnType<typeof vi.fn>;
 const phaseFindUnique = prisma.phase.findUnique as ReturnType<typeof vi.fn>;
 const phaseUpdate = prisma.phase.update as ReturnType<typeof vi.fn>;
+const phaseFindMany = prisma.phase.findMany as ReturnType<typeof vi.fn>;
+const phaseFindFirst = prisma.phase.findFirst as ReturnType<typeof vi.fn>;
+const featureUpdate = prisma.feature.update as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 
 const USER = 'user-1';
 
-// The tx handle the create path drives (aggregate for the append ordinal + create).
+// The tx handle drives create (aggregate + create) and reorder (per-phase update).
 const txAggregate = vi.fn();
 const txCreate = vi.fn();
+const txPhaseUpdate = vi.fn();
 function mockTx() {
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
-    cb({ phase: { aggregate: txAggregate, create: txCreate } })
+    cb({
+      phase: {
+        aggregate: txAggregate,
+        create: txCreate,
+        update: txPhaseUpdate,
+        findMany: phaseFindMany,
+      },
+    })
   );
 }
 
@@ -144,11 +168,11 @@ describe('updatePhase', () => {
   });
 
   it('patches only supplied fields and reports them', async () => {
-    const r = await updatePhase(USER, 'ph1', { name: 'Renamed', ordinal: 3 });
-    expect(r).toEqual({ phaseId: 'ph1', updated: ['name', 'ordinal'] });
+    const r = await updatePhase(USER, 'ph1', { name: 'Renamed', description: 'why' });
+    expect(r).toEqual({ phaseId: 'ph1', updated: ['name', 'description'] });
     expect(phaseUpdate).toHaveBeenCalledWith({
       where: { id: 'ph1' },
-      data: { name: 'Renamed', ordinal: 3 },
+      data: { name: 'Renamed', description: 'why' },
     });
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'phase.update' }));
   });
@@ -226,5 +250,104 @@ describe('updatePhase', () => {
     await updatePhase(USER, 'ph1', { status: 'parked' });
     const data = phaseUpdate.mock.calls[0][0].data;
     expect(data.completedAt).toBeNull();
+  });
+
+  it('rejects a cross-project id-swap when expectedProjectId is given (404, no write)', async () => {
+    phaseFindUnique.mockResolvedValue({
+      projectId: 'other',
+      status: 'upcoming',
+      startedAt: null,
+      completedAt: null,
+    });
+    await expect(updatePhase(USER, 'ph1', { name: 'x' }, 'p1')).rejects.toBeInstanceOf(
+      NotFoundError
+    );
+    expect(phaseUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('reorderPhases (f-phases §22 t3)', () => {
+  it('throws NotFoundError for a non-member', async () => {
+    canAccess.mockResolvedValue({ basis: null });
+    await expect(reorderPhases(USER, 'p1', ['a', 'b'])).rejects.toBeInstanceOf(NotFoundError);
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('reassigns ordinals 0..n-1 in the given order, in a transaction', async () => {
+    phaseFindMany.mockResolvedValue([{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
+    const r = await reorderPhases(USER, 'p1', ['c', 'a', 'b']);
+    expect(r).toEqual({ projectId: 'p1', count: 3 });
+    expect(txPhaseUpdate).toHaveBeenNthCalledWith(1, { where: { id: 'c' }, data: { ordinal: 0 } });
+    expect(txPhaseUpdate).toHaveBeenNthCalledWith(2, { where: { id: 'a' }, data: { ordinal: 1 } });
+    expect(txPhaseUpdate).toHaveBeenNthCalledWith(3, { where: { id: 'b' }, data: { ordinal: 2 } });
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'phase.reorder' }));
+  });
+
+  it('rejects an incomplete list (must be exactly the project’s phases), no ordinal write', async () => {
+    // Completeness is now checked INSIDE the tx (against a consistent snapshot), so
+    // the tx runs but no ordinal update happens before it throws.
+    phaseFindMany.mockResolvedValue([{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
+    await expect(reorderPhases(USER, 'p1', ['a', 'b'])).rejects.toBeInstanceOf(ValidationError);
+    expect(txPhaseUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a list containing a stranger id, no ordinal write', async () => {
+    phaseFindMany.mockResolvedValue([{ id: 'a' }, { id: 'b' }]);
+    await expect(reorderPhases(USER, 'p1', ['a', 'zzz'])).rejects.toBeInstanceOf(ValidationError);
+    expect(txPhaseUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('assignFeatureToPhase (f-phases §22 t3)', () => {
+  const granted = (projectId = 'p1') => ({ ok: true, feature: { projectId, basis: 'member' } });
+
+  beforeEach(() => {
+    resolveFeature.mockResolvedValue(granted());
+    featureUpdate.mockResolvedValue({});
+  });
+
+  it('is member-tier — resolves at the member tier, not owner', async () => {
+    phaseFindFirst.mockResolvedValue({ id: 'ph1' });
+    await assignFeatureToPhase(USER, 'f1', 'ph1');
+    expect(resolveFeature).toHaveBeenCalledWith(USER, 'f1', 'member');
+  });
+
+  it('files a feature under a same-project phase (connect)', async () => {
+    phaseFindFirst.mockResolvedValue({ id: 'ph1' });
+    const r = await assignFeatureToPhase(USER, 'f1', 'ph1');
+    expect(r).toEqual({ featureId: 'f1', phaseId: 'ph1' });
+    expect(featureUpdate).toHaveBeenCalledWith({
+      where: { id: 'f1' },
+      data: { phase: { connect: { id: 'ph1' } } },
+    });
+  });
+
+  it('unfiles with phaseId null (disconnect, no phase lookup)', async () => {
+    const r = await assignFeatureToPhase(USER, 'f1', null);
+    expect(r.phaseId).toBeNull();
+    expect(phaseFindFirst).not.toHaveBeenCalled();
+    expect(featureUpdate).toHaveBeenCalledWith({
+      where: { id: 'f1' },
+      data: { phase: { disconnect: true } },
+    });
+  });
+
+  it('rejects a phase from another project (ValidationError, no write)', async () => {
+    phaseFindFirst.mockResolvedValue(null);
+    await expect(assignFeatureToPhase(USER, 'f1', 'other')).rejects.toBeInstanceOf(ValidationError);
+    expect(featureUpdate).not.toHaveBeenCalled();
+  });
+
+  it('maps a non-member (funnel not_found) to NotFoundError', async () => {
+    resolveFeature.mockResolvedValue({ ok: false, reason: 'not_found' });
+    await expect(assignFeatureToPhase(USER, 'f1', 'ph1')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('rejects a cross-project id-swap via expectedProjectId', async () => {
+    resolveFeature.mockResolvedValue(granted('other'));
+    await expect(assignFeatureToPhase(USER, 'f1', null, 'p1')).rejects.toBeInstanceOf(
+      NotFoundError
+    );
+    expect(featureUpdate).not.toHaveBeenCalled();
   });
 });

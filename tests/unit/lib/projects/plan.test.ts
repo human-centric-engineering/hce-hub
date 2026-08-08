@@ -438,7 +438,7 @@ describe('getProjectPlan — phase grouping (f-phases §22 t2)', () => {
     expect(plan.phases[0].features.map((f) => f.id)).toEqual(['a', 'b']);
   });
 
-  it('orders bands: non-parked by ordinal, then residual, then parked last', async () => {
+  it('orders bands in true ordinal order (parked included), residual last', async () => {
     phaseFindMany.mockResolvedValue([
       phase({ id: 'p-active', name: 'Active', status: 'active', ordinal: 0 }),
       phase({ id: 'p-parked', name: 'Ideas', status: 'parked', ordinal: 1 }),
@@ -451,7 +451,9 @@ describe('getProjectPlan — phase grouping (f-phases §22 t2)', () => {
       row({ id: 'inUp', status: 'planning', phaseId: 'p-up' }),
     ]);
     const plan = await getProjectPlan('u1', 'p1');
-    expect(plan.phases.map((b) => b.id)).toEqual(['p-active', 'p-up', null, 'p-parked']);
+    // A parked phase (ordinal 1) is NOT sunk to the bottom — it sits between the
+    // active (0) and upcoming (2) phases, mirroring the manage dialog; residual last.
+    expect(plan.phases.map((b) => b.id)).toEqual(['p-active', 'p-parked', 'p-up', null]);
     expect(plan.phases.find((b) => b.id === 'p-active')!.features.map((f) => f.id)).toEqual([
       'inActive',
     ]);
