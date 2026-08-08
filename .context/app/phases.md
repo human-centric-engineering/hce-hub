@@ -1,6 +1,6 @@
 # Phases
 
-[[phase-2-plan]]'s keystone. A **Phase** is a roadmap band a project reads in its
+[Phase 2](./planning/phase-2-plan.md)'s keystone. A **Phase** is a roadmap band a project reads in its
 own semantics — an **epic** for a build project (HCE Hub), a **release** band for
 a platform (Sunrise), an **idea park** when parked. One small primitive serves all
 three because **phases are per-project**, so each project groups its features
@@ -38,7 +38,7 @@ never left `complete` with a null start.
 ## Authorization — member-tier throughout
 
 Phases are **collaborative roadmap organisation**, not per-feature authored
-content, so every phase write is **member-tier** via the [[f-access]] funnel
+content, so every phase write is **member-tier** via the [f-access](./planning/f-access.md) funnel
 (`canAccessProject` / `resolveFeatureAccess('member')`): any project member may
 create / rename / reorder / park phases **and file any feature** into one. A
 non-member — or a phase/feature in a project the caller can't see — is a **404,
@@ -132,6 +132,7 @@ once) — a partial list would leave unlisted phases with stale, colliding ordin
 - **Delete a phase** — parking replaces deletion (a parked phase is hidden, not
   destroyed); no delete verb/route.
 - **A dedicated `Release` / divergence model** — phase-as-release is deliberate
-  for now; see the "Dedicated release + divergence modelling" entry in [[futures]].
+  for now; see the "Dedicated release + divergence modelling" entry in
+  [futures](./planning/futures.md).
 - **GitHub-author → Hub-user mapping** for the (later) Sunrise-as-a-project
-  onboarding — [[next-phase-brief]].
+  onboarding — [the next-phase brief](./planning/next-phase-brief.md).
