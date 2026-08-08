@@ -18,11 +18,14 @@ import { getRouteLogger } from '@/lib/api/context';
 import { parseCuidParam } from '@/lib/api/route-params';
 import { updatePhase } from '@/lib/projects/phases-service';
 
+// No `ordinal` here on purpose — order is changed only via the batch reorder
+// (`PUT …/phases/order`), which rewrites the whole dense `0..n-1` sequence and
+// can't collide. A raw per-phase ordinal would be a collision side-door around it
+// (there is no `@@unique(projectId, ordinal)`).
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   description: z.string().max(2000).nullish(),
   status: z.enum(['upcoming', 'active', 'complete', 'parked']).optional(),
-  ordinal: z.number().int().min(0).optional(),
 });
 
 export const PATCH = withAuth<{ id: string; phaseId: string }>(
@@ -46,7 +49,6 @@ export const PATCH = withAuth<{ id: string; phaseId: string }>(
         name: parsed.data.name,
         description: parsed.data.description,
         status: parsed.data.status,
-        ordinal: parsed.data.ordinal,
       },
       id
     );

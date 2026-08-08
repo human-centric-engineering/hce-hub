@@ -210,16 +210,20 @@ export async function reorderPhases(
   if (basis === null) throw new NotFoundError(`Project ${projectId} not found`);
 
   const ordered = [...new Set(orderedPhaseIds)];
-  const existing = await prisma.phase.findMany({ where: { projectId }, select: { id: true } });
-  const existingIds = new Set(existing.map((p) => p.id));
-  // The list must be the project's exact phase set — same size, every id present.
-  const complete =
-    ordered.length === existingIds.size && ordered.every((id) => existingIds.has(id));
-  if (!complete) {
-    throw new ValidationError('The reorder must list exactly this project’s phases, once each.');
-  }
 
+  // Validate completeness and rewrite ordinals in ONE transaction, so a phase
+  // created/deleted between the two can't cause a stale-ordinal collision or a raw
+  // P2025 500: the read and the writes see one consistent snapshot. A phase deleted
+  // just before → the exact-set check fails cleanly (ValidationError → 400).
   await executeTransaction(async (tx) => {
+    const existing = await tx.phase.findMany({ where: { projectId }, select: { id: true } });
+    const existingIds = new Set(existing.map((p) => p.id));
+    // The list must be the project's exact phase set — same size, every id present.
+    const complete =
+      ordered.length === existingIds.size && ordered.every((id) => existingIds.has(id));
+    if (!complete) {
+      throw new ValidationError('The reorder must list exactly this project’s phases, once each.');
+    }
     for (let i = 0; i < ordered.length; i++) {
       await tx.phase.update({ where: { id: ordered[i] }, data: { ordinal: i } });
     }

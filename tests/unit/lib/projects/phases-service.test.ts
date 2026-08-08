@@ -55,7 +55,14 @@ const txPhaseUpdate = vi.fn();
 function mockTx() {
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
-    cb({ phase: { aggregate: txAggregate, create: txCreate, update: txPhaseUpdate } })
+    cb({
+      phase: {
+        aggregate: txAggregate,
+        create: txCreate,
+        update: txPhaseUpdate,
+        findMany: phaseFindMany,
+      },
+    })
   );
 }
 
@@ -276,16 +283,18 @@ describe('reorderPhases (f-phases §22 t3)', () => {
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'phase.reorder' }));
   });
 
-  it('rejects an incomplete list (must be exactly the project’s phases)', async () => {
+  it('rejects an incomplete list (must be exactly the project’s phases), no ordinal write', async () => {
+    // Completeness is now checked INSIDE the tx (against a consistent snapshot), so
+    // the tx runs but no ordinal update happens before it throws.
     phaseFindMany.mockResolvedValue([{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
     await expect(reorderPhases(USER, 'p1', ['a', 'b'])).rejects.toBeInstanceOf(ValidationError);
-    expect(runTx).not.toHaveBeenCalled();
+    expect(txPhaseUpdate).not.toHaveBeenCalled();
   });
 
-  it('rejects a list containing a stranger id', async () => {
+  it('rejects a list containing a stranger id, no ordinal write', async () => {
     phaseFindMany.mockResolvedValue([{ id: 'a' }, { id: 'b' }]);
     await expect(reorderPhases(USER, 'p1', ['a', 'zzz'])).rejects.toBeInstanceOf(ValidationError);
-    expect(runTx).not.toHaveBeenCalled();
+    expect(txPhaseUpdate).not.toHaveBeenCalled();
   });
 });
 
