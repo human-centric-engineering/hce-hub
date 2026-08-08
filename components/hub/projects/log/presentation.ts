@@ -46,6 +46,8 @@ export function describeEvent(event: ProjectEventDTO): string {
       return 'completed the task';
     case 'bug_reported':
       return 'reported a bug';
+    case 'task_assigned':
+      return 'assigned the task';
     case 'help_wanted':
       return meta.helpWanted === true ? 'flagged help wanted' : 'cleared help wanted';
     case 'member_added':

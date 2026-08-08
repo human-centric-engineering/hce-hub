@@ -5,7 +5,7 @@ import type { BoardColumn, BoardLane, BoardTaskCard } from '@/components/hub/pro
 
 /** The three status columns, in display order, with header labels + subtitles. */
 export const COLUMN_META: { key: BoardColumn; label: string; sub: string }[] = [
-  { key: 'claimed', label: 'Claimed', sub: 'owned · ready or blocked' },
+  { key: 'claimed', label: 'Assigned', sub: 'assigned · ready or blocked' },
   { key: 'active', label: 'Active', sub: 'being worked' },
   { key: 'merged', label: 'Merged', sub: 'landed' },
 ];

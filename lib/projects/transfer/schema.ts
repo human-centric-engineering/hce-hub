@@ -52,6 +52,7 @@ const projectEventKind = z.enum([
   'task_merged',
   'help_wanted',
   'bug_reported',
+  'task_assigned',
   'member_added',
   'decision',
   'note',

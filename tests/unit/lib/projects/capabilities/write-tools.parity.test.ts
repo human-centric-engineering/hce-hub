@@ -11,13 +11,16 @@
 import { describe, it, expect } from 'vitest';
 import { CreateTaskCapability } from '@/lib/projects/capabilities/create-task';
 import { FlagHelpWantedCapability } from '@/lib/projects/capabilities/flag-help-wanted';
+import { AssignTaskCapability } from '@/lib/projects/capabilities/assign-task';
 import { createTaskFunctionDefinition } from '@/prisma/seeds/app/002-create-task';
 import { flagHelpWantedFunctionDefinition } from '@/prisma/seeds/app/004-flag-help-wanted';
+import { assignTaskFunctionDefinition } from '@/prisma/seeds/app/021-assign-task';
 
 describe('write-tool class ↔ seed parity', () => {
   it.each([
     ['create_task', new CreateTaskCapability(), createTaskFunctionDefinition],
     ['flag_help_wanted', new FlagHelpWantedCapability(), flagHelpWantedFunctionDefinition],
+    ['assign_task', new AssignTaskCapability(), assignTaskFunctionDefinition],
   ])(
     '%s: class functionDefinition equals the seeded copy, and name === slug',
     (slug, cap, seedDef) => {

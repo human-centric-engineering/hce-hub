@@ -25,6 +25,7 @@ import { PlanFeatureCapability } from '@/lib/projects/capabilities/plan-feature'
 import { ShipFeatureCapability } from '@/lib/projects/capabilities/ship-feature';
 import { StartTaskCapability } from '@/lib/projects/capabilities/start-task';
 import { CompleteTaskCapability } from '@/lib/projects/capabilities/complete-task';
+import { AssignTaskCapability } from '@/lib/projects/capabilities/assign-task';
 import { SetPrCapability } from '@/lib/projects/capabilities/set-pr';
 import { UpdateTaskCapability } from '@/lib/projects/capabilities/update-task';
 import { UpdateFeatureCapability } from '@/lib/projects/capabilities/update-feature';
@@ -48,6 +49,7 @@ export function initAppCapabilities(): void {
   // retired per-task pull) are gone; take_over_task (reassign) comes later.
   registerAppCapability(new StartTaskCapability()); // claimed → active (member)
   registerAppCapability(new CompleteTaskCapability()); // → merged (member)
+  registerAppCapability(new AssignTaskCapability()); // (re)assign a task (member)
   // Link a task to its PR (f-github-sync §14 t-1) — sets Task.prUrl + journals
   // task_pr_linked, NO status change. The §14 webhook later reconciles a *merge*
   // to `merged` via complete_task's core; this is the human-declared PR link.

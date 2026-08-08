@@ -16,7 +16,11 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('ClaimFeatureButton', () => {
   it('POSTs the claim route and refreshes on success (primary)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { featureId: 'f1', claimed: true, warnings: [] } }),
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     render(<ClaimFeatureButton projectId="p1" featureId="f1" />);
@@ -26,6 +30,26 @@ describe('ClaimFeatureButton', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/projects/p1/features/f1/claim', {
       method: 'POST',
     });
+  });
+
+  it('surfaces a soft refusal (claimed:false, e.g. shipped) without refreshing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: { featureId: 'f1', claimed: false, warnings: [{ kind: 'already_shipped' }] },
+        }),
+      })
+    );
+
+    render(<ClaimFeatureButton projectId="p1" featureId="f1" />);
+    fireEvent.click(screen.getByRole('button', { name: /Claim feature/ }));
+
+    // A 200 that didn't actually claim must NOT be treated as success.
+    expect(await screen.findByText(/Couldn.t claim just now/)).toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it('surfaces an error and does not refresh when the claim fails', async () => {

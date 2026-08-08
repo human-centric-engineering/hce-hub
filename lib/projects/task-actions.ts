@@ -22,9 +22,9 @@
  */
 import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
-import { NotFoundError } from '@/lib/api/errors';
+import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import type { TaskStatus } from '@prisma/client';
-import { resolveTaskAccess } from '@/lib/projects/access';
+import { resolveTaskAccess, canAccessProject } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 import { detectFileOverlapWarnings, type CollisionWarning } from '@/lib/projects/collision';
@@ -142,6 +142,109 @@ export async function startTask(
   });
 
   return { taskId: task.taskId, status: 'active', warnings };
+}
+
+/**
+ * Assign `taskId` to `assigneeUserId` (f-task-assignment §f-ta t1) — the missing
+ * verb that re-sets the dormant `assigneeUserId` (born = feature owner, never
+ * re-set until now). Self = "take/claim it", another = "reassign" — one verb.
+ *
+ * **Any project member may (re)assign** (call 2 — open/trusting; the caller's
+ * membership is the `resolveTaskAccess` funnel's, deny ≡ 404). The **assignee**
+ * must be a member of the task's project (else `ValidationError`). Decoupled from
+ * feature ownership (call 4): never touches `Feature.ownerUserId`.
+ *
+ * Semantics:
+ * - **Merged is a no-op** — completed work credits its doer (`claimedByUserId`);
+ *   you don't reassign finished tasks (call 3 rider).
+ * - **Active hands off cleanly** (call 1a): reassigning an active task to a
+ *   *different* person releases the displaced worker's open `TaskClaim`, resets
+ *   `active → claimed` so the new assignee starts fresh, and returns a soft
+ *   heads-up. Re-assigning an active task to the person already working it is a
+ *   no-op on status/claim — it can't knock the active worker back to `claimed`.
+ * - `claimedByUserId` is synced to the new assignee in the `claimed` state (as a
+ *   born task is), so the existing claimer-based plan/board display already shows
+ *   the new person; the richer status-aware display is t2.
+ *
+ * Journals a `task_assigned` `ProjectEvent` (the handoff trail — who moved whose
+ * work, and when) inside the same tx, and audit-logs it. An optional
+ * `expectedProjectId` rejects a cross-project id-swap.
+ */
+export async function assignTask(
+  userId: string,
+  taskId: string,
+  assigneeUserId: string,
+  expectedProjectId?: string
+): Promise<TaskActionResult> {
+  const task = await resolveScoped(userId, taskId, expectedProjectId);
+
+  // Can't reassign finished work — a merged task credits its doer; lenient no-op.
+  if (task.status === 'merged') {
+    return { taskId: task.taskId, status: 'merged', warnings: [] };
+  }
+
+  // The assignee must be a member of the task's project (deny ≡ not a member).
+  const { basis } = await canAccessProject(assigneeUserId, task.projectId);
+  if (basis === null) {
+    throw new ValidationError('The assignee must be a member of this project.');
+  }
+
+  // Handing off ACTIVE work to a *different* person resets it to `claimed` so they
+  // start fresh (call 1a) and releases the displaced worker's claim — so surface a
+  // soft heads-up that in-progress work was interrupted. Re-assigning an active
+  // task to the person already working it is NOT a handoff: leave their in-progress
+  // work untouched (no reset, no claim release), so a double-fire / self-assign
+  // can't silently knock the active worker back to `claimed`.
+  const displacedWorker =
+    task.status === 'active' && task.claimedByUserId && task.claimedByUserId !== assigneeUserId
+      ? task.claimedByUserId
+      : null;
+  const warnings: CollisionWarning[] = displacedWorker
+    ? [
+        {
+          kind: 'already_claimed',
+          userId: displacedWorker,
+          taskId: task.taskId,
+          message:
+            'Heads-up: this task was actively being worked by someone else — their claim was released on reassignment.',
+        },
+      ]
+    : [];
+  const nextStatus: TaskStatus = displacedWorker ? 'claimed' : task.status;
+
+  await executeTransaction(async (tx) => {
+    // Only a genuine handoff (to a different person than the active worker) releases
+    // the open active-work claim.
+    if (displacedWorker) {
+      await tx.taskClaim.updateMany({
+        where: { taskId: task.taskId, releasedAt: null },
+        data: { releasedAt: new Date() },
+      });
+    }
+    await tx.task.update({
+      where: { id: task.taskId },
+      data: { assigneeUserId, claimedByUserId: assigneeUserId, status: nextStatus },
+    });
+    // Journal the (re)assignment inside the same tx (an event iff it commits).
+    await recordProjectEvent(tx, {
+      projectId: task.projectId,
+      featureId: task.featureId,
+      taskId: task.taskId,
+      kind: 'task_assigned',
+      actorUserId: userId,
+      metadata: { assigneeUserId, from: task.status },
+    });
+  });
+
+  logAdminAction({
+    userId,
+    action: 'task.assign',
+    entityType: 'app_task',
+    entityId: task.taskId,
+    metadata: { assigneeUserId, from: task.status },
+  });
+
+  return { taskId: task.taskId, status: nextStatus, warnings };
 }
 
 /**

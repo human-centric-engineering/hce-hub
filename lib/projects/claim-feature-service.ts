@@ -22,12 +22,14 @@ import { resolveFeatureAccess } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 
-/** Advisory, never a block — mirrors the claim_task collision warnings. */
-export interface ClaimFeatureWarning {
-  kind: 'already_owned';
-  ownerUserId: string;
-  message: string;
-}
+/**
+ * Advisory, never a block — mirrors the claim_task collision warnings. A
+ * discriminated union so `ownerUserId` is required exactly where it exists (the
+ * prior live owner, `already_owned`) and absent for `already_shipped`.
+ */
+export type ClaimFeatureWarning =
+  | { kind: 'already_owned'; ownerUserId: string; message: string }
+  | { kind: 'already_shipped'; message: string };
 
 export interface ClaimFeatureResult {
   featureId: string;
@@ -52,6 +54,24 @@ export async function claimFeature(
   // Scope to the route's project (no cross-project id-swap) when asked to.
   if (expectedProjectId && access.feature.projectId !== expectedProjectId) {
     throw new NotFoundError(`Feature ${featureId} not found`);
+  }
+
+  // Don't reopen shipped history: claiming would flip a shipped feature back to
+  // `in_flight`. Refuse softly (no mutation, `claimed: false`) — the fix for a
+  // shipped feature's defect is a bug-kind task you *start*, not a feature
+  // re-claim (f-task-assignment t1; the f-bug-handling "don't rewrite history").
+  if (access.feature.status === 'shipped') {
+    return {
+      featureId,
+      claimed: false,
+      warnings: [
+        {
+          kind: 'already_shipped',
+          message:
+            'This feature is already shipped — claiming it would reopen it. Work its defects as bug-kind tasks (start them) rather than re-claiming the feature.',
+        },
+      ],
+    };
   }
 
   const previousOwner = access.feature.ownerUserId;

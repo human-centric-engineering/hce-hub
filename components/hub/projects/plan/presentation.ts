@@ -26,7 +26,10 @@ const FEATURE_TONE: Record<FeatureStatus, StatusTone> = {
 };
 
 const TASK_TONE: Record<TaskEffectiveStatus, StatusTone> = {
-  claimed: { tone: 'claimed', label: 'claimed' },
+  // "assigned", not "claimed": a born-claimed task is *assigned* (to the feature
+  // owner by default) and awaiting a start — the person never actively claimed it
+  // (f-task-assignment t1). The stored enum stays `claimed`; only the label changes.
+  claimed: { tone: 'claimed', label: 'assigned' },
   active: { tone: 'active', label: 'active' },
   merged: { tone: 'merged', label: 'merged' },
   blocked: { tone: 'blocked', label: 'blocked' },

@@ -32,6 +32,8 @@ describe('describeEvent', () => {
     // A bug filed via create_task{kind:'bug'} journals as bug_reported — it must
     // read as "reported a bug", not fall through to the generic label (§22-02).
     expect(describeEvent(ev({ kind: 'bug_reported' }))).toBe('reported a bug');
+    // assign_task journals task_assigned — the handoff trail (f-task-assignment t1).
+    expect(describeEvent(ev({ kind: 'task_assigned' }))).toBe('assigned the task');
   });
 
   it('labels task_created unconditionally (no backlog branch — every task is born claimed)', () => {
