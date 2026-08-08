@@ -78,7 +78,7 @@ export function FeatureRow({
   const hasSketch = isIndicative && feature.indicativeTasks.length > 0;
   const expandable = hasTasks || hasSketch;
   const status = featureStatus(feature.status);
-  const { merged, total, live, blocked } = feature.progress;
+  const { merged, total, live, blocked, openFixes } = feature.progress;
   const pct = total > 0 ? Math.round((merged / total) * 100) : 0;
   // The shareable feature page — human project slug + feature slug when authored.
   const featurePath = `/projects/${projectRef}/features/${feature.slug ?? feature.id}`;
@@ -198,6 +198,12 @@ export function FeatureRow({
                 {live > 0 && <span style={{ color: 'var(--signal-pr)' }}> · {live} live</span>}
                 {blocked > 0 && (
                   <span style={{ color: 'var(--signal-blocked)' }}> · {blocked} blocked</span>
+                )}
+                {openFixes > 0 && (
+                  <span style={{ color: 'var(--signal-blocked)' }}>
+                    {' '}
+                    · {openFixes} open {openFixes === 1 ? 'fix' : 'fixes'}
+                  </span>
                 )}
               </span>
             </span>

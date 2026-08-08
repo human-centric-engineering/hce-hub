@@ -18,7 +18,7 @@
  */
 
 import { z } from 'zod';
-import type { TaskStatus } from '@prisma/client';
+import { TaskKind, type TaskStatus } from '@prisma/client';
 import { BaseCapability } from '@/lib/orchestration/capabilities/base-capability';
 import type {
   CapabilityContext,
@@ -49,6 +49,12 @@ const schema = z.object({
     .array(z.string())
     .optional()
     .describe('Ids of existing tasks in the same project this task depends on.'),
+  kind: z
+    .nativeEnum(TaskKind)
+    .optional()
+    .describe(
+      "Task kind: 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of the feature's completion progress); defaults to 'feature_work'."
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -86,6 +92,12 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           type: 'array',
           items: { type: 'string' },
           description: 'Optional ids of existing tasks in the same project this task depends on.',
+        },
+        kind: {
+          type: 'string',
+          enum: ['feature_work', 'bug'],
+          description:
+            "Optional task kind — 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of the feature's completion progress); defaults to 'feature_work'.",
         },
       },
       required: ['featureId', 'title'],
@@ -143,6 +155,8 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
       }
     }
 
+    const taskKind = args.kind ?? 'feature_work';
+
     const task = await executeTransaction(async (tx) => {
       // Assign the next project-wide task number by atomically bumping the
       // project counter. The row-level lock on the project row serializes
@@ -159,6 +173,7 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           title: args.title,
           description: args.description ?? null,
           doneWhen: args.doneWhen ?? null,
+          kind: taskKind,
           // Born `claimed`, owned by the feature owner (f-status-model §20); its
           // effective status is `blocked` until its dependencies merge.
           status: 'claimed',
@@ -174,13 +189,15 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
         });
       }
       // Journal the creation inside the same tx (an event iff the task commits).
+      // A `bug`-kind task is journalled as `bug_reported` so "which shipped work
+      // generates defects" stays queryable (f-bug-handling §22-02).
       await recordProjectEvent(tx, {
         projectId: access.feature.projectId,
         featureId: args.featureId,
         taskId: created.id,
-        kind: 'task_created',
+        kind: taskKind === 'bug' ? 'bug_reported' : 'task_created',
         actorUserId: userId,
-        metadata: { status: created.status },
+        metadata: { status: created.status, kind: taskKind },
       });
       return created;
     });

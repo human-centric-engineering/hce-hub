@@ -99,6 +99,7 @@ export function buildCutoverSnapshot(
         description: t.description ?? null,
         doneWhen: t.doneWhen ?? null,
         status: t.status,
+        kind: 'feature_work', // the seeded roadmap is all feature-work (f-bug-handling §22-02)
         filesScope: t.files ?? [],
         assigneeUserId: owner,
         claimedByUserId: owner,

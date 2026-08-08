@@ -136,6 +136,7 @@ export async function exportProject(
       description: t.description,
       doneWhen: t.doneWhen,
       status: t.status,
+      kind: t.kind,
       filesScope: t.filesScope,
       assigneeUserId: t.assigneeUserId,
       claimedByUserId: t.claimedByUserId,
