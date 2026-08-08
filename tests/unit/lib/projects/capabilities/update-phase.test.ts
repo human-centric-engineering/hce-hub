@@ -38,7 +38,6 @@ describe('update_phase', () => {
       name: 'Renamed',
       description: undefined,
       status: 'complete',
-      ordinal: undefined,
     });
   });
 
@@ -61,12 +60,12 @@ describe('update_phase', () => {
 
   it('masks free-text name/description in provenance, keeps ids', () => {
     const out = cap.redactProvenance(
-      { phaseId: 'ph1', name: 'secret name', description: 'secret desc', ordinal: 1 },
+      { phaseId: 'ph1', name: 'secret name', description: 'secret desc', status: 'parked' },
       { success: true, data: { phaseId: 'ph1', updated: ['name'] } }
     );
     const a = out.args as Record<string, unknown>;
     expect(a.phaseId).toBe('ph1');
-    expect(a.ordinal).toBe(1);
+    expect(a.status).toBe('parked');
     expect(String(a.name)).not.toContain('secret name');
     expect(String(a.description)).not.toContain('secret desc');
   });

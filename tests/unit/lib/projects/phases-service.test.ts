@@ -168,11 +168,11 @@ describe('updatePhase', () => {
   });
 
   it('patches only supplied fields and reports them', async () => {
-    const r = await updatePhase(USER, 'ph1', { name: 'Renamed', ordinal: 3 });
-    expect(r).toEqual({ phaseId: 'ph1', updated: ['name', 'ordinal'] });
+    const r = await updatePhase(USER, 'ph1', { name: 'Renamed', description: 'why' });
+    expect(r).toEqual({ phaseId: 'ph1', updated: ['name', 'description'] });
     expect(phaseUpdate).toHaveBeenCalledWith({
       where: { id: 'ph1' },
-      data: { name: 'Renamed', ordinal: 3 },
+      data: { name: 'Renamed', description: 'why' },
     });
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'phase.update' }));
   });

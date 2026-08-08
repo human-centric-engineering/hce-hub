@@ -47,7 +47,7 @@ export interface UpdatePhaseInput {
   name?: string;
   description?: string | null;
   status?: PhaseStatus;
-  ordinal?: number;
+  // No `ordinal` — order is changed only via `reorderPhases` (batch, collision-free).
 }
 
 export interface UpdatePhaseResult {
@@ -118,8 +118,9 @@ export async function createPhase(
 }
 
 /**
- * Update `phaseId` for `userId` — partial patch of name / description / status /
- * ordinal. Throws `NotFoundError` (→ 404) for an unknown phase or a non-member,
+ * Update `phaseId` for `userId` — partial patch of name / description / status
+ * (reordering is a separate batch op). Throws `NotFoundError` (→ 404) for an
+ * unknown phase or a non-member,
  * and `ValidationError` (→ 400) when no field is supplied. A status transition
  * into `active`/`complete` stamps the matching timestamp if not already set
  * (idempotent — re-setting the same status never re-stamps).
@@ -152,10 +153,6 @@ export async function updatePhase(
   if (input.description !== undefined) {
     data.description = input.description;
     updated.push('description');
-  }
-  if (input.ordinal !== undefined) {
-    data.ordinal = input.ordinal;
-    updated.push('ordinal');
   }
   if (input.status !== undefined) {
     data.status = input.status;
