@@ -59,3 +59,29 @@ export function computeEffectiveStatus(
 export function isReadyToStart(task: TaskStatusInput, deps: DependencyStatusInput[]): boolean {
   return computeEffectiveStatus(task, deps) === 'claimed';
 }
+
+/**
+ * The user a task is **attributed to** on the Plan / Board (f-task-assignment §22
+ * t2): the person a read surface shows against the task, and the Board lane it
+ * routes into.
+ *
+ *  - **open** (`claimed`/`active`/`blocked`) → the **assignee** (`assigneeUserId`)
+ *    — whose work it is, per design call 1b. Falls back to the claimant when a
+ *    task somehow has no assignee (defensive; born tasks are always assigned).
+ *  - **merged** → the **claimant/doer** (`claimedByUserId`) — completed work
+ *    credits who actually did it, not who it was last assigned to.
+ *
+ * In the common case these coincide (assigning a task syncs the claim to the new
+ * assignee — t1); they diverge only when someone **other than the assignee**
+ * started the task (`start_task` moves the claim to the starter, leaving the
+ * assignee unchanged). Returns `null` when neither id is set (unassigned, or the
+ * user was erased) — callers add their own fallback (the Board lane falls to the
+ * feature owner).
+ */
+export function taskHolderId(
+  status: EffectiveStatus,
+  claimedByUserId: string | null,
+  assigneeUserId: string | null
+): string | null {
+  return status === 'merged' ? claimedByUserId : (assigneeUserId ?? claimedByUserId);
+}

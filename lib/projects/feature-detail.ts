@@ -93,6 +93,11 @@ export interface FeatureDetail {
   helpWanted: boolean;
   /** `null` when unowned or the owner was erased. */
   owner: UserRef | null;
+  /**
+   * The project's members — the "reassign remaining tasks" picker's options
+   * (f-task-assignment §22 t2). Membership order; erased users dropped.
+   */
+  members: UserRef[];
   dependsOn: FeatureDetailRef[];
   /** Real tasks (populated once planned). */
   tasks: FeatureDetailTask[];
@@ -141,55 +146,65 @@ export async function getFeatureDetail(
 
   // Scoped to the confirmed project's **canonical id** and matched by slug OR cuid
   // — a feature from another project (even one the caller belongs to) is not found
-  // here, and the human slug is the shareable key.
-  const feature = await prisma.feature.findFirst({
-    where: { projectId: project.id, OR: [{ slug: key }, { id: key }] },
-    select: {
-      id: true,
-      number: true,
-      slug: true,
-      title: true,
-      description: true,
-      doneWhen: true,
-      references: true,
-      status: true,
-      planningStage: true,
-      helpWanted: true,
-      ownerUserId: true,
-      dependencies: {
-        // `status` feeds the readiness derivation; slug/title feed the chips.
-        select: { dependsOn: { select: { id: true, slug: true, title: true, status: true } } },
-      },
-      tasks: {
-        // Numerical order — tasks are built sequentially (f-status-model §20).
-        orderBy: [{ number: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
-        select: {
-          id: true,
-          number: true,
-          title: true,
-          status: true,
-          doneWhen: true,
-          prUrl: true,
-          claimedByUserId: true,
-          assigneeUserId: true,
-          dependencies: { select: { dependsOn: { select: { status: true } } } },
+  // here, and the human slug is the shareable key. The project's members (the
+  // "reassign remaining" picker's options) load in parallel.
+  const [feature, memberRows] = await Promise.all([
+    prisma.feature.findFirst({
+      where: { projectId: project.id, OR: [{ slug: key }, { id: key }] },
+      select: {
+        id: true,
+        number: true,
+        slug: true,
+        title: true,
+        description: true,
+        doneWhen: true,
+        references: true,
+        status: true,
+        planningStage: true,
+        helpWanted: true,
+        ownerUserId: true,
+        dependencies: {
+          // `status` feeds the readiness derivation; slug/title feed the chips.
+          select: { dependsOn: { select: { id: true, slug: true, title: true, status: true } } },
+        },
+        tasks: {
+          // Numerical order — tasks are built sequentially (f-status-model §20).
+          orderBy: [{ number: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+          select: {
+            id: true,
+            number: true,
+            title: true,
+            status: true,
+            doneWhen: true,
+            prUrl: true,
+            claimedByUserId: true,
+            assigneeUserId: true,
+            dependencies: { select: { dependsOn: { select: { status: true } } } },
+          },
+        },
+        indicativeTasks: {
+          orderBy: { order: 'asc' },
+          select: { id: true, order: true, text: true },
         },
       },
-      indicativeTasks: {
-        orderBy: { order: 'asc' },
-        select: { id: true, order: true, text: true },
-      },
-    },
-  });
+    }),
+    prisma.projectMember.findMany({
+      where: { projectId: project.id },
+      orderBy: { addedAt: 'asc' },
+      select: { userId: true },
+    }),
+  ]);
   if (!feature) throw new NotFoundError(`Feature ${key} not found`);
 
-  // One batched identity lookup for the owner + every task claimer/assignee.
+  // One batched identity lookup for the owner + every task claimer/assignee + every
+  // member (the reassign picker's options).
   const userIds = [
     ...(feature.ownerUserId ? [feature.ownerUserId] : []),
     ...feature.tasks.flatMap((t) => [
       ...(t.claimedByUserId ? [t.claimedByUserId] : []),
       ...(t.assigneeUserId ? [t.assigneeUserId] : []),
     ]),
+    ...memberRows.map((m) => m.userId),
   ];
   const users = await fetchUsers(userIds);
 
@@ -215,6 +230,7 @@ export async function getFeatureDetail(
     planningStage: feature.planningStage,
     helpWanted: feature.helpWanted,
     owner: feature.ownerUserId ? (users.get(feature.ownerUserId) ?? null) : null,
+    members: memberRows.map((m) => users.get(m.userId)).filter((u): u is UserRef => u != null),
     dependsOn: feature.dependencies.map((d) => ({
       id: d.dependsOn.id,
       slug: d.dependsOn.slug,

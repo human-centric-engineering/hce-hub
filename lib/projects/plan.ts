@@ -18,7 +18,11 @@
 import type { FeaturePlanningStage, PhaseStatus, TaskKind } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { getAccessibleProject } from '@/lib/projects/access';
-import { computeEffectiveStatus, type EffectiveStatus } from '@/lib/projects/task-status';
+import {
+  computeEffectiveStatus,
+  taskHolderId,
+  type EffectiveStatus,
+} from '@/lib/projects/task-status';
 import { computeFeatureProgress } from '@/lib/projects/feature-progress';
 import {
   computeFeatureStatus,
@@ -47,7 +51,11 @@ export interface PlanTaskView {
   /** `bug` (a defect, styled distinctly + surfaced as a fix) vs `feature_work` (f-bug-handling §22-02). */
   kind: TaskKind;
   prUrl: string | null;
-  /** `null` when unclaimed or the claimant was erased. */
+  /**
+   * The person shown against the task (via `taskHolderId`, f-task-assignment §22
+   * t2): the **assignee** while the task is open, the **doer** (claimant) once
+   * merged. `null` when unassigned or the resolved user was erased.
+   */
   claimer: UserRef | null;
 }
 
@@ -173,16 +181,21 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
           kind: true,
           prUrl: true,
           claimedByUserId: true,
+          assigneeUserId: true,
           dependencies: { select: { dependsOn: { select: { status: true } } } },
         },
       },
     },
   });
 
-  // One batched identity lookup for every owner + claimer across the tree.
+  // One batched identity lookup for every owner + task holder across the tree
+  // (a holder is the assignee or the claimant — `taskHolderId`, resolved below).
   const userIds = features.flatMap((f) => [
     ...(f.ownerUserId ? [f.ownerUserId] : []),
-    ...f.tasks.flatMap((t) => (t.claimedByUserId ? [t.claimedByUserId] : [])),
+    ...f.tasks.flatMap((t) => [
+      ...(t.claimedByUserId ? [t.claimedByUserId] : []),
+      ...(t.assigneeUserId ? [t.assigneeUserId] : []),
+    ]),
   ]);
   const users = await fetchUsers(userIds);
 
@@ -194,18 +207,23 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
   );
 
   const views: PlanFeatureView[] = features.map((f) => {
-    const tasks: PlanTaskView[] = f.tasks.map((t) => ({
-      id: t.id,
-      number: t.number,
-      title: t.title,
-      status: computeEffectiveStatus(
+    const tasks: PlanTaskView[] = f.tasks.map((t) => {
+      const status = computeEffectiveStatus(
         t,
         t.dependencies.map((d) => d.dependsOn)
-      ),
-      kind: t.kind,
-      prUrl: t.prUrl,
-      claimer: t.claimedByUserId ? (users.get(t.claimedByUserId) ?? null) : null,
-    }));
+      );
+      // Show the assignee while open, the doer once merged (f-task-assignment §22 t2).
+      const holderId = taskHolderId(status, t.claimedByUserId, t.assigneeUserId);
+      return {
+        id: t.id,
+        number: t.number,
+        title: t.title,
+        status,
+        kind: t.kind,
+        prUrl: t.prUrl,
+        claimer: holderId ? (users.get(holderId) ?? null) : null,
+      };
+    });
 
     // Progress reads off the SAME effective status the rows render (§09 carry):
     // a dep-blocked task counts as `blocked`, never `live`, so a feature's

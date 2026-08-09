@@ -8,6 +8,7 @@ import { Markdown } from '@/components/hub/markdown';
 import { useSidekick } from '@/components/hub/sidekick-context';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
 import { TaskActivity } from '@/components/hub/projects/task-sheet/task-activity';
+import { AssigneePicker } from '@/components/hub/projects/task-sheet/assignee-picker';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
 import { taskStatus, firstName, prLabel } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
@@ -199,6 +200,13 @@ export function TaskSheet({
     [path]
   );
 
+  // A (re)assignment landed (via the assignee picker): surface its soft handoff
+  // warnings and refetch so the assignee/status/claimer reflect the change.
+  const onReassigned = useCallback((w: CollisionWarning[]) => {
+    setWarnings(w);
+    setReloadKey((k) => k + 1);
+  }, []);
+
   // Open the inline PR form, prefilled with the current link (Edit) or empty (Link).
   const openPrForm = useCallback(() => {
     setPrInput(detail?.prUrl ?? '');
@@ -293,23 +301,36 @@ export function TaskSheet({
               <h2 className="text-[17px] leading-snug font-medium">{detail.title}</h2>
               <div className="flex items-center gap-3">
                 {status && <StatusPill tone={status.tone} label={status.label} />}
-                {detail.claimer ? (
-                  <span className="flex items-center gap-1.5">
-                    <Avatar className="h-5 w-5">
-                      {detail.claimer.image && <AvatarImage src={detail.claimer.image} alt="" />}
-                      <AvatarFallback className="text-[9px]">
-                        {initials(detail.claimer.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="text-muted-foreground text-xs">
-                      {firstName(detail.claimer.name)}
-                      {detail.isMine && <span style={{ color: 'var(--accent)' }}> · you</span>}
+                {detail.status === 'merged' ? (
+                  // Merged → the doer, read-only (credit — you don't reassign finished
+                  // work; f-task-assignment §22 t2).
+                  detail.claimer ? (
+                    <span className="flex items-center gap-1.5">
+                      <Avatar className="h-5 w-5">
+                        {detail.claimer.image && <AvatarImage src={detail.claimer.image} alt="" />}
+                        <AvatarFallback className="text-[9px]">
+                          {initials(detail.claimer.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-muted-foreground text-xs">
+                        {firstName(detail.claimer.name)}
+                        {detail.isMine && <span style={{ color: 'var(--accent)' }}> · you</span>}
+                      </span>
                     </span>
-                  </span>
+                  ) : (
+                    <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                      unassigned
+                    </span>
+                  )
                 ) : (
-                  <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                    unassigned
-                  </span>
+                  // Open → the assignee picker (any member may reassign; call 2).
+                  <AssigneePicker
+                    projectId={projectId}
+                    taskId={taskId}
+                    assignee={detail.assignee}
+                    members={detail.members}
+                    onReassigned={onReassigned}
+                  />
                 )}
               </div>
 
