@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { computeEffectiveStatus, isReadyToStart } from '@/lib/projects/task-status';
+import { computeEffectiveStatus, isReadyToStart, taskHolderId } from '@/lib/projects/task-status';
 import type { TaskStatus } from '@prisma/client';
 
 const dep = (status: TaskStatus) => ({ status });
@@ -46,5 +46,29 @@ describe('isReadyToStart', () => {
     expect(isReadyToStart({ status: 'claimed' }, [dep('active')])).toBe(false);
     expect(isReadyToStart({ status: 'active' }, [])).toBe(false);
     expect(isReadyToStart({ status: 'merged' }, [])).toBe(false);
+  });
+});
+
+describe('taskHolderId (f-task-assignment §22 t2)', () => {
+  it('shows the assignee while the task is open (claimed / active / blocked)', () => {
+    for (const s of ['claimed', 'active', 'blocked'] as const) {
+      // claimer ≠ assignee (the someone-else-started edge) → the assignee wins.
+      expect(taskHolderId(s, 'claimer', 'assignee')).toBe('assignee');
+    }
+  });
+
+  it('shows the doer (claimant) once merged — credit, not the last assignee', () => {
+    // A merged task credits whoever did it, even if it was later reassigned.
+    expect(taskHolderId('merged', 'doer', 'assignee')).toBe('doer');
+  });
+
+  it('falls back to the claimant on an open task with no assignee (defensive)', () => {
+    expect(taskHolderId('claimed', 'claimer', null)).toBe('claimer');
+  });
+
+  it('is null when neither is set (unassigned / erased)', () => {
+    expect(taskHolderId('claimed', null, null)).toBeNull();
+    // A merged task with an erased doer is null even if an assignee lingers.
+    expect(taskHolderId('merged', null, 'assignee')).toBeNull();
   });
 });

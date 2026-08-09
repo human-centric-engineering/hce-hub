@@ -9,7 +9,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/projects/access', () => ({ getAccessibleProjectByRef: vi.fn() }));
-vi.mock('@/lib/db/client', () => ({ prisma: { feature: { findFirst: vi.fn() } } }));
+vi.mock('@/lib/db/client', () => ({
+  prisma: { feature: { findFirst: vi.fn() }, projectMember: { findMany: vi.fn() } },
+}));
 vi.mock('@/lib/projects/user-refs', () => ({ fetchUsers: vi.fn() }));
 
 const { getAccessibleProjectByRef } = await import('@/lib/projects/access');
@@ -20,6 +22,7 @@ const { getFeatureDetail } = await import('@/lib/projects/feature-detail');
 
 const access = getAccessibleProjectByRef as ReturnType<typeof vi.fn>;
 const featureFindFirst = prisma.feature.findFirst as ReturnType<typeof vi.fn>;
+const memberFindMany = prisma.projectMember.findMany as ReturnType<typeof vi.fn>;
 const users = fetchUsers as ReturnType<typeof vi.fn>;
 
 const USER = 'user-1';
@@ -45,6 +48,7 @@ const featureRow = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   access.mockResolvedValue({ id: 'p1', slug: 'hce-hub', name: 'HCE Hub' });
+  memberFindMany.mockResolvedValue([]);
   users.mockResolvedValue(new Map());
 });
 
@@ -181,6 +185,22 @@ describe('getFeatureDetail mapping', () => {
     expect(detail.tasks[0].assignee).toBeNull(); // erased assignee never derefs
     expect(detail.tasks[1].status).toBe('claimed');
     expect(detail.tasks[1].claimer?.name).toBe('Bo');
+  });
+
+  it('exposes the project members as the reassign picker’s options (order kept, erased dropped)', async () => {
+    memberFindMany.mockResolvedValue([{ userId: 'm1' }, { userId: 'ghost' }, { userId: 'm2' }]);
+    users.mockResolvedValue(
+      new Map([
+        ['m1', { id: 'm1', name: 'Ada', email: 'a@x.io', image: null }],
+        ['m2', { id: 'm2', name: 'Bo', email: 'b@x.io', image: null }],
+      ])
+    );
+    featureFindFirst.mockResolvedValue(featureRow());
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(memberFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { projectId: 'p1' }, orderBy: { addedAt: 'asc' } })
+    );
+    expect(detail.members.map((m) => m.id)).toEqual(['m1', 'm2']); // ghost dropped, order kept
   });
 });
 

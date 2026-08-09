@@ -8,10 +8,11 @@
  * renders a grid and the load-bearing logic is testable at the boundary.
  *
  * Routing rules (v1-requirements §5, pull-not-push; statuses per f-status-model §20):
- *   - **lane** = the task's held-by claimer (the doer, once Started), else its
- *     feature's owner (a born-claimed task routes to the owner's lane); a
- *     null/non-member target → the terminal **Unassigned** lane (carried
- *     f-data-model t-3 — never deref).
+ *   - **lane** = the task's **holder** (`taskHolderId`, f-task-assignment §22 t2):
+ *     the **assignee** while the task is open, the **doer** (claimant) once merged,
+ *     else its feature's owner (a born task routes to its assignee — the owner by
+ *     default); a null/non-member target → the terminal **Unassigned** lane
+ *     (carried f-data-model t-3 — never deref).
  *   - **column** = the task's *effective* status (`computeEffectiveStatus`, so
  *     Plan and Board never diverge); a deps-blocked task (effective `blocked`)
  *     folds into the **Claimed** column with the blocked treatment (it's a
@@ -26,7 +27,11 @@
 import type { ProjectRole, TaskKind } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { getAccessibleProject } from '@/lib/projects/access';
-import { computeEffectiveStatus, type EffectiveStatus } from '@/lib/projects/task-status';
+import {
+  computeEffectiveStatus,
+  taskHolderId,
+  type EffectiveStatus,
+} from '@/lib/projects/task-status';
 import { filesOverlap } from '@/lib/projects/collision';
 import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
 
@@ -50,7 +55,11 @@ export interface BoardTaskCard {
   kind: TaskKind;
   column: BoardColumn;
   prUrl: string | null;
-  /** `null` when unclaimed or the claimant was erased. */
+  /**
+   * The person shown against the card (via `taskHolderId`, f-task-assignment §22
+   * t2): the **assignee** while open, the **doer** (claimant) once merged — the
+   * same person whose lane the card routes into. `null` when unassigned/erased.
+   */
   claimer: UserRef | null;
   /** True when the caller is the claimant (the `is-mine` highlight). */
   isMine: boolean;
@@ -109,6 +118,7 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
         kind: true,
         prUrl: true,
         claimedByUserId: true,
+        assigneeUserId: true,
         dependencies: { select: { dependsOn: { select: { status: true } } } },
       },
     }),
@@ -136,10 +146,13 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
     }
   }
 
-  // Batched identities for member lanes + claimers.
+  // Batched identities for member lanes + task holders (assignee or claimant).
   const users = await fetchUsers([
     ...members.map((m) => m.userId),
-    ...tasks.flatMap((t) => (t.claimedByUserId ? [t.claimedByUserId] : [])),
+    ...tasks.flatMap((t) => [
+      ...(t.claimedByUserId ? [t.claimedByUserId] : []),
+      ...(t.assigneeUserId ? [t.assigneeUserId] : []),
+    ]),
   ]);
   const memberIds = new Set(members.map((m) => m.userId));
   const featureById = new Map(features.map((f) => [f.id, f]));
@@ -159,11 +172,14 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
     // A blocked task is a claimed task that can't start yet — it shows in the
     // Claimed column with the blocked treatment, not a column of its own.
     const column: BoardColumn = effective === 'blocked' ? 'claimed' : effective;
-    // Lane = the claimer (credit the doer, in any status), else the feature owner.
-    // A null claimant (unclaimed, or erased → carried f-data-model t-2) falls to
-    // the owner; effective status handles the *column* (a null-claimant `claimed`
-    // lands in the owner lane's Available column, not Claimed).
-    const target = t.claimedByUserId ?? feature.ownerUserId;
+    // Lane = the task holder (f-task-assignment §22 t2): the assignee while open,
+    // the doer once merged — so an open task sits in *whose work it is*, and a
+    // merged task credits who did it. Falls to the feature owner when neither is
+    // set (unclaimed, or erased → carried f-data-model t-2); a null/non-member
+    // target lands in the terminal Unassigned lane. Effective status still handles
+    // the *column* (a born-claimed task lands in its holder lane's Claimed column).
+    const holderId = taskHolderId(effective, t.claimedByUserId, t.assigneeUserId);
+    const target = holderId ?? feature.ownerUserId;
     const laneKey = target && memberIds.has(target) ? target : UNASSIGNED;
 
     cardsByLane.get(laneKey)!.push({
@@ -177,8 +193,11 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
       kind: t.kind,
       column,
       prUrl: t.prUrl,
-      claimer: t.claimedByUserId ? (users.get(t.claimedByUserId) ?? null) : null,
-      isMine: t.claimedByUserId === userId,
+      claimer: holderId ? (users.get(holderId) ?? null) : null,
+      // `is-mine` follows the *holder* the card shows (the assignee while open, the
+      // doer once merged) — so the card, its lane, and the highlight all agree on
+      // one person, even in the someone-else-started edge (assignee ≠ claimant).
+      isMine: holderId === userId,
       collision: collisionByTask.get(t.id) ?? null,
     });
   }

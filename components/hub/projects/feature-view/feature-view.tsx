@@ -20,6 +20,7 @@ import { Markdown } from '@/components/hub/markdown';
 import { FeatureTaskList } from '@/components/hub/projects/feature-view/feature-task-list';
 import { FeatureActivity } from '@/components/hub/projects/feature-view/feature-activity';
 import { ClaimFeatureButton } from '@/components/hub/projects/feature-view/claim-feature-button';
+import { ReassignRemainingButton } from '@/components/hub/projects/feature-view/reassign-remaining-button';
 import type {
   FeatureDetailDTO,
   FeatureReferenceDTO,
@@ -71,6 +72,10 @@ function StageChip({ stage }: { stage: FeatureDetailDTO['planningStage'] }) {
 
 export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
   const status = featureStatus(feature.status);
+  // The "reassign remaining tasks" affordance only makes sense once there are real
+  // tasks and at least one is still open (merged tasks keep their doer credit).
+  const hasOpenTasks =
+    feature.planningStage === 'planned' && feature.tasks.some((t) => t.status !== 'merged');
 
   return (
     <div className="mx-auto max-w-3xl px-8 py-10">
@@ -188,8 +193,17 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
         )}
 
         <section className="flex flex-col gap-2">
-          <div className={sectionLabel} style={{ color: 'var(--ink-faint)' }}>
-            {feature.planningStage === 'planned' ? 'Tasks' : 'Sketch'}
+          <div className="flex items-center justify-between gap-3">
+            <div className={sectionLabel} style={{ color: 'var(--ink-faint)' }}>
+              {feature.planningStage === 'planned' ? 'Tasks' : 'Sketch'}
+            </div>
+            {hasOpenTasks && feature.members.length > 0 && (
+              <ReassignRemainingButton
+                projectId={feature.projectId}
+                featureId={feature.id}
+                members={feature.members}
+              />
+            )}
           </div>
           <FeatureTaskList tasks={feature.tasks} indicativeTasks={feature.indicativeTasks} />
         </section>

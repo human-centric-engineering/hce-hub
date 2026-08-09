@@ -51,10 +51,23 @@ export interface TaskDetail {
   prUrl: string | null;
   /** Paths/globs the work is expected to touch — soft, "declared, not enforced". */
   filesScope: string[];
-  /** `null` when unclaimed or the claimant was erased. */
+  /** `null` when unclaimed or the claimant was erased. The doer, once merged. */
   claimer: UserRef | null;
+  /**
+   * Who the task is **assigned to** (f-task-assignment §22 t2) — the person the
+   * assignee picker shows + reassigns. `null` when unassigned or the assignee was
+   * erased. Defaults to the feature owner at plan time.
+   */
+  assignee: UserRef | null;
   /** True when the caller is the claimant (the `is-mine` / "· you" treatment). */
   isMine: boolean;
+  /**
+   * The assignee picker's options (f-task-assignment §22 t2): the project's members
+   * in membership order (erased users dropped), plus the current assignee if they've
+   * since left the project (so the picker renders the current value — see
+   * `buildPickerOptions`). Any member may be assigned (call 2, open/trusting).
+   */
+  members: UserRef[];
   feature: {
     id: string;
     /** Authored short key (`f-mcp`); `null` until authored. */
@@ -102,6 +115,27 @@ function toRef(n: Neighbour): TaskDetailRef {
 }
 
 /**
+ * The assignee picker's options (f-task-assignment §22 t2): the project's members
+ * in membership order (erased users dropped), plus — if the task's **current
+ * assignee** isn't among them (they've left the project but still hold the task) —
+ * that assignee appended, so the picker renders the current value instead of
+ * "Unassigned" while the Plan/Board show their name. New assignments are still
+ * membership-checked in the core; re-picking the current assignee is a no-op.
+ */
+function buildPickerOptions(
+  members: { userId: string }[],
+  users: Map<string, UserRef>,
+  assigneeUserId: string | null
+): UserRef[] {
+  const options = members.map((m) => users.get(m.userId)).filter((u): u is UserRef => u != null);
+  if (assigneeUserId && !options.some((u) => u.id === assigneeUserId)) {
+    const assignee = users.get(assigneeUserId);
+    if (assignee) options.push(assignee);
+  }
+  return options;
+}
+
+/**
  * Load one task's full detail for a member of `projectId`. Throws `NotFoundError`
  * (→ 404) for a non-member/unknown project (via `getAccessibleProject`) or a task
  * that doesn't exist / lives in another project (the `feature.projectId` scope).
@@ -115,30 +149,42 @@ export async function getTaskDetail(
   await getAccessibleProject(userId, projectId);
 
   // Scoped to the confirmed project — a task from another project (even one the
-  // caller belongs to) is not found here, closing the cross-project id-swap.
-  const task = await prisma.task.findFirst({
-    where: { id: taskId, feature: { projectId } },
-    select: {
-      id: true,
-      number: true,
-      title: true,
-      description: true,
-      doneWhen: true,
-      status: true,
-      prUrl: true,
-      filesScope: true,
-      claimedByUserId: true,
-      feature: { select: { id: true, slug: true, title: true, ownerUserId: true } },
-      dependencies: { select: { dependsOn: { select: NEIGHBOUR_SELECT } } },
-      dependents: { select: { task: { select: NEIGHBOUR_SELECT } } },
-    },
-  });
+  // caller belongs to) is not found here, closing the cross-project id-swap. The
+  // project's members are the assignee picker's options; loaded in parallel.
+  const [task, members] = await Promise.all([
+    prisma.task.findFirst({
+      where: { id: taskId, feature: { projectId } },
+      select: {
+        id: true,
+        number: true,
+        title: true,
+        description: true,
+        doneWhen: true,
+        status: true,
+        prUrl: true,
+        filesScope: true,
+        claimedByUserId: true,
+        assigneeUserId: true,
+        feature: { select: { id: true, slug: true, title: true, ownerUserId: true } },
+        dependencies: { select: { dependsOn: { select: NEIGHBOUR_SELECT } } },
+        dependents: { select: { task: { select: NEIGHBOUR_SELECT } } },
+      },
+    }),
+    prisma.projectMember.findMany({
+      where: { projectId },
+      orderBy: { addedAt: 'asc' },
+      select: { userId: true },
+    }),
+  ]);
   if (!task) throw new NotFoundError(`Task ${taskId} not found`);
 
-  // One batched identity lookup for the claimer + the feature owner.
+  // One batched identity lookup for the claimer + assignee + feature owner + every
+  // member (the picker's options).
   const users = await fetchUsers([
     ...(task.claimedByUserId ? [task.claimedByUserId] : []),
+    ...(task.assigneeUserId ? [task.assigneeUserId] : []),
     ...(task.feature.ownerUserId ? [task.feature.ownerUserId] : []),
+    ...members.map((m) => m.userId),
   ]);
 
   return {
@@ -154,7 +200,9 @@ export async function getTaskDetail(
     prUrl: task.prUrl,
     filesScope: task.filesScope,
     claimer: task.claimedByUserId ? (users.get(task.claimedByUserId) ?? null) : null,
+    assignee: task.assigneeUserId ? (users.get(task.assigneeUserId) ?? null) : null,
     isMine: task.claimedByUserId === userId,
+    members: buildPickerOptions(members, users, task.assigneeUserId),
     feature: {
       id: task.feature.id,
       slug: task.feature.slug,

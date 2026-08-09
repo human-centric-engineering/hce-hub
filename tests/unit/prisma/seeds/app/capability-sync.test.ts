@@ -18,6 +18,9 @@ import createPhaseUnit, {
 } from '@/prisma/seeds/app/019-create-phase';
 import createTaskUnit, { createTaskFunctionDefinition } from '@/prisma/seeds/app/002-create-task';
 import assignTaskUnit, { assignTaskFunctionDefinition } from '@/prisma/seeds/app/021-assign-task';
+import reassignFeatureTasksUnit, {
+  reassignFeatureTasksFunctionDefinition,
+} from '@/prisma/seeds/app/022-reassign-feature-tasks';
 
 function runContext() {
   const upsert = vi.fn().mockResolvedValue({ id: 'cap1' });
@@ -71,5 +74,14 @@ describe('capability seeds re-sync functionDefinition on update', () => {
     expect(arg.where).toEqual({ slug: 'assign_task' });
     expect(arg.update.functionDefinition).toEqual(assignTaskFunctionDefinition);
     expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('assigneeUserId');
+  });
+
+  it('022-reassign-feature-tasks: the new capability seed re-syncs on the update branch', async () => {
+    const { ctx, upsert } = runContext();
+    await reassignFeatureTasksUnit.run(ctx);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ slug: 'reassign_feature_tasks' });
+    expect(arg.update.functionDefinition).toEqual(reassignFeatureTasksFunctionDefinition);
+    expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('featureId');
   });
 });

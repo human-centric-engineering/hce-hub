@@ -24,7 +24,7 @@ import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import type { TaskStatus } from '@prisma/client';
-import { resolveTaskAccess, canAccessProject } from '@/lib/projects/access';
+import { resolveTaskAccess, resolveFeatureAccess, canAccessProject } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 import { detectFileOverlapWarnings, type CollisionWarning } from '@/lib/projects/collision';
@@ -37,6 +37,15 @@ export interface TaskActionResult {
   warnings: CollisionWarning[];
 }
 
+/** The outcome of a feature-level "reassign remaining" (f-task-assignment §22 t2). */
+export interface FeatureReassignResult {
+  featureId: string;
+  /** How many (unmerged) tasks were reassigned. */
+  reassigned: number;
+  /** Soft handoff heads-ups, one per active task taken from a different worker. */
+  warnings: CollisionWarning[];
+}
+
 /** Resolve + project-scope a task, or throw the funnel's 404. */
 async function resolveScoped(userId: string, taskId: string, expectedProjectId?: string) {
   const access = await resolveTaskAccess(userId, taskId);
@@ -46,6 +55,77 @@ async function resolveScoped(userId: string, taskId: string, expectedProjectId?:
     throw new NotFoundError(`Task ${taskId} not found`);
   }
   return task;
+}
+
+/** The transaction client `executeTransaction` hands its callback (reused, not re-derived). */
+type Tx = Parameters<Parameters<typeof executeTransaction>[0]>[0];
+
+/** The minimal task shape one (re)assignment operates on. */
+interface AssignableTask {
+  taskId: string;
+  featureId: string;
+  projectId: string;
+  status: TaskStatus;
+  claimedByUserId: string | null;
+}
+
+/**
+ * Apply one (re)assignment inside `tx` — the shared core of `assignTask` (one
+ * task) and `reassignFeatureTasks` (a feature's unmerged tasks), so they can't
+ * drift (f-task-assignment §22 t1/t2).
+ *
+ * Points the task at `assigneeUserId` and syncs the claim to them (as a born task
+ * is), so the claimer-based surfaces already show the new person. Handing off
+ * **active** work to a *different* person resets it `active → claimed` (they start
+ * fresh) and releases the displaced worker's open claim, returning a soft
+ * heads-up; re-assigning active work to the person already on it leaves their
+ * in-progress work untouched. Journals `task_assigned`. **Callers must exclude
+ * merged tasks** — finished work credits its doer, never reassigned.
+ */
+async function applyAssignment(
+  tx: Tx,
+  task: AssignableTask,
+  assigneeUserId: string,
+  actorUserId: string
+): Promise<{ nextStatus: TaskStatus; warning: CollisionWarning | null }> {
+  const displacedWorker =
+    task.status === 'active' && task.claimedByUserId && task.claimedByUserId !== assigneeUserId
+      ? task.claimedByUserId
+      : null;
+  const nextStatus: TaskStatus = displacedWorker ? 'claimed' : task.status;
+
+  // Only a genuine handoff (to a different person than the active worker) releases
+  // the open active-work claim.
+  if (displacedWorker) {
+    await tx.taskClaim.updateMany({
+      where: { taskId: task.taskId, releasedAt: null },
+      data: { releasedAt: new Date() },
+    });
+  }
+  await tx.task.update({
+    where: { id: task.taskId },
+    data: { assigneeUserId, claimedByUserId: assigneeUserId, status: nextStatus },
+  });
+  // Journal the (re)assignment inside the same tx (an event iff it commits).
+  await recordProjectEvent(tx, {
+    projectId: task.projectId,
+    featureId: task.featureId,
+    taskId: task.taskId,
+    kind: 'task_assigned',
+    actorUserId,
+    metadata: { assigneeUserId, from: task.status },
+  });
+
+  const warning: CollisionWarning | null = displacedWorker
+    ? {
+        kind: 'already_claimed',
+        userId: displacedWorker,
+        taskId: task.taskId,
+        message:
+          'Heads-up: this task was actively being worked by someone else — their claim was released on reassignment.',
+      }
+    : null;
+  return { nextStatus, warning };
 }
 
 /**
@@ -189,52 +269,22 @@ export async function assignTask(
     throw new ValidationError('The assignee must be a member of this project.');
   }
 
-  // Handing off ACTIVE work to a *different* person resets it to `claimed` so they
-  // start fresh (call 1a) and releases the displaced worker's claim — so surface a
-  // soft heads-up that in-progress work was interrupted. Re-assigning an active
-  // task to the person already working it is NOT a handoff: leave their in-progress
-  // work untouched (no reset, no claim release), so a double-fire / self-assign
-  // can't silently knock the active worker back to `claimed`.
-  const displacedWorker =
-    task.status === 'active' && task.claimedByUserId && task.claimedByUserId !== assigneeUserId
-      ? task.claimedByUserId
-      : null;
-  const warnings: CollisionWarning[] = displacedWorker
-    ? [
-        {
-          kind: 'already_claimed',
-          userId: displacedWorker,
-          taskId: task.taskId,
-          message:
-            'Heads-up: this task was actively being worked by someone else — their claim was released on reassignment.',
-        },
-      ]
-    : [];
-  const nextStatus: TaskStatus = displacedWorker ? 'claimed' : task.status;
-
-  await executeTransaction(async (tx) => {
-    // Only a genuine handoff (to a different person than the active worker) releases
-    // the open active-work claim.
-    if (displacedWorker) {
-      await tx.taskClaim.updateMany({
-        where: { taskId: task.taskId, releasedAt: null },
-        data: { releasedAt: new Date() },
-      });
-    }
-    await tx.task.update({
-      where: { id: task.taskId },
-      data: { assigneeUserId, claimedByUserId: assigneeUserId, status: nextStatus },
-    });
-    // Journal the (re)assignment inside the same tx (an event iff it commits).
-    await recordProjectEvent(tx, {
-      projectId: task.projectId,
-      featureId: task.featureId,
-      taskId: task.taskId,
-      kind: 'task_assigned',
-      actorUserId: userId,
-      metadata: { assigneeUserId, from: task.status },
-    });
-  });
+  // The (re)assignment itself — the shared per-task core (handoff reset + claim
+  // release + journal), so this and the feature-level reassign never diverge.
+  const { nextStatus, warning } = await executeTransaction((tx) =>
+    applyAssignment(
+      tx,
+      {
+        taskId: task.taskId,
+        featureId: task.featureId,
+        projectId: task.projectId,
+        status: task.status,
+        claimedByUserId: task.claimedByUserId,
+      },
+      assigneeUserId,
+      userId
+    )
+  );
 
   logAdminAction({
     userId,
@@ -244,7 +294,94 @@ export async function assignTask(
     metadata: { assigneeUserId, from: task.status },
   });
 
-  return { taskId: task.taskId, status: nextStatus, warnings };
+  return { taskId: task.taskId, status: nextStatus, warnings: warning ? [warning] : [] };
+}
+
+/**
+ * Reassign a feature's **unmerged** tasks to `assigneeUserId` — the "reassign
+ * remaining" move (f-task-assignment §22 t2, design call 3): a dev goes off / is
+ * pulled onto something else, so hand their outstanding work on this feature to
+ * someone else in one action.
+ *
+ * - **Unmerged only** — merged tasks are left untouched (finished work credits its
+ *   doer, call 3 rider).
+ * - **Never touches `Feature.ownerUserId`** — task assignment is decoupled from
+ *   feature ownership (call 4); this moves the *tasks*, not the feature.
+ * - Any project member may reassign (call 2); the assignee must be a member (else
+ *   `ValidationError`). Each task runs through the same `applyAssignment` core as
+ *   the single-task verb (handoff reset + claim release + `task_assigned` journal),
+ *   all in one transaction; each active handoff adds a soft heads-up.
+ *
+ * A no-op (0 reassigned) when the feature has no unmerged tasks. Throws
+ * `NotFoundError` (→ 404) for a non-member / unknown feature, or one outside
+ * `expectedProjectId`.
+ */
+export async function reassignFeatureTasks(
+  userId: string,
+  featureId: string,
+  assigneeUserId: string,
+  expectedProjectId?: string
+): Promise<FeatureReassignResult> {
+  const access = await resolveFeatureAccess(userId, featureId, 'member');
+  if (!access.ok) throw new NotFoundError(`Feature ${featureId} not found`);
+  const feature = access.feature;
+  // Scope to the route's project (no cross-project id-swap) when asked to.
+  if (expectedProjectId && feature.projectId !== expectedProjectId) {
+    throw new NotFoundError(`Feature ${featureId} not found`);
+  }
+
+  // The assignee must be a member of the feature's project (deny ≡ not a member).
+  const { basis } = await canAccessProject(assigneeUserId, feature.projectId);
+  if (basis === null) {
+    throw new ValidationError('The assignee must be a member of this project.');
+  }
+
+  // Only the unmerged tasks move — merged work keeps its doer credit (call 3 rider).
+  const unmerged = await prisma.task.findMany({
+    where: { featureId, status: { not: 'merged' } },
+    select: { id: true, status: true, claimedByUserId: true, assigneeUserId: true },
+  });
+  // Skip tasks already fully on the target (assignee *and* claim) — a genuine no-op:
+  // reassigning wouldn't change anything, so it mustn't inflate the count or write a
+  // spurious `task_assigned` (double-click, or the target already holds some).
+  const tasks = unmerged.filter(
+    (t) => t.assigneeUserId !== assigneeUserId || t.claimedByUserId !== assigneeUserId
+  );
+  if (tasks.length === 0) {
+    return { featureId, reassigned: 0, warnings: [] };
+  }
+
+  // All the reassignments in one transaction — either the whole handoff lands or
+  // none of it does (no half-moved feature).
+  const warnings = await executeTransaction(async (tx) => {
+    const collected: CollisionWarning[] = [];
+    for (const t of tasks) {
+      const { warning } = await applyAssignment(
+        tx,
+        {
+          taskId: t.id,
+          featureId,
+          projectId: feature.projectId,
+          status: t.status,
+          claimedByUserId: t.claimedByUserId,
+        },
+        assigneeUserId,
+        userId
+      );
+      if (warning) collected.push(warning);
+    }
+    return collected;
+  });
+
+  logAdminAction({
+    userId,
+    action: 'feature.reassign_tasks',
+    entityType: 'app_feature',
+    entityId: featureId,
+    metadata: { assigneeUserId, taskCount: tasks.length },
+  });
+
+  return { featureId, reassigned: tasks.length, warnings };
 }
 
 /**

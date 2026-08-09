@@ -146,6 +146,40 @@ describe('getProjectPlan — nullable refs render gracefully', () => {
     const plan = await getProjectPlan('u1', 'p1');
     expect(flat(plan)[0].owner).toEqual({ id: 'u1', name: 'Ada', email: 'a@x.io', image: null });
   });
+
+  it('shows the ASSIGNEE on an open task, the DOER on a merged one (holder, §22 t2)', async () => {
+    featureFindMany.mockResolvedValue([
+      row({
+        tasks: [
+          {
+            id: 'open',
+            title: 'open, assigned to Ada but started by Bo',
+            status: 'active',
+            prUrl: null,
+            claimedByUserId: 'bo', // someone else is actively working it
+            assigneeUserId: 'ada', // ...but it's Ada's to own
+            dependencies: [],
+          },
+          {
+            id: 'done',
+            title: 'merged — credit the doer',
+            status: 'merged',
+            prUrl: null,
+            claimedByUserId: 'bo', // Bo did it
+            assigneeUserId: 'ada', // even though later assigned to Ada
+            dependencies: [],
+          },
+        ],
+      }),
+    ]);
+    userFindMany.mockResolvedValue([
+      { id: 'ada', name: 'Ada', email: 'a@x.io', image: null },
+      { id: 'bo', name: 'Bo', email: 'b@x.io', image: null },
+    ]);
+    const tasks = flat(await getProjectPlan('u1', 'p1'))[0].tasks;
+    expect(tasks[0].claimer?.name).toBe('Ada'); // open → assignee
+    expect(tasks[1].claimer?.name).toBe('Bo'); // merged → doer
+  });
 });
 
 describe('getProjectPlan — dependency chips + progress + ordering', () => {

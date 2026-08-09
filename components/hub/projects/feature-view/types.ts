@@ -66,6 +66,8 @@ export interface FeatureDetailDTO {
   planningStage: FeaturePlanningStage;
   helpWanted: boolean;
   owner: UserRef | null;
+  /** The project's members — the "reassign remaining tasks" picker's options. */
+  members: UserRef[];
   dependsOn: FeatureDetailRefDTO[];
   tasks: FeatureDetailTaskDTO[];
   indicativeTasks: FeatureDetailIndicativeTaskDTO[];

@@ -27,8 +27,13 @@ export interface TaskDetailDTO {
   status: TaskEffectiveStatus;
   prUrl: string | null;
   filesScope: string[];
+  /** The doer, once merged; `null` when unclaimed/erased. */
   claimer: UserRef | null;
+  /** Who the task is assigned to (the picker's current value); `null` if unassigned/erased. */
+  assignee: UserRef | null;
   isMine: boolean;
+  /** The project's members — the assignee picker's options (membership order). */
+  members: UserRef[];
   feature: {
     id: string;
     slug: string | null;

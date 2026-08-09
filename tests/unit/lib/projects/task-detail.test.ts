@@ -18,6 +18,7 @@ vi.mock('@/lib/projects/access', () => ({ getAccessibleProject: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
   prisma: {
     task: { findFirst: vi.fn() },
+    projectMember: { findMany: vi.fn() },
     user: { findMany: vi.fn() },
   },
 }));
@@ -29,6 +30,7 @@ const { getTaskDetail } = await import('@/lib/projects/task-detail');
 
 const getAccessible = getAccessibleProject as ReturnType<typeof vi.fn>;
 const taskFindFirst = prisma.task.findFirst as ReturnType<typeof vi.fn>;
+const memberFindMany = prisma.projectMember.findMany as ReturnType<typeof vi.fn>;
 const userFindMany = prisma.user.findMany as ReturnType<typeof vi.fn>;
 
 /** A dependency-graph neighbour (blocker or dependent). */
@@ -59,6 +61,7 @@ const taskRow = (o: Record<string, unknown> = {}) => ({
   prUrl: null,
   filesScope: [],
   claimedByUserId: null,
+  assigneeUserId: null,
   feature: { id: 'f1', slug: 'f-mcp', title: 'Feature one', ownerUserId: null },
   dependencies: [],
   dependents: [],
@@ -70,6 +73,7 @@ const userRow = (id: string) => ({ id, name: id.toUpperCase(), email: `${id}@x.i
 beforeEach(() => {
   vi.clearAllMocks();
   getAccessible.mockResolvedValue({ id: 'p1' });
+  memberFindMany.mockResolvedValue([]);
   userFindMany.mockResolvedValue([]);
 });
 
@@ -167,5 +171,40 @@ describe('getTaskDetail', () => {
     expect(detail.claimer).toBeNull();
     expect(detail.isMine).toBe(false);
     expect(detail.feature.owner).toBeNull();
+  });
+
+  it('resolves the assignee (the picker’s current value), independent of the claimer (§22 t2)', async () => {
+    // The someone-else-started edge: assigned to a1, but actively claimed by u1.
+    userFindMany.mockResolvedValue([userRow('u1'), userRow('a1')]);
+    taskFindFirst.mockResolvedValue(
+      taskRow({ status: 'active', claimedByUserId: 'u1', assigneeUserId: 'a1' })
+    );
+    const detail = await getTaskDetail('u2', 'p1', 't1');
+    expect(detail.assignee?.id).toBe('a1');
+    expect(detail.claimer?.id).toBe('u1'); // still the doer/claimant
+  });
+
+  it('exposes the project members as the picker’s options (membership order, erased dropped)', async () => {
+    memberFindMany.mockResolvedValue([{ userId: 'm1' }, { userId: 'ghost' }, { userId: 'm2' }]);
+    userFindMany.mockResolvedValue([userRow('m1'), userRow('m2')]); // 'ghost' erased
+    taskFindFirst.mockResolvedValue(taskRow());
+    const detail = await getTaskDetail('u1', 'p1', 't1');
+    // Members query is scoped to the project + ordered by addedAt.
+    expect(memberFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { projectId: 'p1' }, orderBy: { addedAt: 'asc' } })
+    );
+    expect(detail.members.map((m) => m.id)).toEqual(['m1', 'm2']); // ghost dropped, order kept
+  });
+
+  it('keeps the current assignee in the picker options even after they leave the project', async () => {
+    // 'gone' is the assignee but no longer a member — still shown so the picker
+    // renders the current value (Board/Plan resolve them too), never "Unassigned".
+    memberFindMany.mockResolvedValue([{ userId: 'm1' }]);
+    userFindMany.mockResolvedValue([userRow('m1'), userRow('gone')]); // 'gone' still exists as a user
+    taskFindFirst.mockResolvedValue(taskRow({ assigneeUserId: 'gone' }));
+    const detail = await getTaskDetail('u1', 'p1', 't1');
+    expect(detail.assignee?.id).toBe('gone');
+    // Members (m1) + the current assignee appended (so the Select has its value).
+    expect(detail.members.map((m) => m.id)).toEqual(['m1', 'gone']);
   });
 });

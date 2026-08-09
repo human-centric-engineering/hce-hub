@@ -12,6 +12,10 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+
+// The sheet refreshes the server surface behind it after a reassignment (§22 t2).
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
 import { TaskSheet } from '@/components/hub/projects/task-sheet/task-sheet';
 import { SidekickProvider } from '@/components/hub/sidekick-context';
 import { TaskSheetControlsProvider } from '@/components/hub/projects/task-sheet/task-sheet-context';
@@ -30,7 +34,9 @@ const detail = (over: Partial<TaskDetailDTO> = {}): TaskDetailDTO => ({
   prUrl: null,
   filesScope: [],
   claimer: null,
+  assignee: null,
   isMine: false,
+  members: [],
   feature: { id: 'f1', slug: 'f-mcp', title: 'MCP server', owner: null },
   blockedBy: [],
   blocks: [],
@@ -82,7 +88,9 @@ describe('TaskSheet', () => {
     expect(screen.getByText('t-6')).toBeInTheDocument();
     expect(screen.getByText('f-mcp')).toBeInTheDocument();
     expect(screen.getByText('assigned')).toBeInTheDocument(); // effective `claimed` reads "assigned" (f-task-assignment t1)
-    expect(screen.getByText('unassigned')).toBeInTheDocument();
+    // An open, unassigned task shows the assignee picker with the "Unassigned"
+    // placeholder (f-task-assignment §22 t2), not a read-only name.
+    expect(screen.getByRole('combobox', { name: 'Assignee' })).toHaveTextContent('Unassigned');
   });
 
   it('closes on Escape', async () => {
@@ -121,10 +129,13 @@ describe('TaskSheet', () => {
     expect(screen.getByRole('dialog')).toHaveStyle({ right: '0px' });
   });
 
-  it('renders the claimer (with the "· you" mark) and falls back when number/slug are null', async () => {
+  it('renders the doer (with the "· you" mark) on a MERGED task, and falls back when number/slug are null', async () => {
+    // Merged → the doer is shown read-only for credit (open tasks show the picker,
+    // covered below); f-task-assignment §22 t2.
     mockFetchOnce({
       data: detail({
         number: null,
+        status: 'merged',
         isMine: true,
         claimer: { id: 'u1', name: 'Ada Lovelace', email: 'a@x.io', image: null },
         feature: { id: 'f1', slug: null, title: 'MCP server', owner: null },
@@ -136,6 +147,25 @@ describe('TaskSheet', () => {
     // number null → the ref falls back to the id tail; slug null → the feature title.
     expect(screen.getByText(/^t-/)).toBeInTheDocument();
     expect(screen.getByText('MCP server')).toBeInTheDocument();
+  });
+
+  it('renders the assignee picker (not a read-only name) on an OPEN task', async () => {
+    // An open task is (re)assignable — the sheet shows the member picker seeded
+    // with the current assignee + the project's members (f-task-assignment §22 t2).
+    mockFetchOnce({
+      data: detail({
+        status: 'claimed',
+        assignee: { id: 'u1', name: 'Ada Lovelace', email: 'a@x.io', image: null },
+        members: [
+          { id: 'u1', name: 'Ada Lovelace', email: 'a@x.io', image: null },
+          { id: 'u2', name: 'Bo Diaz', email: 'b@x.io', image: null },
+        ],
+      }),
+    });
+    renderSheet();
+    // The picker is a Radix combobox labelled "Assignee", showing the current one.
+    const picker = await screen.findByRole('combobox', { name: 'Assignee' });
+    expect(picker).toHaveTextContent('Ada');
   });
 
   it('renders the error state on a failed fetch (no crash)', async () => {
