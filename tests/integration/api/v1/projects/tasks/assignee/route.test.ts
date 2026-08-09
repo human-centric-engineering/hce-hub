@@ -58,6 +58,17 @@ describe('PATCH /api/v1/projects/:id/tasks/:taskId/assignee', () => {
     expect(assignMock).not.toHaveBeenCalled();
   });
 
+  it('400s a malformed (non-JSON) body without touching the core', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
+    const bad = new NextRequest(`http://localhost/api/v1/projects/${PID}/tasks/${TID}/assignee`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{ not json',
+    });
+    expect((await assigneePatch(bad, params())).status).toBe(400);
+    expect(assignMock).not.toHaveBeenCalled();
+  });
+
   it('404s a non-member / unknown task (deny ≡ not-found, never 403)', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
     assignMock.mockRejectedValue(new NotFoundError('Task not found'));
