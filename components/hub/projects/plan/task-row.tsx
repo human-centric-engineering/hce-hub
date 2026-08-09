@@ -13,6 +13,7 @@ import { StatusPill } from '@/components/hub/projects/plan/status-pill';
 import { taskStatus, firstName, prLabel } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
+import { BugTag } from '@/components/hub/projects/bug-tag';
 import type { PlanTask } from '@/components/hub/projects/plan/types';
 
 /** Shared grid template — fixed trailing widths so the header and rows align
@@ -45,15 +46,7 @@ export function TaskRow({ task, ordinal }: { task: PlanTask; ordinal: number }) 
         t-{task.number ?? ordinal}
       </span>
       <span className="flex min-w-0 items-center gap-1.5" style={{ color: 'var(--ink-soft)' }}>
-        {task.kind === 'bug' && (
-          // A quiet cue (not red-alert — anti-urgency): a bug is a fix, not a crisis.
-          <span
-            className="shrink-0 rounded px-1 text-[10px] font-medium tracking-wide uppercase"
-            style={{ color: 'var(--signal-blocked)', backgroundColor: 'var(--bg-tint)' }}
-          >
-            bug
-          </span>
-        )}
+        {task.kind === 'bug' && <BugTag />}
         <span className="truncate">{task.title}</span>
       </span>
 
