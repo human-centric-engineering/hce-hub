@@ -195,4 +195,16 @@ describe('getTaskDetail', () => {
     );
     expect(detail.members.map((m) => m.id)).toEqual(['m1', 'm2']); // ghost dropped, order kept
   });
+
+  it('keeps the current assignee in the picker options even after they leave the project', async () => {
+    // 'gone' is the assignee but no longer a member — still shown so the picker
+    // renders the current value (Board/Plan resolve them too), never "Unassigned".
+    memberFindMany.mockResolvedValue([{ userId: 'm1' }]);
+    userFindMany.mockResolvedValue([userRow('m1'), userRow('gone')]); // 'gone' still exists as a user
+    taskFindFirst.mockResolvedValue(taskRow({ assigneeUserId: 'gone' }));
+    const detail = await getTaskDetail('u1', 'p1', 't1');
+    expect(detail.assignee?.id).toBe('gone');
+    // Members (m1) + the current assignee appended (so the Select has its value).
+    expect(detail.members.map((m) => m.id)).toEqual(['m1', 'gone']);
+  });
 });

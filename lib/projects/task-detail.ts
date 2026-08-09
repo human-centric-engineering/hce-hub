@@ -62,9 +62,10 @@ export interface TaskDetail {
   /** True when the caller is the claimant (the `is-mine` / "· you" treatment). */
   isMine: boolean;
   /**
-   * The project's members — the assignee picker's options (f-task-assignment §22
-   * t2). Any member may be assigned (call 2, open/trusting); erased members are
-   * dropped. Membership order (the `addedAt` the picker lists them in).
+   * The assignee picker's options (f-task-assignment §22 t2): the project's members
+   * in membership order (erased users dropped), plus the current assignee if they've
+   * since left the project (so the picker renders the current value — see
+   * `buildPickerOptions`). Any member may be assigned (call 2, open/trusting).
    */
   members: UserRef[];
   feature: {
@@ -111,6 +112,27 @@ function toRef(n: Neighbour): TaskDetailRef {
       n.dependencies.map((d) => d.dependsOn)
     ),
   };
+}
+
+/**
+ * The assignee picker's options (f-task-assignment §22 t2): the project's members
+ * in membership order (erased users dropped), plus — if the task's **current
+ * assignee** isn't among them (they've left the project but still hold the task) —
+ * that assignee appended, so the picker renders the current value instead of
+ * "Unassigned" while the Plan/Board show their name. New assignments are still
+ * membership-checked in the core; re-picking the current assignee is a no-op.
+ */
+function buildPickerOptions(
+  members: { userId: string }[],
+  users: Map<string, UserRef>,
+  assigneeUserId: string | null
+): UserRef[] {
+  const options = members.map((m) => users.get(m.userId)).filter((u): u is UserRef => u != null);
+  if (assigneeUserId && !options.some((u) => u.id === assigneeUserId)) {
+    const assignee = users.get(assigneeUserId);
+    if (assignee) options.push(assignee);
+  }
+  return options;
 }
 
 /**
@@ -180,8 +202,7 @@ export async function getTaskDetail(
     claimer: task.claimedByUserId ? (users.get(task.claimedByUserId) ?? null) : null,
     assignee: task.assigneeUserId ? (users.get(task.assigneeUserId) ?? null) : null,
     isMine: task.claimedByUserId === userId,
-    // Members in membership order, erased users dropped (the picker's options).
-    members: members.map((m) => users.get(m.userId)).filter((u): u is UserRef => u != null),
+    members: buildPickerOptions(members, users, task.assigneeUserId),
     feature: {
       id: task.feature.id,
       slug: task.feature.slug,

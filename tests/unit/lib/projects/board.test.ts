@@ -143,6 +143,9 @@ describe('getProjectBoard — lane + column routing', () => {
     const u1 = laneOf(board, 'u1')!;
     expect(u1.tasks[0]).toMatchObject({ id: 't1', column: 'active' });
     expect(u1.tasks[0].claimer).toMatchObject({ id: 'u1' });
+    // `is-mine` follows the holder (u1), not the active claimer (u2, the caller) —
+    // the card, its lane, and the highlight all agree on one person.
+    expect(u1.tasks[0].isMine).toBe(false);
     expect(laneOf(board, 'u2')!.tasks).toHaveLength(0);
   });
 

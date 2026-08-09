@@ -337,10 +337,16 @@ export async function reassignFeatureTasks(
   }
 
   // Only the unmerged tasks move — merged work keeps its doer credit (call 3 rider).
-  const tasks = await prisma.task.findMany({
+  const unmerged = await prisma.task.findMany({
     where: { featureId, status: { not: 'merged' } },
-    select: { id: true, status: true, claimedByUserId: true },
+    select: { id: true, status: true, claimedByUserId: true, assigneeUserId: true },
   });
+  // Skip tasks already fully on the target (assignee *and* claim) — a genuine no-op:
+  // reassigning wouldn't change anything, so it mustn't inflate the count or write a
+  // spurious `task_assigned` (double-click, or the target already holds some).
+  const tasks = unmerged.filter(
+    (t) => t.assigneeUserId !== assigneeUserId || t.claimedByUserId !== assigneeUserId
+  );
   if (tasks.length === 0) {
     return { featureId, reassigned: 0, warnings: [] };
   }

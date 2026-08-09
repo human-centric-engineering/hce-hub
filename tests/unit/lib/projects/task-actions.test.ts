@@ -411,8 +411,10 @@ describe('reassignFeatureTasks (f-task-assignment §22 t2)', () => {
 
   it('reassigns every unmerged task to the new assignee + journals each, in one transaction', async () => {
     findTasks.mockResolvedValue([
-      { id: 't1', status: 'claimed', claimedByUserId: 'owner-1' },
-      { id: 't2', status: 'active', claimedByUserId: ASSIGNEE }, // already on it — preserved active
+      { id: 't1', status: 'claimed', claimedByUserId: 'owner-1', assigneeUserId: 'owner-1' },
+      // Assigned to owner-1 but actively worked by the target already — still moves
+      // (the assignee changes), and the active status is preserved (no self-displace).
+      { id: 't2', status: 'active', claimedByUserId: ASSIGNEE, assigneeUserId: 'owner-1' },
     ]);
 
     const r = await reassignFeatureTasks(USER, 'f1', ASSIGNEE);
@@ -433,8 +435,34 @@ describe('reassignFeatureTasks (f-task-assignment §22 t2)', () => {
     );
   });
 
+  it('skips tasks already fully on the target — no over-count, no spurious journal', async () => {
+    findTasks.mockResolvedValue([
+      { id: 't1', status: 'claimed', claimedByUserId: 'owner-1', assigneeUserId: 'owner-1' }, // moves
+      { id: 't2', status: 'active', claimedByUserId: ASSIGNEE, assigneeUserId: ASSIGNEE }, // already B → skip
+    ]);
+
+    const r = await reassignFeatureTasks(USER, 'f1', ASSIGNEE);
+
+    expect(r.reassigned).toBe(1); // only t1 actually changed hands
+    expect(txTaskUpdate).toHaveBeenCalledTimes(1);
+    expect(txTaskUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 't1' } }));
+    expect(emit).toHaveBeenCalledTimes(1); // one task_assigned, not two
+  });
+
+  it('is a no-op (0 reassigned) when every unmerged task is already on the target', async () => {
+    findTasks.mockResolvedValue([
+      { id: 't1', status: 'claimed', claimedByUserId: ASSIGNEE, assigneeUserId: ASSIGNEE },
+    ]);
+    const r = await reassignFeatureTasks(USER, 'f1', ASSIGNEE);
+    expect(r).toEqual({ featureId: 'f1', reassigned: 0, warnings: [] });
+    expect(runTx).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
   it('never touches Feature.ownerUserId — moves the tasks, not the feature (call 4)', async () => {
-    findTasks.mockResolvedValue([{ id: 't1', status: 'claimed', claimedByUserId: 'owner-1' }]);
+    findTasks.mockResolvedValue([
+      { id: 't1', status: 'claimed', claimedByUserId: 'owner-1', assigneeUserId: 'owner-1' },
+    ]);
     await reassignFeatureTasks(USER, 'f1', ASSIGNEE);
     // The tx only touches taskClaim + task — no feature.update anywhere.
     for (const call of txTaskUpdate.mock.calls) {

@@ -194,7 +194,10 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
       column,
       prUrl: t.prUrl,
       claimer: holderId ? (users.get(holderId) ?? null) : null,
-      isMine: t.claimedByUserId === userId,
+      // `is-mine` follows the *holder* the card shows (the assignee while open, the
+      // doer once merged) — so the card, its lane, and the highlight all agree on
+      // one person, even in the someone-else-started edge (assignee ≠ claimant).
+      isMine: holderId === userId,
       collision: collisionByTask.get(t.id) ?? null,
     });
   }
