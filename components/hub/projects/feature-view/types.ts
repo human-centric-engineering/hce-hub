@@ -11,6 +11,7 @@ import type {
   FeaturePlanningStage,
   FeatureStatus,
   TaskEffectiveStatus,
+  TaskKind,
   WaitingOnRef,
 } from '@/components/hub/projects/plan/types';
 
@@ -33,6 +34,8 @@ export interface FeatureDetailTaskDTO {
   number: number | null;
   title: string;
   status: TaskEffectiveStatus;
+  /** `bug` vs `feature_work` (f-bug-handling §22-02) — drives the row's bug tag. */
+  kind: TaskKind;
   doneWhen: string | null;
   prUrl: string | null;
   claimer: UserRef | null;

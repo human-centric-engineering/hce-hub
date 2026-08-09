@@ -14,6 +14,7 @@ const task = (over: Partial<FeatureDetailTaskDTO> = {}): FeatureDetailTaskDTO =>
   number: 3,
   title: 'Wire the guard',
   status: 'claimed',
+  kind: 'feature_work',
   doneWhen: null,
   prUrl: null,
   claimer: null,
@@ -42,6 +43,22 @@ describe('FeatureTaskList — planned', () => {
     expect(screen.getByText('Ada')).toBeInTheDocument(); // assignee (no live claimer)
     fireEvent.click(screen.getByRole('button', { name: 'Open task t-3' }));
     expect(open).toHaveBeenCalledWith('t1');
+  });
+
+  it('tags a bug-kind task, and leaves feature-work untagged', () => {
+    const { rerender } = render(
+      <TaskSheetControlsProvider value={{ open: vi.fn(), close: vi.fn() }}>
+        <FeatureTaskList tasks={[task({ kind: 'bug' })]} indicativeTasks={[]} />
+      </TaskSheetControlsProvider>
+    );
+    expect(screen.getByText('bug')).toBeInTheDocument();
+
+    rerender(
+      <TaskSheetControlsProvider value={{ open: vi.fn(), close: vi.fn() }}>
+        <FeatureTaskList tasks={[task({ kind: 'feature_work' })]} indicativeTasks={[]} />
+      </TaskSheetControlsProvider>
+    );
+    expect(screen.queryByText('bug')).not.toBeInTheDocument();
   });
 
   it('renders "unassigned" with no claimer/assignee and a "t-—" for a null number', () => {

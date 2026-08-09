@@ -18,7 +18,7 @@
  * the §09 Plan / §10 Board), and every nullable `user` ref resolves to
  * `UserRef | null` ("unassigned / former member"), never dereferenced.
  */
-import type { FeaturePlanningStage, Prisma } from '@prisma/client';
+import type { FeaturePlanningStage, Prisma, TaskKind } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { NotFoundError } from '@/lib/api/errors';
 import { getAccessibleProjectByRef } from '@/lib/projects/access';
@@ -52,6 +52,8 @@ export interface FeatureDetailTask {
   title: string;
   /** Effective status (via `computeEffectiveStatus`) — matches Plan/Board. */
   status: EffectiveStatus;
+  /** `bug` (a defect, marked distinctly) vs `feature_work` (f-bug-handling §22-02). */
+  kind: TaskKind;
   /** The per-task acceptance contract (§18). */
   doneWhen: string | null;
   prUrl: string | null;
@@ -175,6 +177,7 @@ export async function getFeatureDetail(
             number: true,
             title: true,
             status: true,
+            kind: true,
             doneWhen: true,
             prUrl: true,
             claimedByUserId: true,
@@ -244,6 +247,7 @@ export async function getFeatureDetail(
         t,
         t.dependencies.map((d) => d.dependsOn)
       ),
+      kind: t.kind,
       doneWhen: t.doneWhen,
       prUrl: t.prUrl,
       claimer: t.claimedByUserId ? (users.get(t.claimedByUserId) ?? null) : null,

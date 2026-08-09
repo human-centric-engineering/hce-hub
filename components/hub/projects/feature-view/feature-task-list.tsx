@@ -45,8 +45,21 @@ function TaskItem({ task }: { task: FeatureDetailTaskDTO }) {
         t-{task.number ?? '—'}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px]" style={{ color: 'var(--ink-soft)' }}>
-          {task.title}
+        <span
+          className="flex items-center gap-1.5 text-[14px]"
+          style={{ color: 'var(--ink-soft)' }}
+        >
+          {task.kind === 'bug' && (
+            // A quiet, anti-urgency cue — a bug is a fix, not a crisis; matches the
+            // Plan row / Board card / task sheet (f-bug-handling §22-02).
+            <span
+              className="shrink-0 rounded px-1 text-[10px] font-medium tracking-wide uppercase"
+              style={{ color: 'var(--signal-blocked)', backgroundColor: 'var(--bg-tint)' }}
+            >
+              bug
+            </span>
+          )}
+          <span className="truncate">{task.title}</span>
         </span>
         {task.doneWhen && (
           <span className="mt-0.5 block truncate text-xs" style={{ color: 'var(--ink-faint)' }}>

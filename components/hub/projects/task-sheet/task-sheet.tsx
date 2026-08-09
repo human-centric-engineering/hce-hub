@@ -203,13 +203,14 @@ export function TaskSheet({
         const json = (await res.json()) as { data: TaskActionResultDTO };
         setWarnings(json.data.warnings);
         setReloadKey((k) => k + 1); // refetch so status/claimer reflect the change
+        router.refresh(); // ...and refresh the Plan/Board behind the sheet (no reload)
       } catch {
         setActionError(true); // surface it (never a silent write failure) — retryable
       } finally {
         setActing(false);
       }
     },
-    [path]
+    [path, router]
   );
 
   // A (re)assignment landed (via the assignee picker): surface its soft handoff
@@ -247,12 +248,13 @@ export function TaskSheet({
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setPrFormOpen(false);
       setReloadKey((k) => k + 1); // refetch so the PR link reflects the change
+      router.refresh(); // ...and refresh the Plan/Board behind the sheet (no reload)
     } catch {
       setPrError(true); // surface it (never a silent write failure) — retryable
     } finally {
       setSavingPr(false);
     }
-  }, [path, prInput]);
+  }, [path, prInput, router]);
 
   const ref = detail?.number != null ? `t-${detail.number}` : `t-${taskId.slice(-4)}`;
   const status = detail ? taskStatus(detail.status) : null;
