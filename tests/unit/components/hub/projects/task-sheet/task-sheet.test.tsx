@@ -12,6 +12,10 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+
+// The sheet refreshes the server surface behind it after a reassignment (§22 t2).
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
 import { TaskSheet } from '@/components/hub/projects/task-sheet/task-sheet';
 import { SidekickProvider } from '@/components/hub/sidekick-context';
 import { TaskSheetControlsProvider } from '@/components/hub/projects/task-sheet/task-sheet-context';

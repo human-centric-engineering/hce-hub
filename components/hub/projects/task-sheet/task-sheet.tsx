@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { X, Link2, Play, Check, GitPullRequest, MessageSquare, Lock, Folder } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
@@ -101,6 +102,7 @@ export function TaskSheet({
   taskId: string;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const { open: sidekickOpen, setOpen: setSidekickOpen } = useSidekick();
   const { open: openTask } = useTaskSheet();
   const [detail, setDetail] = useState<TaskDetailDTO | null>(null);
@@ -201,11 +203,17 @@ export function TaskSheet({
   );
 
   // A (re)assignment landed (via the assignee picker): surface its soft handoff
-  // warnings and refetch so the assignee/status/claimer reflect the change.
-  const onReassigned = useCallback((w: CollisionWarning[]) => {
-    setWarnings(w);
-    setReloadKey((k) => k + 1);
-  }, []);
+  // warnings, refetch the sheet's own detail, and refresh the server surface
+  // *behind* the sheet (the Plan / Board) so its cards reflect the new assignee
+  // without a manual reload — matching the feature page's reassign affordance.
+  const onReassigned = useCallback(
+    (w: CollisionWarning[]) => {
+      setWarnings(w);
+      setReloadKey((k) => k + 1);
+      router.refresh();
+    },
+    [router]
+  );
 
   // Open the inline PR form, prefilled with the current link (Edit) or empty (Link).
   const openPrForm = useCallback(() => {

@@ -16,14 +16,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users } from 'lucide-react';
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from '@/components/ui/select';
-import { firstName } from '@/components/hub/projects/plan/presentation';
+import { MemberSelect } from '@/components/hub/projects/member-select';
 import type { UserRef } from '@/components/hub/projects/types';
 
 type Outcome = { reassigned: number; warnings: number } | null;
@@ -106,21 +99,13 @@ export function ReassignRemainingButton({
         <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
           Hand remaining tasks to
         </span>
-        <Select onValueChange={(v) => void reassign(v)} disabled={busy || pending}>
-          <SelectTrigger
-            className="h-7 w-auto max-w-[12rem] text-xs"
-            aria-label="Reassign remaining tasks to"
-          >
-            <SelectValue placeholder="Choose a member…" />
-          </SelectTrigger>
-          <SelectContent>
-            {members.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {firstName(m.name)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MemberSelect
+          members={members}
+          onSelect={(v) => void reassign(v)}
+          disabled={busy || pending}
+          placeholder="Choose a member…"
+          ariaLabel="Reassign remaining tasks to"
+        />
         <button
           type="button"
           onClick={() => setOpen(false)}

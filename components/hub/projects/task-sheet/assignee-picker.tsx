@@ -12,16 +12,7 @@
  * `assignee`) and is surfaced via the trigger — never swallowed.
  */
 import { useEffect, useState } from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from '@/components/ui/select';
-import { initials } from '@/components/hub/projects/presentation';
-import { firstName } from '@/components/hub/projects/plan/presentation';
+import { MemberSelect } from '@/components/hub/projects/member-select';
 import type { UserRef } from '@/components/hub/projects/types';
 import type { CollisionWarning } from '@/components/hub/projects/task-sheet/types';
 
@@ -76,28 +67,16 @@ export function AssigneePicker({
   };
 
   return (
-    <Select value={selected ?? undefined} onValueChange={(v) => void reassign(v)} disabled={busy}>
-      <SelectTrigger
-        className="h-7 w-auto max-w-[12rem] gap-1.5 text-xs"
-        aria-label="Assignee"
-        title={failed ? 'Could not reassign — try again.' : 'Assign this task to a member'}
-      >
-        {failed && <span className="text-destructive">!</span>}
-        <SelectValue placeholder="Unassigned" />
-      </SelectTrigger>
-      <SelectContent>
-        {members.map((m) => (
-          <SelectItem key={m.id} value={m.id}>
-            <span className="flex items-center gap-1.5">
-              <Avatar className="h-4 w-4">
-                {m.image && <AvatarImage src={m.image} alt="" />}
-                <AvatarFallback className="text-[8px]">{initials(m.name)}</AvatarFallback>
-              </Avatar>
-              {firstName(m.name)}
-            </span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <MemberSelect
+      members={members}
+      value={selected}
+      onSelect={(v) => void reassign(v)}
+      disabled={busy}
+      placeholder="Unassigned"
+      ariaLabel="Assignee"
+      invalid={failed}
+      invalidTitle="Could not reassign — try again."
+      validTitle="Assign this task to a member"
+    />
   );
 }
