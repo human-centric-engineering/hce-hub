@@ -31,6 +31,7 @@ const detail = (over: Partial<TaskDetailDTO> = {}): TaskDetailDTO => ({
   description: null,
   doneWhen: null,
   status: 'claimed',
+  kind: 'feature_work',
   prUrl: null,
   filesScope: [],
   claimer: null,
@@ -166,6 +167,19 @@ describe('TaskSheet', () => {
     // The picker is a Radix combobox labelled "Assignee", showing the current one.
     const picker = await screen.findByRole('combobox', { name: 'Assignee' });
     expect(picker).toHaveTextContent('Ada');
+  });
+
+  it('shows a bug tag for a bug-kind task, and none for feature_work', async () => {
+    mockFetchOnce({ data: detail({ kind: 'bug' }) });
+    const { unmount } = renderSheet();
+    expect(await screen.findByText('bug')).toBeInTheDocument();
+    unmount();
+
+    mockFetchOnce({ data: detail({ kind: 'feature_work' }) });
+    renderSheet();
+    // Wait for the sheet to load, then confirm no bug tag on feature-work.
+    expect(await screen.findByText('Wire the streaming handler')).toBeInTheDocument();
+    expect(screen.queryByText('bug')).not.toBeInTheDocument();
   });
 
   it('renders the error state on a failed fetch (no crash)', async () => {

@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, Link2, Play, Check, GitPullRequest, MessageSquare, Lock, Folder } from 'lucide-react';
+import {
+  X,
+  Link2,
+  Play,
+  Check,
+  GitPullRequest,
+  MessageSquare,
+  Lock,
+  Folder,
+  Bug,
+} from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
 import { Markdown } from '@/components/hub/markdown';
@@ -309,6 +319,18 @@ export function TaskSheet({
               <h2 className="text-[17px] leading-snug font-medium">{detail.title}</h2>
               <div className="flex items-center gap-3">
                 {status && <StatusPill tone={status.tone} label={status.label} />}
+                {/* A bug-kind task wears a quiet tag here too (f-bug-handling §22-02) —
+                    a fix, not a crisis (anti-urgency): matches the Plan/Board cue. */}
+                {detail.kind === 'bug' && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase"
+                    style={{ color: 'var(--signal-blocked)', backgroundColor: 'var(--bg-tint)' }}
+                    title="A bug — a fix on the feature it broke"
+                  >
+                    <Bug className="h-3 w-3" aria-hidden />
+                    bug
+                  </span>
+                )}
                 {detail.status === 'merged' ? (
                   // Merged → the doer, read-only (credit — you don't reassign finished
                   // work; f-task-assignment §22 t2).

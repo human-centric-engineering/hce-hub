@@ -6,7 +6,7 @@
  * carries no `Date`s, so these are exact structural mirrors.
  */
 import type { UserRef } from '@/components/hub/projects/types';
-import type { TaskEffectiveStatus } from '@/components/hub/projects/plan/types';
+import type { TaskEffectiveStatus, TaskKind } from '@/components/hub/projects/plan/types';
 
 /** A neighbour in the dependency graph (a blocker or a dependent). */
 export interface TaskDetailRef {
@@ -25,6 +25,8 @@ export interface TaskDetailDTO {
   description: string | null;
   doneWhen: string | null;
   status: TaskEffectiveStatus;
+  /** `bug` vs `feature_work` (f-bug-handling §22-02) — drives the sheet's bug tag. */
+  kind: TaskKind;
   prUrl: string | null;
   filesScope: string[];
   /** The doer, once merged; `null` when unclaimed/erased. */

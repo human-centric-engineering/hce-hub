@@ -17,7 +17,7 @@
  * dereferenced. `prUrl` is returned raw and sanitized at render (as `task-row` /
  * `task-card` do), keeping the raw-in-service / sanitize-in-component pattern.
  */
-import { Prisma } from '@prisma/client';
+import { Prisma, type TaskKind } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { NotFoundError } from '@/lib/api/errors';
 import { getAccessibleProject } from '@/lib/projects/access';
@@ -47,6 +47,8 @@ export interface TaskDetail {
   doneWhen: string | null;
   /** Effective status (drives the pill + the Start/Complete/Blocked action state). */
   status: EffectiveStatus;
+  /** `bug` (a defect, marked distinctly) vs `feature_work` (f-bug-handling §22-02). */
+  kind: TaskKind;
   /** Raw human-declared PR url — sanitized at render (see file header). */
   prUrl: string | null;
   /** Paths/globs the work is expected to touch — soft, "declared, not enforced". */
@@ -161,6 +163,7 @@ export async function getTaskDetail(
         description: true,
         doneWhen: true,
         status: true,
+        kind: true,
         prUrl: true,
         filesScope: true,
         claimedByUserId: true,
@@ -197,6 +200,7 @@ export async function getTaskDetail(
       task,
       task.dependencies.map((d) => d.dependsOn)
     ),
+    kind: task.kind,
     prUrl: task.prUrl,
     filesScope: task.filesScope,
     claimer: task.claimedByUserId ? (users.get(task.claimedByUserId) ?? null) : null,
