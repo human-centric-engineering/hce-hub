@@ -85,6 +85,18 @@ pre-`kind` backups still import) and the cutover snapshot.
   a crisis) in the card meta row (`components/hub/projects/board/task-card.tsx`). The
   card already carries its origin feature ref, so a bug reads apart from feature-work.
 
+### Task sheet + feature page (t3)
+
+- The same quiet **bug** tag rides the **task sheet** header (next to the status pill,
+  `components/hub/projects/task-sheet/task-sheet.tsx`) and the **feature page's** task
+  rows (`components/hub/projects/feature-view/feature-task-list.tsx`), so a defect reads
+  apart from feature-work on **every** task-render surface — glanceable while working it,
+  and legible historically once it's merged. `kind` is threaded through the single-task
+  read (`task-detail.ts`) and the feature read (`feature-detail.ts`) to feed them.
+- Verifying the bug UX end-to-end here (t3) also closed the sheet's stale-surface gap:
+  Start / Complete / Link-PR (and reassign) now refresh the Plan/Board behind the sheet,
+  so working a bug from the sheet updates the views without a manual reload.
+
 ## The standing "Platform / Maintenance" feature
 
 An orphan/infra bug (a shell/nav defect belonging to no single feature) hangs on a
