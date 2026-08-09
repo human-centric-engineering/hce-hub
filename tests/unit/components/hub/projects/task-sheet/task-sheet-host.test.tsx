@@ -20,6 +20,7 @@ const DETAIL: TaskDetailDTO = {
   description: null,
   doneWhen: null,
   status: 'claimed',
+  kind: 'feature_work',
   prUrl: null,
   filesScope: [],
   claimer: null,

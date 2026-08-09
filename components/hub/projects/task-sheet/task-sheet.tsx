@@ -10,6 +10,7 @@ import { useSidekick } from '@/components/hub/sidekick-context';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
 import { TaskActivity } from '@/components/hub/projects/task-sheet/task-activity';
 import { AssigneePicker } from '@/components/hub/projects/task-sheet/assignee-picker';
+import { BugTag } from '@/components/hub/projects/bug-tag';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
 import { taskStatus, firstName, prLabel } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
@@ -181,6 +182,15 @@ export function TaskSheet({
 
   const copyLink = () => void navigator.clipboard?.writeText(window.location.href);
 
+  // After any sheet write: refetch the sheet's own detail AND refresh the server
+  // surface *behind* the sheet (the Plan / Board) so both reflect the change with no
+  // manual reload. One helper so every handler pairs the two — omitting the RSC
+  // refresh is exactly the stale-surface gap this closed.
+  const afterWrite = useCallback(() => {
+    setReloadKey((k) => k + 1);
+    router.refresh();
+  }, [router]);
+
   // Start (claimed → active) and Complete (active → merged) share one poster; the
   // action row picks which by the task's effective status.
   const advance = useCallback(
@@ -192,27 +202,24 @@ export function TaskSheet({
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = (await res.json()) as { data: TaskActionResultDTO };
         setWarnings(json.data.warnings);
-        setReloadKey((k) => k + 1); // refetch so status/claimer reflect the change
+        afterWrite();
       } catch {
         setActionError(true); // surface it (never a silent write failure) — retryable
       } finally {
         setActing(false);
       }
     },
-    [path]
+    [path, afterWrite]
   );
 
   // A (re)assignment landed (via the assignee picker): surface its soft handoff
-  // warnings, refetch the sheet's own detail, and refresh the server surface
-  // *behind* the sheet (the Plan / Board) so its cards reflect the new assignee
-  // without a manual reload — matching the feature page's reassign affordance.
+  // warnings, then refetch + refresh like any other sheet write.
   const onReassigned = useCallback(
     (w: CollisionWarning[]) => {
       setWarnings(w);
-      setReloadKey((k) => k + 1);
-      router.refresh();
+      afterWrite();
     },
-    [router]
+    [afterWrite]
   );
 
   // Open the inline PR form, prefilled with the current link (Edit) or empty (Link).
@@ -236,13 +243,13 @@ export function TaskSheet({
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setPrFormOpen(false);
-      setReloadKey((k) => k + 1); // refetch so the PR link reflects the change
+      afterWrite();
     } catch {
       setPrError(true); // surface it (never a silent write failure) — retryable
     } finally {
       setSavingPr(false);
     }
-  }, [path, prInput]);
+  }, [path, prInput, afterWrite]);
 
   const ref = detail?.number != null ? `t-${detail.number}` : `t-${taskId.slice(-4)}`;
   const status = detail ? taskStatus(detail.status) : null;
@@ -309,6 +316,7 @@ export function TaskSheet({
               <h2 className="text-[17px] leading-snug font-medium">{detail.title}</h2>
               <div className="flex items-center gap-3">
                 {status && <StatusPill tone={status.tone} label={status.label} />}
+                {detail.kind === 'bug' && <BugTag />}
                 {detail.status === 'merged' ? (
                   // Merged → the doer, read-only (credit — you don't reassign finished
                   // work; f-task-assignment §22 t2).

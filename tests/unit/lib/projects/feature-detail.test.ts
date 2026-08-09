@@ -158,6 +158,7 @@ describe('getFeatureDetail mapping', () => {
             number: 1,
             title: 'blocked task',
             status: 'claimed',
+            kind: 'bug',
             doneWhen: 'ok',
             prUrl: null,
             claimedByUserId: null,
@@ -169,6 +170,7 @@ describe('getFeatureDetail mapping', () => {
             number: 2,
             title: 'claimed task',
             status: 'claimed',
+            kind: 'feature_work',
             doneWhen: null,
             prUrl: null,
             claimedByUserId: 'claim-1',
@@ -182,8 +184,10 @@ describe('getFeatureDetail mapping', () => {
     const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
     expect(detail.owner).toEqual({ id: 'owner-1', name: 'Ada', email: 'a@x.io', image: null });
     expect(detail.tasks[0].status).toBe('blocked'); // dep not merged
+    expect(detail.tasks[0].kind).toBe('bug'); // surfaced for the feature-page bug tag
     expect(detail.tasks[0].assignee).toBeNull(); // erased assignee never derefs
     expect(detail.tasks[1].status).toBe('claimed');
+    expect(detail.tasks[1].kind).toBe('feature_work');
     expect(detail.tasks[1].claimer?.name).toBe('Bo');
   });
 

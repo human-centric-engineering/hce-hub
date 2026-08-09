@@ -58,6 +58,7 @@ const taskRow = (o: Record<string, unknown> = {}) => ({
   description: 'desc',
   doneWhen: null,
   status: 'claimed',
+  kind: 'feature_work',
   prUrl: null,
   filesScope: [],
   claimedByUserId: null,
@@ -107,6 +108,13 @@ describe('getTaskDetail', () => {
     expect(detail.doneWhen).toBe('the widget renders'); // selected + surfaced (§21 t-c)
     expect(detail.filesScope).toEqual(['lib/a.ts', 'lib/b.ts']);
     expect(detail.prUrl).toBe('javascript:alert(1)');
+  });
+
+  it('surfaces the task kind (bug vs feature_work) for the sheet tag', async () => {
+    taskFindFirst.mockResolvedValue(taskRow({ kind: 'bug' }));
+    expect((await getTaskDetail('u1', 'p1', 't1')).kind).toBe('bug');
+    taskFindFirst.mockResolvedValue(taskRow()); // default
+    expect((await getTaskDetail('u1', 'p1', 't1')).kind).toBe('feature_work');
   });
 
   it('computes the task effective status (deps-blocked claimed → blocked)', async () => {
