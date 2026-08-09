@@ -101,33 +101,42 @@ export function ReassignRemainingButton({
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-        Hand remaining tasks to
-      </span>
-      <Select onValueChange={(v) => void reassign(v)} disabled={busy || pending}>
-        <SelectTrigger
-          className="h-7 w-auto max-w-[12rem] text-xs"
-          aria-label="Reassign remaining tasks to"
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+          Hand remaining tasks to
+        </span>
+        <Select onValueChange={(v) => void reassign(v)} disabled={busy || pending}>
+          <SelectTrigger
+            className="h-7 w-auto max-w-[12rem] text-xs"
+            aria-label="Reassign remaining tasks to"
+          >
+            <SelectValue placeholder="Choose a member…" />
+          </SelectTrigger>
+          <SelectContent>
+            {members.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {firstName(m.name)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="text-xs"
+          style={{ color: 'var(--ink-mute)' }}
         >
-          <SelectValue placeholder="Choose a member…" />
-        </SelectTrigger>
-        <SelectContent>
-          {members.map((m) => (
-            <SelectItem key={m.id} value={m.id}>
-              {firstName(m.name)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <button
-        type="button"
-        onClick={() => setOpen(false)}
-        className="text-xs"
-        style={{ color: 'var(--ink-mute)' }}
-      >
-        Cancel
-      </button>
+          Cancel
+        </button>
+      </div>
+      {/* A failed write keeps the picker open (retry a pick right here) — but the
+          failure must still be visible, never silent. */}
+      {failed && (
+        <p className="text-xs" style={{ color: 'var(--signal-blocked)' }}>
+          Couldn&rsquo;t reassign just now — try again.
+        </p>
+      )}
     </div>
   );
 }

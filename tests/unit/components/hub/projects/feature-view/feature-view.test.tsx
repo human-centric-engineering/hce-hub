@@ -25,6 +25,7 @@ const detail = (over: Partial<FeatureDetailDTO> = {}): FeatureDetailDTO => ({
   planningStage: 'planned',
   helpWanted: false,
   owner: { id: 'u1', name: 'Ada Lovelace', email: 'a@x', image: null },
+  members: [],
   dependsOn: [{ id: 'd1', slug: 'f-access', title: 'Membership funnel' }],
   tasks: [],
   indicativeTasks: [],

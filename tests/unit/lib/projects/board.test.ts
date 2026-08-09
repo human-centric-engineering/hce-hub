@@ -43,6 +43,7 @@ const task = (o: Record<string, unknown> & { deps?: string[] }) => ({
   kind: o.kind ?? 'feature_work',
   prUrl: o.prUrl ?? null,
   claimedByUserId: o.claimedByUserId ?? null,
+  assigneeUserId: o.assigneeUserId ?? null,
   dependencies: (o.deps ?? []).map((s: string) => ({ dependsOn: { status: s } })),
 });
 const feature = (id: string, ownerUserId: string | null = null, slug: string | null = null) => ({
@@ -118,6 +119,31 @@ describe('getProjectBoard — lane + column routing', () => {
     const board = await getProjectBoard('u1', 'p1');
     expect(laneOf(board, 'u2')!.tasks[0]).toMatchObject({ id: 't1', column: 'merged' });
     expect(laneOf(board, 'u1')!.tasks).toHaveLength(0);
+  });
+
+  it('routes an OPEN task to the ASSIGNEE lane when someone else started it (holder = assignee, §22 t2)', async () => {
+    // The someone-else-started edge: assigned to u1, but actively claimed by u2.
+    // Open → the holder is the assignee (u1), so it sits in *whose work it is*.
+    setup({
+      members: [member('u1'), member('u2')],
+      features: [feature('f1', 'u1')],
+      tasks: [
+        task({
+          id: 't1',
+          featureId: 'f1',
+          status: 'active',
+          claimedByUserId: 'u2',
+          assigneeUserId: 'u1',
+        }),
+      ],
+      users: [userRow('u1'), userRow('u2')],
+    });
+    const board = await getProjectBoard('u2', 'p1');
+    // Routed to the assignee (u1) lane, showing the assignee — not the active claimer.
+    const u1 = laneOf(board, 'u1')!;
+    expect(u1.tasks[0]).toMatchObject({ id: 't1', column: 'active' });
+    expect(u1.tasks[0].claimer).toMatchObject({ id: 'u1' });
+    expect(laneOf(board, 'u2')!.tasks).toHaveLength(0);
   });
 
   it('folds a deps-blocked claimed task into the Claimed column, with the blocked treatment (owner lane)', async () => {

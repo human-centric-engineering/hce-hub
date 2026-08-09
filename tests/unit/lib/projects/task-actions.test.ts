@@ -10,26 +10,32 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/projects/access', () => ({
   resolveTaskAccess: vi.fn(),
+  resolveFeatureAccess: vi.fn(),
   canAccessProject: vi.fn(),
 }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
-vi.mock('@/lib/db/client', () => ({ prisma: { taskClaim: { findMany: vi.fn() } } }));
+vi.mock('@/lib/db/client', () => ({
+  prisma: { taskClaim: { findMany: vi.fn() }, task: { findMany: vi.fn() } },
+}));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
 vi.mock('@/lib/projects/project-event', () => ({ recordProjectEvent: vi.fn() }));
 
-const { resolveTaskAccess, canAccessProject } = await import('@/lib/projects/access');
+const { resolveTaskAccess, resolveFeatureAccess, canAccessProject } =
+  await import('@/lib/projects/access');
 const { executeTransaction } = await import('@/lib/db/utils');
 const { prisma } = await import('@/lib/db/client');
 const { logAdminAction } = await import('@/lib/orchestration/audit/admin-audit-logger');
 const { recordProjectEvent } = await import('@/lib/projects/project-event');
 const { NotFoundError, ValidationError } = await import('@/lib/api/errors');
-const { startTask, completeTask, setTaskPr, assignTask } =
+const { startTask, completeTask, setTaskPr, assignTask, reassignFeatureTasks } =
   await import('@/lib/projects/task-actions');
 
 const resolveTask = resolveTaskAccess as ReturnType<typeof vi.fn>;
+const resolveFeature = resolveFeatureAccess as ReturnType<typeof vi.fn>;
 const canAccess = canAccessProject as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const findClaims = prisma.taskClaim.findMany as ReturnType<typeof vi.fn>;
+const findTasks = prisma.task.findMany as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
 
@@ -52,6 +58,18 @@ const granted = (
     claimedByUserId: overrides.claimedByUserId ?? USER,
     filesScope: overrides.filesScope ?? [],
     basis: 'member',
+  },
+});
+
+const grantedFeature = (
+  overrides: Partial<{ projectId: string; status: string; ownerUserId: string | null }> = {}
+) => ({
+  ok: true,
+  feature: {
+    id: 'f1',
+    projectId: overrides.projectId ?? 'p1',
+    status: overrides.status ?? 'in_flight',
+    ownerUserId: overrides.ownerUserId ?? 'owner-1',
   },
 });
 
@@ -340,6 +358,105 @@ describe('assignTask (f-task-assignment t1)', () => {
     expect(txTaskUpdate).toHaveBeenCalledWith({
       where: { id: 't1' },
       data: { assigneeUserId: ASSIGNEE, claimedByUserId: ASSIGNEE, status: 'active' },
+    });
+  });
+});
+
+describe('reassignFeatureTasks (f-task-assignment §22 t2)', () => {
+  const ASSIGNEE = 'user-2';
+
+  beforeEach(() => {
+    resolveFeature.mockResolvedValue(grantedFeature());
+    findTasks.mockResolvedValue([]);
+  });
+
+  it('throws NotFoundError for a non-member caller / unknown feature (no write)', async () => {
+    resolveFeature.mockResolvedValue({ ok: false, reason: 'not_found' });
+    await expect(reassignFeatureTasks(USER, 'f1', ASSIGNEE)).rejects.toBeInstanceOf(NotFoundError);
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundError when the feature is outside expectedProjectId (id-swap guard)', async () => {
+    resolveFeature.mockResolvedValue(grantedFeature({ projectId: 'other' }));
+    await expect(reassignFeatureTasks(USER, 'f1', ASSIGNEE, 'p1')).rejects.toBeInstanceOf(
+      NotFoundError
+    );
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('rejects an assignee who is not a member (ValidationError, no write)', async () => {
+    canAccess.mockResolvedValue({ ok: false, basis: null });
+    await expect(reassignFeatureTasks(USER, 'f1', 'stranger')).rejects.toBeInstanceOf(
+      ValidationError
+    );
+    expect(canAccess).toHaveBeenCalledWith('stranger', 'p1');
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op (0 reassigned) when the feature has no unmerged tasks', async () => {
+    findTasks.mockResolvedValue([]);
+    const r = await reassignFeatureTasks(USER, 'f1', ASSIGNEE);
+    expect(r).toEqual({ featureId: 'f1', reassigned: 0, warnings: [] });
+    expect(runTx).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled(); // nothing moved → no audit entry
+  });
+
+  it('queries only unmerged tasks — merged work keeps its doer credit (call 3 rider)', async () => {
+    findTasks.mockResolvedValue([{ id: 't1', status: 'claimed', claimedByUserId: 'owner-1' }]);
+    await reassignFeatureTasks(USER, 'f1', ASSIGNEE);
+    expect(findTasks).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { featureId: 'f1', status: { not: 'merged' } } })
+    );
+  });
+
+  it('reassigns every unmerged task to the new assignee + journals each, in one transaction', async () => {
+    findTasks.mockResolvedValue([
+      { id: 't1', status: 'claimed', claimedByUserId: 'owner-1' },
+      { id: 't2', status: 'active', claimedByUserId: ASSIGNEE }, // already on it — preserved active
+    ]);
+
+    const r = await reassignFeatureTasks(USER, 'f1', ASSIGNEE);
+
+    expect(r.reassigned).toBe(2);
+    expect(runTx).toHaveBeenCalledTimes(1); // one tx for the whole handoff, not one-per-task
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { assigneeUserId: ASSIGNEE, claimedByUserId: ASSIGNEE, status: 'claimed' },
+    });
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't2' },
+      data: { assigneeUserId: ASSIGNEE, claimedByUserId: ASSIGNEE, status: 'active' },
+    });
+    expect(emit).toHaveBeenCalledTimes(2); // a task_assigned per task
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'feature.reassign_tasks', entityId: 'f1' })
+    );
+  });
+
+  it('never touches Feature.ownerUserId — moves the tasks, not the feature (call 4)', async () => {
+    findTasks.mockResolvedValue([{ id: 't1', status: 'claimed', claimedByUserId: 'owner-1' }]);
+    await reassignFeatureTasks(USER, 'f1', ASSIGNEE);
+    // The tx only touches taskClaim + task — no feature.update anywhere.
+    for (const call of txTaskUpdate.mock.calls) {
+      expect(call[0].data).not.toHaveProperty('ownerUserId');
+    }
+  });
+
+  it('surfaces a soft heads-up per active task taken from a different worker, releasing its claim', async () => {
+    findTasks.mockResolvedValue([
+      { id: 't1', status: 'active', claimedByUserId: 'someone-else' }, // displaced
+      { id: 't2', status: 'claimed', claimedByUserId: 'owner-1' }, // no warning
+    ]);
+
+    const r = await reassignFeatureTasks(USER, 'f1', ASSIGNEE);
+
+    expect(r.warnings).toEqual([
+      expect.objectContaining({ kind: 'already_claimed', userId: 'someone-else', taskId: 't1' }),
+    ]);
+    // The displaced worker's active-work claim is released (only for the handoff).
+    expect(txClaimUpdateMany).toHaveBeenCalledWith({
+      where: { taskId: 't1', releasedAt: null },
+      data: { releasedAt: expect.any(Date) },
     });
   });
 });
