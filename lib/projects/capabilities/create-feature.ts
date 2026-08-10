@@ -63,6 +63,10 @@ const schema = z.object({
     .array(z.string())
     .optional()
     .describe('Ids of existing features in the same project this one depends on.'),
+  phaseId: z
+    .string()
+    .optional()
+    .describe('Optional: file the new feature under a phase in this project (born filed).'),
   indicativeTasks: z
     .array(z.string().min(1).max(500))
     .max(100)
@@ -84,7 +88,7 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'create_feature',
     description:
-      'Author a feature into a project as an unowned, high-level sketch (planning + indicative). Carries title, optional slug/description/done-when/references, optional dependencies on existing features, and an optional indicative task sketch. Any project member may create one; claim it separately to take ownership.',
+      'Author a feature into a project as an unowned, high-level sketch (planning + indicative). Carries title, optional slug/description/done-when/references, optional dependencies on existing features, an optional phase to file it under, and an optional indicative task sketch. Any project member may create one; claim it separately to take ownership.',
     parameters: {
       type: 'object',
       properties: {
@@ -117,6 +121,10 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
           items: { type: 'string' },
           description: 'Ids of existing features in the same project this one depends on.',
         },
+        phaseId: {
+          type: 'string',
+          description: 'Optional: file the new feature under a phase in this project (born filed).',
+        },
         indicativeTasks: {
           type: 'array',
           items: { type: 'string' },
@@ -139,6 +147,7 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
       args: {
         projectId: args.projectId,
         slug: args.slug ?? null,
+        phaseId: args.phaseId ?? null,
         dependsOnFeatureIds: args.dependsOnFeatureIds ?? [],
         title: redactedString(`title (${args.title.length} chars)`),
         summary: args.summary ? redactedString(`summary (${args.summary.length} chars)`) : null,
@@ -193,6 +202,18 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
       }
     }
 
+    // Optional phase must exist in THIS project (mirrors update_feature) — you can't
+    // file into a phase you can't see. The FK is the race backstop.
+    if (args.phaseId !== undefined) {
+      const phase = await prisma.phase.findFirst({
+        where: { id: args.phaseId, projectId: args.projectId },
+        select: { id: true },
+      });
+      if (!phase) {
+        return this.error('That phase was not found in this project.', 'invalid_phase');
+      }
+    }
+
     const feature = await executeTransaction(async (tx) => {
       // Bump the project counter for a unique, stable project-wide `number` by
       // construction — the feature's §N, mirroring Task.number (f-status-model §20 t-37).
@@ -211,6 +232,7 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
           description: args.description ?? null,
           doneWhen: args.doneWhen ?? null,
           ...(args.references ? { references: args.references } : {}),
+          ...(args.phaseId ? { phaseId: args.phaseId } : {}),
           status: 'planning',
           planningStage: 'indicative',
           // Unowned until claimed — you claim features, not tasks.
