@@ -31,6 +31,11 @@ describe('capture_idea capability', () => {
     expect(r.error?.code).toBe('not_found');
   });
 
+  it('rethrows a non-funnel error unchanged (only NotFoundError is mapped)', async () => {
+    capture.mockRejectedValue(new Error('db down'));
+    await expect(cap.execute({ projectId: 'p1', text: 'x' }, ctx())).rejects.toThrow('db down');
+  });
+
   it('returns ideaId on success, forwarding the caller + project + text', async () => {
     capture.mockResolvedValue({ ideaId: 'idea1' });
     const r = await cap.execute({ projectId: 'p1', text: 'an idea' }, ctx('caller'));
