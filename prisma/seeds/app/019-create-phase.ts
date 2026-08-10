@@ -29,6 +29,11 @@ export const createPhaseFunctionDefinition = {
         type: 'number',
         description: 'Explicit display position; defaults to appended after the last phase.',
       },
+      fromIdeaId: {
+        type: 'string',
+        description:
+          'Optional: the id of an open idea in this project being promoted into this phase — it is marked promoted and linked, atomically.',
+      },
     },
     required: ['projectId', 'name'],
   },

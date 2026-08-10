@@ -27,6 +27,7 @@ import { executeTransaction } from '@/lib/db/utils';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { canAccessProject, resolveFeatureAccess } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
+import { resolveIdeaOnPromotion } from '@/lib/projects/idea-promotion';
 
 /** The mutable fields of a phase (its lifecycle timestamps are derived, not set). */
 export interface CreatePhaseInput {
@@ -36,6 +37,12 @@ export interface CreatePhaseInput {
   status?: PhaseStatus;
   /** Explicit display position; defaults to appended after the project's last phase. */
   ordinal?: number;
+  /**
+   * Optional: the id of an OPEN idea in this project being promoted into this
+   * phase. Marked promoted and linked atomically in the create tx. The caller
+   * (the `create_phase` capability) pre-checks it; here it is the in-tx resolve.
+   */
+  fromIdeaId?: string;
 }
 
 export interface CreatePhaseResult {
@@ -87,7 +94,7 @@ export async function createPhase(
       });
       ordinal = (_max.ordinal ?? -1) + 1; // first phase → 0
     }
-    return tx.phase.create({
+    const phase = await tx.phase.create({
       data: {
         projectId,
         name: input.name,
@@ -103,6 +110,16 @@ export async function createPhase(
       },
       select: { id: true, ordinal: true },
     });
+    // Promotion: mark the source idea promoted into this phase, atomically.
+    if (input.fromIdeaId !== undefined) {
+      await resolveIdeaOnPromotion(tx, {
+        ideaId: input.fromIdeaId,
+        projectId,
+        kind: 'phase',
+        refId: phase.id,
+      });
+    }
+    return phase;
   });
 
   logAdminAction({
@@ -111,7 +128,12 @@ export async function createPhase(
     entityType: 'app_phase',
     entityId: created.id,
     entityName: input.name,
-    metadata: { projectId, status, ordinal: created.ordinal },
+    metadata: {
+      projectId,
+      status,
+      ordinal: created.ordinal,
+      ...(input.fromIdeaId ? { fromIdeaId: input.fromIdeaId } : {}),
+    },
   });
 
   return { phaseId: created.id, ordinal: created.ordinal };
