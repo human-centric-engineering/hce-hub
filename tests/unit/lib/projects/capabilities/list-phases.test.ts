@@ -32,6 +32,11 @@ describe('list_phases', () => {
     expect(r.error?.code).toBe('not_found');
   });
 
+  it('re-throws a non-funnel error rather than masking it as not_found', async () => {
+    getPlan.mockRejectedValue(new Error('db down'));
+    await expect(cap.execute({ projectId: 'p1' }, ctx())).rejects.toThrow('db down');
+  });
+
   it('forwards the caller + projectId to the membership-scoped read', async () => {
     getPlan.mockResolvedValue({ projectId: 'p1', projectSlug: null, phases: [] });
     await cap.execute({ projectId: 'p1' }, ctx('caller'));
