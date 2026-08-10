@@ -22,6 +22,7 @@ import { RecordDecisionCapability } from '@/lib/projects/capabilities/record-dec
 import { AddNoteCapability } from '@/lib/projects/capabilities/add-note';
 import { CreateFeatureCapability } from '@/lib/projects/capabilities/create-feature';
 import { CaptureIdeaCapability } from '@/lib/projects/capabilities/capture-idea';
+import { UpdateIdeaCapability } from '@/lib/projects/capabilities/update-idea';
 import { ClaimFeatureCapability } from '@/lib/projects/capabilities/claim-feature';
 import { PlanFeatureCapability } from '@/lib/projects/capabilities/plan-feature';
 import { ShipFeatureCapability } from '@/lib/projects/capabilities/ship-feature';
@@ -76,7 +77,8 @@ export function initAppCapabilities(): void {
   // Feature lifecycle (f-feature-planning §18 t-2) — claim-then-plan over MCP.
   // Each emits its feature_* journal event; membership via the feature funnel.
   registerAppCapability(new CreateFeatureCapability()); // author (member)
-  registerAppCapability(new CaptureIdeaCapability()); // jot an idea into the Ideas Park (member)
+  registerAppCapability(new CaptureIdeaCapability()); // jot an idea into the inbox (member)
+  registerAppCapability(new UpdateIdeaCapability()); // edit / drop / restore an idea (member)
   registerAppCapability(new ClaimFeatureCapability()); // take ownership (member)
   registerAppCapability(new PlanFeatureCapability()); // materialise tasks (owner)
   registerAppCapability(new ShipFeatureCapability()); // close out (owner)
