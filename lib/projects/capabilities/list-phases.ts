@@ -22,7 +22,7 @@ import type {
 import { NotFoundError } from '@/lib/api/errors';
 import { getProjectPlan } from '@/lib/projects/plan';
 import type { PhaseStatus } from '@prisma/client';
-import type { FeatureStatus } from '@/components/hub/projects/plan/types';
+import type { EffectiveFeatureStatus } from '@/lib/projects/feature-status';
 
 const schema = z.object({
   projectId: z.string().describe('The project whose phases + features to read.'),
@@ -39,7 +39,7 @@ interface FeatureRef {
   slug: string | null;
   title: string;
   /** Readiness-derived status (`available` | `blocked` | `in_flight` | `shipped`). */
-  status: FeatureStatus;
+  status: EffectiveFeatureStatus;
 }
 
 /** A phase band — a real phase, or the residual `id: null` "no phase" bucket. */

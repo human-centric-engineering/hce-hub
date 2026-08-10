@@ -165,6 +165,14 @@ describe('create_feature happy path', () => {
     expect(txFeatureCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ phaseId: 'ph1' }) })
     );
+    // Born-filed is recorded in the journal + audit (distinguishable from a later move).
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ metadata: expect.objectContaining({ phaseId: 'ph1' }) })
+    );
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ phaseId: 'ph1' }) })
+    );
   });
 
   it('omits phaseId from the create when not supplied (unfiled)', async () => {

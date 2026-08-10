@@ -256,7 +256,9 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
         featureId: created.id,
         kind: 'feature_created',
         actorUserId: userId,
-        metadata: { slug: created.slug },
+        // Capture a born-filed phase so the journal distinguishes it from a later
+        // `update_feature` move (which records 'phase').
+        metadata: { slug: created.slug, ...(args.phaseId ? { phaseId: args.phaseId } : {}) },
       });
       return created;
     });
@@ -267,7 +269,11 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
       entityType: 'app_feature',
       entityId: feature.id,
       entityName: args.slug ?? args.title,
-      metadata: { projectId: args.projectId, dependsOnFeatureIds: depIds },
+      metadata: {
+        projectId: args.projectId,
+        dependsOnFeatureIds: depIds,
+        ...(args.phaseId ? { phaseId: args.phaseId } : {}),
+      },
     });
 
     return this.success({ featureId: feature.id, slug: feature.slug });
