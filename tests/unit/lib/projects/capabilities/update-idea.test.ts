@@ -37,6 +37,11 @@ describe('update_idea capability', () => {
     expect(r.error?.code).toBe('invalid_update');
   });
 
+  it('rethrows a non-mapped error unchanged (only funnel/validation are mapped)', async () => {
+    update.mockRejectedValue(new Error('db down'));
+    await expect(cap.execute({ ideaId: 'idea-1', text: 'x' }, ctx())).rejects.toThrow('db down');
+  });
+
   it('returns ideaId + status on success, forwarding the caller + patch', async () => {
     update.mockResolvedValue({ ideaId: 'idea-1', projectId: 'p1', status: 'dropped' });
     const r = await cap.execute({ ideaId: 'idea-1', status: 'dropped' }, ctx('caller'));
@@ -58,5 +63,15 @@ describe('update_idea capability', () => {
     expect(args.ideaId).toBe('idea-1');
     expect(args.status).toBe('open');
     expect(args.text).not.toContain('sensitive');
+  });
+
+  it('provenance carries null text for a status-only (drop/restore) call', () => {
+    const redacted = cap.redactProvenance(
+      { ideaId: 'idea-1', status: 'dropped' },
+      { success: true, data: { ideaId: 'idea-1', status: 'dropped' } }
+    );
+    const args = redacted.args as { text: string | null; status: string };
+    expect(args.text).toBeNull();
+    expect(args.status).toBe('dropped');
   });
 });
