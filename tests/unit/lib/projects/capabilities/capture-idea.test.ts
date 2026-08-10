@@ -1,15 +1,15 @@
 /**
  * Tests for `lib/projects/capabilities/capture-idea.ts` — a thin wrapper over the
  * shared `captureIdea` core. Pins the no-user guard, error mapping (funnel
- * `not_found`, no-parked-phase `no_parked_phase`), forwarding the caller + scope,
- * and the free-text jot being masked in provenance.
+ * `not_found`), forwarding the caller + scope, and the free-text jot being masked
+ * in provenance.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/projects/capture-idea-service', () => ({ captureIdea: vi.fn() }));
 
 const { captureIdea } = await import('@/lib/projects/capture-idea-service');
-const { NotFoundError, ValidationError } = await import('@/lib/api/errors');
+const { NotFoundError } = await import('@/lib/api/errors');
 const { CaptureIdeaCapability } = await import('@/lib/projects/capabilities/capture-idea');
 
 const capture = captureIdea as ReturnType<typeof vi.fn>;
@@ -31,16 +31,15 @@ describe('capture_idea capability', () => {
     expect(r.error?.code).toBe('not_found');
   });
 
-  it('maps a no-parked-phase ValidationError to no_parked_phase', async () => {
-    capture.mockRejectedValue(new ValidationError('no parked phase'));
-    const r = await cap.execute({ projectId: 'p1', text: 'x' }, ctx());
-    expect(r.error?.code).toBe('no_parked_phase');
+  it('rethrows a non-funnel error unchanged (only NotFoundError is mapped)', async () => {
+    capture.mockRejectedValue(new Error('db down'));
+    await expect(cap.execute({ projectId: 'p1', text: 'x' }, ctx())).rejects.toThrow('db down');
   });
 
-  it('returns featureId + phaseId on success, forwarding the caller + project + text', async () => {
-    capture.mockResolvedValue({ featureId: 'f1', phaseId: 'park1' });
+  it('returns ideaId on success, forwarding the caller + project + text', async () => {
+    capture.mockResolvedValue({ ideaId: 'idea1' });
     const r = await cap.execute({ projectId: 'p1', text: 'an idea' }, ctx('caller'));
-    expect(r).toEqual({ success: true, data: { featureId: 'f1', phaseId: 'park1' } });
+    expect(r).toEqual({ success: true, data: { ideaId: 'idea1' } });
     expect(capture).toHaveBeenCalledWith('caller', 'p1', 'an idea');
   });
 
@@ -57,7 +56,7 @@ describe('capture_idea capability', () => {
   it('masks the free-text jot in provenance, keeping the project scope', () => {
     const redacted = cap.redactProvenance(
       { projectId: 'p1', text: 'a sensitive idea about someone' },
-      { success: true, data: { featureId: 'f1', phaseId: 'park1' } }
+      { success: true, data: { ideaId: 'idea1' } }
     );
     const args = redacted.args as { projectId: string; text: string };
     expect(args.projectId).toBe('p1');

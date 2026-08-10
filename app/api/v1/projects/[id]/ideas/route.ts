@@ -1,16 +1,15 @@
 /**
  * Consumer — capture an idea (the quick-jot affordance)
  *
- * POST /api/v1/projects/:id/ideas — jot a line; it lands as an indicative feature
- * stub in the project's parked phase (the Ideas Park). The HTTP face of the shared
- * `captureIdea()` core (f-idea-capture §22-03 t-58); the `capture_idea` MCP
- * capability is the other face. The quick-jot UI (t-59) POSTs here.
+ * POST /api/v1/projects/:id/ideas — jot a line; it lands as an `Idea` in the
+ * project's inbox, to triage later. The HTTP face of the shared `captureIdea()`
+ * core (f-idea-capture §22); the `capture_idea` MCP capability is the other face.
+ * The quick-jot UI POSTs here.
  *
  * Fork-owned. Auth comes from `withAuth`; the automatic per-section write cap is
  * applied by the security middleware (`proxy.ts`), not the guard. The body is
  * validated at this boundary. `captureIdea` routes through the [[f-access]]
- * funnel, so a **non-member or unknown project is a 404, never a 403**; a project
- * with no parked phase is a 400 (`ValidationError`, mapped by `handleAPIError`).
+ * funnel, so a **non-member or unknown project is a 404, never a 403**.
  */
 import { z } from 'zod';
 import { withAuth } from '@/lib/auth/guards';
@@ -39,7 +38,7 @@ export const POST = withAuth<{ id: string }>(async (request, session, { params }
   log.info('Idea captured', {
     userId: session.user.id,
     projectId: id,
-    featureId: result.featureId,
+    ideaId: result.ideaId,
   });
   return successResponse(result);
 });

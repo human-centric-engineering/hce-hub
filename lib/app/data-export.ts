@@ -82,6 +82,7 @@ export const HUB_SUBJECT_TABLES = {
   app_project: 'exported', // projects they lead
   app_feature: 'exported', // features they own
   app_focus_directive: 'exported', // directives they declared
+  app_idea: 'exported', // ideas they captured (their free-text jots)
 
   // Plan structure — no user column at all. A dependency edge, an indicative
   // task, a sprint or a phase describes the work, not a person; the people
@@ -102,25 +103,34 @@ export const HUB_SUBJECT_TABLES = {
  * and Art. 15 is a right to one's own.
  */
 export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promise<AppSubjectData> {
-  const [memberships, taskClaims, authoredEvents, tasks, projectsLed, featuresOwned, directives] =
-    await Promise.all([
-      prisma.projectMember.findMany({ where: { userId }, orderBy: { addedAt: 'asc' } }),
-      prisma.taskClaim.findMany({ where: { userId }, orderBy: { claimedAt: 'asc' } }),
-      prisma.projectEvent.findMany({
-        where: { actorUserId: userId },
-        orderBy: { createdAt: 'asc' },
-      }),
-      prisma.task.findMany({
-        where: { OR: [{ assigneeUserId: userId }, { claimedByUserId: userId }] },
-        orderBy: { createdAt: 'asc' },
-      }),
-      prisma.project.findMany({ where: { leadUserId: userId }, orderBy: { createdAt: 'asc' } }),
-      prisma.feature.findMany({ where: { ownerUserId: userId }, orderBy: { createdAt: 'asc' } }),
-      prisma.focusDirective.findMany({
-        where: { declaredByUserId: userId },
-        orderBy: { declaredAt: 'asc' },
-      }),
-    ]);
+  const [
+    memberships,
+    taskClaims,
+    authoredEvents,
+    tasks,
+    projectsLed,
+    featuresOwned,
+    directives,
+    ideas,
+  ] = await Promise.all([
+    prisma.projectMember.findMany({ where: { userId }, orderBy: { addedAt: 'asc' } }),
+    prisma.taskClaim.findMany({ where: { userId }, orderBy: { claimedAt: 'asc' } }),
+    prisma.projectEvent.findMany({
+      where: { actorUserId: userId },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.task.findMany({
+      where: { OR: [{ assigneeUserId: userId }, { claimedByUserId: userId }] },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.project.findMany({ where: { leadUserId: userId }, orderBy: { createdAt: 'asc' } }),
+    prisma.feature.findMany({ where: { ownerUserId: userId }, orderBy: { createdAt: 'asc' } }),
+    prisma.focusDirective.findMany({
+      where: { declaredByUserId: userId },
+      orderBy: { declaredAt: 'asc' },
+    }),
+    prisma.idea.findMany({ where: { createdByUserId: userId }, orderBy: { createdAt: 'asc' } }),
+  ]);
 
   return {
     projectMemberships: memberships,
@@ -130,5 +140,6 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     projectsLed,
     featuresOwned,
     focusDirectives: directives,
+    ideas,
   };
 }

@@ -17,8 +17,26 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { describe, it, expect } from 'vitest';
-import { HUB_SUBJECT_TABLES } from '@/lib/app/data-export';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { HUB_SUBJECT_TABLES, collectAppSubjectData } from '@/lib/app/data-export';
+
+vi.mock('@/lib/db/client', () => {
+  const findMany = () => vi.fn().mockResolvedValue([]);
+  return {
+    prisma: {
+      projectMember: { findMany: findMany() },
+      taskClaim: { findMany: findMany() },
+      projectEvent: { findMany: findMany() },
+      task: { findMany: findMany() },
+      project: { findMany: findMany() },
+      feature: { findMany: findMany() },
+      focusDirective: { findMany: findMany() },
+      idea: { findMany: findMany() },
+    },
+  };
+});
+
+const { prisma } = await import('@/lib/db/client');
 
 const SCHEMA = path.join(process.cwd(), 'prisma/schema/app.prisma');
 
@@ -66,5 +84,46 @@ describe('Hub subject-data export', () => {
       wronglyExcluded,
       'table carries a user-id column but is marked no-personal-data'
     ).toEqual([]);
+  });
+});
+
+describe('collectAppSubjectData', () => {
+  const ideaFindMany = prisma.idea.findMany as ReturnType<typeof vi.fn>;
+  const featureFindMany = prisma.feature.findMany as ReturnType<typeof vi.fn>;
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it('scopes each source to the subject — ideas by createdByUserId (their own jots only)', async () => {
+    ideaFindMany.mockResolvedValue([{ id: 'idea-1', text: 'a jot' }]);
+    featureFindMany.mockResolvedValue([{ id: 'f-1' }]);
+
+    const data = await collectAppSubjectData({ userId: 'u1', email: 'u1@example.com' });
+
+    // GDPR Art. 15: a subject receives ONLY their own ideas — never a colleague's.
+    expect(ideaFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { createdByUserId: 'u1' } })
+    );
+    expect(data.ideas).toEqual([{ id: 'idea-1', text: 'a jot' }]);
+    // A neighbouring source keeps working (its own scoping column, not the idea one).
+    expect(featureFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { ownerUserId: 'u1' } })
+    );
+    expect(data.featuresOwned).toEqual([{ id: 'f-1' }]);
+  });
+
+  it('returns every declared section, even when a subject has no rows', async () => {
+    const data = await collectAppSubjectData({ userId: 'ghost', email: 'ghost@example.com' });
+    expect(Object.keys(data).sort()).toEqual(
+      [
+        'authoredEvents',
+        'featuresOwned',
+        'focusDirectives',
+        'ideas',
+        'projectMemberships',
+        'projectsLed',
+        'taskClaims',
+        'tasks',
+      ].sort()
+    );
   });
 });
