@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/projects/access', () => ({ resolveFeatureAccess: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
-  prisma: { task: { findMany: vi.fn() } },
+  prisma: { task: { findMany: vi.fn() }, idea: { findFirst: vi.fn() } },
 }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
@@ -26,6 +26,7 @@ const { CreateTaskCapability } = await import('@/lib/projects/capabilities/creat
 
 const resolveFeature = resolveFeatureAccess as ReturnType<typeof vi.fn>;
 const taskFindMany = prisma.task.findMany as ReturnType<typeof vi.fn>;
+const ideaFindFirst = prisma.idea.findFirst as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
@@ -43,9 +44,11 @@ const granted = {
 const txDepCreateMany = vi.fn();
 const txTaskCreate = vi.fn();
 const txProjectUpdate = vi.fn();
+const txIdeaUpdateMany = vi.fn();
 function mockTxCreatesTask(id = 't-new', status = 'claimed', nextNumber = 7) {
   txTaskCreate.mockResolvedValue({ id, status });
   txProjectUpdate.mockResolvedValue({ taskCounter: nextNumber });
+  txIdeaUpdateMany.mockResolvedValue({ count: 1 });
   // The mock runs the capability's real tx callback so we can assert what it
   // wrote; the untyped vi.fn() infers a void-returning impl, hence the disable.
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
@@ -54,6 +57,7 @@ function mockTxCreatesTask(id = 't-new', status = 'claimed', nextNumber = 7) {
       project: { update: txProjectUpdate },
       task: { create: txTaskCreate },
       taskDependency: { createMany: txDepCreateMany },
+      idea: { updateMany: txIdeaUpdateMany },
     })
   );
 }
@@ -235,6 +239,68 @@ describe('create_task happy path (no deps)', () => {
       actorUserId: USER,
       metadata: { status: 'claimed', kind: 'bug' },
     });
+  });
+});
+
+describe('create_task promotion (fromIdeaId)', () => {
+  beforeEach(() => {
+    resolveFeature.mockResolvedValue(granted);
+    taskFindMany.mockResolvedValue([]);
+  });
+
+  it('promotes an open idea into a task (kind "task"), scoped to the feature project', async () => {
+    ideaFindFirst.mockResolvedValue({ status: 'open' });
+    mockTxCreatesTask('t-new', 'claimed', 7);
+
+    const r = await cap.execute({ featureId: 'f1', title: 'do it', fromIdeaId: 'idea-1' }, ctx());
+
+    expect(r.success).toBe(true);
+    expect(ideaFindFirst).toHaveBeenCalledWith({
+      where: { id: 'idea-1', projectId: 'p1' },
+      select: { status: true },
+    });
+    expect(txIdeaUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'idea-1', projectId: 'p1', status: 'open' },
+      data: {
+        status: 'promoted',
+        promotedKind: 'task',
+        promotedRefId: 't-new',
+        triagedAt: expect.any(Date),
+      },
+    });
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ fromIdeaId: 'idea-1' }) })
+    );
+  });
+
+  it('promotes an idea straight to a bug when kind:"bug" (outcome "bug")', async () => {
+    ideaFindFirst.mockResolvedValue({ status: 'open' });
+    mockTxCreatesTask('t-bug', 'claimed', 8);
+
+    await cap.execute(
+      { featureId: 'f1', title: 'logout leak', kind: 'bug', fromIdeaId: 'idea-2' },
+      ctx()
+    );
+
+    expect(txIdeaUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ promotedKind: 'bug', promotedRefId: 't-bug' }),
+      })
+    );
+  });
+
+  it('rejects an unknown idea (invalid_idea) and an already-triaged idea (idea_not_open), no write', async () => {
+    ideaFindFirst.mockResolvedValueOnce(null);
+    expect(
+      (await cap.execute({ featureId: 'f1', title: 'x', fromIdeaId: 'ghost' }, ctx())).error?.code
+    ).toBe('invalid_idea');
+
+    ideaFindFirst.mockResolvedValueOnce({ status: 'dropped' });
+    expect(
+      (await cap.execute({ featureId: 'f1', title: 'x', fromIdeaId: 'idea-3' }, ctx())).error?.code
+    ).toBe('idea_not_open');
+
+    expect(runTx).not.toHaveBeenCalled();
   });
 });
 

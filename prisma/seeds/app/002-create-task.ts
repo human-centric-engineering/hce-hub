@@ -35,6 +35,11 @@ export const createTaskFunctionDefinition = {
         description:
           "Optional task kind — 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of the feature's completion progress); defaults to 'feature_work'.",
       },
+      fromIdeaId: {
+        type: 'string',
+        description:
+          'Optional: the id of an open idea in this project being promoted into this task — it is marked promoted and linked, atomically. Use with kind:"bug" to promote an idea straight to a bug.',
+      },
     },
     required: ['featureId', 'title'],
   },

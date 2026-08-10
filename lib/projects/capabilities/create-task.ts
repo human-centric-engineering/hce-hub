@@ -30,6 +30,7 @@ import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
+import { checkIdeaPromotable, resolveIdeaOnPromotion } from '@/lib/projects/idea-promotion';
 import { redactedString } from '@/lib/security/redact';
 
 const schema = z.object({
@@ -54,6 +55,12 @@ const schema = z.object({
     .optional()
     .describe(
       "Task kind: 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of the feature's completion progress); defaults to 'feature_work'."
+    ),
+  fromIdeaId: z
+    .string()
+    .optional()
+    .describe(
+      'Optional: the id of an OPEN idea in this project being promoted into this task — it is marked promoted and linked, atomically. Use with kind:"bug" to promote an idea straight to a bug.'
     ),
 });
 
@@ -98,6 +105,11 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           enum: ['feature_work', 'bug'],
           description:
             "Optional task kind — 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of the feature's completion progress); defaults to 'feature_work'.",
+        },
+        fromIdeaId: {
+          type: 'string',
+          description:
+            'Optional: the id of an open idea in this project being promoted into this task — it is marked promoted and linked, atomically. Use with kind:"bug" to promote an idea straight to a bug.',
         },
       },
       required: ['featureId', 'title'],
@@ -157,6 +169,15 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
 
     const taskKind = args.kind ?? 'feature_work';
 
+    // Promotion: the idea must exist in THIS project and be open (friendly
+    // pre-check; the in-tx guard below is the race backstop).
+    if (args.fromIdeaId !== undefined) {
+      const promotable = await checkIdeaPromotable(access.feature.projectId, args.fromIdeaId);
+      if (!promotable.ok) {
+        return this.error(promotable.message, promotable.code);
+      }
+    }
+
     const task = await executeTransaction(async (tx) => {
       // Assign the next project-wide task number by atomically bumping the
       // project counter. The row-level lock on the project row serializes
@@ -197,8 +218,22 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
         taskId: created.id,
         kind: taskKind === 'bug' ? 'bug_reported' : 'task_created',
         actorUserId: userId,
-        metadata: { status: created.status, kind: taskKind },
+        metadata: {
+          status: created.status,
+          kind: taskKind,
+          ...(args.fromIdeaId ? { fromIdeaId: args.fromIdeaId } : {}),
+        },
       });
+      // Promotion: mark the source idea promoted into this task (bug ⇒ 'bug'),
+      // atomically. Guarded on status:'open' inside the tx (race backstop).
+      if (args.fromIdeaId !== undefined) {
+        await resolveIdeaOnPromotion(tx, {
+          ideaId: args.fromIdeaId,
+          projectId: access.feature.projectId,
+          kind: taskKind === 'bug' ? 'bug' : 'task',
+          refId: created.id,
+        });
+      }
       return created;
     });
 
@@ -208,7 +243,11 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
       entityType: 'app_task',
       entityId: task.id,
       entityName: args.title,
-      metadata: { featureId: args.featureId, dependsOnTaskIds: depIds },
+      metadata: {
+        featureId: args.featureId,
+        dependsOnTaskIds: depIds,
+        ...(args.fromIdeaId ? { fromIdeaId: args.fromIdeaId } : {}),
+      },
     });
 
     return this.success({ taskId: task.id, status: task.status, featureId: args.featureId });
