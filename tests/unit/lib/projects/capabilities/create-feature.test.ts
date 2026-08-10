@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/projects/access', () => ({ canAccessProject: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
-  prisma: { feature: { findFirst: vi.fn(), findMany: vi.fn() } },
+  prisma: { feature: { findFirst: vi.fn(), findMany: vi.fn() }, phase: { findFirst: vi.fn() } },
 }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
@@ -26,6 +26,7 @@ const { CreateFeatureCapability } = await import('@/lib/projects/capabilities/cr
 const access = canAccessProject as ReturnType<typeof vi.fn>;
 const featureFindFirst = prisma.feature.findFirst as ReturnType<typeof vi.fn>;
 const featureFindMany = prisma.feature.findMany as ReturnType<typeof vi.fn>;
+const phaseFindFirst = prisma.phase.findFirst as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
@@ -94,6 +95,17 @@ describe('create_feature validation', () => {
     expect(r.error?.code).toBe('invalid_dependency');
     expect(runTx).not.toHaveBeenCalled();
   });
+
+  it('rejects a phaseId that is not a phase in this project (invalid_phase, no write)', async () => {
+    phaseFindFirst.mockResolvedValue(null); // no such phase in the project
+    const r = await cap.execute({ projectId: 'p1', title: 'x', phaseId: 'ph-other' }, ctx());
+    expect(r.error?.code).toBe('invalid_phase');
+    expect(phaseFindFirst).toHaveBeenCalledWith({
+      where: { id: 'ph-other', projectId: 'p1' },
+      select: { id: true },
+    });
+    expect(runTx).not.toHaveBeenCalled();
+  });
 });
 
 describe('create_feature happy path', () => {
@@ -141,6 +153,34 @@ describe('create_feature happy path', () => {
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'feature.create', entityId: 'f-new' })
     );
+  });
+
+  it('files the feature under a valid phase (born filed) when phaseId is supplied', async () => {
+    phaseFindFirst.mockResolvedValue({ id: 'ph1' }); // a real phase in this project
+    mockTxCreatesFeature('f-new', 'f-mcp', 3);
+
+    const r = await cap.execute({ projectId: 'p1', title: 'MCP server', phaseId: 'ph1' }, ctx());
+
+    expect(r.success).toBe(true);
+    expect(txFeatureCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ phaseId: 'ph1' }) })
+    );
+    // Born-filed is recorded in the journal + audit (distinguishable from a later move).
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ metadata: expect.objectContaining({ phaseId: 'ph1' }) })
+    );
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ phaseId: 'ph1' }) })
+    );
+  });
+
+  it('omits phaseId from the create when not supplied (unfiled)', async () => {
+    mockTxCreatesFeature('f-new', 'f-x', 4);
+    await cap.execute({ projectId: 'p1', title: 'X' }, ctx());
+    expect(phaseFindFirst).not.toHaveBeenCalled();
+    const data = txFeatureCreate.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('phaseId');
   });
 
   it('persists a summary when supplied, defaults it to null otherwise (§21 t-d)', async () => {
