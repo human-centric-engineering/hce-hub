@@ -25,6 +25,9 @@ import listPhasesUnit, { listPhasesFunctionDefinition } from '@/prisma/seeds/app
 import createFeatureUnit, {
   createFeatureFunctionDefinition,
 } from '@/prisma/seeds/app/010-create-feature';
+import captureIdeaUnit, {
+  captureIdeaFunctionDefinition,
+} from '@/prisma/seeds/app/024-capture-idea';
 
 function runContext() {
   const upsert = vi.fn().mockResolvedValue({ id: 'cap1' });
@@ -106,5 +109,14 @@ describe('capability seeds re-sync functionDefinition on update', () => {
     expect(arg.update.functionDefinition).toEqual(createFeatureFunctionDefinition);
     // The f-idea-capture addition must reach the DB copy the MCP tool list serves.
     expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('phaseId');
+  });
+
+  it('024-capture-idea: the new capability seed re-syncs on the update branch', async () => {
+    const { ctx, upsert } = runContext();
+    await captureIdeaUnit.run(ctx);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ slug: 'capture_idea' });
+    expect(arg.update.functionDefinition).toEqual(captureIdeaFunctionDefinition);
+    expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('text');
   });
 });
