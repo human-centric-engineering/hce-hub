@@ -9,7 +9,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const captureIdeaFunctionDefinition = {
   name: 'capture_idea',
   description:
-    "Capture an idea or tweak without leaving your current work — jot a short line and it lands as an idea in the project's inbox, to triage later (promote into a feature, a task, a new phase, or a bug — or drop it). Any project member may capture.",
+    "Capture an idea or tweak without leaving your current work — jot a short line and it lands as an idea in the project's inbox, to triage later. Any project member may capture.",
   parameters: {
     type: 'object',
     properties: {
@@ -52,7 +52,7 @@ const unit: SeedUnit = {
         capabilityId: capability.id,
         isEnabled: true,
         customName: 'capture_idea',
-        readOnlyHint: false, // mutates: creates an indicative feature stub
+        readOnlyHint: false, // mutates: creates an idea in the project inbox
         openWorldHint: false,
       },
     });
