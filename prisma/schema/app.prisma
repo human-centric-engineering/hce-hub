@@ -77,9 +77,53 @@ model Project {
   phases          Phase[]
   focusDirectives FocusDirective[]
   events          ProjectEvent[]
+  ideas           Idea[]
 
   @@index([leadUserId])
   @@map("app_project")
+}
+
+/// A captured idea — the parking gesture (f-idea-capture §22). An inbox item that
+/// lives OUTSIDE the plan/phase/feature graph: at capture time we don't yet know
+/// what it is. Triage PROMOTES it into whatever it turns out to be (a feature, a
+/// task on an existing feature, a new phase, or a bug) — recorded in `promotedKind`
+/// / `promotedRefId` — or DROPS it (`status = dropped`, reversible; dropped ideas
+/// are retained as a browseable archive, never deleted). `createdByUserId` is a
+/// hand-FK → "user" with ON DELETE SET NULL (a raw-SQL constraint in the migration,
+/// like `app_feature.ownerUserId`) so erasure de-attributes but retains the idea.
+model Idea {
+  id              String       @id @default(cuid())
+  projectId       String
+  text            String       @db.Text // the raw jot — the subject's free-text personal data (exported)
+  status          IdeaStatus   @default(open)
+  createdByUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the idea as project data)
+  createdAt       DateTime     @default(now())
+  // Triage outcome — set when promoted (f-idea-capture promotion task). What it became:
+  promotedKind    IdeaOutcome? // feature | task | phase | bug
+  promotedRefId   String? // id of the created feature / task / phase (bug = the task id)
+  triagedAt       DateTime? // when promoted or dropped
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status])
+  @@map("app_idea")
+}
+
+/// Lifecycle of a captured idea. `open` in the inbox → `promoted` (became a
+/// feature/task/phase/bug) or `dropped` (archived, reversible).
+enum IdeaStatus {
+  open
+  promoted
+  dropped
+}
+
+/// What an idea was promoted into. A `bug` is a task with `kind = bug`, so its
+/// `promotedRefId` is the created task's id.
+enum IdeaOutcome {
+  feature
+  task
+  phase
+  bug
 }
 
 model ProjectMember {

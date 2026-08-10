@@ -108,4 +108,14 @@ export function registerAppDriftProbes(): void {
     table: 'app_project_event',
     probe: constraintExists('app_project_event_actorUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // Idea capture (f-idea-capture §22): a captured idea is retained project data —
+  // the creator reference nulls on erasure, the idea stays (exported under Art. 15).
+  // (projectId is a modelled Prisma relation, so Prisma owns that FK; only the
+  // hand-written user edge needs a probe.)
+  registerAppDriftProbe({
+    name: 'app_idea_createdByUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_idea',
+    probe: constraintExists('app_idea_createdByUserId_fkey', 'ON DELETE SET NULL'),
+  });
 }

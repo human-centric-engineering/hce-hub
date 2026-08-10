@@ -1,7 +1,7 @@
 import type { SeedUnit } from '@/prisma/runner';
 
 /**
- * Seed the `capture_idea` Hub write capability (f-idea-capture §22-03 t-58).
+ * Seed the `capture_idea` Hub write capability (f-idea-capture §22).
  * See `app/001-next-task.ts` for the seam + parity conventions. `functionDefinition`
  * is hand-kept in sync with `CaptureIdeaCapability` by its parity test, and re-synced
  * on the update branch (the #108 fix) so a schema change reaches the DB.
@@ -9,15 +9,14 @@ import type { SeedUnit } from '@/prisma/runner';
 export const captureIdeaFunctionDefinition = {
   name: 'capture_idea',
   description:
-    "Capture an idea or tweak without leaving your current work — jot a short line and it lands as an indicative feature stub in the project's parked phase (the Ideas Park), to triage later (promote into an active phase, or drop). Any project member may capture. The project must have a parked phase.",
+    "Capture an idea or tweak without leaving your current work — jot a short line and it lands as an idea in the project's inbox, to triage later (promote into a feature, a task, a new phase, or a bug — or drop it). Any project member may capture.",
   parameters: {
     type: 'object',
     properties: {
       projectId: { type: 'string', description: 'The project to capture the idea into.' },
       text: {
         type: 'string',
-        description:
-          'The idea — a short line; it becomes an indicative feature stub in the Ideas Park.',
+        description: 'The idea — a short line; it lands in the project inbox to triage later.',
       },
     },
     required: ['projectId', 'text'],
@@ -36,7 +35,7 @@ const unit: SeedUnit = {
         slug: 'capture_idea',
         name: 'Capture Idea',
         description:
-          "Jot an idea into the project's parked phase (Ideas Park) as an indicative stub. Any member; audited.",
+          "Jot an idea into the project's inbox to triage later (promote or drop). Any member; audited.",
         category: 'coordination',
         executionType: 'internal',
         executionHandler: 'CaptureIdeaCapability',

@@ -14,7 +14,7 @@ vi.mock('@/lib/projects/capture-idea-service', () => ({ captureIdea: vi.fn() }))
 
 import { auth } from '@/lib/auth/config';
 import { captureIdea } from '@/lib/projects/capture-idea-service';
-import { NotFoundError, ValidationError } from '@/lib/api/errors';
+import { NotFoundError } from '@/lib/api/errors';
 import { POST as ideasPost } from '@/app/api/v1/projects/[id]/ideas/route';
 import { mockAuthenticatedUser, mockUnauthenticatedUser } from '@/tests/helpers/auth';
 
@@ -38,14 +38,14 @@ describe('POST /api/v1/projects/:id/ideas', () => {
     expect(captureMock).not.toHaveBeenCalled();
   });
 
-  it('captures for a member, project-scoped, and returns the result', async () => {
+  it('captures for a member, project-scoped, and returns the ideaId', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
-    captureMock.mockResolvedValue({ featureId: 'f-new', phaseId: 'park1' });
+    captureMock.mockResolvedValue({ ideaId: 'idea-new' });
     const res = await ideasPost(req({ text: 'an idea' }), params());
     expect(res.status).toBe(200);
     expect(captureMock).toHaveBeenCalledWith(expect.any(String), PID, 'an idea');
     const json = await res.json();
-    expect(json.data.featureId).toBe('f-new');
+    expect(json.data.ideaId).toBe('idea-new');
   });
 
   it('400s a missing/empty idea before touching the core', async () => {
@@ -70,12 +70,6 @@ describe('POST /api/v1/projects/:id/ideas', () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
     captureMock.mockRejectedValue(new NotFoundError('Project not found'));
     expect((await ideasPost(req(), params())).status).toBe(404);
-  });
-
-  it('400s when the project has no parked phase (ValidationError)', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
-    captureMock.mockRejectedValue(new ValidationError('no parked phase'));
-    expect((await ideasPost(req(), params())).status).toBe(400);
   });
 
   it('400s an invalid (non-cuid) project id before capturing', async () => {
