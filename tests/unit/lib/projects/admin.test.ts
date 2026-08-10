@@ -70,6 +70,7 @@ function makeTx() {
       update: vi.fn().mockResolvedValue({ id: 'p1', name: 'Hub', knowledgeTagId: 'tag1' }),
     },
     knowledgeTag: { create: vi.fn().mockResolvedValue({ id: 'tag1' }) },
+    phase: { create: vi.fn().mockResolvedValue({ id: 'ideas1' }) },
     projectMember: {
       create: vi.fn().mockResolvedValue({ id: 'm1' }),
       upsert: vi.fn().mockResolvedValue({ id: 'm2' }),
@@ -109,6 +110,30 @@ describe('createProject — the invariant', () => {
       })
     );
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'project.create' }));
+  });
+
+  it('is born with a parked "Ideas Park" phase so capture always has a home (t-59)', async () => {
+    userFindUnique.mockResolvedValue({ id: 'lead_1' });
+    const tx = makeTx();
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    runTx.mockImplementation((cb: (t: unknown) => Promise<unknown>) => cb(tx));
+
+    await createProject({ name: 'Hub', hostPlatform: 'sunrise', leadUserId: 'lead_1' }, actor);
+
+    // A single parked phase at ordinal 0 — matched by status, not name; the sole
+    // phase of a fresh project, so it's trivially last in the roadmap.
+    expect(tx.phase.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { projectId: 'p1', name: 'Ideas Park', status: 'parked', ordinal: 0 },
+      })
+    );
+    // Its id rides on the project.create audit for traceability.
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'project.create',
+        metadata: expect.objectContaining({ ideasParkPhaseId: 'ideas1' }),
+      })
+    );
   });
 
   it('rejects a non-existent lead before opening a transaction', async () => {

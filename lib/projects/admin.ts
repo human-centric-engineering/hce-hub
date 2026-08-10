@@ -210,7 +210,7 @@ export async function createProject(
   const slug =
     input.slug !== undefined ? input.slug : await uniqueProjectSlug(slugifyProjectName(input.name));
 
-  const project = await executeTransaction(async (tx) => {
+  const seeded = await executeTransaction(async (tx) => {
     const created = await tx.project.create({
       data: {
         slug,
@@ -240,20 +240,33 @@ export async function createProject(
       data: { projectId: created.id, userId: input.leadUserId, role: 'lead' },
     });
 
-    return withTag;
+    // Every project is born with a parked "Ideas Park" phase (f-idea-capture §22
+    // t-59) so `capture_idea` / `POST …/ideas` always has a home — no manual setup
+    // before the first jot. Capture targets by parked *status* (the name is
+    // cosmetic), and this is the project's sole phase at birth, so `ordinal: 0`.
+    const ideasPark = await tx.phase.create({
+      data: { projectId: created.id, name: 'Ideas Park', status: 'parked', ordinal: 0 },
+      select: { id: true },
+    });
+
+    return { project: withTag, ideasParkPhaseId: ideasPark.id };
   }).catch(rethrowSlugConflict);
 
   logAdminAction({
     userId: actor.userId,
     action: 'project.create',
     entityType: 'app_project',
-    entityId: project.id,
-    entityName: project.name,
-    metadata: { hostPlatform: project.hostPlatform, leadUserId: input.leadUserId },
+    entityId: seeded.project.id,
+    entityName: seeded.project.name,
+    metadata: {
+      hostPlatform: seeded.project.hostPlatform,
+      leadUserId: input.leadUserId,
+      ideasParkPhaseId: seeded.ideasParkPhaseId,
+    },
     clientIp: actor.clientIp,
   });
 
-  return project;
+  return seeded.project;
 }
 
 /**
