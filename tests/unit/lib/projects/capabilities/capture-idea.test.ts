@@ -44,6 +44,16 @@ describe('capture_idea capability', () => {
     expect(capture).toHaveBeenCalledWith('caller', 'p1', 'an idea');
   });
 
+  it('trims surrounding whitespace so the MCP face matches the HTTP route', () => {
+    // The dispatcher runs `validate` (the Zod schema) before `execute`; the route
+    // trims too, so both faces store the same title — no whitespace drift.
+    expect(cap.validate({ projectId: 'p1', text: '  an idea  ' }).text).toBe('an idea');
+  });
+
+  it('rejects an all-whitespace jot (empty after trim), like the route', () => {
+    expect(() => cap.validate({ projectId: 'p1', text: '   ' })).toThrow();
+  });
+
   it('masks the free-text jot in provenance, keeping the project scope', () => {
     const redacted = cap.redactProvenance(
       { projectId: 'p1', text: 'a sensitive idea about someone' },

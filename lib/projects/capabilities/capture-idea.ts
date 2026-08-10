@@ -27,6 +27,7 @@ const schema = z.object({
   projectId: z.string().describe('The project to capture the idea into.'),
   text: z
     .string()
+    .trim()
     .min(1)
     .max(500)
     .describe('The idea — a short line; it becomes an indicative feature stub in the Ideas Park.'),

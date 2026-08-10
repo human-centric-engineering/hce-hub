@@ -6,8 +6,9 @@
  * `captureIdea()` core (f-idea-capture §22-03 t-58); the `capture_idea` MCP
  * capability is the other face. The quick-jot UI (t-59) POSTs here.
  *
- * Fork-owned. Auth + the automatic per-section write cap come from `withAuth`; the
- * body is validated at this boundary. `captureIdea` routes through the [[f-access]]
+ * Fork-owned. Auth comes from `withAuth`; the automatic per-section write cap is
+ * applied by the security middleware (`proxy.ts`), not the guard. The body is
+ * validated at this boundary. `captureIdea` routes through the [[f-access]]
  * funnel, so a **non-member or unknown project is a 404, never a 403**; a project
  * with no parked phase is a 400 (`ValidationError`, mapped by `handleAPIError`).
  */
