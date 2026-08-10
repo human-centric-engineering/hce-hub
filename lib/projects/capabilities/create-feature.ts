@@ -28,6 +28,7 @@ import { executeTransaction } from '@/lib/db/utils';
 import { canAccessProject } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
+import { checkIdeaPromotable, resolveIdeaOnPromotion } from '@/lib/projects/idea-promotion';
 import { redactedString } from '@/lib/security/redact';
 
 const referenceSpec = z.object({
@@ -67,6 +68,12 @@ const schema = z.object({
     .string()
     .optional()
     .describe('Optional: file the new feature under a phase in this project (born filed).'),
+  fromIdeaId: z
+    .string()
+    .optional()
+    .describe(
+      'Optional: the id of an OPEN idea in this project being promoted into this feature — it is marked promoted and linked, atomically.'
+    ),
   indicativeTasks: z
     .array(z.string().min(1).max(500))
     .max(100)
@@ -125,6 +132,11 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
           type: 'string',
           description: 'Optional: file the new feature under a phase in this project (born filed).',
         },
+        fromIdeaId: {
+          type: 'string',
+          description:
+            'Optional: the id of an open idea in this project being promoted into this feature — it is marked promoted and linked, atomically.',
+        },
         indicativeTasks: {
           type: 'array',
           items: { type: 'string' },
@@ -148,6 +160,7 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
         projectId: args.projectId,
         slug: args.slug ?? null,
         phaseId: args.phaseId ?? null,
+        fromIdeaId: args.fromIdeaId ?? null,
         dependsOnFeatureIds: args.dependsOnFeatureIds ?? [],
         title: redactedString(`title (${args.title.length} chars)`),
         summary: args.summary ? redactedString(`summary (${args.summary.length} chars)`) : null,
@@ -214,6 +227,15 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
       }
     }
 
+    // Promotion: the idea must exist in THIS project and be open (friendly
+    // pre-check; the in-tx guard below is the race backstop).
+    if (args.fromIdeaId !== undefined) {
+      const promotable = await checkIdeaPromotable(args.projectId, args.fromIdeaId);
+      if (!promotable.ok) {
+        return this.error(promotable.message, promotable.code);
+      }
+    }
+
     const feature = await executeTransaction(async (tx) => {
       // Bump the project counter for a unique, stable project-wide `number` by
       // construction — the feature's §N, mirroring Task.number (f-status-model §20 t-37).
@@ -258,8 +280,21 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
         actorUserId: userId,
         // Capture a born-filed phase so the journal distinguishes it from a later
         // `update_feature` move (which records 'phase').
-        metadata: { slug: created.slug, ...(args.phaseId ? { phaseId: args.phaseId } : {}) },
+        metadata: {
+          slug: created.slug,
+          ...(args.phaseId ? { phaseId: args.phaseId } : {}),
+          ...(args.fromIdeaId ? { fromIdeaId: args.fromIdeaId } : {}),
+        },
       });
+      // Promotion: mark the source idea promoted into this feature, atomically.
+      if (args.fromIdeaId !== undefined) {
+        await resolveIdeaOnPromotion(tx, {
+          ideaId: args.fromIdeaId,
+          projectId: args.projectId,
+          kind: 'feature',
+          refId: created.id,
+        });
+      }
       return created;
     });
 
@@ -273,6 +308,7 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
         projectId: args.projectId,
         dependsOnFeatureIds: depIds,
         ...(args.phaseId ? { phaseId: args.phaseId } : {}),
+        ...(args.fromIdeaId ? { fromIdeaId: args.fromIdeaId } : {}),
       },
     });
 
