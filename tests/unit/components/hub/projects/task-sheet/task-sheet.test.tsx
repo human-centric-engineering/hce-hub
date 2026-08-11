@@ -313,6 +313,7 @@ describe('TaskSheet body + actions', () => {
       detail: detail({ status: 'claimed' }),
       action: {
         taskId: 't1',
+        number: 1,
         status: 'active',
         warnings: [
           { kind: 'already_claimed', message: 'Heads-up: already claimed by someone else.' },
@@ -332,7 +333,7 @@ describe('TaskSheet body + actions', () => {
   it('completes via POST once the task is active', async () => {
     renderSheet({
       detail: detail({ status: 'active' }),
-      action: { taskId: 't1', status: 'merged', warnings: [] },
+      action: { taskId: 't1', number: 1, status: 'merged', warnings: [] },
     });
     const btn = await screen.findByRole('button', { name: 'Complete' });
     expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
@@ -436,7 +437,7 @@ describe('TaskSheet body + actions', () => {
   it('links a PR via the inline form — POSTs the URL to set-pr', async () => {
     renderSheet({
       detail: detail({ status: 'claimed', prUrl: null }),
-      action: { taskId: 't1', status: 'claimed', warnings: [] },
+      action: { taskId: 't1', number: 1, status: 'claimed', warnings: [] },
     });
     // With no PR yet, the affordance reads "Link PR".
     fireEvent.click(await screen.findByRole('button', { name: 'Link PR' }));

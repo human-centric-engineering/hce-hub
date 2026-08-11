@@ -55,6 +55,9 @@ export interface CollisionWarning {
 /** The `POST …/start` | `…/complete` payload (mirrors `TaskActionResult`). */
 export interface TaskActionResultDTO {
   taskId: string;
+  /** The task's `t-N` ref (f-refs; `null` until assigned) — carried so a handler can
+   * name what it just started/completed (t-66). */
+  number: number | null;
   status: TaskEffectiveStatus;
   warnings: CollisionWarning[];
 }
