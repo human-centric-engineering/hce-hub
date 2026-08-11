@@ -267,6 +267,8 @@ export async function resolveEventScope(
 /** A task's claim-relevant fields + the caller's role, once access is granted. */
 export interface TaskAccess {
   taskId: string;
+  /** Project-wide `t-N`; `null` until assigned (f-refs). */
+  number: number | null;
   featureId: string;
   projectId: string;
   status: TaskStatus;
@@ -289,6 +291,7 @@ export async function resolveTaskAccess(userId: string, taskId: string): Promise
     where: { id: taskId },
     select: {
       id: true,
+      number: true,
       featureId: true,
       status: true,
       claimedByUserId: true,
@@ -305,6 +308,7 @@ export async function resolveTaskAccess(userId: string, taskId: string): Promise
     ok: true,
     task: {
       taskId: task.id,
+      number: task.number,
       featureId: task.featureId,
       projectId: task.feature.projectId,
       status: task.status,

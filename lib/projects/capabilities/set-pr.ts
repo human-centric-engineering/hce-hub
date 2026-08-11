@@ -44,6 +44,8 @@ type Args = z.infer<typeof schema>;
 
 interface Data {
   taskId: string;
+  /** The task's `t-N` ref (f-refs; `null` until assigned) — name what you just linked (t-66). */
+  number: number | null;
   /** The task's status — unchanged (linking a PR never advances the lifecycle). */
   status: TaskStatus;
 }
@@ -80,7 +82,11 @@ export class SetPrCapability extends BaseCapability<Args, Data> {
 
     try {
       const result = await setTaskPr(userId, args.taskId, args.prUrl, args.projectId);
-      return this.success({ taskId: result.taskId, status: result.status });
+      return this.success({
+        taskId: result.taskId,
+        number: result.number,
+        status: result.status,
+      });
     } catch (err) {
       // The funnel throws NotFoundError for a non-member / unknown / cross-project
       // task (deny ≡ not_found, no enumeration); anything else is a real fault.

@@ -46,7 +46,7 @@ const txIndicativeCreateMany = vi.fn();
 const txProjectUpdate = vi.fn();
 const txIdeaUpdateMany = vi.fn();
 function mockTxCreatesFeature(id = 'f-new', slug: string | null = null, nextNumber = 3) {
-  txFeatureCreate.mockResolvedValue({ id, slug });
+  txFeatureCreate.mockResolvedValue({ id, slug, number: nextNumber });
   txProjectUpdate.mockResolvedValue({ featureCounter: nextNumber });
   txIdeaUpdateMany.mockResolvedValue({ count: 1 });
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
@@ -132,7 +132,7 @@ describe('create_feature happy path', () => {
       ctx()
     );
 
-    expect(r).toEqual({ success: true, data: { featureId: 'f-new', slug: 'f-mcp' } });
+    expect(r).toEqual({ success: true, data: { featureId: 'f-new', slug: 'f-mcp', number: 3 } });
     // Unowned (you claim features, not tasks) + indicative + planning.
     expect(txFeatureCreate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -327,7 +327,7 @@ describe('create_feature redactProvenance', () => {
         dependsOnFeatureIds: ['d1'],
         indicativeTasks: ['a', 'b'],
       },
-      { success: true, data: { featureId: 'f', slug: 'f-mcp' } }
+      { success: true, data: { featureId: 'f', slug: 'f-mcp', number: 3 } }
     );
     const a = out.args as Record<string, unknown>;
     expect(a.projectId).toBe('p1');

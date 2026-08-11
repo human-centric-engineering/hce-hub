@@ -38,6 +38,8 @@ type Args = z.infer<typeof schema>;
 
 interface Data {
   taskId: string;
+  /** The task's `t-N` ref (f-refs; `null` until assigned) — name what you just merged (t-66). */
+  number: number | null;
   status: TaskStatus;
   /** Always empty for complete — kept for a uniform task-action shape. */
   warnings: CollisionWarning[];

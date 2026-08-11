@@ -9,7 +9,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const createFeatureFunctionDefinition = {
   name: 'create_feature',
   description:
-    'Author a feature into a project as an unowned, high-level sketch (planning + indicative). Carries title, optional slug/description/done-when/references, optional dependencies on existing features, an optional phase to file it under, and an optional indicative task sketch. Any project member may create one; claim it separately to take ownership.',
+    'Author a feature into a project as an unowned, high-level sketch (planning + indicative). Carries title, optional slug/description/done-when/references, optional dependencies on existing features, an optional phase to file it under, and an optional indicative task sketch. Any project member may create one; claim it separately to take ownership. The result includes the created feature id, slug + assigned §N.',
   parameters: {
     type: 'object',
     properties: {

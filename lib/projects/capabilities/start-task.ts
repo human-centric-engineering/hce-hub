@@ -40,6 +40,8 @@ type Args = z.infer<typeof schema>;
 
 interface Data {
   taskId: string;
+  /** The task's `t-N` ref (f-refs; `null` until assigned) — name what you just started (t-66). */
+  number: number | null;
   status: TaskStatus;
   /** Advisory file-overlap / already-held warnings — never a block. */
   warnings: CollisionWarning[];

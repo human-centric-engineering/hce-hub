@@ -45,8 +45,12 @@ type Args = z.infer<typeof schema>;
 /** The recommended task, shaped for a caller to act on. `null` when none. */
 interface NextTaskDto {
   id: string;
+  /** Project-wide `t-N` ref (f-refs; `null` until assigned) — name the pick without a second read (t-66). */
+  number: number | null;
   title: string;
   featureId: string;
+  /** The feature's authored slug (`f-mcp`); `null` until authored. */
+  featureSlug: string | null;
   projectId: string;
   filesScope: string[];
   prUrl: string | null;
@@ -65,7 +69,7 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'next_task',
     description:
-      "Recommend the single highest-priority task the caller can start next — a claimed task whose dependencies are all merged (nothing blocked by an open PR), in a feature the caller owns, or any help-wanted feature when includeHelpWanted is true. Membership-scoped: only the caller's projects are considered. A recommendation, not an assignment.",
+      "Recommend the single highest-priority task the caller can start next — a claimed task whose dependencies are all merged (nothing blocked by an open PR), in a feature the caller owns, or any help-wanted feature when includeHelpWanted is true. Membership-scoped: only the caller's projects are considered. A recommendation, not an assignment. The result includes the task t-N + feature slug so you can name it.",
     parameters: {
       type: 'object',
       properties: {
@@ -120,6 +124,7 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
       where: { feature: featureWhere },
       select: {
         id: true,
+        number: true,
         title: true,
         featureId: true,
         filesScope: true,
@@ -127,7 +132,7 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
         status: true,
         kind: true,
         claimedByUserId: true,
-        feature: { select: { projectId: true } },
+        feature: { select: { projectId: true, slug: true } },
         dependencies: { select: { dependsOn: { select: { status: true } } } },
       },
       orderBy: [{ feature: { createdAt: 'asc' } }, { createdAt: 'asc' }],
@@ -149,8 +154,10 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
       task: pick
         ? {
             id: pick.id,
+            number: pick.number,
             title: pick.title,
             featureId: pick.featureId,
+            featureSlug: pick.feature.slug,
             projectId: pick.feature.projectId,
             filesScope: pick.filesScope,
             prUrl: pick.prUrl,

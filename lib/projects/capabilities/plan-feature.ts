@@ -67,7 +67,10 @@ type Args = z.infer<typeof schema>;
 
 interface Data {
   featureId: string;
-  taskIds: string[];
+  /** The materialised tasks, each with its project-wide `t-N` ref (f-refs) so a planner
+   * can name them immediately without a second read (t-66). `number` is `null` only
+   * if unassigned (never for a freshly-created task). */
+  tasks: { id: string; number: number | null }[];
   planningStage: 'planned';
 }
 
@@ -78,7 +81,7 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'plan_feature',
     description:
-      "Materialise a feature's tasks: creates real tasks (numbered, born claimed and owned by the feature owner), wires their dependencies, replaces the indicative sketch, and marks the feature planned. Only the feature owner or a project lead may plan. A cyclic task batch is rejected.",
+      "Materialise a feature's tasks: creates real tasks (numbered, born claimed and owned by the feature owner), wires their dependencies, replaces the indicative sketch, and marks the feature planned. Only the feature owner or a project lead may plan. A cyclic task batch is rejected. The result lists each created task with its id + t-N.",
     parameters: {
       type: 'object',
       properties: {
@@ -212,10 +215,10 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
       throw err;
     }
 
-    const taskIds = await executeTransaction(async (tx) => {
+    const tasks = await executeTransaction(async (tx) => {
       // Create every task first so batch-local refs can resolve to real ids.
       const refToId = new Map<string, string>();
-      const created: string[] = [];
+      const created: { id: string; number: number | null }[] = [];
       for (const spec of args.tasks) {
         // Bump the project counter per task (unique `number` by construction — f-refs).
         const { taskCounter } = await tx.project.update({
@@ -239,10 +242,10 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
             assigneeUserId: access.feature.ownerUserId,
             claimedByUserId: access.feature.ownerUserId,
           },
-          select: { id: true },
+          select: { id: true, number: true },
         });
         refToId.set(spec.ref, task.id);
-        created.push(task.id);
+        created.push({ id: task.id, number: task.number });
       }
 
       // Wire dependencies (de-duplicated per task), resolving batch refs → created
@@ -272,11 +275,11 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
         actorUserId: userId,
         metadata: { taskCount: created.length },
       });
-      for (const taskId of created) {
+      for (const t of created) {
         await recordProjectEvent(tx, {
           projectId: access.feature.projectId,
           featureId: args.featureId,
-          taskId,
+          taskId: t.id,
           kind: 'task_created',
           actorUserId: userId,
           metadata: { status: 'claimed' },
@@ -290,9 +293,9 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
       action: 'feature.plan',
       entityType: 'app_feature',
       entityId: args.featureId,
-      metadata: { projectId: access.feature.projectId, taskCount: taskIds.length },
+      metadata: { projectId: access.feature.projectId, taskCount: tasks.length },
     });
 
-    return this.success({ featureId: args.featureId, taskIds, planningStage: 'planned' });
+    return this.success({ featureId: args.featureId, tasks, planningStage: 'planned' });
   }
 }
