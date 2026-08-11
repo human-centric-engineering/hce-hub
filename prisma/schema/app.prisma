@@ -70,6 +70,7 @@ model Project {
   sidekickAgentId String? // set by f-sidekick (Sunrise AiAgent); no FK
   taskCounter     Int           @default(0) // monotonic source for project-wide Task.number (f-refs)
   featureCounter  Int           @default(0) // monotonic source for project-wide Feature.number (f-status-model §20 t-37)
+  ideaCounter     Int           @default(0) // monotonic source for project-wide Idea.number (f-idea-capture §22 t-63)
   createdAt       DateTime      @default(now())
 
   members         ProjectMember[]
@@ -94,6 +95,7 @@ model Project {
 model Idea {
   id              String       @id @default(cuid())
   projectId       String
+  number          Int? // stable project-wide `#N` (f-idea-capture §22 t-63) — a human handle for "promote #4"; assigned at capture, never changes across drop/restore/promote
   text            String       @db.Text // the raw jot — the subject's free-text personal data (exported)
   status          IdeaStatus   @default(open)
   createdByUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the idea as project data)

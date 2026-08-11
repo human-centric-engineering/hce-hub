@@ -12,6 +12,7 @@ import type { IdeaInboxDTO, IdeaView } from '@/components/hub/projects/ideas/typ
 
 const idea = (over: Partial<IdeaView>): IdeaView => ({
   id: 'i',
+  number: 1,
   text: 'a jot',
   status: 'open',
   createdBy: null,

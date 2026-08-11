@@ -14,6 +14,7 @@ import type { IdeaView } from '@/components/hub/projects/ideas/types';
 
 const openIdea: IdeaView = {
   id: 'i1',
+  number: 4,
   text: 'board should remember my last filter',
   status: 'open',
   createdBy: { id: 'u1', name: 'Ada Lovelace', email: 'ada@x.io', image: null },
@@ -33,11 +34,18 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.unstubAllGlobals());
 
 describe('IdeaRow', () => {
-  it('renders the jot, author and date', () => {
+  it('renders the #N handle, jot, author and date', () => {
     render(<IdeaRow projectId="p1" idea={openIdea} />);
+    expect(screen.getByText('#4')).toBeInTheDocument();
     expect(screen.getByText('board should remember my last filter')).toBeInTheDocument();
     expect(screen.getByText(/captured by Ada Lovelace/)).toBeInTheDocument();
     expect(screen.getByText(/1 Aug 2026/)).toBeInTheDocument();
+  });
+
+  it('omits the handle for a pre-t-63 idea with no number', () => {
+    render(<IdeaRow projectId="p1" idea={{ ...openIdea, number: null }} />);
+    expect(screen.queryByText(/^#/)).not.toBeInTheDocument();
+    expect(screen.getByText('board should remember my last filter')).toBeInTheDocument();
   });
 
   it('renders "former member" when the author was erased', () => {

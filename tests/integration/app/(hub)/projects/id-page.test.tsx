@@ -99,6 +99,7 @@ const ideasPayload = {
   ideas: [
     {
       id: 'i1',
+      number: 1,
       text: 'remember my last filter',
       status: 'open',
       createdBy: null,

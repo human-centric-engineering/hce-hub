@@ -20,6 +20,9 @@ import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
 /** An idea row in the inbox. */
 export interface IdeaView {
   id: string;
+  /** Stable project-wide `#N` handle (f-idea-capture §22 t-63); `null` only for a
+   * pre-t-63 row the backfill somehow missed (never for a freshly captured idea). */
+  number: number | null;
   text: string;
   /** `open` (to triage) or `dropped` (archived, restorable). Never `promoted` here. */
   status: Extract<IdeaStatus, 'open' | 'dropped'>;
@@ -48,6 +51,7 @@ export async function getProjectIdeas(userId: string, projectId: string): Promis
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
+      number: true,
       text: true,
       status: true,
       createdByUserId: true,
@@ -60,6 +64,7 @@ export async function getProjectIdeas(userId: string, projectId: string): Promis
 
   const ideas: IdeaView[] = rows.map((r) => ({
     id: r.id,
+    number: r.number,
     text: r.text,
     status: r.status as Extract<IdeaStatus, 'open' | 'dropped'>,
     createdBy: r.createdByUserId ? (users.get(r.createdByUserId) ?? null) : null,
