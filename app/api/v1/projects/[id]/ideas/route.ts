@@ -19,6 +19,7 @@ import { getRouteLogger } from '@/lib/api/context';
 import { parseCuidParam } from '@/lib/api/route-params';
 import { captureIdea } from '@/lib/projects/capture-idea-service';
 import { getProjectIdeas } from '@/lib/projects/ideas';
+import { IDEA_TEXT_MAX } from '@/lib/projects/idea-constants';
 
 export const GET = withAuth<{ id: string }>(async (request, session, { params }) => {
   const log = await getRouteLogger(request);
@@ -31,7 +32,7 @@ export const GET = withAuth<{ id: string }>(async (request, session, { params })
   return successResponse(inbox);
 });
 
-const bodySchema = z.object({ text: z.string().trim().min(1).max(500) });
+const bodySchema = z.object({ text: z.string().trim().min(1).max(IDEA_TEXT_MAX) });
 
 export const POST = withAuth<{ id: string }>(async (request, session, { params }) => {
   const log = await getRouteLogger(request);
@@ -40,7 +41,7 @@ export const POST = withAuth<{ id: string }>(async (request, session, { params }
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return errorResponse('An idea (1–500 characters) is required.', {
+    return errorResponse(`An idea (1–${IDEA_TEXT_MAX} characters) is required.`, {
       code: 'VALIDATION_ERROR',
       status: 400,
     });

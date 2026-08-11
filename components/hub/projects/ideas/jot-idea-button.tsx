@@ -15,6 +15,7 @@ import { Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { IDEA_TEXT_MAX } from '@/lib/projects/idea-constants';
 
 export function JotIdeaButton({ projectId }: { projectId: string }) {
   const router = useRouter();
@@ -28,7 +29,7 @@ export function JotIdeaButton({ projectId }: { projectId: string }) {
 
   const capture = async () => {
     const jot = text.trim();
-    if (jot.length === 0 || jot.length > 500) {
+    if (jot.length === 0 || jot.length > IDEA_TEXT_MAX) {
       setFailed(true);
       return;
     }
@@ -81,7 +82,7 @@ export function JotIdeaButton({ projectId }: { projectId: string }) {
                 void capture();
               }
             }}
-            maxLength={500}
+            maxLength={IDEA_TEXT_MAX}
             rows={3}
             placeholder="e.g. board should remember my last filter"
             aria-label="Idea"

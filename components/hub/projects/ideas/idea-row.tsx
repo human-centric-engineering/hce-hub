@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import { Pencil, Archive, RotateCcw, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { IDEA_TEXT_MAX } from '@/lib/projects/idea-constants';
 import type { IdeaView } from '@/components/hub/projects/ideas/types';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -73,7 +74,7 @@ export function IdeaRow({ projectId, idea }: { projectId: string; idea: IdeaView
 
   const saveEdit = () => {
     const next = draft.trim();
-    if (next.length === 0 || next.length > 500) {
+    if (next.length === 0 || next.length > IDEA_TEXT_MAX) {
       setFailed(true);
       return;
     }
@@ -102,7 +103,7 @@ export function IdeaRow({ projectId, idea }: { projectId: string; idea: IdeaView
               setDraft(e.target.value);
               autosize();
             }}
-            maxLength={500}
+            maxLength={IDEA_TEXT_MAX}
             rows={2}
             aria-label="Edit idea"
             className="resize-none"
