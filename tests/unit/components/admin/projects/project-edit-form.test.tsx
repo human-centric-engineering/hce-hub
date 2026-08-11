@@ -87,6 +87,22 @@ describe('ProjectEditForm', () => {
     expect(body).not.toHaveProperty('slug');
   });
 
+  it('does not re-send an untouched URL key (a stale page must not revert it)', async () => {
+    vi.mocked(apiClient.patch).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<ProjectEditForm project={project} users={users} />);
+
+    // Change something else entirely; never touch the URL key.
+    await user.clear(screen.getByLabelText('Name'));
+    await user.type(screen.getByLabelText('Name'), 'Renamed');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    const body = vi.mocked(apiClient.patch).mock.calls[0][1]?.body as Record<string, unknown>;
+    expect(body).toMatchObject({ name: 'Renamed' });
+    expect(body).not.toHaveProperty('slug');
+  });
+
   it('refuses to clear an existing URL key instead of silently keeping it', async () => {
     const user = userEvent.setup();
     render(<ProjectEditForm project={project} users={users} />);
@@ -96,6 +112,22 @@ describe('ProjectEditForm', () => {
 
     expect(await screen.findByText(/can’t be removed once set/i)).toBeVisible();
     expect(apiClient.patch).not.toHaveBeenCalled();
+  });
+
+  it('drops a previous "Saved." before refusing a cleared URL key', async () => {
+    // Otherwise the screen claims the submission was both applied and rejected.
+    vi.mocked(apiClient.patch).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<ProjectEditForm project={project} users={users} />);
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(await screen.findByText(/^saved\.$/i)).toBeVisible();
+
+    await user.clear(screen.getByLabelText('URL key'));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(await screen.findByText(/can’t be removed once set/i)).toBeVisible();
+    expect(screen.queryByText(/^saved\.$/i)).not.toBeInTheDocument();
   });
 
   it('pins a 409 to the URL key field, naming the taken key', async () => {

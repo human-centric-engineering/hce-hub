@@ -68,8 +68,9 @@ export function ProjectFormFields({
               <>Leave blank to derive one from the name.</>
             ) : (
               <>
-                Leave blank to keep the current key. Renaming the project never changes it — a
-                shared link must not break — and the project&apos;s id URL keeps working either way.
+                Leave blank to keep the current key. Renaming the project never re-derives it, but{' '}
+                <strong>changing it here breaks links already shared</strong> at the old key — only
+                the project&apos;s id URL keeps working regardless.
               </>
             )}
           </FieldHelp>

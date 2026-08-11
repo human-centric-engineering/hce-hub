@@ -59,25 +59,32 @@ export function ProjectEditForm({ project, users }: ProjectEditFormProps) {
   });
 
   const onSubmit = async (data: ProjectFormData) => {
+    // Clear last submit's outcome FIRST — a guard that returns early must not
+    // leave a stale "Saved." (or error banner) sitting next to its own message.
+    setError(null);
+    setSaved(false);
+
     // Clearing an existing key would be a silent no-op (the API has no "unset"),
     // so say so rather than saving the rest and leaving the box looking applied.
     if (project.slug && data.slug === '') {
       setFieldError('slug', {
-        message: 'A URL key can’t be removed once set — shared links would break.',
+        message: 'A URL key can’t be removed once set — the API has no “unset”.',
       });
       return;
     }
 
+    // Send the key ONLY when this admin actually changed it. Re-transmitting the
+    // prefilled value on every save would let a stale page silently revert
+    // someone else's key change — and a key is the one field shared links depend
+    // on, so last-write-wins is worse here than for `name`/`status`.
+    const slugChanged = data.slug !== (project.slug ?? '');
+
     setSubmitting(true);
-    setError(null);
-    setSaved(false);
     try {
       await apiClient.patch(PROJECT_ADMIN_API.detail(project.id), {
         body: {
           name: data.name,
-          // Omitted when blank — the API treats a slug as explicit-only, so
-          // sending nothing is what "leave it alone" means.
-          ...(data.slug === '' ? {} : { slug: data.slug }),
+          ...(slugChanged ? { slug: data.slug } : {}),
           hostPlatform: data.hostPlatform,
           leadUserId: data.leadUserId,
           status: data.status,
@@ -88,9 +95,9 @@ export function ProjectEditForm({ project, users }: ProjectEditFormProps) {
       router.refresh();
     } catch (err) {
       // A 409 is always the slug `@unique` — pin it to the field that caused it
-      // instead of a top-level "save failed" the admin has to decode. A blank box
-      // sends no slug, so it can't be the cause: that falls through below.
-      if (err instanceof APIClientError && err.status === 409 && data.slug !== '') {
+      // instead of a top-level "save failed" the admin has to decode. If we sent
+      // no slug it can't be the cause, so that falls through below.
+      if (err instanceof APIClientError && err.status === 409 && slugChanged) {
         setFieldError('slug', { message: `“${data.slug}” is already taken — choose another.` });
       } else {
         setError(err instanceof APIClientError ? err.message : 'Failed to save project');
