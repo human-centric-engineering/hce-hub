@@ -195,6 +195,8 @@ describe('ProjectViewPage', () => {
     );
     expect(screen.getByRole('heading', { name: 'HCE Hub' })).toBeInTheDocument();
     expect(screen.getByText(/Couldn.t load ideas/i)).toBeInTheDocument();
+    // A 500 (not a 404) is logged, matching the plan/board discrimination.
+    expect(logger.error).toHaveBeenCalled();
   });
 
   it('renders a graceful message if the plan fetch fails but the project loads', async () => {
