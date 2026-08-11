@@ -16,6 +16,7 @@
 import { registerAppCapability } from '@/lib/orchestration/capabilities/registry';
 import { NextTaskCapability } from '@/lib/projects/capabilities/next-task';
 import { ListPhasesCapability } from '@/lib/projects/capabilities/list-phases';
+import { ListIdeasCapability } from '@/lib/projects/capabilities/list-ideas';
 import { CreateTaskCapability } from '@/lib/projects/capabilities/create-task';
 import { FlagHelpWantedCapability } from '@/lib/projects/capabilities/flag-help-wanted';
 import { RecordDecisionCapability } from '@/lib/projects/capabilities/record-decision';
@@ -78,6 +79,7 @@ export function initAppCapabilities(): void {
   // Each emits its feature_* journal event; membership via the feature funnel.
   registerAppCapability(new CreateFeatureCapability()); // author (member)
   registerAppCapability(new CaptureIdeaCapability()); // jot an idea into the inbox (member)
+  registerAppCapability(new ListIdeasCapability()); // read: the idea inbox by #N (member)
   registerAppCapability(new UpdateIdeaCapability()); // edit / drop / restore an idea (member)
   registerAppCapability(new ClaimFeatureCapability()); // take ownership (member)
   registerAppCapability(new PlanFeatureCapability()); // materialise tasks (owner)

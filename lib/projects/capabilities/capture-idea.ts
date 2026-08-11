@@ -20,6 +20,7 @@ import type {
 } from '@/lib/orchestration/capabilities/types';
 import { NotFoundError } from '@/lib/api/errors';
 import { captureIdea } from '@/lib/projects/capture-idea-service';
+import { IDEA_TEXT_MAX } from '@/lib/projects/idea-constants';
 import { redactedString } from '@/lib/security/redact';
 
 const schema = z.object({
@@ -28,7 +29,7 @@ const schema = z.object({
     .string()
     .trim()
     .min(1)
-    .max(500)
+    .max(IDEA_TEXT_MAX)
     .describe('The idea — a short line; it lands in the project inbox to triage later.'),
 });
 
@@ -37,6 +38,8 @@ type Args = z.infer<typeof schema>;
 interface Data {
   /** The captured idea (born `open` in the project's inbox). */
   ideaId: string;
+  /** The idea's stable project-wide `#N` handle (f-idea-capture §22 t-63). */
+  number: number;
 }
 
 export class CaptureIdeaCapability extends BaseCapability<Args, Data> {
@@ -84,7 +87,7 @@ export class CaptureIdeaCapability extends BaseCapability<Args, Data> {
 
     try {
       const result = await captureIdea(userId, args.projectId, args.text);
-      return this.success({ ideaId: result.ideaId });
+      return this.success({ ideaId: result.ideaId, number: result.number });
     } catch (err) {
       // Funnel 404 for a non-member caller / unknown project.
       if (err instanceof NotFoundError) {

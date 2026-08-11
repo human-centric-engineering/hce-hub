@@ -5,6 +5,7 @@ import type { ProjectTab } from '@/components/hub/projects/types';
 const TABS: { key: ProjectTab; label: string }[] = [
   { key: 'plan', label: 'Plan' },
   { key: 'board', label: 'Board' },
+  { key: 'ideas', label: 'Ideas' },
   { key: 'log', label: 'Log' },
 ];
 

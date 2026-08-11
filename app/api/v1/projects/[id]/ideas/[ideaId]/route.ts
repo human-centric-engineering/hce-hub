@@ -20,10 +20,11 @@ import { successResponse, errorResponse } from '@/lib/api/responses';
 import { getRouteLogger } from '@/lib/api/context';
 import { parseCuidParam } from '@/lib/api/route-params';
 import { updateIdea } from '@/lib/projects/update-idea-service';
+import { IDEA_TEXT_MAX } from '@/lib/projects/idea-constants';
 
 const bodySchema = z
   .object({
-    text: z.string().trim().min(1).max(500).optional(),
+    text: z.string().trim().min(1).max(IDEA_TEXT_MAX).optional(),
     status: z.enum(['open', 'dropped']).optional(),
   })
   .refine((v) => v.text !== undefined || v.status !== undefined, {
@@ -39,10 +40,10 @@ export const PATCH = withAuth<{ id: string; ideaId: string }>(
 
     const parsed = bodySchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
-      return errorResponse('Provide a new text (1–500 chars) and/or status (open|dropped).', {
-        code: 'VALIDATION_ERROR',
-        status: 400,
-      });
+      return errorResponse(
+        `Provide a new text (1–${IDEA_TEXT_MAX} chars) and/or status (open|dropped).`,
+        { code: 'VALIDATION_ERROR', status: 400 }
+      );
     }
 
     const result = await updateIdea(session.user.id, ideaId, parsed.data, projectId);
