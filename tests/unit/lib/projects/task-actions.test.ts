@@ -52,6 +52,7 @@ const granted = (
   ok: true,
   task: {
     taskId: 't1',
+    number: 42,
     featureId: 'f1',
     projectId: overrides.projectId ?? 'p1',
     status: overrides.status ?? 'claimed',
@@ -116,7 +117,7 @@ describe('startTask write', () => {
 
     const r = await startTask(USER, 't1', 'p1');
 
-    expect(r).toEqual({ taskId: 't1', status: 'active', warnings: [] });
+    expect(r).toEqual({ taskId: 't1', number: 42, status: 'active', warnings: [] });
     // Releases any prior open claim, then opens one for the caller.
     expect(txClaimUpdateMany).toHaveBeenCalledWith({
       where: { taskId: 't1', releasedAt: null },
@@ -172,7 +173,7 @@ describe('startTask write', () => {
 
     const r = await startTask(USER, 't1');
 
-    expect(r).toEqual({ taskId: 't1', status: 'merged', warnings: [] });
+    expect(r).toEqual({ taskId: 't1', number: 42, status: 'merged', warnings: [] });
     expect(runTx).not.toHaveBeenCalled();
     expect(emit).not.toHaveBeenCalled();
   });
@@ -190,7 +191,7 @@ describe('completeTask', () => {
 
     const r = await completeTask(USER, 't1', 'p1');
 
-    expect(r).toEqual({ taskId: 't1', status: 'merged', warnings: [] });
+    expect(r).toEqual({ taskId: 't1', number: 42, status: 'merged', warnings: [] });
     expect(txClaimUpdateMany).toHaveBeenCalledWith({
       where: { taskId: 't1', releasedAt: null },
       data: { releasedAt: expect.any(Date) },
@@ -215,7 +216,7 @@ describe('completeTask', () => {
   it('is a no-op on an already-merged task', async () => {
     resolveTask.mockResolvedValue(granted({ status: 'merged' }));
     const r = await completeTask(USER, 't1');
-    expect(r).toEqual({ taskId: 't1', status: 'merged', warnings: [] });
+    expect(r).toEqual({ taskId: 't1', number: 42, status: 'merged', warnings: [] });
     expect(runTx).not.toHaveBeenCalled();
     expect(emit).not.toHaveBeenCalled();
   });
@@ -242,7 +243,7 @@ describe('setTaskPr', () => {
     const r = await setTaskPr(USER, 't1', PR, 'p1');
 
     // Status is unchanged — linking a PR is not merging it.
-    expect(r).toEqual({ taskId: 't1', status: 'claimed', warnings: [] });
+    expect(r).toEqual({ taskId: 't1', number: 42, status: 'claimed', warnings: [] });
     expect(txTaskUpdate).toHaveBeenCalledWith({ where: { id: 't1' }, data: { prUrl: PR } });
     // No status field in the update, and no claim lifecycle touched.
     expect(txTaskUpdate.mock.calls[0][0].data.status).toBeUndefined();
@@ -293,7 +294,7 @@ describe('assignTask (f-task-assignment t1)', () => {
   it('is a no-op for a merged task (credits the doer — never reassigns finished work)', async () => {
     resolveTask.mockResolvedValue(granted({ status: 'merged' }));
     const r = await assignTask(USER, 't1', ASSIGNEE);
-    expect(r).toEqual({ taskId: 't1', status: 'merged', warnings: [] });
+    expect(r).toEqual({ taskId: 't1', number: 42, status: 'merged', warnings: [] });
     expect(canAccess).not.toHaveBeenCalled(); // short-circuits before validating the assignee
     expect(runTx).not.toHaveBeenCalled();
   });
@@ -303,7 +304,7 @@ describe('assignTask (f-task-assignment t1)', () => {
 
     const r = await assignTask(USER, 't1', ASSIGNEE);
 
-    expect(r).toEqual({ taskId: 't1', status: 'claimed', warnings: [] });
+    expect(r).toEqual({ taskId: 't1', number: 42, status: 'claimed', warnings: [] });
     expect(txTaskUpdate).toHaveBeenCalledWith({
       where: { id: 't1' },
       data: { assigneeUserId: ASSIGNEE, claimedByUserId: ASSIGNEE, status: 'claimed' },

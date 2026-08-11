@@ -39,6 +39,8 @@ type Args = z.infer<typeof schema>;
 
 interface Data {
   taskId: string;
+  /** The task's `t-N` ref (f-refs; `null` until assigned) — name what you just (re)assigned (t-66). */
+  number: number | null;
   status: TaskStatus;
   /** Soft heads-up when a reassignment displaced someone's active work — never a block. */
   warnings: CollisionWarning[];
@@ -81,6 +83,7 @@ export class AssignTaskCapability extends BaseCapability<Args, Data> {
       const result = await assignTask(userId, args.taskId, args.assigneeUserId, args.projectId);
       return this.success({
         taskId: result.taskId,
+        number: result.number,
         status: result.status,
         warnings: result.warnings,
       });

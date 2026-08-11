@@ -42,6 +42,7 @@ function task(opts: {
 }) {
   return {
     id: opts.id,
+    number: 5,
     title: `task ${opts.id}`,
     featureId: `feat-${opts.id}`,
     filesScope: [],
@@ -49,7 +50,7 @@ function task(opts: {
     status: opts.status ?? 'claimed',
     kind: opts.kind ?? 'feature_work',
     claimedByUserId: opts.claimedByUserId ?? null,
-    feature: { projectId: opts.projectId ?? 'proj-1' },
+    feature: { projectId: opts.projectId ?? 'proj-1', slug: `f-${opts.id}` },
     dependencies: (opts.deps ?? []).map((status) => ({ dependsOn: { status } })),
   };
 }
@@ -187,7 +188,7 @@ describe('next_task readiness selection', () => {
     expect(r.data?.task?.id).toBe('ready-work');
   });
 
-  it('shapes the recommended task with its project id and file scope', async () => {
+  it('shapes the recommended task with its t-N, feature slug, project id and file scope', async () => {
     findMany.mockResolvedValue([
       {
         ...task({ id: 'ready', deps: ['merged'], projectId: 'p9' }),
@@ -198,8 +199,10 @@ describe('next_task readiness selection', () => {
     const r = await cap.execute({}, ctx());
     expect(r.data?.task).toEqual({
       id: 'ready',
+      number: 5, // the pick's t-N ref (t-66)
       title: 'task ready',
       featureId: 'feat-ready',
+      featureSlug: 'f-ready', // + the feature slug, so the agent can name it
       projectId: 'p9',
       filesScope: ['api/'],
       prUrl: null,

@@ -54,7 +54,12 @@ function mockTx() {
   let counter = 10;
   let created = 0;
   txProjectUpdate.mockImplementation(async () => ({ taskCounter: ++counter }));
-  txTaskCreate.mockImplementation(async () => ({ id: `id-${created++}` }));
+  // Echo back the number the task was created with (the bumped counter), as the real
+  // `select: { id, number }` does — so the response carries each task's t-N.
+  txTaskCreate.mockImplementation(async ({ data }: { data: { number: number } }) => ({
+    id: `id-${created++}`,
+    number: data.number,
+  }));
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
@@ -180,7 +185,11 @@ describe('plan_feature materialise', () => {
     expect(r.success).toBe(true);
     expect(r.data).toEqual({
       featureId: 'f1',
-      taskIds: ['id-0', 'id-1'],
+      // Each materialised task reports its t-N from the counter bump (t-66).
+      tasks: [
+        { id: 'id-0', number: 11 },
+        { id: 'id-1', number: 12 },
+      ],
       planningStage: 'planned',
     });
 
@@ -301,7 +310,10 @@ describe('plan_feature redactProvenance', () => {
           },
         ],
       },
-      { success: true, data: { featureId: 'f1', taskIds: ['x'], planningStage: 'planned' } }
+      {
+        success: true,
+        data: { featureId: 'f1', tasks: [{ id: 'x', number: 1 }], planningStage: 'planned' },
+      }
     );
     const tasks = (out.args as { tasks: Record<string, unknown>[] }).tasks;
     expect(tasks[0].ref).toBe('t1');
@@ -314,7 +326,10 @@ describe('plan_feature redactProvenance', () => {
   it('leaves description / doneWhen null in provenance when omitted', () => {
     const out = cap.redactProvenance(
       { featureId: 'f1', tasks: [{ ref: 't1', title: 'a' }] },
-      { success: true, data: { featureId: 'f1', taskIds: ['x'], planningStage: 'planned' } }
+      {
+        success: true,
+        data: { featureId: 'f1', tasks: [{ id: 'x', number: 1 }], planningStage: 'planned' },
+      }
     );
     const tasks = (out.args as { tasks: Record<string, unknown>[] }).tasks;
     expect(tasks[0].description).toBeNull();

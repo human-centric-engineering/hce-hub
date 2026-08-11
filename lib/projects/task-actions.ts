@@ -31,6 +31,9 @@ import { detectFileOverlapWarnings, type CollisionWarning } from '@/lib/projects
 
 export interface TaskActionResult {
   taskId: string;
+  /** The task's project-wide `t-N` ref (f-refs); `null` until assigned. Lets a caller
+   * name the task it just acted on without a second read (t-66). */
+  number: number | null;
   /** The task's stored status after the action. */
   status: TaskStatus;
   /** Soft warnings — advisory, never a block (Start only). */
@@ -144,7 +147,7 @@ export async function startTask(
 
   // Can't restart finished work — a lenient no-op, never an error.
   if (task.status === 'merged') {
-    return { taskId: task.taskId, status: 'merged', warnings: [] };
+    return { taskId: task.taskId, number: task.number, status: 'merged', warnings: [] };
   }
 
   const warnings: CollisionWarning[] = [];
@@ -221,7 +224,7 @@ export async function startTask(
     metadata: { warningCount: warnings.length, from: task.status },
   });
 
-  return { taskId: task.taskId, status: 'active', warnings };
+  return { taskId: task.taskId, number: task.number, status: 'active', warnings };
 }
 
 /**
@@ -260,7 +263,7 @@ export async function assignTask(
 
   // Can't reassign finished work — a merged task credits its doer; lenient no-op.
   if (task.status === 'merged') {
-    return { taskId: task.taskId, status: 'merged', warnings: [] };
+    return { taskId: task.taskId, number: task.number, status: 'merged', warnings: [] };
   }
 
   // The assignee must be a member of the task's project (deny ≡ not a member).
@@ -294,7 +297,12 @@ export async function assignTask(
     metadata: { assigneeUserId, from: task.status },
   });
 
-  return { taskId: task.taskId, status: nextStatus, warnings: warning ? [warning] : [] };
+  return {
+    taskId: task.taskId,
+    number: task.number,
+    status: nextStatus,
+    warnings: warning ? [warning] : [],
+  };
 }
 
 /**
@@ -399,7 +407,7 @@ export async function completeTask(
 
   // Already done — idempotent no-op (e.g. a re-fired f-github-sync merge event).
   if (task.status === 'merged') {
-    return { taskId: task.taskId, status: 'merged', warnings: [] };
+    return { taskId: task.taskId, number: task.number, status: 'merged', warnings: [] };
   }
 
   await executeTransaction(async (tx) => {
@@ -426,7 +434,7 @@ export async function completeTask(
     metadata: { from: task.status },
   });
 
-  return { taskId: task.taskId, status: 'merged', warnings: [] };
+  return { taskId: task.taskId, number: task.number, status: 'merged', warnings: [] };
 }
 
 /**
@@ -473,5 +481,5 @@ export async function setTaskPr(
   });
 
   // No status change — return the current stored status so the no-op is explicit.
-  return { taskId: task.taskId, status: task.status, warnings: [] };
+  return { taskId: task.taskId, number: task.number, status: task.status, warnings: [] };
 }

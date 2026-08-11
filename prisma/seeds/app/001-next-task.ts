@@ -38,7 +38,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const nextTaskFunctionDefinition = {
   name: 'next_task',
   description:
-    "Recommend the single highest-priority task the caller can start next — a claimed task whose dependencies are all merged (nothing blocked by an open PR), in a feature the caller owns, or any help-wanted feature when includeHelpWanted is true. Membership-scoped: only the caller's projects are considered. A recommendation, not an assignment.",
+    "Recommend the single highest-priority task the caller can start next — a claimed task whose dependencies are all merged (nothing blocked by an open PR), in a feature the caller owns, or any help-wanted feature when includeHelpWanted is true. Membership-scoped: only the caller's projects are considered. A recommendation, not an assignment. The result includes the task t-N + feature slug so you can name it.",
   parameters: {
     type: 'object',
     properties: {

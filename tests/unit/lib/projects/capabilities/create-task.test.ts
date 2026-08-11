@@ -46,7 +46,8 @@ const txTaskCreate = vi.fn();
 const txProjectUpdate = vi.fn();
 const txIdeaUpdateMany = vi.fn();
 function mockTxCreatesTask(id = 't-new', status = 'claimed', nextNumber = 7) {
-  txTaskCreate.mockResolvedValue({ id, status });
+  // Echo the assigned number back (as the real `select: { id, number, status }` does).
+  txTaskCreate.mockResolvedValue({ id, number: nextNumber, status });
   txProjectUpdate.mockResolvedValue({ taskCounter: nextNumber });
   txIdeaUpdateMany.mockResolvedValue({ count: 1 });
   // The mock runs the capability's real tx callback so we can assert what it
@@ -116,7 +117,7 @@ describe('create_task dependency integrity', () => {
 
     expect(r).toEqual({
       success: true,
-      data: { taskId: 't-new', status: 'claimed', featureId: 'f1' },
+      data: { taskId: 't-new', number: 7, status: 'claimed', featureId: 'f1' },
     });
     // De-duplicated edges from the new task to each dep.
     expect(txDepCreateMany).toHaveBeenCalledWith({
@@ -135,7 +136,8 @@ describe('create_task happy path (no deps)', () => {
     mockTxCreatesTask('t-1', 'claimed');
     const r = await cap.execute({ featureId: 'f1', title: 'Ship it' }, ctx());
 
-    expect(r.data).toEqual({ taskId: 't-1', status: 'claimed', featureId: 'f1' });
+    // Reports the assigned t-N so the caller can say "created t-7" (t-66).
+    expect(r.data).toEqual({ taskId: 't-1', number: 7, status: 'claimed', featureId: 'f1' });
     expect(taskFindMany).not.toHaveBeenCalled();
     expect(txDepCreateMany).not.toHaveBeenCalled();
     // Atomic project-wide number: bump the counter, stamp the returned value.
@@ -315,7 +317,7 @@ describe('create_task redactProvenance', () => {
     };
     const out = cap.redactProvenance(args, {
       success: true,
-      data: { taskId: 't', status: 'claimed', featureId: 'f1' },
+      data: { taskId: 't', number: 1, status: 'claimed', featureId: 'f1' },
     });
     const redactedArgs = out.args as {
       title: string;
@@ -332,7 +334,7 @@ describe('create_task redactProvenance', () => {
   it('leaves description / doneWhen null in provenance when omitted', () => {
     const out = cap.redactProvenance(
       { featureId: 'f1', title: 't' },
-      { success: true, data: { taskId: 't', status: 'claimed', featureId: 'f1' } }
+      { success: true, data: { taskId: 't', number: 1, status: 'claimed', featureId: 'f1' } }
     );
     const redactedArgs = out.args as { description: string | null; doneWhen: string | null };
     expect(redactedArgs.description).toBeNull();

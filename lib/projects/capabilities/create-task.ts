@@ -68,6 +68,8 @@ type Args = z.infer<typeof schema>;
 
 interface Data {
   taskId: string;
+  /** The created task's project-wide `t-N` ref (f-refs) — report "created t-N" without a second read (t-66). */
+  number: number | null;
   status: TaskStatus;
   featureId: string;
 }
@@ -79,7 +81,7 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'create_task',
     description:
-      "Add a task to a feature you own (or lead): declares its title, optional description + acceptance contract (done-when), optional file scope, and optional dependencies on existing tasks. The task is born claimed and owned by the feature owner (blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks.",
+      "Add a task to a feature you own (or lead): declares its title, optional description + acceptance contract (done-when), optional file scope, and optional dependencies on existing tasks. The task is born claimed and owned by the feature owner (blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks. The result includes the created task id + assigned t-N (report it without a re-read).",
     parameters: {
       type: 'object',
       properties: {
@@ -202,7 +204,7 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           assigneeUserId: access.feature.ownerUserId,
           claimedByUserId: access.feature.ownerUserId,
         },
-        select: { id: true, status: true },
+        select: { id: true, number: true, status: true },
       });
       if (depIds.length > 0) {
         await tx.taskDependency.createMany({
@@ -250,6 +252,11 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
       },
     });
 
-    return this.success({ taskId: task.id, status: task.status, featureId: args.featureId });
+    return this.success({
+      taskId: task.id,
+      number: task.number,
+      status: task.status,
+      featureId: args.featureId,
+    });
   }
 }

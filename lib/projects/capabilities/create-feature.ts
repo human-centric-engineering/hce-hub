@@ -86,6 +86,9 @@ type Args = z.infer<typeof schema>;
 interface Data {
   featureId: string;
   slug: string | null;
+  /** The created feature's project-wide `§N` ref (f-status-model §20) — report "created §N"
+   * without a second read (t-66). `null` only if unassigned (never for a fresh create). */
+  number: number | null;
 }
 
 export class CreateFeatureCapability extends BaseCapability<Args, Data> {
@@ -95,7 +98,7 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'create_feature',
     description:
-      'Author a feature into a project as an unowned, high-level sketch (planning + indicative). Carries title, optional slug/description/done-when/references, optional dependencies on existing features, an optional phase to file it under, and an optional indicative task sketch. Any project member may create one; claim it separately to take ownership.',
+      'Author a feature into a project as an unowned, high-level sketch (planning + indicative). Carries title, optional slug/description/done-when/references, optional dependencies on existing features, an optional phase to file it under, and an optional indicative task sketch. Any project member may create one; claim it separately to take ownership. The result includes the created feature id, slug + assigned §N.',
     parameters: {
       type: 'object',
       properties: {
@@ -260,7 +263,7 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
           // Unowned until claimed — you claim features, not tasks.
           ownerUserId: null,
         },
-        select: { id: true, slug: true },
+        select: { id: true, slug: true, number: true },
       });
       if (depIds.length > 0) {
         await tx.featureDependency.createMany({
@@ -312,6 +315,6 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
       },
     });
 
-    return this.success({ featureId: feature.id, slug: feature.slug });
+    return this.success({ featureId: feature.id, slug: feature.slug, number: feature.number });
   }
 }
