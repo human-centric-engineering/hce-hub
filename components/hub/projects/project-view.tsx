@@ -7,11 +7,14 @@ import { BreadcrumbLabel } from '@/components/hub/breadcrumb-label';
 import { PlanView } from '@/components/hub/projects/plan/plan-view';
 import { BoardView } from '@/components/hub/projects/board/board-view';
 import { LogView } from '@/components/hub/projects/log/log-view';
+import { IdeasView } from '@/components/hub/projects/ideas/ideas-view';
+import { JotIdeaButton } from '@/components/hub/projects/ideas/jot-idea-button';
 import { ActiveFixesStrip } from '@/components/hub/projects/active-fixes-strip';
 import { TaskSheetProvider } from '@/components/hub/projects/task-sheet/task-sheet-host';
 import type { ProjectTab, ProjectViewDTO } from '@/components/hub/projects/types';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
 import type { ProjectBoardDTO } from '@/components/hub/projects/board/types';
+import type { IdeaInboxDTO } from '@/components/hub/projects/ideas/types';
 
 /** A stacked row of member avatars (overflow collapses to a +N chip). */
 function MemberStack({ members }: { members: ProjectViewDTO['members'] }) {
@@ -44,6 +47,7 @@ export function ProjectView({
   activeTab,
   plan,
   board,
+  ideas,
 }: {
   project: ProjectViewDTO;
   activeTab: ProjectTab;
@@ -51,6 +55,8 @@ export function ProjectView({
   plan?: ProjectPlanDTO | null;
   /** The Board payload — supplied only on the Board tab; `null` if its fetch failed. */
   board?: ProjectBoardDTO | null;
+  /** The Ideas inbox payload — supplied only on the Ideas tab; `null` if its fetch failed. */
+  ideas?: IdeaInboxDTO | null;
 }) {
   const platform = getHostPlatform(project.hostPlatform)?.label ?? project.hostPlatform;
 
@@ -76,7 +82,10 @@ export function ProjectView({
             </span>
           </div>
         </div>
-        <MemberStack members={project.members} />
+        <div className="flex items-center gap-3">
+          <JotIdeaButton projectId={project.id} />
+          <MemberStack members={project.members} />
+        </div>
       </div>
 
       {/* The task sheet opens (deep-linked via `?task=`) over whichever tab is
@@ -89,7 +98,7 @@ export function ProjectView({
             carries its own top spacing, so an empty strip leaves no gap). The Log
             is the history stream, so the strip doesn't belong over it. The list is
             defaulted defensively — a missing field should hide the strip, not crash. */}
-        {activeTab !== 'log' && (
+        {activeTab !== 'log' && activeTab !== 'ideas' && (
           <ActiveFixesStrip fixes={project.activeFixes ?? []} projectId={project.id} />
         )}
 
@@ -108,6 +117,14 @@ export function ProjectView({
             ) : (
               <p className="text-muted-foreground py-16 text-center text-sm">
                 Couldn&rsquo;t load the board just now — try refreshing.
+              </p>
+            )
+          ) : activeTab === 'ideas' ? (
+            ideas ? (
+              <IdeasView projectId={project.id} inbox={ideas} />
+            ) : (
+              <p className="text-muted-foreground py-16 text-center text-sm">
+                Couldn&rsquo;t load ideas just now — try refreshing.
               </p>
             )
           ) : (
