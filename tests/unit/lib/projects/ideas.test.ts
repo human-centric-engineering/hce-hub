@@ -50,6 +50,7 @@ describe('getProjectIdeas', () => {
     findMany.mockResolvedValue([
       {
         id: 'i1',
+        number: 7,
         text: 'a jot',
         status: 'open',
         createdByUserId: 'u1',
@@ -65,6 +66,7 @@ describe('getProjectIdeas', () => {
     expect(ideas).toEqual([
       {
         id: 'i1',
+        number: 7,
         text: 'a jot',
         status: 'open',
         createdBy: { id: 'u1', name: 'Ada', email: 'ada@x.io', image: null },
@@ -72,12 +74,17 @@ describe('getProjectIdeas', () => {
         triagedAt: null,
       },
     ]);
+    // The #N handle is selected and carried straight through.
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ select: expect.objectContaining({ number: true }) })
+    );
   });
 
   it('renders an erased / unknown author as null, and serialises triagedAt for a dropped idea', async () => {
     findMany.mockResolvedValue([
       {
         id: 'i2',
+        number: 2,
         text: 'archived',
         status: 'dropped',
         createdByUserId: 'gone',

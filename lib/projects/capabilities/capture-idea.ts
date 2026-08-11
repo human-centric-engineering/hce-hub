@@ -38,6 +38,8 @@ type Args = z.infer<typeof schema>;
 interface Data {
   /** The captured idea (born `open` in the project's inbox). */
   ideaId: string;
+  /** The idea's stable project-wide `#N` handle (f-idea-capture §22 t-63). */
+  number: number;
 }
 
 export class CaptureIdeaCapability extends BaseCapability<Args, Data> {
@@ -85,7 +87,7 @@ export class CaptureIdeaCapability extends BaseCapability<Args, Data> {
 
     try {
       const result = await captureIdea(userId, args.projectId, args.text);
-      return this.success({ ideaId: result.ideaId });
+      return this.success({ ideaId: result.ideaId, number: result.number });
     } catch (err) {
       // Funnel 404 for a non-member caller / unknown project.
       if (err instanceof NotFoundError) {

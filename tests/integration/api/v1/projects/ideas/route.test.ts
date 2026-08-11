@@ -72,14 +72,15 @@ describe('POST /api/v1/projects/:id/ideas', () => {
     expect(captureMock).not.toHaveBeenCalled();
   });
 
-  it('captures for a member, project-scoped, and returns the ideaId', async () => {
+  it('captures for a member, project-scoped, and returns the ideaId + #N', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
-    captureMock.mockResolvedValue({ ideaId: 'idea-new' });
+    captureMock.mockResolvedValue({ ideaId: 'idea-new', number: 4 });
     const res = await ideasPost(req({ text: 'an idea' }), params());
     expect(res.status).toBe(200);
     expect(captureMock).toHaveBeenCalledWith(expect.any(String), PID, 'an idea');
     const json = await res.json();
     expect(json.data.ideaId).toBe('idea-new');
+    expect(json.data.number).toBe(4);
   });
 
   it('400s a missing/empty idea before touching the core', async () => {

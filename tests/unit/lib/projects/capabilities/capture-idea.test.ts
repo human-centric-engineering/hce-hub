@@ -37,10 +37,10 @@ describe('capture_idea capability', () => {
     await expect(cap.execute({ projectId: 'p1', text: 'x' }, ctx())).rejects.toThrow('db down');
   });
 
-  it('returns ideaId on success, forwarding the caller + project + text', async () => {
-    capture.mockResolvedValue({ ideaId: 'idea1' });
+  it('returns ideaId + #N on success, forwarding the caller + project + text', async () => {
+    capture.mockResolvedValue({ ideaId: 'idea1', number: 4 });
     const r = await cap.execute({ projectId: 'p1', text: 'an idea' }, ctx('caller'));
-    expect(r).toEqual({ success: true, data: { ideaId: 'idea1' } });
+    expect(r).toEqual({ success: true, data: { ideaId: 'idea1', number: 4 } });
     expect(capture).toHaveBeenCalledWith('caller', 'p1', 'an idea');
   });
 
@@ -66,7 +66,7 @@ describe('capture_idea capability', () => {
   it('masks the free-text jot in provenance, keeping the project scope', () => {
     const redacted = cap.redactProvenance(
       { projectId: 'p1', text: 'a sensitive idea about someone' },
-      { success: true, data: { ideaId: 'idea1' } }
+      { success: true, data: { ideaId: 'idea1', number: 4 } }
     );
     const args = redacted.args as { projectId: string; text: string };
     expect(args.projectId).toBe('p1');

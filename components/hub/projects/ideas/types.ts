@@ -16,6 +16,9 @@ export interface IdeaAuthorRef {
 /** An idea row in the inbox. */
 export interface IdeaView {
   id: string;
+  /** Stable project-wide `#N` handle (f-idea-capture §22 t-63); `null` only for a
+   * pre-t-63 idea the backfill missed. */
+  number: number | null;
   text: string;
   /** `open` (to triage) or `dropped` (archived, restorable). */
   status: 'open' | 'dropped';

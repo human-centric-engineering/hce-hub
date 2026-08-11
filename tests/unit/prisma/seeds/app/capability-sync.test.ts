@@ -29,6 +29,7 @@ import captureIdeaUnit, {
   captureIdeaFunctionDefinition,
 } from '@/prisma/seeds/app/024-capture-idea';
 import updateIdeaUnit, { updateIdeaFunctionDefinition } from '@/prisma/seeds/app/025-update-idea';
+import listIdeasUnit, { listIdeasFunctionDefinition } from '@/prisma/seeds/app/026-list-ideas';
 
 function runContext() {
   const upsert = vi.fn().mockResolvedValue({ id: 'cap1' });
@@ -128,5 +129,14 @@ describe('capability seeds re-sync functionDefinition on update', () => {
     expect(arg.where).toEqual({ slug: 'update_idea' });
     expect(arg.update.functionDefinition).toEqual(updateIdeaFunctionDefinition);
     expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('status');
+  });
+
+  it('026-list-ideas: the new read capability seed re-syncs on the update branch', async () => {
+    const { ctx, upsert } = runContext();
+    await listIdeasUnit.run(ctx);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ slug: 'list_ideas' });
+    expect(arg.update.functionDefinition).toEqual(listIdeasFunctionDefinition);
+    expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('projectId');
   });
 });
