@@ -5,6 +5,7 @@
  * in provenance.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { IDEA_TEXT_MAX } from '@/lib/projects/idea-constants';
 
 vi.mock('@/lib/projects/capture-idea-service', () => ({ captureIdea: vi.fn() }));
 
@@ -51,6 +52,15 @@ describe('capture_idea capability', () => {
 
   it('rejects an all-whitespace jot (empty after trim), like the route', () => {
     expect(() => cap.validate({ projectId: 'p1', text: '   ' })).toThrow();
+  });
+
+  it('accepts a verbose paragraph up to the raised cap, rejects beyond it', () => {
+    // The cap is generous (not a one-liner) so thought-through ideas aren't truncated.
+    expect(IDEA_TEXT_MAX).toBeGreaterThanOrEqual(2000);
+    expect(cap.validate({ projectId: 'p1', text: 'a'.repeat(IDEA_TEXT_MAX) }).text.length).toBe(
+      IDEA_TEXT_MAX
+    );
+    expect(() => cap.validate({ projectId: 'p1', text: 'a'.repeat(IDEA_TEXT_MAX + 1) })).toThrow();
   });
 
   it('masks the free-text jot in provenance, keeping the project scope', () => {

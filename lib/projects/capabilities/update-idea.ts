@@ -21,12 +21,19 @@ import type {
 } from '@/lib/orchestration/capabilities/types';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { updateIdea } from '@/lib/projects/update-idea-service';
+import { IDEA_TEXT_MAX } from '@/lib/projects/idea-constants';
 import { redactedString } from '@/lib/security/redact';
 
 const schema = z
   .object({
     ideaId: z.string().describe('The idea to edit or drop/restore.'),
-    text: z.string().trim().min(1).max(500).optional().describe('New idea text (refine the jot).'),
+    text: z
+      .string()
+      .trim()
+      .min(1)
+      .max(IDEA_TEXT_MAX)
+      .optional()
+      .describe('New idea text (refine the jot).'),
     status: z
       .enum(['open', 'dropped'])
       .optional()

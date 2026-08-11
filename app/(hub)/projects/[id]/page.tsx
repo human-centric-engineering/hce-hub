@@ -6,6 +6,7 @@ import { ProjectView } from '@/components/hub/projects/project-view';
 import type { ProjectTab, ProjectViewDTO } from '@/components/hub/projects/types';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
 import type { ProjectBoardDTO } from '@/components/hub/projects/board/types';
+import type { IdeaInboxDTO } from '@/components/hub/projects/ideas/types';
 
 /**
  * Dynamic tab title — starts with the project name so a browser tab / bookmark
@@ -24,7 +25,8 @@ export async function generateMetadata({
   const { view } = await searchParams;
   const project = await getProject(id);
   if (!project) return { title: 'Project' };
-  const tab = view === 'board' ? 'Board' : view === 'log' ? 'Log' : 'Plan';
+  const tab =
+    view === 'board' ? 'Board' : view === 'log' ? 'Log' : view === 'ideas' ? 'Ideas' : 'Plan';
   return { title: `${project.name} · ${tab}` };
 }
 
@@ -76,6 +78,22 @@ async function getBoard(id: string): Promise<ProjectBoardDTO | null> {
   }
 }
 
+async function getIdeas(id: string): Promise<IdeaInboxDTO | null> {
+  try {
+    const res = await serverFetch(`/api/v1/projects/${id}/ideas`);
+    if (!res.ok) {
+      // 404 ≡ the project 404 (handled via getProject → notFound); log the rest.
+      if (res.status !== 404) logger.error('Hub ideas fetch failed', { id, status: res.status });
+      return null;
+    }
+    const data = await parseApiResponse<IdeaInboxDTO>(res);
+    return data.success ? data.data : null;
+  } catch (error) {
+    logger.error('Hub ideas fetch threw', { id, error });
+    return null;
+  }
+}
+
 export default async function ProjectViewPage({
   params,
   searchParams,
@@ -87,7 +105,8 @@ export default async function ProjectViewPage({
   const { view } = await searchParams;
   // Plan is the default; Board and Log are explicit. The Log tab is
   // client-fetched (filterable), so it needs no server payload here.
-  const activeTab: ProjectTab = view === 'board' ? 'board' : view === 'log' ? 'log' : 'plan';
+  const activeTab: ProjectTab =
+    view === 'board' ? 'board' : view === 'log' ? 'log' : view === 'ideas' ? 'ideas' : 'plan';
 
   // `id` may be a slug (the shareable URL) or a cuid. Resolve the header first —
   // it accepts both and returns the canonical cuid — then drive the cuid-only
@@ -95,10 +114,13 @@ export default async function ProjectViewPage({
   const project = await getProject(id);
   if (!project) notFound();
 
-  const [plan, board] = await Promise.all([
+  const [plan, board, ideas] = await Promise.all([
     activeTab === 'plan' ? getPlan(project.id) : Promise.resolve(null),
     activeTab === 'board' ? getBoard(project.id) : Promise.resolve(null),
+    activeTab === 'ideas' ? getIdeas(project.id) : Promise.resolve(null),
   ]);
 
-  return <ProjectView project={project} activeTab={activeTab} plan={plan} board={board} />;
+  return (
+    <ProjectView project={project} activeTab={activeTab} plan={plan} board={board} ideas={ideas} />
+  );
 }
