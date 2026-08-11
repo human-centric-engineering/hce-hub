@@ -20,7 +20,9 @@ tasks, each projected to the refs an agent needs to identify and name one:
 
 - **Narrowing.** `featureId` → one feature's tasks; `kind: 'bug'` → the open-bugs read
   (the concrete need that motivated the feature); `status` → one effective status.
-  Filters compose.
+  Filters compose. The motivating calls all narrow, so they're self-bounding; the read
+  is otherwise **unbounded** — the tool description nudges narrowing on a large project,
+  and a hard cap / pagination across the `list_` verbs is a tracked hardening idea.
 - **Effective status is shared, not re-derived.** `status` is
   `computeEffectiveStatus` ([`lib/projects/task-status.ts`](../../lib/projects/task-status.ts)),
   the same computation the Plan and Board use — so a deps-blocked `claimed` task reads
