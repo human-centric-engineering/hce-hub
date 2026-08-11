@@ -95,7 +95,20 @@ const boardPayload = {
   columnTotals: { claimed: 0, active: 0, merged: 0 },
 };
 
-/** URL-aware mocks: `/plan` → plan payload, `/board` → board payload, else header. */
+const ideasPayload = {
+  ideas: [
+    {
+      id: 'i1',
+      text: 'remember my last filter',
+      status: 'open',
+      createdBy: null,
+      createdAt: '2026-08-01T10:00:00.000Z',
+      triagedAt: null,
+    },
+  ],
+};
+
+/** URL-aware mocks: `/plan` → plan, `/board` → board, `/ideas` → inbox, else header. */
 function wireOk() {
   fetchMock.mockImplementation((url: string) => Promise.resolve({ ok: true, url }));
   parseMock.mockImplementation((res: { url: string }) =>
@@ -105,7 +118,9 @@ function wireOk() {
         ? planPayload
         : res.url.endsWith('/board')
           ? boardPayload
-          : view,
+          : res.url.endsWith('/ideas')
+            ? ideasPayload
+            : view,
     })
   );
 }
@@ -146,6 +161,40 @@ describe('ProjectViewPage', () => {
     // The board rendered its lane + column headers.
     expect(screen.getByText('Ada')).toBeInTheDocument();
     expect(screen.getByText('Assigned')).toBeInTheDocument();
+  });
+
+  it('honours ?view=ideas — fetches the inbox (not plan/board) and renders an idea', async () => {
+    wireOk();
+
+    render(
+      await ProjectViewPage({
+        params: Promise.resolve({ id: 'p1' }),
+        searchParams: Promise.resolve({ view: 'ideas' }),
+      })
+    );
+    expect(screen.getByRole('tab', { name: 'Ideas' })).toHaveAttribute('aria-selected', 'true');
+    const urls = fetchMock.mock.calls.map((c) => c[0]);
+    expect(urls).toContain('/api/v1/projects/p1/ideas');
+    expect(urls).not.toContain('/api/v1/projects/p1/plan');
+    expect(urls).not.toContain('/api/v1/projects/p1/board');
+    // The inbox rendered the fetched idea.
+    expect(screen.getByText('remember my last filter')).toBeInTheDocument();
+  });
+
+  it('renders a graceful message when the ideas fetch fails but the project loads', async () => {
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(url.endsWith('/ideas') ? { ok: false, status: 500, url } : { ok: true, url })
+    );
+    parseMock.mockImplementation(() => Promise.resolve({ success: true, data: view }));
+
+    render(
+      await ProjectViewPage({
+        params: Promise.resolve({ id: 'p1' }),
+        searchParams: Promise.resolve({ view: 'ideas' }),
+      })
+    );
+    expect(screen.getByRole('heading', { name: 'HCE Hub' })).toBeInTheDocument();
+    expect(screen.getByText(/Couldn.t load ideas/i)).toBeInTheDocument();
   });
 
   it('renders a graceful message if the plan fetch fails but the project loads', async () => {
@@ -298,7 +347,7 @@ describe('ProjectViewPage generateMetadata', () => {
     expect(meta.title).toBe('HCE Hub · Plan');
   });
 
-  it('reflects ?view=board and ?view=log in the title', async () => {
+  it('reflects ?view=board, ?view=ideas and ?view=log in the title', async () => {
     wireOk();
     expect(
       (
@@ -308,6 +357,14 @@ describe('ProjectViewPage generateMetadata', () => {
         })
       ).title
     ).toBe('HCE Hub · Board');
+    expect(
+      (
+        await generateMetadata({
+          params: Promise.resolve({ id: 'p1' }),
+          searchParams: Promise.resolve({ view: 'ideas' }),
+        })
+      ).title
+    ).toBe('HCE Hub · Ideas');
     expect(
       (
         await generateMetadata({
