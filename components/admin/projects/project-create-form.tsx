@@ -26,11 +26,18 @@ export function ProjectCreateForm({ users }: { users: UserOption[] }) {
     register,
     handleSubmit,
     setValue,
+    setError: setFieldError,
     watch,
     formState: { errors },
   } = useForm<ProjectFormData>({
     resolver: zodResolver(projectFormSchema),
-    defaultValues: { name: '', hostPlatform: 'sunrise', leadUserId: '', status: 'planning' },
+    defaultValues: {
+      name: '',
+      slug: '',
+      hostPlatform: 'sunrise',
+      leadUserId: '',
+      status: 'planning',
+    },
   });
 
   const onSubmit = async (data: ProjectFormData) => {
@@ -40,6 +47,9 @@ export function ProjectCreateForm({ users }: { users: UserOption[] }) {
       const project = await apiClient.post<{ id: string }>(PROJECT_ADMIN_API.create, {
         body: {
           name: data.name,
+          // Omitted when blank so the server derives (and auto-dedupes) one from
+          // the name; an explicit key is used verbatim and 409s if it's taken.
+          ...(data.slug === '' ? {} : { slug: data.slug }),
           hostPlatform: data.hostPlatform,
           leadUserId: data.leadUserId,
           status: data.status,
@@ -51,7 +61,15 @@ export function ProjectCreateForm({ users }: { users: UserOption[] }) {
       router.push(`/admin/projects/${project.id}`);
       router.refresh();
     } catch (err) {
-      setError(err instanceof APIClientError ? err.message : 'Failed to create project');
+      // A 409 is always the slug `@unique` — pin it to the field that caused it.
+      // Unless the box was blank: then the server derived the slug and lost a
+      // race, which is not the admin's field to fix (a message on an empty box
+      // would read as nonsense), so that falls through to the top-level error.
+      if (err instanceof APIClientError && err.status === 409 && data.slug !== '') {
+        setFieldError('slug', { message: `“${data.slug}” is already taken — choose another.` });
+      } else {
+        setError(err instanceof APIClientError ? err.message : 'Failed to create project');
+      }
       setSubmitting(false);
     }
   };
@@ -64,6 +82,7 @@ export function ProjectCreateForm({ users }: { users: UserOption[] }) {
         watch={watch}
         setValue={setValue}
         users={users}
+        mode="create"
       />
 
       {error && (

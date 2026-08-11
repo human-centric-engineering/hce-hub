@@ -8,7 +8,17 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('@/lib/api/client', () => ({
   apiClient: { post: vi.fn(), delete: vi.fn(), patch: vi.fn(), get: vi.fn() },
-  APIClientError: class APIClientError extends Error {},
+  // Mirrors the real constructor's (message, code, status) — the form branches on
+  // `status === 409` to pin a slug conflict to its field.
+  APIClientError: class APIClientError extends Error {
+    constructor(
+      message: string,
+      public code?: string,
+      public status?: number
+    ) {
+      super(message);
+    }
+  },
 }));
 
 import { apiClient } from '@/lib/api/client';
@@ -21,6 +31,7 @@ const users: UserOption[] = [
 ];
 const project: ProjectDetailDTO = {
   id: 'p1',
+  slug: 'wayframer',
   name: 'Wayframer',
   hostPlatform: 'sunrise',
   status: 'active',
@@ -36,10 +47,85 @@ const project: ProjectDetailDTO = {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ProjectEditForm', () => {
-  it('prefills the name and repo URLs', () => {
+  it('prefills the name, URL key and repo URLs', () => {
     render(<ProjectEditForm project={project} users={users} />);
     expect(screen.getByLabelText('Name')).toHaveValue('Wayframer');
+    expect(screen.getByLabelText('URL key')).toHaveValue('wayframer');
     expect(screen.getByLabelText('Repository URLs')).toHaveValue('https://github.com/o/r');
+  });
+
+  it('leaves the URL key box empty for a project that has none', () => {
+    render(<ProjectEditForm project={{ ...project, slug: null }} users={users} />);
+    expect(screen.getByLabelText('URL key')).toHaveValue('');
+  });
+
+  it('sets a URL key on a project that had none', async () => {
+    vi.mocked(apiClient.patch).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<ProjectEditForm project={{ ...project, slug: null }} users={users} />);
+
+    await user.type(screen.getByLabelText('URL key'), 'hce-hub');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(apiClient.patch).toHaveBeenCalledWith(
+        '/api/v1/admin/projects/p1',
+        expect.objectContaining({ body: expect.objectContaining({ slug: 'hce-hub' }) })
+      );
+    });
+  });
+
+  it('omits the URL key from the PATCH when the project has none and the box is blank', async () => {
+    vi.mocked(apiClient.patch).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<ProjectEditForm project={{ ...project, slug: null }} users={users} />);
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    const body = vi.mocked(apiClient.patch).mock.calls[0][1]?.body as Record<string, unknown>;
+    expect(body).not.toHaveProperty('slug');
+  });
+
+  it('refuses to clear an existing URL key instead of silently keeping it', async () => {
+    const user = userEvent.setup();
+    render(<ProjectEditForm project={project} users={users} />);
+
+    await user.clear(screen.getByLabelText('URL key'));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(await screen.findByText(/can’t be removed once set/i)).toBeVisible();
+    expect(apiClient.patch).not.toHaveBeenCalled();
+  });
+
+  it('pins a 409 to the URL key field, naming the taken key', async () => {
+    const { APIClientError } = await import('@/lib/api/client');
+    vi.mocked(apiClient.patch).mockRejectedValue(
+      new APIClientError('A project with that slug already exists', 'CONFLICT', 409)
+    );
+    const user = userEvent.setup();
+    render(<ProjectEditForm project={project} users={users} />);
+
+    await user.clear(screen.getByLabelText('URL key'));
+    await user.type(screen.getByLabelText('URL key'), 'hce-hub');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(await screen.findByText(/“hce-hub” is already taken/i)).toBeVisible();
+    // Pinned to the field, not duplicated as an opaque top-level failure.
+    expect(screen.queryByText(/failed to save project/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^saved\.$/i)).not.toBeInTheDocument();
+  });
+
+  it('rejects a malformed URL key before it reaches the API', async () => {
+    const user = userEvent.setup();
+    render(<ProjectEditForm project={project} users={users} />);
+
+    await user.clear(screen.getByLabelText('URL key'));
+    await user.type(screen.getByLabelText('URL key'), 'HCE Hub');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(await screen.findByText(/lowercase words separated by single hyphens/i)).toBeVisible();
+    expect(apiClient.patch).not.toHaveBeenCalled();
   });
 
   it('saves changes via PATCH', async () => {

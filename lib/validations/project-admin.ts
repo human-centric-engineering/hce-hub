@@ -11,6 +11,7 @@
 import { z } from 'zod';
 import { nonEmptyStringSchema, urlSchema, paginationQuerySchema } from '@/lib/validations/common';
 import { isKnownHostPlatform } from '@/lib/projects/host-platforms';
+import { PROJECT_SLUG_PATTERN } from '@/lib/projects/project-slug';
 
 /** Project lifecycle status — mirrors the `ProjectStatus` enum in app.prisma. */
 export const projectStatusSchema = z.enum(['planning', 'active', 'archived']);
@@ -28,10 +29,7 @@ const repoUrlsSchema = z.array(urlSchema).max(20, 'At most 20 repo URLs');
 const projectSlugSchema = z
   .string()
   .trim()
-  .regex(
-    /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-    'lowercase words separated by single hyphens (e.g. "hce-hub")'
-  )
+  .regex(PROJECT_SLUG_PATTERN, 'lowercase words separated by single hyphens (e.g. "hce-hub")')
   .max(100);
 
 /** POST /admin/projects — create a project (and seat its lead + knowledge tag). */

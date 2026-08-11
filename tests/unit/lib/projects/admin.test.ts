@@ -394,6 +394,30 @@ describe('getProjectDetail — null-user rendering', () => {
     expect(detail.lead).toBeNull(); // null leadUserId renders gracefully
   });
 
+  // The admin edit form prefills its URL-key box from this field; a detail that
+  // dropped it would silently render an empty box over a project that has a slug.
+  it.each([
+    ['hce-hub', 'hce-hub'],
+    [null, null],
+  ])('carries the shareable slug (%s) through to the detail', async (slug, expected) => {
+    projFindUnique.mockResolvedValue({
+      id: 'p1',
+      slug,
+      name: 'Hub',
+      hostPlatform: 'sunrise',
+      status: 'active',
+      repoUrls: [],
+      leadUserId: null,
+      knowledgeTagId: null,
+      sidekickAgentId: null,
+      createdAt: new Date('2026-07-15'),
+      members: [],
+    });
+    userFindMany.mockResolvedValue([]);
+
+    await expect(getProjectDetail('p1')).resolves.toMatchObject({ slug: expected });
+  });
+
   it('404s an unknown project', async () => {
     projFindUnique.mockResolvedValue(null);
     await expect(getProjectDetail('nope')).rejects.toThrow(/not found/i);

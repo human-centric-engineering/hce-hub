@@ -8,7 +8,17 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('@/lib/api/client', () => ({
   apiClient: { post: vi.fn(), delete: vi.fn(), patch: vi.fn(), get: vi.fn() },
-  APIClientError: class APIClientError extends Error {},
+  // Mirrors the real constructor's (message, code, status) — the forms branch on
+  // `status === 409` to pin a slug conflict to its field.
+  APIClientError: class APIClientError extends Error {
+    constructor(
+      message: string,
+      public code?: string,
+      public status?: number
+    ) {
+      super(message);
+    }
+  },
 }));
 
 import { apiClient } from '@/lib/api/client';
@@ -93,6 +103,78 @@ describe('ProjectCreateForm', () => {
     expect(await screen.findByText(/name is required/i)).toBeInTheDocument();
     expect(await screen.findByText(/each line must be a valid url/i)).toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it('sends an explicit URL key when one is typed', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ id: 'p1' });
+    const user = userEvent.setup();
+    render(<ProjectCreateForm users={users} />);
+
+    await user.type(screen.getByLabelText('Name'), 'Wayframer');
+    await user.type(screen.getByLabelText('URL key'), 'way-framer');
+    await user.click(screen.getByRole('combobox', { name: /lead/i }));
+    await user.click(screen.getByRole('option', { name: /Ada/i }));
+    await user.click(screen.getByRole('button', { name: /create project/i }));
+
+    await waitFor(() => {
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/v1/admin/projects',
+        expect.objectContaining({ body: expect.objectContaining({ slug: 'way-framer' }) })
+      );
+    });
+  });
+
+  it('rejects a malformed URL key before it reaches the API', async () => {
+    const user = userEvent.setup();
+    render(<ProjectCreateForm users={users} />);
+
+    await user.type(screen.getByLabelText('Name'), 'Wayframer');
+    await user.type(screen.getByLabelText('URL key'), 'Way Framer!');
+    await user.click(screen.getByRole('combobox', { name: /lead/i }));
+    await user.click(screen.getByRole('option', { name: /Ada/i }));
+    await user.click(screen.getByRole('button', { name: /create project/i }));
+
+    expect(await screen.findByText(/lowercase words separated by single hyphens/i)).toBeVisible();
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it('pins a 409 to the URL key field, naming the taken key', async () => {
+    const { APIClientError } = await import('@/lib/api/client');
+    vi.mocked(apiClient.post).mockRejectedValue(
+      new APIClientError('A project with that slug already exists', 'CONFLICT', 409)
+    );
+    const user = userEvent.setup();
+    render(<ProjectCreateForm users={users} />);
+
+    await user.type(screen.getByLabelText('Name'), 'Wayframer');
+    await user.type(screen.getByLabelText('URL key'), 'hce-hub');
+    await user.click(screen.getByRole('combobox', { name: /lead/i }));
+    await user.click(screen.getByRole('option', { name: /Ada/i }));
+    await user.click(screen.getByRole('button', { name: /create project/i }));
+
+    expect(await screen.findByText(/“hce-hub” is already taken/i)).toBeVisible();
+    // Pinned to the field, not duplicated as an opaque top-level failure.
+    expect(screen.queryByText(/failed to create project/i)).not.toBeInTheDocument();
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it('shows a 409 on a blank key at the top level, not on the empty field', async () => {
+    // Blank box → the server derived the slug and lost a dedupe race. Pinning
+    // "'' is already taken" to an empty field would be nonsense.
+    const { APIClientError } = await import('@/lib/api/client');
+    vi.mocked(apiClient.post).mockRejectedValue(
+      new APIClientError('A project with that slug already exists', 'CONFLICT', 409)
+    );
+    const user = userEvent.setup();
+    render(<ProjectCreateForm users={users} />);
+
+    await user.type(screen.getByLabelText('Name'), 'Wayframer');
+    await user.click(screen.getByRole('combobox', { name: /lead/i }));
+    await user.click(screen.getByRole('option', { name: /Ada/i }));
+    await user.click(screen.getByRole('button', { name: /create project/i }));
+
+    expect(await screen.findByText(/a project with that slug already exists/i)).toBeVisible();
+    expect(screen.queryByText(/is already taken/i)).not.toBeInTheDocument();
   });
 
   it('shows a generic message for a non-API failure', async () => {

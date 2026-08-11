@@ -35,6 +35,8 @@ export interface ProjectMemberRow {
 /** Full project detail (GET /admin/projects/:id). */
 export interface ProjectDetailDTO {
   id: string;
+  /** Shareable URL key (`/projects/hce-hub`); `null` → the cuid `id` is the URL. */
+  slug: string | null;
   name: string;
   hostPlatform: string;
   status: 'planning' | 'active' | 'archived';
