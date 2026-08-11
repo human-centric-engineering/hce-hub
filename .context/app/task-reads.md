@@ -50,10 +50,25 @@ alongside the id is a separate, complementary change — **t-66** on
 _report_ the ref it just created; `list_tasks` lets it _read_ the refs already there.
 Both exist so the human and Claude Code name the same task by the same `t-N`.
 
+## `get_task` (`lib/projects/capabilities/get-task.ts`)
+
+`list_tasks` _identifies_ a task; **`get_task` returns its body** — the detail an
+agent needs to actually build it: `description`, `doneWhen`, effective `status`,
+`kind`, `filesScope`, `prUrl`, the `feature { id, slug, title }`, and the dependency
+graph (`blockedBy` / `blocks`, each neighbour with its `t-N` + readiness). A thin
+projection over `getTaskDetail` ([`lib/projects/task-detail.ts`](../../lib/projects/task-detail.ts)),
+the same funnel-scoped read the web task-sheet renders — so a non-member, unknown, or
+**cross-project** task is `not_found` (no id-swap). `taskId` is required; `projectId`
+is optional (derived via `resolveTaskAccess` when omitted, like `start_task`). The
+free-text body ⇒ `processesPii` (masked in provenance); the assignee is a raw id
+(no PII). This closes the "hand me a task by `t-N` and I'll work it" loop — its
+absence is what blocked reading `t-65` over MCP.
+
 ## Discovery chain
 
 `list_phases` (find a feature id/slug) → `list_tasks` (that feature's tasks, or the
-project's open bugs) → act (`start_task` / `complete_task` / `set_pr`, or `next_task`
-for a recommendation). The capability pattern (class ↔ seed parity, MCP exposure,
+project's open bugs) → `get_task` (read the one you'll work — description, done-when,
+deps) → act (`start_task` / `complete_task` / `set_pr`, or `next_task` for a
+recommendation). The capability pattern (class ↔ seed parity, MCP exposure,
 registration) is the same as every other Hub verb — see
 [idea-capture.md](./idea-capture.md) for the worked reference.
