@@ -79,4 +79,17 @@ describe('captureIdea', () => {
       })
     );
   });
+
+  it('falls back to 0 in the (unreachable) case the create returns a null number', async () => {
+    // Defensive: `number` is nullable in the schema (pre-t-63 rows) but always
+    // assigned on create — this pins the `?? 0` guard rather than leaking null out.
+    const tx = {
+      project: { update: vi.fn().mockResolvedValue({ ideaCounter: 1 }) },
+      idea: { create: vi.fn().mockResolvedValue({ id: 'idea-1', number: null }) },
+    };
+    runTx.mockImplementation((work: (t: unknown) => unknown) => work(tx));
+
+    const r = await captureIdea(USER, 'p1', 'a jot');
+    expect(r).toEqual({ ideaId: 'idea-1', number: 0 });
+  });
 });
