@@ -11,7 +11,7 @@
  * server-rendered inbox re-reads; a failed write is surfaced inline, never
  * swallowed (the phase-picker pattern).
  */
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Pencil, Archive, RotateCcw, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,9 +33,21 @@ export function IdeaRow({ projectId, idea }: { projectId: string; idea: IdeaView
   const [failed, setFailed] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(idea.text);
+  const editRef = useRef<HTMLTextAreaElement>(null);
 
   const dropped = idea.status === 'dropped';
   const locked = busy || pending;
+
+  // Grow the editor to fit its content — a fixed row count clips a long jot.
+  const autosize = () => {
+    const el = editRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  useEffect(() => {
+    if (editing) autosize();
+  }, [editing]);
 
   const patch = async (body: { text: string } | { status: 'open' | 'dropped' }) => {
     setBusy(true);
@@ -84,11 +96,16 @@ export function IdeaRow({ projectId, idea }: { projectId: string; idea: IdeaView
       {editing ? (
         <div className="flex flex-col gap-2">
           <Textarea
+            ref={editRef}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              autosize();
+            }}
             maxLength={500}
             rows={2}
             aria-label="Edit idea"
+            className="resize-none"
             disabled={locked}
             // Focus the field when the user clicks Edit — a deliberate,
             // user-initiated focus (not autofocus-on-load, the a11y concern).
