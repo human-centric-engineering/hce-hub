@@ -26,6 +26,24 @@ import { buildCutoverSnapshot } from '@/lib/projects/cutover/snapshot';
 import { CUTOVER_PROJECT } from '@/lib/projects/cutover/plan-data';
 
 async function main(): Promise<void> {
+  // t-65 guard: the plan→Hub cutover is one-shot. Once the project id has moved off
+  // the scaffold `CUTOVER_PROJECT.id` (a real cuid now), re-running would upsert a
+  // DUPLICATE project at the scaffold id and, because `importProject` upserts features
+  // by their fixed `cfeat*` ids, strand every live feature onto that duplicate. The
+  // cutover features carry stable slugs, so a founding one under a *different*
+  // projectId means the id has already moved — refuse.
+  const cutoverFeature = await prisma.feature.findFirst({
+    where: { slug: 'f-fork' },
+    select: { projectId: true },
+  });
+  if (cutoverFeature && cutoverFeature.projectId !== CUTOVER_PROJECT.id) {
+    console.error(
+      '✗ The plan→Hub cutover has already run and the project id has moved off the scaffold id (t-65).\n' +
+        '  Re-running import-plan would create a duplicate project and strand every live feature. Refusing.'
+    );
+    process.exit(1);
+  }
+
   const email = process.argv[2];
   const lead = await prisma.user.findFirst({
     where: email ? { email } : { ...humanWhere, NOT: { email: { endsWith: '@demo.hce.local' } } },
