@@ -69,31 +69,44 @@ export async function updateIdea(
     throw new NotFoundError(`Idea ${ideaId} not found`);
   }
 
-  // A promoted idea already became a feature/task/phase/bug — it's terminal here.
+  // A promoted idea already became a feature/task/phase/bug — it's terminal here
+  // (friendly early error for the common case; the write below is the race guard).
   if (idea.status === 'promoted') {
     throw new ValidationError('That idea has already been promoted and can no longer be edited.');
   }
 
-  const updated = await prisma.idea.update({
-    where: { id: ideaId },
+  // Guard the write on NOT-promoted so a promotion that commits between the read
+  // above and here can't be clobbered — the same rigor `resolveIdeaOnPromotion`
+  // uses. (`update` can't take a non-unique where, so it's `updateMany` + count.)
+  const { count } = await prisma.idea.updateMany({
+    where: { id: ideaId, status: { not: 'promoted' } },
     data: {
       ...(patch.text !== undefined ? { text: patch.text } : {}),
-      ...(patch.status !== undefined ? { status: patch.status } : {}),
+      // `triagedAt` tracks the drop (schema contract: set "when promoted or
+      // dropped"); restoring to `open` clears it — the idea is back in the inbox.
+      ...(patch.status !== undefined
+        ? { status: patch.status, triagedAt: patch.status === 'dropped' ? new Date() : null }
+        : {}),
     },
-    select: { id: true, projectId: true, status: true },
   });
+  if (count !== 1) {
+    // Lost the race: the idea was promoted (terminal) between the read and write.
+    throw new ValidationError('That idea has already been promoted and can no longer be edited.');
+  }
+
+  const status = patch.status ?? idea.status;
 
   logAdminAction({
     userId,
     action: 'idea.update',
     entityType: 'app_idea',
-    entityId: updated.id,
+    entityId: ideaId,
     metadata: {
-      projectId: updated.projectId,
+      projectId: idea.projectId,
       textChanged: patch.text !== undefined,
       ...(patch.status !== undefined ? { status: patch.status } : {}),
     },
   });
 
-  return { ideaId: updated.id, projectId: updated.projectId, status: updated.status };
+  return { ideaId, projectId: idea.projectId, status };
 }
