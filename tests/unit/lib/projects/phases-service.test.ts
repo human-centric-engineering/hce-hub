@@ -52,7 +52,9 @@ const USER = 'user-1';
 const txAggregate = vi.fn();
 const txCreate = vi.fn();
 const txPhaseUpdate = vi.fn();
+const txIdeaUpdateMany = vi.fn();
 function mockTx() {
+  txIdeaUpdateMany.mockResolvedValue({ count: 1 });
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
@@ -62,6 +64,7 @@ function mockTx() {
         update: txPhaseUpdate,
         findMany: phaseFindMany,
       },
+      idea: { updateMany: txIdeaUpdateMany },
     })
   );
 }
@@ -119,6 +122,32 @@ describe('createPhase', () => {
         data: expect.objectContaining({ status: 'upcoming', startedAt: null, completedAt: null }),
       })
     );
+  });
+
+  it('promotes an idea into the phase (fromIdeaId): resolves it in the same tx, audits it', async () => {
+    txAggregate.mockResolvedValue({ _max: { ordinal: null } });
+    txCreate.mockResolvedValue({ id: 'ph-new', ordinal: 0 });
+    await createPhase(USER, 'p1', { name: 'Ideas Wave', fromIdeaId: 'idea-1' });
+    // Guarded on status:'open', kind 'phase', linked to the created phase.
+    expect(txIdeaUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'idea-1', projectId: 'p1', status: 'open' },
+      data: {
+        status: 'promoted',
+        promotedKind: 'phase',
+        promotedRefId: 'ph-new',
+        triagedAt: expect.any(Date),
+      },
+    });
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ fromIdeaId: 'idea-1' }) })
+    );
+  });
+
+  it('does not touch ideas when no fromIdeaId is given', async () => {
+    txAggregate.mockResolvedValue({ _max: { ordinal: null } });
+    txCreate.mockResolvedValue({ id: 'ph', ordinal: 0 });
+    await createPhase(USER, 'p1', { name: 'X' });
+    expect(txIdeaUpdateMany).not.toHaveBeenCalled();
   });
 
   it('stamps startedAt when created active', async () => {

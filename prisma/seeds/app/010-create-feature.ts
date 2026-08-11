@@ -46,6 +46,11 @@ export const createFeatureFunctionDefinition = {
         type: 'string',
         description: 'Optional: file the new feature under a phase in this project (born filed).',
       },
+      fromIdeaId: {
+        type: 'string',
+        description:
+          'Optional: the id of an open idea in this project being promoted into this feature — it is marked promoted and linked, atomically.',
+      },
       indicativeTasks: {
         type: 'array',
         items: { type: 'string' },

@@ -22,6 +22,7 @@ import type {
 } from '@/lib/orchestration/capabilities/types';
 import { NotFoundError } from '@/lib/api/errors';
 import { createPhase } from '@/lib/projects/phases-service';
+import { checkIdeaPromotable } from '@/lib/projects/idea-promotion';
 import { redactedString } from '@/lib/security/redact';
 
 const schema = z.object({
@@ -43,6 +44,12 @@ const schema = z.object({
     .min(0)
     .optional()
     .describe('Explicit display position; defaults to appended after the last phase.'),
+  fromIdeaId: z
+    .string()
+    .optional()
+    .describe(
+      'Optional: the id of an OPEN idea in this project being promoted into this phase — it is marked promoted and linked, atomically.'
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -79,6 +86,11 @@ export class CreatePhaseCapability extends BaseCapability<Args, Data> {
           type: 'number',
           description: 'Explicit display position; defaults to appended after the last phase.',
         },
+        fromIdeaId: {
+          type: 'string',
+          description:
+            'Optional: the id of an open idea in this project being promoted into this phase — it is marked promoted and linked, atomically.',
+        },
       },
       required: ['projectId', 'name'],
     },
@@ -95,6 +107,7 @@ export class CreatePhaseCapability extends BaseCapability<Args, Data> {
         projectId: args.projectId,
         status: args.status ?? null,
         ordinal: args.ordinal,
+        fromIdeaId: args.fromIdeaId ?? null,
         name: redactedString(`name (${args.name.length} chars)`),
         description:
           typeof args.description === 'string'
@@ -111,6 +124,15 @@ export class CreatePhaseCapability extends BaseCapability<Args, Data> {
       return this.error('create_phase requires a signed-in caller.', 'no_user_context');
     }
 
+    // Promotion: the idea must exist in THIS project and be open (friendly
+    // pre-check; createPhase's in-tx guard is the race backstop).
+    if (args.fromIdeaId !== undefined) {
+      const promotable = await checkIdeaPromotable(args.projectId, args.fromIdeaId);
+      if (!promotable.ok) {
+        return this.error(promotable.message, promotable.code);
+      }
+    }
+
     // Shared core with t3's REST route — a funnel denial surfaces as NotFoundError,
     // which maps to the capability's not_found (no enumeration).
     try {
@@ -119,6 +141,7 @@ export class CreatePhaseCapability extends BaseCapability<Args, Data> {
         description: args.description,
         status: args.status,
         ordinal: args.ordinal,
+        fromIdeaId: args.fromIdeaId,
       });
       return this.success(result);
     } catch (err) {

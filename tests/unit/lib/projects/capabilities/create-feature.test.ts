@@ -10,7 +10,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/projects/access', () => ({ canAccessProject: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
-  prisma: { feature: { findFirst: vi.fn(), findMany: vi.fn() }, phase: { findFirst: vi.fn() } },
+  prisma: {
+    feature: { findFirst: vi.fn(), findMany: vi.fn() },
+    phase: { findFirst: vi.fn() },
+    idea: { findFirst: vi.fn() },
+  },
 }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
@@ -27,6 +31,7 @@ const access = canAccessProject as ReturnType<typeof vi.fn>;
 const featureFindFirst = prisma.feature.findFirst as ReturnType<typeof vi.fn>;
 const featureFindMany = prisma.feature.findMany as ReturnType<typeof vi.fn>;
 const phaseFindFirst = prisma.phase.findFirst as ReturnType<typeof vi.fn>;
+const ideaFindFirst = prisma.idea.findFirst as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
@@ -39,9 +44,11 @@ const txFeatureCreate = vi.fn();
 const txFeatureDepCreateMany = vi.fn();
 const txIndicativeCreateMany = vi.fn();
 const txProjectUpdate = vi.fn();
+const txIdeaUpdateMany = vi.fn();
 function mockTxCreatesFeature(id = 'f-new', slug: string | null = null, nextNumber = 3) {
   txFeatureCreate.mockResolvedValue({ id, slug });
   txProjectUpdate.mockResolvedValue({ featureCounter: nextNumber });
+  txIdeaUpdateMany.mockResolvedValue({ count: 1 });
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
@@ -49,6 +56,7 @@ function mockTxCreatesFeature(id = 'f-new', slug: string | null = null, nextNumb
       feature: { create: txFeatureCreate },
       featureDependency: { createMany: txFeatureDepCreateMany },
       indicativeTask: { createMany: txIndicativeCreateMany },
+      idea: { updateMany: txIdeaUpdateMany },
     })
   );
 }
@@ -245,6 +253,63 @@ describe('create_feature happy path', () => {
         { featureId: 'f-new', order: 1, text: 'wire guard' },
       ],
     });
+  });
+});
+
+describe('create_feature promotion (fromIdeaId)', () => {
+  beforeEach(() => {
+    access.mockResolvedValue({ ok: true, basis: 'member' });
+    featureFindFirst.mockResolvedValue(null);
+    featureFindMany.mockResolvedValue([]);
+  });
+
+  it('promotes an open idea: marks it promoted (feature) in the same tx, records fromIdeaId', async () => {
+    ideaFindFirst.mockResolvedValue({ status: 'open' });
+    mockTxCreatesFeature('f-new', 'f-mcp', 3);
+
+    const r = await cap.execute(
+      { projectId: 'p1', title: 'MCP server', slug: 'f-mcp', fromIdeaId: 'idea-1' },
+      ctx()
+    );
+
+    expect(r.success).toBe(true);
+    // Precheck scoped to THIS project.
+    expect(ideaFindFirst).toHaveBeenCalledWith({
+      where: { id: 'idea-1', projectId: 'p1' },
+      select: { status: true },
+    });
+    // Resolve is guarded on status:'open' (race backstop) and links the feature.
+    expect(txIdeaUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'idea-1', projectId: 'p1', status: 'open' },
+      data: {
+        status: 'promoted',
+        promotedKind: 'feature',
+        promotedRefId: 'f-new',
+        triagedAt: expect.any(Date),
+      },
+    });
+    // The journal + audit note the promotion source.
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ metadata: expect.objectContaining({ fromIdeaId: 'idea-1' }) })
+    );
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ fromIdeaId: 'idea-1' }) })
+    );
+  });
+
+  it('rejects promotion of an unknown idea (invalid_idea, no write)', async () => {
+    ideaFindFirst.mockResolvedValue(null);
+    const r = await cap.execute({ projectId: 'p1', title: 'x', fromIdeaId: 'ghost' }, ctx());
+    expect(r.error?.code).toBe('invalid_idea');
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('rejects promotion of an already-triaged idea (idea_not_open, no write)', async () => {
+    ideaFindFirst.mockResolvedValue({ status: 'promoted' });
+    const r = await cap.execute({ projectId: 'p1', title: 'x', fromIdeaId: 'idea-1' }, ctx());
+    expect(r.error?.code).toBe('idea_not_open');
+    expect(runTx).not.toHaveBeenCalled();
   });
 });
 

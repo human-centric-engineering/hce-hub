@@ -10,11 +10,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotFoundError } from '@/lib/api/errors';
 
 vi.mock('@/lib/projects/phases-service', () => ({ createPhase: vi.fn() }));
+vi.mock('@/lib/db/client', () => ({ prisma: { idea: { findFirst: vi.fn() } } }));
 
 const { createPhase } = await import('@/lib/projects/phases-service');
+const { prisma } = await import('@/lib/db/client');
 const { CreatePhaseCapability } = await import('@/lib/projects/capabilities/create-phase');
 
 const create = createPhase as ReturnType<typeof vi.fn>;
+const ideaFindFirst = prisma.idea.findFirst as ReturnType<typeof vi.fn>;
 const cap = new CreatePhaseCapability();
 const ctx = (userId: string | null = 'user-1') => ({ userId, agentId: 'a1' });
 
@@ -54,6 +57,38 @@ describe('create_phase', () => {
   it('rethrows unexpected errors', async () => {
     create.mockRejectedValue(new Error('db down'));
     await expect(cap.execute({ projectId: 'p1', name: 'Alpha' }, ctx())).rejects.toThrow('db down');
+  });
+
+  it('passes fromIdeaId through to the service when the idea is open', async () => {
+    ideaFindFirst.mockResolvedValue({ status: 'open' });
+    const r = await cap.execute(
+      { projectId: 'p1', name: 'Ideas Wave', fromIdeaId: 'idea-1' },
+      ctx()
+    );
+    expect(r.success).toBe(true);
+    expect(ideaFindFirst).toHaveBeenCalledWith({
+      where: { id: 'idea-1', projectId: 'p1' },
+      select: { status: true },
+    });
+    expect(create).toHaveBeenCalledWith(
+      'user-1',
+      'p1',
+      expect.objectContaining({ fromIdeaId: 'idea-1' })
+    );
+  });
+
+  it('rejects promotion of an unknown / already-triaged idea before calling the service', async () => {
+    ideaFindFirst.mockResolvedValueOnce(null);
+    expect(
+      (await cap.execute({ projectId: 'p1', name: 'X', fromIdeaId: 'ghost' }, ctx())).error?.code
+    ).toBe('invalid_idea');
+
+    ideaFindFirst.mockResolvedValueOnce({ status: 'promoted' });
+    expect(
+      (await cap.execute({ projectId: 'p1', name: 'X', fromIdeaId: 'idea-2' }, ctx())).error?.code
+    ).toBe('idea_not_open');
+
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('masks free-text name/description in provenance, keeps ids', () => {
