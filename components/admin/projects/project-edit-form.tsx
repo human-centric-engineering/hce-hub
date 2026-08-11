@@ -65,11 +65,9 @@ export function ProjectEditForm({ project, users }: ProjectEditFormProps) {
     setSaved(false);
 
     // Clearing an existing key would be a silent no-op (the API has no "unset"),
-    // so say so rather than saving the rest and leaving the box looking applied.
+    // so refuse rather than saving the rest and leaving the box looking applied.
     if (project.slug && data.slug === '') {
-      setFieldError('slug', {
-        message: 'A URL key can’t be removed once set — the API has no “unset”.',
-      });
+      setFieldError('slug', { message: 'URL key cannot be empty.' });
       return;
     }
 

@@ -59,26 +59,23 @@ export function ProjectFormFields({
       <div className="space-y-2">
         <div className="flex items-center gap-1.5">
           <Label htmlFor="slug">URL key</Label>
+          {/* Keep this short — FieldHelp scrolls past ~6 lines (`max-h-60`), and a
+              trailing text node after a `<strong>` is a JSX whitespace trap: if
+              prettier wraps the line there, the space is stripped ("sharedat"). */}
           <FieldHelp title="URL key (slug)">
-            The shareable, durable address for this project — <code>/projects/wayframer</code>.
-            Lowercase words joined by single hyphens, and{' '}
-            <strong>unique across all projects</strong> (a key already in use is rejected when you
-            save).{' '}
-            {mode === 'create' ? (
-              <>Leave blank to derive one from the name.</>
-            ) : (
-              <>
-                Leave blank to keep the current key. Renaming the project never re-derives it, but{' '}
-                <strong>changing it here breaks links already shared</strong> at the old key — only
-                the project&apos;s id URL keeps working regardless.
-              </>
-            )}
+            The shareable address for this project — <code>/projects/hce-website</code>. Lowercase
+            words joined by single hyphens, <strong>unique across all projects</strong>.{' '}
+            {mode === 'create'
+              ? 'Leave blank to derive one from the name.'
+              : 'Leave blank to keep the current key. Changing it breaks links already shared at the old one.'}
           </FieldHelp>
         </div>
         <Input
           id="slug"
           {...register('slug')}
-          placeholder={mode === 'create' ? 'Derived from the name if left blank' : 'e.g. wayframer'}
+          placeholder={
+            mode === 'create' ? 'Derived from the name if left blank' : 'e.g. hce-website'
+          }
           aria-describedby="slug-prefix"
         />
         <p id="slug-prefix" className="text-muted-foreground text-xs">

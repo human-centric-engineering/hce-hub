@@ -110,7 +110,7 @@ describe('ProjectEditForm', () => {
     await user.clear(screen.getByLabelText('URL key'));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    expect(await screen.findByText(/can’t be removed once set/i)).toBeVisible();
+    expect(await screen.findByText(/url key cannot be empty/i)).toBeVisible();
     expect(apiClient.patch).not.toHaveBeenCalled();
   });
 
@@ -126,7 +126,7 @@ describe('ProjectEditForm', () => {
     await user.clear(screen.getByLabelText('URL key'));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    expect(await screen.findByText(/can’t be removed once set/i)).toBeVisible();
+    expect(await screen.findByText(/url key cannot be empty/i)).toBeVisible();
     expect(screen.queryByText(/^saved\.$/i)).not.toBeInTheDocument();
   });
 
