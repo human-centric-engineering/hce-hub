@@ -80,16 +80,17 @@ describe('captureIdea', () => {
     );
   });
 
-  it('falls back to 0 in the (unreachable) case the create returns a null number', async () => {
-    // Defensive: `number` is nullable in the schema (pre-t-63 rows) but always
-    // assigned on create — this pins the `?? 0` guard rather than leaking null out.
+  it('throws (fails loud) rather than coining a #0 handle if the create returns a null number', async () => {
+    // `number` is non-null by construction (the just-bumped counter). A null would be
+    // a broken invariant — we throw instead of returning a bogus `#0`, and we do NOT
+    // audit the capture.
     const tx = {
       project: { update: vi.fn().mockResolvedValue({ ideaCounter: 1 }) },
       idea: { create: vi.fn().mockResolvedValue({ id: 'idea-1', number: null }) },
     };
     runTx.mockImplementation((work: (t: unknown) => unknown) => work(tx));
 
-    const r = await captureIdea(USER, 'p1', 'a jot');
-    expect(r).toEqual({ ideaId: 'idea-1', number: 0 });
+    await expect(captureIdea(USER, 'p1', 'a jot')).rejects.toThrow('without a number');
+    expect(audit).not.toHaveBeenCalled();
   });
 });

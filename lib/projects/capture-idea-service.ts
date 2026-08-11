@@ -55,6 +55,13 @@ export async function captureIdea(
     });
   });
 
+  // `number` is nullable in the schema only for pre-t-63 backfilled rows; a row we
+  // just created carries the freshly-bumped counter, so null here is a broken
+  // invariant — fail loud rather than coining a bogus `#0` handle that no `#N` can match.
+  if (idea.number === null) {
+    throw new Error(`captureIdea: idea ${idea.id} was created without a number`);
+  }
+
   logAdminAction({
     userId,
     action: 'idea.capture',
@@ -63,7 +70,5 @@ export async function captureIdea(
     metadata: { projectId, number: idea.number },
   });
 
-  // `number` is non-null on create (just assigned); the schema is nullable only for
-  // pre-t-63 rows the migration backfilled.
-  return { ideaId: idea.id, number: idea.number ?? 0 };
+  return { ideaId: idea.id, number: idea.number };
 }
