@@ -4,7 +4,7 @@
  * Radix Popover needs the jsdom pointer/scroll stubs to open (as member-select does).
  */
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const refresh = vi.hoisted(() => vi.fn());
@@ -59,5 +59,36 @@ describe('JotIdeaButton', () => {
 
     expect(await screen.findByText(/Couldn.t capture/)).toBeInTheDocument();
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('submits on ⌘/Ctrl+Enter', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<JotIdeaButton projectId="p1" />);
+    await user.click(screen.getByRole('button', { name: /Jot an idea/ }));
+    const ta = await screen.findByLabelText('Idea');
+    await user.type(ta, 'quick one');
+    fireEvent.keyDown(ta, { key: 'Enter', metaKey: true });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/p1/ideas',
+      expect.objectContaining({ body: JSON.stringify({ text: 'quick one' }) })
+    );
+  });
+
+  it('rejects an empty jot on ⌘Enter without POSTing', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<JotIdeaButton projectId="p1" />);
+    await user.click(screen.getByRole('button', { name: /Jot an idea/ }));
+    fireEvent.keyDown(await screen.findByLabelText('Idea'), { key: 'Enter', metaKey: true });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Couldn.t capture/)).toBeInTheDocument();
   });
 });
