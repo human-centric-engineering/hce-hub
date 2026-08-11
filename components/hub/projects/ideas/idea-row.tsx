@@ -139,7 +139,7 @@ export function IdeaRow({ projectId, idea }: { projectId: string; idea: IdeaView
       ) : (
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-sm break-words">{idea.text}</p>
+            <p className="text-sm break-words whitespace-pre-wrap">{idea.text}</p>
             <p className="mt-1.5 text-xs" style={{ color: 'var(--ink-faint)' }}>
               captured by {idea.createdBy?.name ?? 'former member'} · {formatDate(idea.createdAt)}
               {dropped && idea.triagedAt ? ` · dropped ${formatDate(idea.triagedAt)}` : ''}
