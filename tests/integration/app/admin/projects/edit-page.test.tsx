@@ -28,6 +28,7 @@ import EditProjectPage from '@/app/admin/projects/[id]/page';
 
 const detail = {
   id: 'p1',
+  slug: 'wayframer',
   name: 'Wayframer',
   hostPlatform: 'sunrise',
   status: 'active' as const,

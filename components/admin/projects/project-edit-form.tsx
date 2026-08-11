@@ -43,12 +43,14 @@ export function ProjectEditForm({ project, users }: ProjectEditFormProps) {
     register,
     handleSubmit,
     setValue,
+    setError: setFieldError,
     watch,
     formState: { errors },
   } = useForm<ProjectFormData>({
     resolver: zodResolver(projectFormSchema),
     defaultValues: {
       name: project.name,
+      slug: project.slug ?? '',
       hostPlatform: project.hostPlatform,
       leadUserId: project.leadUserId ?? '',
       status: project.status,
@@ -57,13 +59,30 @@ export function ProjectEditForm({ project, users }: ProjectEditFormProps) {
   });
 
   const onSubmit = async (data: ProjectFormData) => {
-    setSubmitting(true);
+    // Clear last submit's outcome FIRST — a guard that returns early must not
+    // leave a stale "Saved." (or error banner) sitting next to its own message.
     setError(null);
     setSaved(false);
+
+    // Clearing an existing key would be a silent no-op (the API has no "unset"),
+    // so refuse rather than saving the rest and leaving the box looking applied.
+    if (project.slug && data.slug === '') {
+      setFieldError('slug', { message: 'URL key cannot be empty.' });
+      return;
+    }
+
+    // Send the key ONLY when this admin actually changed it. Re-transmitting the
+    // prefilled value on every save would let a stale page silently revert
+    // someone else's key change — and a key is the one field shared links depend
+    // on, so last-write-wins is worse here than for `name`/`status`.
+    const slugChanged = data.slug !== (project.slug ?? '');
+
+    setSubmitting(true);
     try {
       await apiClient.patch(PROJECT_ADMIN_API.detail(project.id), {
         body: {
           name: data.name,
+          ...(slugChanged ? { slug: data.slug } : {}),
           hostPlatform: data.hostPlatform,
           leadUserId: data.leadUserId,
           status: data.status,
@@ -73,7 +92,14 @@ export function ProjectEditForm({ project, users }: ProjectEditFormProps) {
       setSaved(true);
       router.refresh();
     } catch (err) {
-      setError(err instanceof APIClientError ? err.message : 'Failed to save project');
+      // A 409 is always the slug `@unique` — pin it to the field that caused it
+      // instead of a top-level "save failed" the admin has to decode. If we sent
+      // no slug it can't be the cause, so that falls through below.
+      if (err instanceof APIClientError && err.status === 409 && slugChanged) {
+        setFieldError('slug', { message: `“${data.slug}” is already taken — choose another.` });
+      } else {
+        setError(err instanceof APIClientError ? err.message : 'Failed to save project');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -100,6 +126,7 @@ export function ProjectEditForm({ project, users }: ProjectEditFormProps) {
         watch={watch}
         setValue={setValue}
         users={users}
+        mode="edit"
       />
 
       {error && (

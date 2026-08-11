@@ -55,6 +55,8 @@ export interface ProjectListItem {
 
 export interface ProjectDetail {
   id: string;
+  /** Shareable URL key (`/projects/hce-hub`); `null` → the cuid `id` is the URL. */
+  slug: string | null;
   name: string;
   hostPlatform: string;
   status: Project['status'];
@@ -142,6 +144,7 @@ export async function getProjectDetail(id: string): Promise<ProjectDetail> {
 
   return {
     id: project.id,
+    slug: project.slug,
     name: project.name,
     hostPlatform: project.hostPlatform,
     status: project.status,
