@@ -34,12 +34,9 @@ import {
   revokeProjectMcpKey,
 } from '@/lib/projects/mcp-keys';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
-import {
-  GET as listGet,
-  POST as createPost,
-} from '@/app/api/v1/projects/[projectId]/mcp-keys/route';
-import { DELETE as revokeDelete } from '@/app/api/v1/projects/[projectId]/mcp-keys/[keyId]/route';
-import { POST as rotatePost } from '@/app/api/v1/projects/[projectId]/mcp-keys/[keyId]/rotate/route';
+import { GET as listGet, POST as createPost } from '@/app/api/v1/projects/[id]/mcp-keys/route';
+import { DELETE as revokeDelete } from '@/app/api/v1/projects/[id]/mcp-keys/[keyId]/route';
+import { POST as rotatePost } from '@/app/api/v1/projects/[id]/mcp-keys/[keyId]/rotate/route';
 import { mockAuthenticatedUser, mockUnauthenticatedUser } from '@/tests/helpers/auth';
 
 const listMock = listProjectMcpKeys as ReturnType<typeof vi.fn>;
@@ -57,9 +54,9 @@ const jsonReq = (p: string, method: string, body?: unknown) =>
       ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }
       : {}),
   });
-const collParams = (projectId = PID) => ({ params: Promise.resolve({ projectId }) });
-const keyParams = (projectId = PID, keyId = KID) => ({
-  params: Promise.resolve({ projectId, keyId }),
+const collParams = (id = PID) => ({ params: Promise.resolve({ id }) });
+const keyParams = (id = PID, keyId = KID) => ({
+  params: Promise.resolve({ id, keyId }),
 });
 
 const signedIn = () => vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());

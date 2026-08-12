@@ -112,20 +112,20 @@ compares ids, so a slug in scope would `not_found` every call.
 Key management is lifted out of `/admin`: any **member** of a project mints,
 rotates, and revokes their own project-scoped key through a fork-owned,
 member-facing surface (`lib/projects/mcp-keys.ts` + the routes under
-`app/api/v1/projects/[projectId]/mcp-keys/`). The admin key routes stay for the
+`app/api/v1/projects/[id]/mcp-keys/`). The admin key routes stay for the
 unscoped "super-admin" key; this is the narrow, member-safe path.
 
 ```
-GET    /api/v1/projects/:projectId/mcp-keys           — your keys for the project
-POST   /api/v1/projects/:projectId/mcp-keys           — mint (plaintext returned once)
-POST   /api/v1/projects/:projectId/mcp-keys/:keyId/rotate  — fresh secret, old invalidated
-DELETE /api/v1/projects/:projectId/mcp-keys/:keyId    — revoke (delete)
+GET    /api/v1/projects/:id/mcp-keys           — your keys for the project
+POST   /api/v1/projects/:id/mcp-keys           — mint (plaintext returned once)
+POST   /api/v1/projects/:id/mcp-keys/:keyId/rotate  — fresh secret, old invalidated
+DELETE /api/v1/projects/:id/mcp-keys/:keyId    — revoke (delete)
 ```
 
 The safety of a self-service surface is in what a member **cannot** choose:
 
-- **Scope is forced** — `scope = { projectId }`, and the `:projectId` (slug or
-  cuid) is resolved through the membership funnel so the stored value is the
+- **Scope is forced** — `scope = { projectId }`, and the `:id` path segment (slug
+  or cuid) is resolved through the membership funnel so the stored value is the
   **canonical cuid** (the contract above), never a slug.
 - **Scopes are locked** — `tools:list` + `tools:execute` only
   (`PROJECT_KEY_SCOPES`). A member cannot mint a `resources:read` / system /
