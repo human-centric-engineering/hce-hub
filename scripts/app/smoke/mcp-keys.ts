@@ -99,9 +99,7 @@ async function main(): Promise<void> {
     });
 
     // 1. Mint via the project SLUG — the stored scope must be the canonical cuid.
-    const minted = await createProjectMcpKey(memberA.id, projectP.slug!, {
-      name: `${PREFIX} laptop`,
-    });
+    const minted = await createProjectMcpKey(memberA.id, projectP.slug!);
     check(
       typeof minted.plaintext === 'string' && minted.plaintext.length > 0,
       'create returns a plaintext secret'
@@ -109,7 +107,14 @@ async function main(): Promise<void> {
 
     const rowA = await prisma.mcpApiKey.findUnique({
       where: { id: minted.key.id },
-      select: { keyHash: true, keyPrefix: true, scope: true, scopes: true, createdBy: true },
+      select: {
+        keyHash: true,
+        keyPrefix: true,
+        scope: true,
+        scopes: true,
+        createdBy: true,
+        name: true,
+      },
     });
     check(rowA !== null, 'minted key row exists');
     check(
@@ -124,18 +129,27 @@ async function main(): Promise<void> {
     );
     check(rowA?.createdBy === memberA.id, 'createdBy is the minting member');
     check(
+      rowA?.name === `${PREFIX} A · ${PREFIX} P`,
+      'name is auto-derived "<member> · <project>"'
+    );
+    check(
       rowA?.keyHash !== minted.plaintext && (rowA?.keyHash?.length ?? 0) >= 32,
       'keyHash is a hash, not the plaintext'
     );
 
+    // A second key for the SAME project is refused (one per project).
+    let refused = false;
+    try {
+      await createProjectMcpKey(memberA.id, projectP.id);
+    } catch {
+      refused = true;
+    }
+    check(refused, 'a second key for the same project is refused');
+
     // 2. A key by member A in project Q, and a key by member B in project P —
     //    neither should surface in A's list for project P.
-    const keyAinQ = await createProjectMcpKey(memberA.id, projectQ.id, {
-      name: `${PREFIX} A-in-Q`,
-    });
-    const keyBinP = await createProjectMcpKey(memberB.id, projectP.id, {
-      name: `${PREFIX} B-in-P`,
-    });
+    const keyAinQ = await createProjectMcpKey(memberA.id, projectQ.id);
+    const keyBinP = await createProjectMcpKey(memberB.id, projectP.id);
 
     const listA_P = await listProjectMcpKeys(memberA.id, projectP.id);
     check(
@@ -145,7 +159,7 @@ async function main(): Promise<void> {
 
     // 3. A non-member cannot mint (funnel 404).
     await expectNotFound(
-      () => createProjectMcpKey(nonMember.id, projectP.id, { name: 'nope' }),
+      () => createProjectMcpKey(nonMember.id, projectP.id),
       'non-member mint is not_found'
     );
 

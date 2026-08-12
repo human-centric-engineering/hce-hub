@@ -109,44 +109,49 @@ compares ids, so a slug in scope would `not_found` every call.
 
 ## Minting keys — member self-service (t-C)
 
-Key management is lifted out of `/admin`: any **member** of a project mints,
-rotates, and revokes their own project-scoped key through a fork-owned,
+Key management is lifted out of `/admin`: any **member** of a project generates,
+regenerates, and revokes their **one** project-scoped key through a fork-owned,
 member-facing surface (`lib/projects/mcp-keys.ts` + the routes under
 `app/api/v1/projects/[id]/mcp-keys/`). The admin key routes stay for the
 unscoped "super-admin" key; this is the narrow, member-safe path.
 
 ```
-GET    /api/v1/projects/:id/mcp-keys           — your keys for the project
-POST   /api/v1/projects/:id/mcp-keys           — mint (plaintext returned once)
-POST   /api/v1/projects/:id/mcp-keys/:keyId/rotate  — fresh secret, old invalidated
+GET    /api/v1/projects/:id/mcp-keys           — your key for the project
+POST   /api/v1/projects/:id/mcp-keys           — generate (no body; plaintext once)
+POST   /api/v1/projects/:id/mcp-keys/:keyId/rotate  — regenerate (fresh secret, old invalidated)
 DELETE /api/v1/projects/:id/mcp-keys/:keyId    — revoke (delete)
 ```
 
-The safety of a self-service surface is in what a member **cannot** choose:
+The member **chooses nothing** — everything is forced or derived, which is what
+keeps a self-service surface safe:
 
-- **Scope is forced** — `scope = { projectId }`, and the `:id` path segment (slug
-  or cuid) is resolved through the membership funnel so the stored value is the
+- **One per project** — a member gets a single key here (`MAX_ACTIVE_KEYS_PER_PROJECT
+= 1`); generating when one exists is refused, so they **regenerate** (fresh secret,
+  same row) or revoke. (There is no separate rotation lifecycle — regenerate _is_ the
+  fresh secret.)
+- **Name is auto-derived** — `"<member> · <project>"`, not asked for. It isn't shown
+  in the Connect UI, but it's the label the **admin** API-keys page renders.
+- **Scope is forced** — `scope = { projectId }`, and the `:id` path segment (slug or
+  cuid) is resolved through the membership funnel so the stored value is the
   **canonical cuid** (the contract above), never a slug.
-- **Scopes are locked** — `tools:list` + `tools:execute` only
-  (`PROJECT_KEY_SCOPES`). A member cannot mint a `resources:read` / system /
-  unscoped key, so a leaked member key drives the coordination verbs for one
-  project and nothing more.
-- **Ownership is enforced** — every op resolves a key the caller **created and
-  that is scoped to this project**; another member's key, an admin key, or a key
-  in another project is `not_found` (uniform, anti-enumeration).
-- **Bounded** — a per-member, per-project active-key cap
-  (`MAX_ACTIVE_KEYS_PER_PROJECT`) keeps a self-service surface from accumulating.
+- **Scopes are locked** — `tools:list` + `tools:execute` only (`PROJECT_KEY_SCOPES`).
+  No `resources:read` / system / unscoped key, so a leaked member key drives the
+  coordination verbs for one project and nothing more.
+- **Ownership is enforced** — every op resolves a key the caller **created and that
+  is scoped to this project**; another member's key, an admin key, or a key in
+  another project is `not_found` (uniform, anti-enumeration).
 
 `withAuth` gates the routes (not `withAdminAuth`); the `/api/v1/**` section rate
-limit (proxy.ts) bounds creation velocity. Create/rotate/revoke are audit-logged.
+limit (proxy.ts) bounds velocity. Generate/regenerate/revoke are audit-logged.
 
 **The UI (t-D).** A project-view **Connect** tab
 (`components/hub/projects/connect/connect-panel.tsx`, reached at
-`/projects/:ref?view=connect`) is the member's browser surface over this API:
-generate / rotate / revoke, a one-time secret shown once with a **ready-to-paste
-`.mcp.json` snippet** (`{ mcpServers: { <slug>: { type: "http", url:
-"<origin>/api/v1/mcp", headers: { Authorization: "Bearer <key>" } } } }`), and the
-project's `repoUrls` shown so a member matches key ↔ checkout.
+`/projects/:ref?view=connect`) is the member's browser surface over this API: one
+key per project — a **Generate** CTA when there's none, else the key with
+**Regenerate** / **Revoke** — plus a one-time secret shown once (with copy-feedback)
+and a **ready-to-paste `.mcp.json` snippet** (`{ mcpServers: { <slug>: { type:
+"http", url: "<origin>/api/v1/mcp", headers: { Authorization: "Bearer <key>" } } } }`),
+and the project's `repoUrls` for the key ↔ checkout match.
 
 ## Related
 

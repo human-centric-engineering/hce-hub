@@ -84,22 +84,16 @@ describe('GET /api/v1/projects/:projectId/mcp-keys', () => {
 describe('POST /api/v1/projects/:projectId/mcp-keys', () => {
   it('401s the signed-out caller', async () => {
     signedOut();
-    expect((await createPost(jsonReq('', 'POST', { name: 'k' }), collParams())).status).toBe(401);
+    expect((await createPost(jsonReq('', 'POST'), collParams())).status).toBe(401);
     expect(createMock).not.toHaveBeenCalled();
   });
 
-  it('400s a missing name (schema validation runs for real)', async () => {
-    signedIn();
-    expect((await createPost(jsonReq('', 'POST', {}), collParams())).status).toBe(400);
-    expect(createMock).not.toHaveBeenCalled();
-  });
-
-  it('mints a key and returns the plaintext once (201)', async () => {
+  it('mints a key (no request body — auto-named) and returns the plaintext once (201)', async () => {
     signedIn();
     createMock.mockResolvedValue({
       key: {
         id: 'k1',
-        name: 'laptop',
+        name: 'Bo · HCE Hub',
         keyPrefix: 'smcp_abcd12',
         scopes: [],
         scope: { projectId: PID },
@@ -107,22 +101,22 @@ describe('POST /api/v1/projects/:projectId/mcp-keys', () => {
       },
       plaintext: 'smcp_secret',
     });
-    const res = await createPost(jsonReq('', 'POST', { name: 'laptop' }), collParams());
+    const res = await createPost(jsonReq('', 'POST'), collParams());
     expect(res.status).toBe(201);
-    expect(createMock).toHaveBeenCalledWith(expect.any(String), PID, { name: 'laptop' });
+    expect(createMock).toHaveBeenCalledWith(expect.any(String), PID);
     expect((await res.json()).data.plaintext).toBe('smcp_secret');
   });
 
   it('404s a non-member (funnel deny ≡ not-found)', async () => {
     signedIn();
     createMock.mockRejectedValue(new NotFoundError('Project not found'));
-    expect((await createPost(jsonReq('', 'POST', { name: 'k' }), collParams())).status).toBe(404);
+    expect((await createPost(jsonReq('', 'POST'), collParams())).status).toBe(404);
   });
 
-  it('400s past the active-key cap (ValidationError)', async () => {
+  it('400s a second key for the project (one-per-project ValidationError)', async () => {
     signedIn();
-    createMock.mockRejectedValue(new ValidationError('too many'));
-    expect((await createPost(jsonReq('', 'POST', { name: 'k' }), collParams())).status).toBe(400);
+    createMock.mockRejectedValue(new ValidationError('already have one'));
+    expect((await createPost(jsonReq('', 'POST'), collParams())).status).toBe(400);
   });
 });
 

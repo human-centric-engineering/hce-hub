@@ -12,15 +12,10 @@
  */
 import { withAuth } from '@/lib/auth/guards';
 import { successResponse } from '@/lib/api/responses';
-import { validateRequestBody } from '@/lib/api/validation';
 import { getRouteLogger } from '@/lib/api/context';
 import { getClientIP } from '@/lib/security/ip';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
-import {
-  listProjectMcpKeys,
-  createProjectMcpKey,
-  projectMcpKeyCreateSchema,
-} from '@/lib/projects/mcp-keys';
+import { listProjectMcpKeys, createProjectMcpKey } from '@/lib/projects/mcp-keys';
 
 export const GET = withAuth<{ id: string }>(async (request, session, { params }) => {
   const log = await getRouteLogger(request);
@@ -41,8 +36,8 @@ export const POST = withAuth<{ id: string }>(async (request, session, { params }
   const clientIP = getClientIP(request);
   const { id: projectId } = await params;
 
-  const body = await validateRequestBody(request, projectMcpKeyCreateSchema);
-  const { key, plaintext } = await createProjectMcpKey(session.user.id, projectId, body);
+  // No request body — the key is one-per-project and auto-named by the service.
+  const { key, plaintext } = await createProjectMcpKey(session.user.id, projectId);
 
   log.info('Project MCP key created', {
     userId: session.user.id,

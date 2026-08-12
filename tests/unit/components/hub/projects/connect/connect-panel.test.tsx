@@ -1,10 +1,10 @@
 /**
  * ConnectPanel tests (f-mcp-project-scope §31 t-D).
  *
- * Covers: loads the caller's keys on mount, the empty state, the repoUrls display,
- * generate → one-time secret + `.mcp.json` snippet (with the live key), rotate →
- * fresh secret, revoke → row removed, and the load-failure message. The service
- * authz (membership / ownership / forced scope) is covered in the API + service
+ * Covers the one-key-per-project model: loads the caller's single key (or the
+ * generate CTA), generate (no body) → one-time secret + `.mcp.json` snippet with the
+ * live key + copy feedback, regenerate → fresh secret, revoke → back to the CTA, the
+ * repoUrls display, and the error paths. Service authz is covered in the API + service
  * tests; this pins the panel's wiring to the t-C endpoints.
  *
  * @see components/hub/projects/connect/connect-panel.tsx
@@ -26,10 +26,8 @@ const del = apiClient.delete as ReturnType<typeof vi.fn>;
 
 const KEY = {
   id: 'key-1',
-  name: 'my laptop',
+  name: 'Bo · HCE Hub',
   keyPrefix: 'smcp_abcd12',
-  scopes: ['tools:list', 'tools:execute'],
-  expiresAt: null,
   lastUsedAt: null,
   createdAt: '2026-08-01T00:00:00.000Z',
 };
@@ -48,16 +46,18 @@ beforeEach(() => {
 });
 
 describe('ConnectPanel', () => {
-  it('loads the caller keys from the project key endpoint on mount', async () => {
+  it('shows the existing key (auto-named) when one exists', async () => {
     get.mockResolvedValue({ keys: [KEY] });
     renderPanel();
-    await waitFor(() => expect(screen.getByText('my laptop')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Bo · HCE Hub')).toBeInTheDocument());
     expect(get).toHaveBeenCalledWith(BASE);
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeInTheDocument();
   });
 
-  it('shows the empty state when there are no keys', async () => {
+  it('shows the generate CTA when there is no key', async () => {
     renderPanel();
-    await waitFor(() => expect(screen.getByText(/No keys yet/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/No key yet/i)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Generate key' })).toBeInTheDocument();
   });
 
   it('lists the project repos, and shows a hint when none are linked', async () => {
@@ -66,93 +66,104 @@ describe('ConnectPanel', () => {
       expect(screen.getByText('git@github.com:x/hce-hub.git')).toBeInTheDocument()
     );
 
-    get.mockResolvedValue({ keys: [] });
     renderPanel([]);
     await waitFor(() => expect(screen.getByText(/none linked yet/i)).toBeInTheDocument());
   });
 
-  it('generates a key and shows the one-time secret + a .mcp.json snippet with the live key', async () => {
+  it('generates a key with NO body and shows the secret + .mcp.json snippet with the live key', async () => {
     const user = userEvent.setup();
     post.mockResolvedValue({
-      name: 'my laptop',
+      name: 'Bo · HCE Hub',
       keyPrefix: 'smcp_new012',
       plaintext: 'smcp_SECRET',
     });
     renderPanel();
-    await waitFor(() => expect(screen.getByText(/No keys yet/i)).toBeInTheDocument());
+    await waitFor(() => screen.getByRole('button', { name: 'Generate key' }));
 
     await user.click(screen.getByRole('button', { name: 'Generate key' }));
-    await user.type(screen.getByLabelText('Name'), 'my laptop');
-    await user.click(screen.getByRole('button', { name: 'Generate' }));
 
-    // Posted with just the name — scope/scopes are forced server-side.
-    expect(post).toHaveBeenCalledWith(BASE, { body: { name: 'my laptop' } });
-
-    // The one-time secret + the paste-ready config are shown.
+    // Posted with no body — one-per-project, auto-named server-side.
+    expect(post).toHaveBeenCalledWith(BASE);
     await waitFor(() => expect(screen.getByText('smcp_SECRET')).toBeInTheDocument());
     const snippet = screen.getByText(/mcpServers/);
     expect(snippet.textContent).toContain('/api/v1/mcp');
     expect(snippet.textContent).toContain('Bearer smcp_SECRET');
   });
 
-  it('rotates a key and shows the fresh secret', async () => {
+  it('regenerates the existing key and shows the fresh secret', async () => {
     const user = userEvent.setup();
     get.mockResolvedValue({ keys: [KEY] });
     post.mockResolvedValue({
-      name: 'my laptop',
+      name: 'Bo · HCE Hub',
       keyPrefix: 'smcp_zzz999',
       plaintext: 'smcp_FRESH',
     });
     renderPanel();
-    await waitFor(() => expect(screen.getByText('my laptop')).toBeInTheDocument());
+    await waitFor(() => screen.getByRole('button', { name: 'Regenerate' }));
 
-    await user.click(screen.getByRole('button', { name: 'Rotate' }));
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }));
 
     expect(post).toHaveBeenCalledWith(`${BASE}/key-1/rotate`);
     await waitFor(() => expect(screen.getByText('smcp_FRESH')).toBeInTheDocument());
   });
 
-  it('revokes a key (after confirm) and drops it from the list', async () => {
+  it('revokes the key (after confirm) and returns to the generate CTA', async () => {
     const user = userEvent.setup();
     get.mockResolvedValue({ keys: [KEY] });
     del.mockResolvedValue(undefined);
     renderPanel();
-    await waitFor(() => expect(screen.getByText('my laptop')).toBeInTheDocument());
+    await waitFor(() => screen.getByRole('button', { name: 'Regenerate' }));
 
     await user.click(screen.getByRole('button', { name: 'Revoke' }));
-    // Confirm in the alert dialog.
     const dialog = await screen.findByRole('alertdialog');
     await user.click(within(dialog).getByRole('button', { name: 'Revoke' }));
 
     expect(del).toHaveBeenCalledWith(`${BASE}/key-1`);
-    await waitFor(() => expect(screen.queryByText('my laptop')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/No key yet/i)).toBeInTheDocument());
   });
 
-  it('surfaces a message when the keys fail to load', async () => {
+  it('gives copy feedback ("Copied!") and writes the secret to the clipboard', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+    post.mockResolvedValue({ name: 'Bo · HCE Hub', keyPrefix: 'smcp_p', plaintext: 'smcp_SECRET' });
+    renderPanel();
+    await waitFor(() => screen.getByRole('button', { name: 'Generate key' }));
+    await user.click(screen.getByRole('button', { name: 'Generate key' }));
+    await waitFor(() => screen.getByText('smcp_SECRET'));
+
+    await user.click(screen.getByRole('button', { name: 'Copy key' }));
+    expect(writeText).toHaveBeenCalledWith('smcp_SECRET');
+    expect(screen.getByRole('button', { name: 'Copied!' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Copy \.mcp\.json/i }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Bearer smcp_SECRET'));
+  });
+
+  it('surfaces a message when the key fails to load', async () => {
     get.mockRejectedValue(new Error('boom'));
     renderPanel();
-    await waitFor(() => expect(screen.getByText(/Couldn.t load your keys/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Couldn.t load your key/i)).toBeInTheDocument());
   });
 
   it('surfaces a message when generate fails', async () => {
     const user = userEvent.setup();
     post.mockRejectedValue(new Error('boom'));
     renderPanel();
-    await waitFor(() => screen.getByText(/No keys yet/i));
+    await waitFor(() => screen.getByRole('button', { name: 'Generate key' }));
     await user.click(screen.getByRole('button', { name: 'Generate key' }));
-    await user.type(screen.getByLabelText('Name'), 'x');
-    await user.click(screen.getByRole('button', { name: 'Generate' }));
-    await waitFor(() => expect(screen.getByText(/Couldn.t create the key/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Couldn.t generate the key/i)).toBeInTheDocument());
   });
 
-  it('surfaces a message when rotate fails', async () => {
+  it('surfaces a message when regenerate fails', async () => {
     const user = userEvent.setup();
     get.mockResolvedValue({ keys: [KEY] });
     post.mockRejectedValue(new Error('boom'));
     renderPanel();
-    await waitFor(() => screen.getByText('my laptop'));
-    await user.click(screen.getByRole('button', { name: 'Rotate' }));
-    await waitFor(() => expect(screen.getByText(/Couldn.t rotate the key/i)).toBeInTheDocument());
+    await waitFor(() => screen.getByRole('button', { name: 'Regenerate' }));
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }));
+    await waitFor(() =>
+      expect(screen.getByText(/Couldn.t regenerate the key/i)).toBeInTheDocument()
+    );
   });
 
   it('surfaces a message when revoke fails, and the key stays', async () => {
@@ -160,41 +171,11 @@ describe('ConnectPanel', () => {
     get.mockResolvedValue({ keys: [KEY] });
     del.mockRejectedValue(new Error('boom'));
     renderPanel();
-    await waitFor(() => screen.getByText('my laptop'));
+    await waitFor(() => screen.getByRole('button', { name: 'Regenerate' }));
     await user.click(screen.getByRole('button', { name: 'Revoke' }));
     const dialog = await screen.findByRole('alertdialog');
     await user.click(within(dialog).getByRole('button', { name: 'Revoke' }));
     await waitFor(() => expect(screen.getByText(/Couldn.t revoke the key/i)).toBeInTheDocument());
-    expect(screen.getByText('my laptop')).toBeInTheDocument();
-  });
-
-  it('renders an Expired badge for a lapsed key and a date for a live one', async () => {
-    get.mockResolvedValue({
-      keys: [
-        { ...KEY, id: 'k-exp', name: 'expired one', expiresAt: '2000-01-01T00:00:00.000Z' },
-        { ...KEY, id: 'k-live', name: 'live one', expiresAt: '2999-01-01T00:00:00.000Z' },
-      ],
-    });
-    renderPanel();
-    await waitFor(() => screen.getByText('expired one'));
-    expect(screen.getByText('Expired')).toBeInTheDocument();
-  });
-
-  it('copies the key and the .mcp.json snippet to the clipboard', async () => {
-    const user = userEvent.setup();
-    // userEvent.setup() installs a (getter-only) navigator.clipboard — spy on it.
-    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
-    post.mockResolvedValue({ name: 'x', keyPrefix: 'smcp_p', plaintext: 'smcp_SECRET' });
-    renderPanel();
-    await waitFor(() => screen.getByText(/No keys yet/i));
-    await user.click(screen.getByRole('button', { name: 'Generate key' }));
-    await user.type(screen.getByLabelText('Name'), 'x');
-    await user.click(screen.getByRole('button', { name: 'Generate' }));
-    await waitFor(() => screen.getByText('smcp_SECRET'));
-
-    await user.click(screen.getByRole('button', { name: 'Copy key' }));
-    await user.click(screen.getByRole('button', { name: /Copy \.mcp\.json/i }));
-    expect(writeText).toHaveBeenCalledWith('smcp_SECRET');
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Bearer smcp_SECRET'));
+    expect(screen.getByText('Bo · HCE Hub')).toBeInTheDocument();
   });
 });
