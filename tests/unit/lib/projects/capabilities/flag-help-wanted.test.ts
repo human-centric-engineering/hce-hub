@@ -22,7 +22,11 @@ const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
 
 const cap = new FlagHelpWantedCapability();
 const USER = 'user-1';
-const ctx = (userId: string | null = USER) => ({ userId, agentId: 'a1' });
+const ctx = (userId: string | null = USER, scope?: Record<string, string>) => ({
+  userId,
+  agentId: 'a1',
+  ...(scope ? { scope } : {}),
+});
 const grant = (helpWanted: boolean, basis = 'lead') => ({
   ok: true,
   feature: { projectId: 'p1', ownerUserId: USER, helpWanted, basis },
@@ -102,5 +106,13 @@ it('is a no-op (no tx, no event, no audit) when the flag is already at the reque
 it('requires the owner access tier', async () => {
   resolveFeature.mockResolvedValue(grant(false));
   await cap.execute({ featureId: 'f1', helpWanted: true }, ctx());
-  expect(resolveFeature).toHaveBeenCalledWith(USER, 'f1', 'owner');
+  expect(resolveFeature).toHaveBeenCalledWith(USER, 'f1', 'owner', undefined);
+});
+
+it("forwards a project-scoped key's projectId as the cross-project guard", async () => {
+  resolveFeature.mockResolvedValue(grant(false));
+  await cap.execute({ featureId: 'f1', helpWanted: true }, ctx(USER, { projectId: 'proj-scoped' }));
+  // resolveFeatureAccess's expectedProjectId → a feature outside the key's
+  // project is not_found (hard isolation for this entity-id verb).
+  expect(resolveFeature).toHaveBeenCalledWith(USER, 'f1', 'owner', 'proj-scoped');
 });

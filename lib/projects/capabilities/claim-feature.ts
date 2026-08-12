@@ -63,7 +63,7 @@ export class ClaimFeatureCapability extends BaseCapability<Args, Data> {
     // Shared core with the consumer claim route — a funnel denial surfaces as
     // NotFoundError, which maps to the capability's not_found (no enumeration).
     try {
-      const result = await claimFeature(userId, args.featureId);
+      const result = await claimFeature(userId, args.featureId, context.scope?.projectId);
       return this.success(result);
     } catch (err) {
       if (err instanceof NotFoundError) {

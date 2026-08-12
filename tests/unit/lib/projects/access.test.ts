@@ -316,6 +316,31 @@ describe('resolveFeatureAccess', () => {
     const r = await resolveFeatureAccess(USER, FEATURE, 'owner');
     expect(r.ok).toBe(true);
   });
+
+  it('rejects a feature outside an expected project scope as not_found (before membership)', async () => {
+    featureFindUnique.mockResolvedValue({
+      projectId: PROJECT,
+      ownerUserId: 'x',
+      helpWanted: false,
+    });
+    const r = await resolveFeatureAccess(USER, FEATURE, 'member', 'other-project');
+    expect(r).toEqual({ ok: false, reason: 'not_found' });
+    // The cross-project guard fires before the membership query (≡ missing).
+    expect(memberFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('grants when the expected project scope matches the feature project', async () => {
+    featureFindUnique.mockResolvedValue({
+      projectId: PROJECT,
+      ownerUserId: USER,
+      status: 'planning',
+      planningStage: 'indicative',
+      helpWanted: false,
+    });
+    memberFindUnique.mockResolvedValue({ role: 'member' });
+    const r = await resolveFeatureAccess(USER, FEATURE, 'member', PROJECT);
+    expect(r.ok).toBe(true);
+  });
 });
 
 describe('resolveTaskAccess', () => {
@@ -376,7 +401,7 @@ describe('resolveEventScope', () => {
     expect(r).toEqual({ ok: true, projectId: PROJECT, featureId: 'feature-1' });
   });
 
-  it('a featureId takes precedence — the project comes from the feature, not a passed projectId', async () => {
+  it('rejects a featureId whose project disagrees with a supplied projectId (cross-project guard)', async () => {
     featureFindUnique.mockResolvedValue({
       projectId: PROJECT,
       ownerUserId: 'x',
@@ -384,7 +409,22 @@ describe('resolveEventScope', () => {
     });
     memberFindUnique.mockResolvedValue({ role: 'member' });
 
+    // The feature lives in PROJECT, but the caller (e.g. a project-scoped MCP key
+    // that folded its projectId in) supplied 'other-project' → not_found. A scoped
+    // key cannot journal onto a feature outside its project.
     const r = await resolveEventScope(USER, { featureId: 'feature-1', projectId: 'other-project' });
+    expect(r).toEqual({ ok: false });
+  });
+
+  it('accepts a featureId when a supplied projectId matches its project', async () => {
+    featureFindUnique.mockResolvedValue({
+      projectId: PROJECT,
+      ownerUserId: 'x',
+      helpWanted: false,
+    });
+    memberFindUnique.mockResolvedValue({ role: 'member' });
+
+    const r = await resolveEventScope(USER, { featureId: 'feature-1', projectId: PROJECT });
     expect(r).toEqual({ ok: true, projectId: PROJECT, featureId: 'feature-1' });
   });
 

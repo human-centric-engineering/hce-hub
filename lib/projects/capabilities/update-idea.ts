@@ -98,10 +98,15 @@ export class UpdateIdeaCapability extends BaseCapability<Args, Data> {
     }
 
     try {
-      const result = await updateIdea(userId, args.ideaId, {
-        text: args.text,
-        status: args.status,
-      });
+      const result = await updateIdea(
+        userId,
+        args.ideaId,
+        {
+          text: args.text,
+          status: args.status,
+        },
+        context.scope?.projectId
+      );
       return this.success({ ideaId: result.ideaId, status: result.status });
     } catch (err) {
       // Funnel 404 for a non-member caller / unknown idea.

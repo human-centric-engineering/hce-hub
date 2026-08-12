@@ -4,10 +4,9 @@ The Hub's MCP surface is a member's programmatic interface, bound to a project
 the way the UI is bound for a human. A member mints a **project-scoped MCP key**
 from a project ("connect a repo"), pastes it into a repo's `.mcp.json`, and the
 Claude Code session in that repo is then bound to exactly one Hub project:
-`projectId` becomes **ambient**, so the agent never passes it and cannot target
-another project by naming it. (That binding covers the verbs that take a
-`projectId`; verbs keyed on an entity id stay membership-bounded — see
-[Boundary](#boundary-by-design) below.)
+`projectId` becomes **ambient**, so the agent never passes it and **cannot reach
+another project through that key** — on every verb, whether it takes a
+`projectId` or acts on an entity by id (see [Enforcement](#enforcement) below).
 
 This is feature `f-mcp-project-scope` (§31). This doc covers the connection model
 and the **ambient-scope mechanism** (t-A). The member-facing key minting UI
@@ -82,17 +81,31 @@ stays a required argument, exactly as before. This is **MCP-dispatch-only** — 
 web and workflow paths dispatch capabilities directly and never pass through the
 fold, so they are unaffected.
 
-### Boundary (by design)
+## Enforcement
 
-The scope binding fixes the **project dimension** for verbs that take one; it is
-an ergonomics + accident-prevention layer, **not** a privilege boundary. The
-privilege boundary is membership, and a scoped key can never exceed what its
-owner could already do with their unscoped key. A verb keyed purely on an entity
-id (e.g. `start_task taskId`) is bounded by the membership funnel, not by the
-key's project — so a multi-project member's scoped key could act on one of their
-_other_ projects' tasks by raw id. That is the same access they already hold; if
-hard per-key entity isolation is ever wanted, it's a follow-up that compares each
-resolved entity's `projectId` to the key scope.
+A scoped key is a **hard project boundary** — every verb is isolated, by one of
+two mechanisms:
+
+- **`projectId`-keyed verbs** (`list_phases`, `list_tasks`, `create_feature`, …)
+  are pinned by the **fold** above: the scope fills `projectId`, and a
+  contradicting explicit `projectId` is rejected.
+- **entity-id verbs** (`start_task`, `claim_feature`, `update_idea`,
+  `create_task`, `add_note`, …) are pinned at the **shared access funnel**. Each
+  passes `context.scope?.projectId` as the `expectedProjectId` guard that
+  `resolveTaskAccess`-scoped services (`resolveScoped`), `resolveFeatureAccess`,
+  `resolveEventScope`, `claimFeature`, and `updateIdea` already honour: after the
+  entity resolves to its project, a mismatch with the key scope is `not_found`
+  (before the membership check — indistinguishable from a missing entity, no
+  enumeration). So a scoped key handed a `taskId`/`featureId`/`ideaId` from
+  another project gets `not_found`, exactly as if it named the foreign project.
+
+Underneath the ergonomics, this stays layered on **membership**: the funnel still
+resolves access for the key's owner, so a scoped key never exceeds what its owner
+could do — the scope narrows that to a single project. A leaked scoped key is
+therefore worth **one** project, not all of the owner's.
+
+Note the scope must be the project **cuid** (see the contract above); the guard
+compares ids, so a slug in scope would `not_found` every call.
 
 ## Related
 

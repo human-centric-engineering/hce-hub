@@ -14,7 +14,11 @@ const { UpdateIdeaCapability } = await import('@/lib/projects/capabilities/updat
 
 const update = updateIdea as ReturnType<typeof vi.fn>;
 const cap = new UpdateIdeaCapability();
-const ctx = (userId: string | null = 'u1') => ({ userId, agentId: 'a1' });
+const ctx = (userId: string | null = 'u1', scope?: Record<string, string>) => ({
+  userId,
+  agentId: 'a1',
+  ...(scope ? { scope } : {}),
+});
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -46,7 +50,28 @@ describe('update_idea capability', () => {
     update.mockResolvedValue({ ideaId: 'idea-1', projectId: 'p1', status: 'dropped' });
     const r = await cap.execute({ ideaId: 'idea-1', status: 'dropped' }, ctx('caller'));
     expect(r).toEqual({ success: true, data: { ideaId: 'idea-1', status: 'dropped' } });
-    expect(update).toHaveBeenCalledWith('caller', 'idea-1', { text: undefined, status: 'dropped' });
+    expect(update).toHaveBeenCalledWith(
+      'caller',
+      'idea-1',
+      { text: undefined, status: 'dropped' },
+      undefined
+    );
+  });
+
+  it("forwards a project-scoped key's projectId as the cross-project guard", async () => {
+    update.mockResolvedValue({ ideaId: 'idea-1', projectId: 'proj-scoped', status: 'dropped' });
+    await cap.execute(
+      { ideaId: 'idea-1', status: 'dropped' },
+      ctx('caller', { projectId: 'proj-scoped' })
+    );
+    // The scope becomes updateIdea's expectedProjectId → an idea outside the
+    // key's project is not_found (hard isolation for this entity-id verb).
+    expect(update).toHaveBeenCalledWith(
+      'caller',
+      'idea-1',
+      { text: undefined, status: 'dropped' },
+      'proj-scoped'
+    );
   });
 
   it('requires at least one of text/status (schema refine)', () => {

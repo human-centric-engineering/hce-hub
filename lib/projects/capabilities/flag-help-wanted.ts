@@ -62,7 +62,12 @@ export class FlagHelpWantedCapability extends BaseCapability<Args, Data> {
       return this.error('flag_help_wanted requires a signed-in caller.', 'no_user_context');
     }
 
-    const access = await resolveFeatureAccess(userId, args.featureId, 'owner');
+    const access = await resolveFeatureAccess(
+      userId,
+      args.featureId,
+      'owner',
+      context.scope?.projectId
+    );
     if (!access.ok) {
       return access.reason === 'not_found'
         ? this.error(`Feature ${args.featureId} not found.`, 'not_found')

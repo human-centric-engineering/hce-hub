@@ -147,7 +147,12 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
     if (!task) {
       return this.error(`Task ${args.taskId} not found.`, 'not_found');
     }
-    const access = await resolveFeatureAccess(userId, task.featureId, 'owner');
+    const access = await resolveFeatureAccess(
+      userId,
+      task.featureId,
+      'owner',
+      context.scope?.projectId
+    );
     if (!access.ok) {
       return access.reason === 'not_found'
         ? this.error(`Task ${args.taskId} not found.`, 'not_found')
