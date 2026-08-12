@@ -8,9 +8,9 @@ Claude Code session in that repo is then bound to exactly one Hub project:
 another project through that key** — on every verb, whether it takes a
 `projectId` or acts on an entity by id (see [Enforcement](#enforcement) below).
 
-This is feature `f-mcp-project-scope` (§31). This doc covers the connection model
-and the **ambient-scope mechanism** (t-A). The member-facing key minting UI
-(create / rotate / revoke) lands in later tasks (t-C, t-D).
+This is feature `f-mcp-project-scope` (§31). This doc covers the connection model,
+the **ambient-scope mechanism** (t-A), and **member self-service key minting**
+(t-C). The in-app "Connect a repo" UI is t-D.
 
 ## The connection model
 
@@ -106,6 +106,39 @@ therefore worth **one** project, not all of the owner's.
 
 Note the scope must be the project **cuid** (see the contract above); the guard
 compares ids, so a slug in scope would `not_found` every call.
+
+## Minting keys — member self-service (t-C)
+
+Key management is lifted out of `/admin`: any **member** of a project mints,
+rotates, and revokes their own project-scoped key through a fork-owned,
+member-facing surface (`lib/projects/mcp-keys.ts` + the routes under
+`app/api/v1/projects/[projectId]/mcp-keys/`). The admin key routes stay for the
+unscoped "super-admin" key; this is the narrow, member-safe path.
+
+```
+GET    /api/v1/projects/:projectId/mcp-keys           — your keys for the project
+POST   /api/v1/projects/:projectId/mcp-keys           — mint (plaintext returned once)
+POST   /api/v1/projects/:projectId/mcp-keys/:keyId/rotate  — fresh secret, old invalidated
+DELETE /api/v1/projects/:projectId/mcp-keys/:keyId    — revoke (delete)
+```
+
+The safety of a self-service surface is in what a member **cannot** choose:
+
+- **Scope is forced** — `scope = { projectId }`, and the `:projectId` (slug or
+  cuid) is resolved through the membership funnel so the stored value is the
+  **canonical cuid** (the contract above), never a slug.
+- **Scopes are locked** — `tools:list` + `tools:execute` only
+  (`PROJECT_KEY_SCOPES`). A member cannot mint a `resources:read` / system /
+  unscoped key, so a leaked member key drives the coordination verbs for one
+  project and nothing more.
+- **Ownership is enforced** — every op resolves a key the caller **created and
+  that is scoped to this project**; another member's key, an admin key, or a key
+  in another project is `not_found` (uniform, anti-enumeration).
+- **Bounded** — a per-member, per-project active-key cap
+  (`MAX_ACTIVE_KEYS_PER_PROJECT`) keeps a self-service surface from accumulating.
+
+`withAuth` gates the routes (not `withAdminAuth`); the `/api/v1/**` section rate
+limit (proxy.ts) bounds creation velocity. Create/rotate/revoke are audit-logged.
 
 ## Related
 
