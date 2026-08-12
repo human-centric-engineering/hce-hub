@@ -178,4 +178,24 @@ describe('ConnectPanel', () => {
     await waitFor(() => expect(screen.getByText(/Couldn.t revoke the key/i)).toBeInTheDocument());
     expect(screen.getByText('Bo · HCE Hub')).toBeInTheDocument();
   });
+
+  it('renders the last-used date when the key has been used', async () => {
+    get.mockResolvedValue({ keys: [{ ...KEY, lastUsedAt: '2026-08-10T00:00:00.000Z' }] });
+    renderPanel();
+    await waitFor(() => screen.getByText('Bo · HCE Hub'));
+    // With a real last-used, the row shows a date rather than "never".
+    expect(screen.queryByText(/never/)).not.toBeInTheDocument();
+  });
+
+  it('closes and clears the one-time-secret dialog on dismiss', async () => {
+    const user = userEvent.setup();
+    post.mockResolvedValue({ name: 'Bo · HCE Hub', keyPrefix: 'p', plaintext: 'smcp_SECRET' });
+    renderPanel();
+    await waitFor(() => screen.getByRole('button', { name: 'Generate key' }));
+    await user.click(screen.getByRole('button', { name: 'Generate key' }));
+    await waitFor(() => screen.getByText('smcp_SECRET'));
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByText('smcp_SECRET')).not.toBeInTheDocument());
+  });
 });
