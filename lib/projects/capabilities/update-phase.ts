@@ -106,11 +106,16 @@ export class UpdatePhaseCapability extends BaseCapability<Args, Data> {
     }
 
     try {
-      const result = await updatePhase(userId, args.phaseId, {
-        name: args.name,
-        description: args.description,
-        status: args.status,
-      });
+      const result = await updatePhase(
+        userId,
+        args.phaseId,
+        {
+          name: args.name,
+          description: args.description,
+          status: args.status,
+        },
+        context.scope?.projectId
+      );
       return this.success(result);
     } catch (err) {
       if (err instanceof NotFoundError) {

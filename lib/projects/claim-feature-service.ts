@@ -49,12 +49,10 @@ export async function claimFeature(
   featureId: string,
   expectedProjectId?: string
 ): Promise<ClaimFeatureResult> {
-  const access = await resolveFeatureAccess(userId, featureId, 'member');
+  // Scope to the caller's project (no cross-project id-swap) when asked to — the
+  // guard lives in resolveFeatureAccess now, so it isn't duplicated here.
+  const access = await resolveFeatureAccess(userId, featureId, 'member', expectedProjectId);
   if (!access.ok) throw new NotFoundError(`Feature ${featureId} not found`);
-  // Scope to the route's project (no cross-project id-swap) when asked to.
-  if (expectedProjectId && access.feature.projectId !== expectedProjectId) {
-    throw new NotFoundError(`Feature ${featureId} not found`);
-  }
 
   // Don't reopen shipped history: claiming would flip a shipped feature back to
   // `in_flight`. Refuse softly (no mutation, `claimed: false`) — the fix for a

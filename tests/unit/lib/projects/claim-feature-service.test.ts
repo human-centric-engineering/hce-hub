@@ -59,13 +59,22 @@ describe('claimFeature funnel', () => {
     expect(runTx).not.toHaveBeenCalled();
   });
 
-  it('throws NotFoundError when the feature is outside expectedProjectId (id-swap guard)', async () => {
-    resolveFeature.mockResolvedValue(granted(null, 'other-project'));
-    await expect(claimFeature(USER, 'f1', 'p1')).rejects.toBeInstanceOf(NotFoundError);
+  it('forwards expectedProjectId to resolveFeatureAccess (the cross-project guard lives there)', async () => {
+    resolveFeature.mockResolvedValue(granted(null, 'p1'));
+    await claimFeature(USER, 'f1', 'p1');
+    expect(resolveFeature).toHaveBeenCalledWith(USER, 'f1', 'member', 'p1');
+  });
+
+  it('throws NotFoundError when resolveFeatureAccess denies for a cross-project scope (no write)', async () => {
+    // resolveFeatureAccess now returns not_found on an expectedProjectId mismatch;
+    // claimFeature no longer re-checks — it trusts the funnel's verdict.
+    resolveFeature.mockResolvedValue({ ok: false, reason: 'not_found' });
+    await expect(claimFeature(USER, 'f1', 'other-project')).rejects.toBeInstanceOf(NotFoundError);
+    expect(resolveFeature).toHaveBeenCalledWith(USER, 'f1', 'member', 'other-project');
     expect(runTx).not.toHaveBeenCalled();
   });
 
-  it('allows the claim when expectedProjectId matches', async () => {
+  it('allows the claim when the funnel grants (expectedProjectId matched)', async () => {
     resolveFeature.mockResolvedValue(granted(null, 'p1'));
     const r = await claimFeature(USER, 'f1', 'p1');
     expect(r.claimed).toBe(true);
