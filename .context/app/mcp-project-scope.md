@@ -4,8 +4,10 @@ The Hub's MCP surface is a member's programmatic interface, bound to a project
 the way the UI is bound for a human. A member mints a **project-scoped MCP key**
 from a project ("connect a repo"), pastes it into a repo's `.mcp.json`, and the
 Claude Code session in that repo is then bound to exactly one Hub project:
-`projectId` becomes **ambient**, so the agent never passes it and cannot reach a
-different project through that key.
+`projectId` becomes **ambient**, so the agent never passes it and cannot target
+another project by naming it. (That binding covers the verbs that take a
+`projectId`; verbs keyed on an entity id stay membership-bounded — see
+[Boundary](#boundary-by-design) below.)
 
 This is feature `f-mcp-project-scope` (§31). This doc covers the connection model
 and the **ambient-scope mechanism** (t-A). The member-facing key minting UI
@@ -51,9 +53,17 @@ folds the key's `scope.projectId` into the tool args:
 
 - **fill-if-absent** — a scoped key that omits `projectId` gets the key's project
   supplied. (An empty string counts as absent.)
-- **cross-project guard** — an explicit `projectId` that differs from the key's
-  scope is rejected (`isError`, no dispatch), so a scoped key can never act on
-  another project by naming it.
+- **cross-project guard** — an explicit `projectId` that is not exactly the
+  key's scope (a different string, or any non-string) is rejected (`isError`, no
+  dispatch), so a scoped key can never act on another project by naming it and
+  the guard does not depend on each verb's own validation.
+
+**Contract:** the stored `scope.projectId` MUST be the project's **cuid**
+(`Project.id`), not its slug — every verb resolves it through
+`getAccessibleProject`'s `findUnique({ where: { id } })`, which is cuid-only
+(only the URL seam `getAccessibleProjectByRef` accepts a slug). If the mint (t-C)
+stored a slug, every scoped call would 404 silently. So t-C stores the resolved
+id.
 
 Both rules apply **only when the target tool declares a `projectId` argument**
 (`toolAcceptsProjectId` checks the tool's input schema). This gate matters:

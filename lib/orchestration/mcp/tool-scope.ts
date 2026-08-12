@@ -12,9 +12,15 @@
  *
  * - **fill-if-absent** — a scoped key that omits `projectId` gets the key's
  *   project supplied. (An empty string counts as absent — an unset arg.)
- * - **cross-project guard** — an explicit `projectId` that differs from the
- *   key's scope is a cross-project attempt; the fold flags it so the caller can
- *   reject the call rather than silently retarget it.
+ * - **cross-project guard** — an explicit `projectId` that is not exactly the
+ *   key's scope (a different string, or any non-string) is a cross-project or
+ *   malformed attempt; the fold flags it so the caller can reject the call
+ *   rather than silently retarget it or lean on the verb's own validation.
+ *
+ * Contract: `scope.projectId` MUST be the project's **cuid** (`Project.id`), not
+ * its slug — every verb resolves it through `getAccessibleProject`'s
+ * `findUnique({ where: { id } })`, which is cuid-only. The key-minting flow
+ * (t-C) stores the resolved id; this fold folds it in verbatim.
  *
  * The `toolAcceptsProjectId` gate matters for two reasons: verbs keyed on an
  * entity id (`taskId` / `featureId`) don't declare `projectId`, so folding it in
@@ -69,12 +75,21 @@ export function foldProjectScope(
     return { args: { ...args, projectId: scoped } };
   }
 
-  // Present and different → cross-project attempt; flag for rejection.
-  if (typeof provided === 'string' && provided !== scoped) {
-    return { args, crossProject: { scoped, requested: provided } };
+  // Anything else present must be EXACTLY the key's project. A different string,
+  // or a non-string (`{}`, `['other']`, a number), is a cross-project or
+  // malformed attempt → reject here rather than leaning on each verb's own Zod
+  // schema, so the scope guarantee is self-contained (enforced where it is
+  // stated, not one layer downstream).
+  if (provided !== scoped) {
+    return {
+      args,
+      crossProject: {
+        scoped,
+        requested: typeof provided === 'string' ? provided : JSON.stringify(provided),
+      },
+    };
   }
 
-  // Present and matching (or a non-string the verb's own schema will reject) →
-  // pass through unchanged.
+  // Present and matching → pass through unchanged.
   return { args };
 }

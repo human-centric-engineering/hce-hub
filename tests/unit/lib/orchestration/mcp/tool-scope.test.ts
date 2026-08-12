@@ -92,11 +92,19 @@ describe('foldProjectScope', () => {
       expect(fold.args).toBe(args);
     });
 
-    it('does not fill over a non-string projectId (leaves the verb schema to reject it)', () => {
+    it('rejects a non-string projectId as cross-project (guard is self-contained)', () => {
       const args = { projectId: 123 };
       const fold = foldProjectScope(args, { projectId: PROJ }, true);
+      expect(fold.crossProject).toEqual({ scoped: PROJ, requested: '123' });
       expect(fold.args).toBe(args);
-      expect(fold.crossProject).toBeUndefined();
+    });
+
+    it('rejects a structured projectId (object/array) as cross-project', () => {
+      const objFold = foldProjectScope({ projectId: {} }, { projectId: PROJ }, true);
+      expect(objFold.crossProject).toEqual({ scoped: PROJ, requested: '{}' });
+
+      const arrFold = foldProjectScope({ projectId: ['proj-other'] }, { projectId: PROJ }, true);
+      expect(arrFold.crossProject).toEqual({ scoped: PROJ, requested: '["proj-other"]' });
     });
   });
 });
