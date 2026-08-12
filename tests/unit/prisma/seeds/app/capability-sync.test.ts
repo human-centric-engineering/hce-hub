@@ -32,6 +32,12 @@ import updateIdeaUnit, { updateIdeaFunctionDefinition } from '@/prisma/seeds/app
 import listIdeasUnit, { listIdeasFunctionDefinition } from '@/prisma/seeds/app/026-list-ideas';
 import listTasksUnit, { listTasksFunctionDefinition } from '@/prisma/seeds/app/027-list-tasks';
 import getTaskUnit, { getTaskFunctionDefinition } from '@/prisma/seeds/app/028-get-task';
+import getFeatureUnit, { getFeatureFunctionDefinition } from '@/prisma/seeds/app/029-get-feature';
+import listProjectsUnit, {
+  listProjectsFunctionDefinition,
+} from '@/prisma/seeds/app/030-list-projects';
+import getProjectUnit, { getProjectFunctionDefinition } from '@/prisma/seeds/app/031-get-project';
+import listEventsUnit, { listEventsFunctionDefinition } from '@/prisma/seeds/app/032-list-events';
 
 function runContext() {
   const upsert = vi.fn().mockResolvedValue({ id: 'cap1' });
@@ -158,5 +164,41 @@ describe('capability seeds re-sync functionDefinition on update', () => {
     expect(arg.where).toEqual({ slug: 'get_task' });
     expect(arg.update.functionDefinition).toEqual(getTaskFunctionDefinition);
     expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('taskId');
+  });
+
+  it('029-get-feature: the new read capability seed re-syncs on the update branch', async () => {
+    const { ctx, upsert } = runContext();
+    await getFeatureUnit.run(ctx);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ slug: 'get_feature' });
+    expect(arg.update.functionDefinition).toEqual(getFeatureFunctionDefinition);
+    expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('featureRef');
+  });
+
+  it('030-list-projects: the new read capability seed re-syncs on the update branch', async () => {
+    const { ctx, upsert } = runContext();
+    await listProjectsUnit.run(ctx);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ slug: 'list_projects' });
+    expect(arg.update.functionDefinition).toEqual(listProjectsFunctionDefinition);
+    expect(arg.update.functionDefinition.name).toBe('list_projects');
+  });
+
+  it('031-get-project: the new read capability seed re-syncs on the update branch', async () => {
+    const { ctx, upsert } = runContext();
+    await getProjectUnit.run(ctx);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ slug: 'get_project' });
+    expect(arg.update.functionDefinition).toEqual(getProjectFunctionDefinition);
+    expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('projectId');
+  });
+
+  it('032-list-events: the new read capability seed re-syncs on the update branch', async () => {
+    const { ctx, upsert } = runContext();
+    await listEventsUnit.run(ctx);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ slug: 'list_events' });
+    expect(arg.update.functionDefinition).toEqual(listEventsFunctionDefinition);
+    expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('featureId');
   });
 });

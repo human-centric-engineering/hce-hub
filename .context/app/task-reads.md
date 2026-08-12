@@ -66,9 +66,23 @@ absence is what blocked reading `t-65` over MCP.
 
 ## Discovery chain
 
-`list_phases` (find a feature id/slug) → `list_tasks` (that feature's tasks, or the
-project's open bugs) → `get_task` (read the one you'll work — description, done-when,
-deps) → act (`start_task` / `complete_task` / `set_pr`, or `next_task` for a
-recommendation). The capability pattern (class ↔ seed parity, MCP exposure,
-registration) is the same as every other Hub verb — see
+The full chain, once **read parity** landed (f-mcp-project-scope §31 t-70 added the
+project / feature / journal reads that bracket this one):
+
+```
+list_projects   → discover a projectId (the entry point)
+get_project     → its header + structure counts
+list_phases     → find a feature id/slug
+get_feature     → read the feature's spec
+list_tasks      → that feature's tasks, or the project's open bugs
+get_task        → read the one you'll work (description, done-when, deps)
+→ act: start_task / complete_task / set_pr, or next_task for a recommendation
+
+list_events     → the project journal (decisions / notes / lifecycle), at any point
+```
+
+Every read is membership-scoped (deny ≡ `not_found`) and **project-scope-aware**: on
+a project-scoped MCP key the `projectId` is ambient (see
+[mcp-project-scope.md](./mcp-project-scope.md)). The capability pattern (class ↔ seed
+parity, MCP exposure, registration) is the same as every other Hub verb — see
 [idea-capture.md](./idea-capture.md) for the worked reference.
