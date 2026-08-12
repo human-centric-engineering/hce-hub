@@ -156,7 +156,12 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
     }
 
     // Owner tier: the feature owner or a project lead. Non-member → not_found.
-    const access = await resolveFeatureAccess(userId, args.featureId, 'owner');
+    const access = await resolveFeatureAccess(
+      userId,
+      args.featureId,
+      'owner',
+      context.scope?.projectId
+    );
     if (!access.ok) {
       return access.reason === 'not_found'
         ? this.error(`Feature ${args.featureId} not found.`, 'not_found')

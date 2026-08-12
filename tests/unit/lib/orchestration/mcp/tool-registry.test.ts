@@ -659,6 +659,121 @@ describe('callMcpTool: scoped agent resolution', () => {
 });
 
 // ---------------------------------------------------------------------------
+// callMcpTool: project scope folding (f-mcp-project-scope §31 t-A)
+// ---------------------------------------------------------------------------
+
+/** A parse result whose tool schema DECLARES a projectId argument. */
+function makeParseWithProjectId() {
+  return {
+    success: true,
+    data: {
+      name: 'search_knowledge',
+      description: 'Search the knowledge base',
+      parameters: {
+        type: 'object',
+        properties: { projectId: { type: 'string' }, query: { type: 'string' } },
+      },
+    },
+  };
+}
+
+describe('callMcpTool: project scope folding', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearMcpToolCache();
+    vi.mocked(prisma.mcpExposedTool.findMany).mockResolvedValue([makeExposedTool()] as never);
+    vi.mocked(prisma.aiAgent.findUnique).mockResolvedValue({ id: 'agent-sys' } as never);
+    vi.mocked(capabilityDispatcher.dispatch).mockResolvedValue({ success: true, data: {} });
+  });
+
+  it("fills projectId from the key's scope when the tool accepts it and the caller omits it", async () => {
+    vi.mocked(capabilityFunctionDefinitionSchema.safeParse).mockReturnValue(
+      makeParseWithProjectId() as never
+    );
+
+    await callMcpTool(
+      'search_knowledge',
+      { query: 'x' },
+      { userId: 'user-1', scope: { projectId: 'proj-scoped' } }
+    );
+
+    expect(capabilityDispatcher.dispatch).toHaveBeenCalledWith(
+      'search_knowledge',
+      { query: 'x', projectId: 'proj-scoped' },
+      expect.objectContaining({ userId: 'user-1', scope: { projectId: 'proj-scoped' } })
+    );
+  });
+
+  it('rejects a call whose explicit projectId contradicts the key scope, without dispatching', async () => {
+    vi.mocked(capabilityFunctionDefinitionSchema.safeParse).mockReturnValue(
+      makeParseWithProjectId() as never
+    );
+
+    const result = await callMcpTool(
+      'search_knowledge',
+      { query: 'x', projectId: 'proj-other' },
+      { userId: 'user-1', scope: { projectId: 'proj-scoped' } }
+    );
+
+    expect(result.isError).toBe(true);
+    expect(asText(result.content[0])).toContain('proj-scoped');
+    expect(asText(result.content[0])).toContain('proj-other');
+    expect(capabilityDispatcher.dispatch).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'MCP tool call: cross-project projectId rejected',
+      expect.objectContaining({ scoped: 'proj-scoped', requested: 'proj-other' })
+    );
+  });
+
+  it('passes an explicit projectId through when it matches the key scope', async () => {
+    vi.mocked(capabilityFunctionDefinitionSchema.safeParse).mockReturnValue(
+      makeParseWithProjectId() as never
+    );
+
+    await callMcpTool(
+      'search_knowledge',
+      { projectId: 'proj-scoped' },
+      { userId: 'user-1', scope: { projectId: 'proj-scoped' } }
+    );
+
+    expect(capabilityDispatcher.dispatch).toHaveBeenCalledWith(
+      'search_knowledge',
+      { projectId: 'proj-scoped' },
+      expect.anything()
+    );
+  });
+
+  it('does not inject projectId for a tool that does not declare it (strict built-ins stay untouched)', async () => {
+    // Default parse: parameters.properties = {} (no projectId).
+    vi.mocked(capabilityFunctionDefinitionSchema.safeParse).mockReturnValue(
+      makeSuccessfulParse() as never
+    );
+
+    await callMcpTool(
+      'search_knowledge',
+      { query: 'x' },
+      { userId: 'user-1', scope: { projectId: 'proj-scoped' } }
+    );
+
+    const [, dispatchedArgs] = vi.mocked(capabilityDispatcher.dispatch).mock.calls[0];
+    expect(dispatchedArgs).toEqual({ query: 'x' });
+    expect(dispatchedArgs).not.toHaveProperty('projectId');
+  });
+
+  it('leaves args unchanged for an unscoped key even when the tool accepts projectId', async () => {
+    vi.mocked(capabilityFunctionDefinitionSchema.safeParse).mockReturnValue(
+      makeParseWithProjectId() as never
+    );
+
+    await callMcpTool('search_knowledge', { query: 'x' }, { userId: 'user-1' });
+
+    const [, dispatchedArgs] = vi.mocked(capabilityDispatcher.dispatch).mock.calls[0];
+    expect(dispatchedArgs).toEqual({ query: 'x' });
+    expect(dispatchedArgs).not.toHaveProperty('projectId');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // clearMcpToolCache
 // ---------------------------------------------------------------------------
 

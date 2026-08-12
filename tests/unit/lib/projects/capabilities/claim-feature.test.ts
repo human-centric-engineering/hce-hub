@@ -16,7 +16,11 @@ const claim = claimFeature as ReturnType<typeof vi.fn>;
 
 const cap = new ClaimFeatureCapability();
 const USER = 'user-1';
-const ctx = (userId: string | null = USER) => ({ userId, agentId: 'a1' });
+const ctx = (userId: string | null = USER, scope?: Record<string, string>) => ({
+  userId,
+  agentId: 'a1',
+  ...(scope ? { scope } : {}),
+});
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -30,8 +34,16 @@ describe('claim_feature capability', () => {
   it('delegates to claimFeature and passes the result through', async () => {
     claim.mockResolvedValue({ featureId: 'f1', claimed: true, warnings: [] });
     const r = await cap.execute({ featureId: 'f1' }, ctx());
-    expect(claim).toHaveBeenCalledWith(USER, 'f1');
+    expect(claim).toHaveBeenCalledWith(USER, 'f1', undefined);
     expect(r).toEqual({ success: true, data: { featureId: 'f1', claimed: true, warnings: [] } });
+  });
+
+  it("forwards a project-scoped key's projectId as the cross-project guard", async () => {
+    claim.mockResolvedValue({ featureId: 'f1', claimed: true, warnings: [] });
+    await cap.execute({ featureId: 'f1' }, ctx(USER, { projectId: 'proj-scoped' }));
+    // The scope becomes claimFeature's expectedProjectId → a feature outside the
+    // key's project is not_found (hard isolation for this entity-id verb).
+    expect(claim).toHaveBeenCalledWith(USER, 'f1', 'proj-scoped');
   });
 
   it('maps a NotFoundError from the funnel to not_found (no enumeration)', async () => {

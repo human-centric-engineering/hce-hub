@@ -196,7 +196,8 @@ export type FeatureAccessResult =
 export async function resolveFeatureAccess(
   userId: string,
   featureId: string,
-  mode: FeatureWriteMode = 'member'
+  mode: FeatureWriteMode = 'member',
+  expectedProjectId?: string
 ): Promise<FeatureAccessResult> {
   const feature = await prisma.feature.findUnique({
     where: { id: featureId },
@@ -209,6 +210,14 @@ export async function resolveFeatureAccess(
     },
   });
   if (!feature) return { ok: false, reason: 'not_found' };
+
+  // Cross-project guard: when a project scope is supplied (a project-scoped MCP
+  // key, or a nested REST route), a feature outside it is `not_found` — before
+  // the membership check, so it's indistinguishable from a missing feature and
+  // matches the `claimFeature` / `updateIdea` expectedProjectId convention.
+  if (expectedProjectId && feature.projectId !== expectedProjectId) {
+    return { ok: false, reason: 'not_found' };
+  }
 
   const { basis } = await canAccessProject(userId, feature.projectId);
   if (basis === null) return { ok: false, reason: 'not_found' }; // non-member ≡ feature does not exist
@@ -243,8 +252,11 @@ export type EventScopeResult =
  * entry through the same membership funnel — never hand-rolled. A `featureId`
  * **takes precedence** and derives its *own* project, so an entry can't be
  * mis-scoped to a project the feature isn't in; otherwise a `projectId` gives a
- * project-level entry. A non-member — or neither id supplied — resolves to
- * `{ ok: false }` (the caller maps it to `not_found`, no enumeration). Any
+ * project-level entry. When **both** are supplied (a project-scoped MCP key
+ * folds its `projectId` in alongside a `featureId`), the feature must belong to
+ * that project — else `{ ok: false }`, so a scoped key can't journal onto a
+ * feature outside its project. A non-member — or neither id supplied — resolves
+ * to `{ ok: false }` (the caller maps it to `not_found`, no enumeration). Any
  * member may author (the `member` tier); there is no owner gate on narrative.
  */
 export async function resolveEventScope(
@@ -252,7 +264,10 @@ export async function resolveEventScope(
   scope: { projectId?: string; featureId?: string }
 ): Promise<EventScopeResult> {
   if (scope.featureId) {
-    const access = await resolveFeatureAccess(userId, scope.featureId, 'member');
+    // Forward any supplied projectId as the cross-project guard: the feature
+    // must live in it (scoped-key isolation + a plain id-mix-up guard). A
+    // scoped MCP key folds its projectId in alongside the featureId.
+    const access = await resolveFeatureAccess(userId, scope.featureId, 'member', scope.projectId);
     if (!access.ok) return { ok: false };
     return { ok: true, projectId: access.feature.projectId, featureId: scope.featureId };
   }

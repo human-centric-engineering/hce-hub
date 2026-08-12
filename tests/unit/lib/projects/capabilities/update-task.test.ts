@@ -27,7 +27,11 @@ const audit = logAdminAction as ReturnType<typeof vi.fn>;
 
 const cap = new UpdateTaskCapability();
 const USER = 'user-1';
-const ctx = (userId: string | null = USER) => ({ userId, agentId: 'a1' });
+const ctx = (userId: string | null = USER, scope?: Record<string, string>) => ({
+  userId,
+  agentId: 'a1',
+  ...(scope ? { scope } : {}),
+});
 const grantedOwner = { ok: true, feature: { projectId: 'p1', ownerUserId: USER, basis: 'member' } };
 
 beforeEach(() => {
@@ -84,7 +88,7 @@ describe('update_task patch semantics', () => {
       data: { title: 'New title', doneWhen: 'it works' },
     });
     // The task is scoped by its feature at the owner tier.
-    expect(resolveFeature).toHaveBeenCalledWith(USER, 'f1', 'owner');
+    expect(resolveFeature).toHaveBeenCalledWith(USER, 'f1', 'owner', undefined);
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'task.update',
@@ -92,6 +96,13 @@ describe('update_task patch semantics', () => {
         metadata: { fields: ['title', 'doneWhen'] },
       })
     );
+  });
+
+  it("forwards a project-scoped key's projectId as the cross-project guard", async () => {
+    await cap.execute({ taskId: 't1', title: 'x' }, ctx(USER, { projectId: 'proj-scoped' }));
+    // The scope reaches resolveFeatureAccess as expectedProjectId → a task whose
+    // feature is outside the key's project is not_found (hard isolation).
+    expect(resolveFeature).toHaveBeenCalledWith(USER, 'f1', 'owner', 'proj-scoped');
   });
 
   it('clears description / doneWhen when passed null', async () => {

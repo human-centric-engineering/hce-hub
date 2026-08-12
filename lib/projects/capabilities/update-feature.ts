@@ -176,7 +176,12 @@ export class UpdateFeatureCapability extends BaseCapability<Args, Data> {
     }
 
     // Owner tier on the feature: non-member → not_found, member-non-owner → forbidden.
-    const access = await resolveFeatureAccess(userId, args.featureId, 'owner');
+    const access = await resolveFeatureAccess(
+      userId,
+      args.featureId,
+      'owner',
+      context.scope?.projectId
+    );
     if (!access.ok) {
       return access.reason === 'not_found'
         ? this.error(`Feature ${args.featureId} not found.`, 'not_found')

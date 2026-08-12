@@ -16,7 +16,11 @@ const { UpdatePhaseCapability } = await import('@/lib/projects/capabilities/upda
 
 const update = updatePhase as ReturnType<typeof vi.fn>;
 const cap = new UpdatePhaseCapability();
-const ctx = (userId: string | null = 'user-1') => ({ userId, agentId: 'a1' });
+const ctx = (userId: string | null = 'user-1', scope?: Record<string, string>) => ({
+  userId,
+  agentId: 'a1',
+  ...(scope ? { scope } : {}),
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -34,11 +38,28 @@ describe('update_phase', () => {
     const r = await cap.execute({ phaseId: 'ph1', name: 'Renamed', status: 'complete' }, ctx());
     expect(r.success).toBe(true);
     expect(r.data).toEqual({ phaseId: 'ph1', updated: ['name'] });
-    expect(update).toHaveBeenCalledWith('user-1', 'ph1', {
-      name: 'Renamed',
-      description: undefined,
-      status: 'complete',
-    });
+    expect(update).toHaveBeenCalledWith(
+      'user-1',
+      'ph1',
+      {
+        name: 'Renamed',
+        description: undefined,
+        status: 'complete',
+      },
+      undefined
+    );
+  });
+
+  it("forwards a project-scoped key's projectId as the cross-project guard", async () => {
+    await cap.execute({ phaseId: 'ph1', name: 'x' }, ctx('user-1', { projectId: 'proj-scoped' }));
+    // The scope becomes updatePhase's expectedProjectId → a phase outside the
+    // key's project is not_found (hard isolation for this entity-id verb).
+    expect(update).toHaveBeenCalledWith(
+      'user-1',
+      'ph1',
+      { name: 'x', description: undefined, status: undefined },
+      'proj-scoped'
+    );
   });
 
   it('maps a non-member (service NotFoundError) to not_found', async () => {
