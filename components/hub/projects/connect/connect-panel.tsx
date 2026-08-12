@@ -203,42 +203,44 @@ export function ConnectPanel({ projectId, projectName, serverName, repoUrls }: C
               it, rotate the key for a fresh one.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label className="text-xs">Key ({secret?.label})</Label>
-              <div className="bg-muted mt-1 rounded-md p-3">
-                <code className="text-xs break-all">{secret?.plaintext}</code>
+          {secret && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs">Key ({secret.label})</Label>
+                <div className="bg-muted mt-1 rounded-md p-3">
+                  <code className="text-xs break-all">{secret.plaintext}</code>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => void navigator.clipboard.writeText(secret.plaintext)}
+                >
+                  Copy key
+                </Button>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-2"
-                onClick={() => void navigator.clipboard.writeText(secret?.plaintext ?? '')}
-              >
-                Copy key
-              </Button>
+              <div>
+                <Label className="text-xs">
+                  Paste into your repo’s <code className="text-xs">.mcp.json</code>
+                </Label>
+                <pre className="bg-muted mt-1 overflow-x-auto rounded-md p-3 text-xs">
+                  <code>{mcpConfig(serverName, origin, secret.plaintext)}</code>
+                </pre>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() =>
+                    void navigator.clipboard.writeText(
+                      mcpConfig(serverName, origin, secret.plaintext)
+                    )
+                  }
+                >
+                  Copy .mcp.json snippet
+                </Button>
+              </div>
             </div>
-            <div>
-              <Label className="text-xs">
-                Paste into your repo’s <code className="text-xs">.mcp.json</code>
-              </Label>
-              <pre className="bg-muted mt-1 overflow-x-auto rounded-md p-3 text-xs">
-                <code>{secret ? mcpConfig(serverName, origin, secret.plaintext) : ''}</code>
-              </pre>
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-2"
-                onClick={() =>
-                  void navigator.clipboard.writeText(
-                    secret ? mcpConfig(serverName, origin, secret.plaintext) : ''
-                  )
-                }
-              >
-                Copy .mcp.json snippet
-              </Button>
-            </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
 

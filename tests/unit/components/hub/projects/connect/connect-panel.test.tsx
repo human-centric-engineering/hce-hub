@@ -133,4 +133,68 @@ describe('ConnectPanel', () => {
     renderPanel();
     await waitFor(() => expect(screen.getByText(/Couldn.t load your keys/i)).toBeInTheDocument());
   });
+
+  it('surfaces a message when generate fails', async () => {
+    const user = userEvent.setup();
+    post.mockRejectedValue(new Error('boom'));
+    renderPanel();
+    await waitFor(() => screen.getByText(/No keys yet/i));
+    await user.click(screen.getByRole('button', { name: 'Generate key' }));
+    await user.type(screen.getByLabelText('Name'), 'x');
+    await user.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(screen.getByText(/Couldn.t create the key/i)).toBeInTheDocument());
+  });
+
+  it('surfaces a message when rotate fails', async () => {
+    const user = userEvent.setup();
+    get.mockResolvedValue({ keys: [KEY] });
+    post.mockRejectedValue(new Error('boom'));
+    renderPanel();
+    await waitFor(() => screen.getByText('my laptop'));
+    await user.click(screen.getByRole('button', { name: 'Rotate' }));
+    await waitFor(() => expect(screen.getByText(/Couldn.t rotate the key/i)).toBeInTheDocument());
+  });
+
+  it('surfaces a message when revoke fails, and the key stays', async () => {
+    const user = userEvent.setup();
+    get.mockResolvedValue({ keys: [KEY] });
+    del.mockRejectedValue(new Error('boom'));
+    renderPanel();
+    await waitFor(() => screen.getByText('my laptop'));
+    await user.click(screen.getByRole('button', { name: 'Revoke' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Revoke' }));
+    await waitFor(() => expect(screen.getByText(/Couldn.t revoke the key/i)).toBeInTheDocument());
+    expect(screen.getByText('my laptop')).toBeInTheDocument();
+  });
+
+  it('renders an Expired badge for a lapsed key and a date for a live one', async () => {
+    get.mockResolvedValue({
+      keys: [
+        { ...KEY, id: 'k-exp', name: 'expired one', expiresAt: '2000-01-01T00:00:00.000Z' },
+        { ...KEY, id: 'k-live', name: 'live one', expiresAt: '2999-01-01T00:00:00.000Z' },
+      ],
+    });
+    renderPanel();
+    await waitFor(() => screen.getByText('expired one'));
+    expect(screen.getByText('Expired')).toBeInTheDocument();
+  });
+
+  it('copies the key and the .mcp.json snippet to the clipboard', async () => {
+    const user = userEvent.setup();
+    // userEvent.setup() installs a (getter-only) navigator.clipboard — spy on it.
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+    post.mockResolvedValue({ name: 'x', keyPrefix: 'smcp_p', plaintext: 'smcp_SECRET' });
+    renderPanel();
+    await waitFor(() => screen.getByText(/No keys yet/i));
+    await user.click(screen.getByRole('button', { name: 'Generate key' }));
+    await user.type(screen.getByLabelText('Name'), 'x');
+    await user.click(screen.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => screen.getByText('smcp_SECRET'));
+
+    await user.click(screen.getByRole('button', { name: 'Copy key' }));
+    await user.click(screen.getByRole('button', { name: /Copy \.mcp\.json/i }));
+    expect(writeText).toHaveBeenCalledWith('smcp_SECRET');
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Bearer smcp_SECRET'));
+  });
 });
