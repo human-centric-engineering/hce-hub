@@ -19,6 +19,7 @@ import { ListPhasesCapability } from '@/lib/projects/capabilities/list-phases';
 import { ListIdeasCapability } from '@/lib/projects/capabilities/list-ideas';
 import { ListTasksCapability } from '@/lib/projects/capabilities/list-tasks';
 import { GetTaskCapability } from '@/lib/projects/capabilities/get-task';
+import { GetFeatureCapability } from '@/lib/projects/capabilities/get-feature';
 import { CreateTaskCapability } from '@/lib/projects/capabilities/create-task';
 import { FlagHelpWantedCapability } from '@/lib/projects/capabilities/flag-help-wanted';
 import { RecordDecisionCapability } from '@/lib/projects/capabilities/record-decision';
@@ -49,6 +50,7 @@ export function initAppCapabilities(): void {
   registerAppCapability(new ListPhasesCapability()); // read: project phases + features (member)
   registerAppCapability(new ListTasksCapability()); // read: a feature's / project's tasks by t-N (member)
   registerAppCapability(new GetTaskCapability()); // read: one task's full detail (description, deps) (member)
+  registerAppCapability(new GetFeatureCapability()); // read: one feature's spec (description, deps, tasks) (member)
   registerAppCapability(new CreateTaskCapability()); // write (t-2)
   registerAppCapability(new FlagHelpWantedCapability()); // write (t-2)
   // Task lifecycle (f-status-model §20 t-38) — MCP-first: the primary way a repo

@@ -32,6 +32,7 @@ import updateIdeaUnit, { updateIdeaFunctionDefinition } from '@/prisma/seeds/app
 import listIdeasUnit, { listIdeasFunctionDefinition } from '@/prisma/seeds/app/026-list-ideas';
 import listTasksUnit, { listTasksFunctionDefinition } from '@/prisma/seeds/app/027-list-tasks';
 import getTaskUnit, { getTaskFunctionDefinition } from '@/prisma/seeds/app/028-get-task';
+import getFeatureUnit, { getFeatureFunctionDefinition } from '@/prisma/seeds/app/029-get-feature';
 
 function runContext() {
   const upsert = vi.fn().mockResolvedValue({ id: 'cap1' });
@@ -158,5 +159,14 @@ describe('capability seeds re-sync functionDefinition on update', () => {
     expect(arg.where).toEqual({ slug: 'get_task' });
     expect(arg.update.functionDefinition).toEqual(getTaskFunctionDefinition);
     expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('taskId');
+  });
+
+  it('029-get-feature: the new read capability seed re-syncs on the update branch', async () => {
+    const { ctx, upsert } = runContext();
+    await getFeatureUnit.run(ctx);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ slug: 'get_feature' });
+    expect(arg.update.functionDefinition).toEqual(getFeatureFunctionDefinition);
+    expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('featureRef');
   });
 });
