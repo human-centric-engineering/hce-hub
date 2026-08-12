@@ -89,6 +89,13 @@ npm ci
 npm run db:migrate:status  # then db:migrate:dev to apply newly-merged Sunrise migrations
 ```
 
+## Working on the Hub
+
+The Hub is its own **system of record**, so its project data lives in the database, not
+in seeds — a fresh `db:reset` gives you the platform schema but no `hce-hub` project. To
+get a working local Hub, restore a dev DB from a dump: see
+[`dev-db-onboarding.md`](./dev-db-onboarding.md).
+
 ## What v1 is
 
 **Module 1 — Project Coordination:** Project / Feature / Task models
