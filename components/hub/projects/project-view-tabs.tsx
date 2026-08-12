@@ -7,6 +7,7 @@ const TABS: { key: ProjectTab; label: string }[] = [
   { key: 'board', label: 'Board' },
   { key: 'ideas', label: 'Ideas' },
   { key: 'log', label: 'Log' },
+  { key: 'connect', label: 'Connect' },
 ];
 
 /**

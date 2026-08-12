@@ -26,7 +26,15 @@ export async function generateMetadata({
   const project = await getProject(id);
   if (!project) return { title: 'Project' };
   const tab =
-    view === 'board' ? 'Board' : view === 'log' ? 'Log' : view === 'ideas' ? 'Ideas' : 'Plan';
+    view === 'board'
+      ? 'Board'
+      : view === 'log'
+        ? 'Log'
+        : view === 'ideas'
+          ? 'Ideas'
+          : view === 'connect'
+            ? 'Connect'
+            : 'Plan';
   return { title: `${project.name} · ${tab}` };
 }
 
@@ -103,10 +111,18 @@ export default async function ProjectViewPage({
 }) {
   const { id } = await params;
   const { view } = await searchParams;
-  // Plan is the default; Board and Log are explicit. The Log tab is
-  // client-fetched (filterable), so it needs no server payload here.
+  // Plan is the default; the rest are explicit. The Log and Connect tabs are
+  // client-fetched (filterable / self-service), so they need no server payload here.
   const activeTab: ProjectTab =
-    view === 'board' ? 'board' : view === 'log' ? 'log' : view === 'ideas' ? 'ideas' : 'plan';
+    view === 'board'
+      ? 'board'
+      : view === 'log'
+        ? 'log'
+        : view === 'ideas'
+          ? 'ideas'
+          : view === 'connect'
+            ? 'connect'
+            : 'plan';
 
   // `id` may be a slug (the shareable URL) or a cuid. Resolve the header first —
   // it accepts both and returns the canonical cuid — then drive the cuid-only

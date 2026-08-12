@@ -9,8 +9,8 @@ another project through that key** — on every verb, whether it takes a
 `projectId` or acts on an entity by id (see [Enforcement](#enforcement) below).
 
 This is feature `f-mcp-project-scope` (§31). This doc covers the connection model,
-the **ambient-scope mechanism** (t-A), and **member self-service key minting**
-(t-C). The in-app "Connect a repo" UI is t-D.
+the **ambient-scope mechanism** (t-A), **member self-service key minting** (t-C),
+and the in-app **Connect** tab that drives it (t-D).
 
 ## The connection model
 
@@ -139,6 +139,14 @@ The safety of a self-service surface is in what a member **cannot** choose:
 
 `withAuth` gates the routes (not `withAdminAuth`); the `/api/v1/**` section rate
 limit (proxy.ts) bounds creation velocity. Create/rotate/revoke are audit-logged.
+
+**The UI (t-D).** A project-view **Connect** tab
+(`components/hub/projects/connect/connect-panel.tsx`, reached at
+`/projects/:ref?view=connect`) is the member's browser surface over this API:
+generate / rotate / revoke, a one-time secret shown once with a **ready-to-paste
+`.mcp.json` snippet** (`{ mcpServers: { <slug>: { type: "http", url:
+"<origin>/api/v1/mcp", headers: { Authorization: "Bearer <key>" } } } }`), and the
+project's `repoUrls` shown so a member matches key ↔ checkout.
 
 ## Related
 
