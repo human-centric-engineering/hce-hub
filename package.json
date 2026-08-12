@@ -39,6 +39,7 @@
     "smoke:vision": "tsx --env-file=.env.local scripts/smoke/vision.ts",
     "smoke:erasure": "tsx --env-file=.env.local scripts/smoke/erasure.ts",
     "app:smoke:erasure": "tsx --env-file=.env.local scripts/app/smoke/erasure.ts",
+    "app:smoke:mcp-keys": "tsx --env-file=.env.local scripts/app/smoke/mcp-keys.ts",
     "smoke:export": "tsx --env-file=.env.local scripts/smoke/export.ts",
     "postinstall": "prisma generate",
     "prepare": "husky"
