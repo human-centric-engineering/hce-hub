@@ -117,4 +117,15 @@ describe('get_feature', () => {
     expect(redacted.resultPreview).not.toContain('Bind a Claude Code'); // body not persisted verbatim
     expect(redacted.resultPreview).toContain('§31'); // just the ref
   });
+
+  it('provenance falls back to a bare label when there is no number / projectId (error result)', async () => {
+    // An unresolved read (e.g. not_found) has no data.number, and the caller may
+    // have omitted projectId — both fall to null / the generic "feature" label.
+    const redacted = cap.redactProvenance(
+      { featureRef: 'f-mcp' },
+      { success: false, error: { code: 'not_found', message: 'x' } }
+    );
+    expect(redacted.args).toEqual({ featureRef: 'f-mcp', projectId: null });
+    expect(redacted.resultPreview).not.toContain('§'); // no ref → the bare "feature" label
+  });
 });
