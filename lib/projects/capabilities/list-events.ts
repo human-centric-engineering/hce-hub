@@ -36,8 +36,8 @@ const schema = z.object({
     .describe(
       'The project whose journal to read. Ambient for a project-scoped key; required otherwise.'
     ),
-  featureId: z.string().optional().describe('Optional: scope to one feature’s events.'),
-  taskId: z.string().optional().describe('Optional: scope to one task’s timeline.'),
+  featureId: z.string().optional().describe('Optional: scope to one feature (its events only).'),
+  taskId: z.string().optional().describe('Optional: scope to one task (its timeline).'),
 });
 
 type Args = z.infer<typeof schema>;
@@ -80,8 +80,11 @@ export class ListEventsCapability extends BaseCapability<Args, Data> {
           description:
             'The project whose journal to read. Ambient for a project-scoped key; required otherwise.',
         },
-        featureId: { type: 'string', description: 'Optional: scope to one feature’s events.' },
-        taskId: { type: 'string', description: 'Optional: scope to one task’s timeline.' },
+        featureId: {
+          type: 'string',
+          description: 'Optional: scope to one feature (its events only).',
+        },
+        taskId: { type: 'string', description: 'Optional: scope to one task (its timeline).' },
       },
       required: [],
     },

@@ -18,8 +18,11 @@ export const listEventsFunctionDefinition = {
         description:
           'The project whose journal to read. Ambient for a project-scoped key; required otherwise.',
       },
-      featureId: { type: 'string', description: 'Optional: scope to one feature’s events.' },
-      taskId: { type: 'string', description: 'Optional: scope to one task’s timeline.' },
+      featureId: {
+        type: 'string',
+        description: 'Optional: scope to one feature (its events only).',
+      },
+      taskId: { type: 'string', description: 'Optional: scope to one task (its timeline).' },
     },
     required: [],
   },

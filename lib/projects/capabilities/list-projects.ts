@@ -22,6 +22,7 @@ import type {
   CapabilityFunctionDefinition,
   CapabilityResult,
 } from '@/lib/orchestration/capabilities/types';
+import type { Project } from '@prisma/client';
 import { NotFoundError } from '@/lib/api/errors';
 import { getAccessibleProject, listAccessibleProjects } from '@/lib/projects/access';
 
@@ -74,7 +75,7 @@ export class ListProjectsCapability extends BaseCapability<Args, Data> {
     // membership funnel every verb uses (deny ≡ not_found), so a stale scope is
     // surfaced consistently rather than silently returning an empty list.
     const scopedProjectId = context.scope?.projectId;
-    let projects;
+    let projects: Project[];
     if (scopedProjectId) {
       try {
         projects = [await getAccessibleProject(userId, scopedProjectId)];
