@@ -31,6 +31,7 @@ const {
   listProjectMcpKeys,
   rotateProjectMcpKey,
   revokeProjectMcpKey,
+  projectMcpKeyCreateSchema,
   PROJECT_KEY_SCOPES,
   MAX_ACTIVE_KEYS_PER_PROJECT,
 } = await import('@/lib/projects/mcp-keys');
@@ -143,25 +144,19 @@ describe('rotateProjectMcpKey — ownership + project isolation', () => {
       createdBy: 'someone-else',
       scope: { projectId: PROJECT_CUID },
     });
-    await expect(rotateProjectMcpKey(USER, 'hce-hub', 'k1', {})).rejects.toBeInstanceOf(
-      NotFoundError
-    );
+    await expect(rotateProjectMcpKey(USER, 'hce-hub', 'k1')).rejects.toBeInstanceOf(NotFoundError);
     expect(update).not.toHaveBeenCalled();
   });
 
   it('404s a key scoped to a different project (even if you own it)', async () => {
     findUnique.mockResolvedValue({ id: 'k1', createdBy: USER, scope: { projectId: 'p-other' } });
-    await expect(rotateProjectMcpKey(USER, 'hce-hub', 'k1', {})).rejects.toBeInstanceOf(
-      NotFoundError
-    );
+    await expect(rotateProjectMcpKey(USER, 'hce-hub', 'k1')).rejects.toBeInstanceOf(NotFoundError);
     expect(update).not.toHaveBeenCalled();
   });
 
   it('404s an unknown key', async () => {
     findUnique.mockResolvedValue(null);
-    await expect(rotateProjectMcpKey(USER, 'hce-hub', 'k1', {})).rejects.toBeInstanceOf(
-      NotFoundError
-    );
+    await expect(rotateProjectMcpKey(USER, 'hce-hub', 'k1')).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('rotates an owned in-project key: fresh material + plaintext once + previous prefix', async () => {
@@ -180,11 +175,64 @@ describe('rotateProjectMcpKey — ownership + project isolation', () => {
       scope: { projectId: PROJECT_CUID },
     });
 
-    const res = await rotateProjectMcpKey(USER, 'hce-hub', 'k1', {});
+    const res = await rotateProjectMcpKey(USER, 'hce-hub', 'k1');
 
     expect(update.mock.calls[0][0].data).toEqual({ keyHash: 'HASH', keyPrefix: 'smcp_abcd12' });
     expect(res.plaintext).toBe('smcp_secret');
     expect(res.previousPrefix).toBe('smcp_OLD012');
+  });
+
+  it('clears an already-lapsed expiry on rotate (so the fresh secret is not dead on arrival)', async () => {
+    findUnique.mockResolvedValue({
+      id: 'k1',
+      name: 'k',
+      createdBy: USER,
+      keyPrefix: 'smcp_OLD012',
+      scope: { projectId: PROJECT_CUID },
+      expiresAt: new Date('2000-01-01T00:00:00Z'), // long past
+    });
+    update.mockResolvedValue({ id: 'k1', scope: { projectId: PROJECT_CUID } });
+
+    await rotateProjectMcpKey(USER, 'hce-hub', 'k1');
+
+    expect(update.mock.calls[0][0].data).toEqual({
+      keyHash: 'HASH',
+      keyPrefix: 'smcp_abcd12',
+      expiresAt: null, // the dead expiry is dropped
+    });
+  });
+
+  it('preserves a still-future expiry on rotate (only the secret is refreshed)', async () => {
+    findUnique.mockResolvedValue({
+      id: 'k1',
+      name: 'k',
+      createdBy: USER,
+      keyPrefix: 'smcp_OLD012',
+      scope: { projectId: PROJECT_CUID },
+      expiresAt: new Date('2999-01-01T00:00:00Z'), // far future
+    });
+    update.mockResolvedValue({ id: 'k1', scope: { projectId: PROJECT_CUID } });
+
+    await rotateProjectMcpKey(USER, 'hce-hub', 'k1');
+
+    // No expiresAt in the update → the live expiry is untouched.
+    expect(update.mock.calls[0][0].data).toEqual({ keyHash: 'HASH', keyPrefix: 'smcp_abcd12' });
+  });
+});
+
+describe('projectMcpKeyCreateSchema — expiry bound (evaluated per request)', () => {
+  it('rejects an expiry in the past', () => {
+    const r = projectMcpKeyCreateSchema.safeParse({ name: 'k', expiresAt: '2000-01-01T00:00:00Z' });
+    expect(r.success).toBe(false);
+  });
+
+  it('accepts a future expiry', () => {
+    const r = projectMcpKeyCreateSchema.safeParse({ name: 'k', expiresAt: '2999-01-01T00:00:00Z' });
+    expect(r.success).toBe(true);
+  });
+
+  it('accepts an omitted expiry (no auto-expiry)', () => {
+    expect(projectMcpKeyCreateSchema.safeParse({ name: 'k' }).success).toBe(true);
   });
 });
 

@@ -71,26 +71,23 @@ export interface MintedProjectMcpKey {
   previousPrefix?: string;
 }
 
-/** Create-body: a member chooses only the name (and optional expiry). */
+/**
+ * Create-body: a member chooses only the name (and an optional future expiry).
+ * The "future" bound is a `.refine` — evaluated **per request** — not
+ * `.min(new Date())`, which Zod freezes at module construction (a stale bound on
+ * a long-lived server would let an already-past expiry slip through).
+ */
 export const projectMcpKeyCreateSchema = z.object({
   name: z.string().min(1).max(100).trim(),
   expiresAt: z.coerce
     .date()
-    .min(new Date(), 'Expiration must be in the future')
     .nullable()
-    .optional(),
+    .optional()
+    .refine((d) => d == null || d.getTime() > Date.now(), {
+      message: 'Expiration must be in the future',
+    }),
 });
 export type ProjectMcpKeyCreateInput = z.infer<typeof projectMcpKeyCreateSchema>;
-
-/** Rotate-body: optionally reset the expiry; nothing else is a member's to change. */
-export const projectMcpKeyRotateSchema = z.object({
-  expiresAt: z.coerce
-    .date()
-    .min(new Date(), 'Expiration must be in the future')
-    .nullable()
-    .optional(),
-});
-export type ProjectMcpKeyRotateInput = z.infer<typeof projectMcpKeyRotateSchema>;
 
 /** Safely read a key's `scope.projectId` (the JSON column is never trusted raw). */
 function scopeProjectId(scope: Prisma.JsonValue | null): string | null {
@@ -129,6 +126,9 @@ export async function listProjectMcpKeys(
   projectRef: string
 ): Promise<ProjectMcpKey[]> {
   const project = await getAccessibleProjectByRef(userId, projectRef);
+  // The caller's own keys, filtered to this project in memory. A member's total
+  // key count is small (bounded by the per-project cap × their projects), so a
+  // by-project JSON-path query filter isn't worth introducing for a handful of rows.
   const rows = await prisma.mcpApiKey.findMany({
     where: { createdBy: userId },
     select: SAFE_SELECT,
@@ -149,6 +149,9 @@ export async function createProjectMcpKey(
   const project = await getAccessibleProjectByRef(userId, projectRef);
 
   // Accumulation guard — count the caller's active keys already on this project.
+  // Advisory, not a security boundary: a rare concurrent double-create is a
+  // read-then-write TOCTOU that could exceed the cap by one. Harmless (they're all
+  // the member's own project keys), so it isn't worth a transaction/lock.
   const existing = await prisma.mcpApiKey.findMany({
     where: { createdBy: userId, isActive: true },
     select: { scope: true },
@@ -177,21 +180,23 @@ export async function createProjectMcpKey(
 }
 
 /**
- * Rotate the caller's own project key: fresh material, the old secret is
- * invalidated immediately. New plaintext returned once.
+ * Rotate the caller's own project key: fresh material, the old secret invalidated
+ * immediately. New plaintext returned once. Rotation refreshes the **secret** only
+ * (expiry is a create-time choice); an **already-lapsed** expiry is cleared so the
+ * fresh secret isn't dead on arrival, while a still-future expiry is preserved.
  */
 export async function rotateProjectMcpKey(
   userId: string,
   projectRef: string,
-  keyId: string,
-  input: ProjectMcpKeyRotateInput
+  keyId: string
 ): Promise<MintedProjectMcpKey> {
   const project = await getAccessibleProjectByRef(userId, projectRef);
   const existing = await resolveOwnProjectKey(userId, project.id, keyId);
 
   const { plaintext, hash, prefix } = generateApiKey();
   const data: Prisma.McpApiKeyUpdateInput = { keyHash: hash, keyPrefix: prefix };
-  if (input.expiresAt !== undefined) data.expiresAt = input.expiresAt;
+  // Don't rotate into a dead key: drop an already-lapsed expiry.
+  if (existing.expiresAt && existing.expiresAt.getTime() < Date.now()) data.expiresAt = null;
 
   const key = await prisma.mcpApiKey.update({ where: { id: keyId }, data, select: SAFE_SELECT });
   return { key, plaintext, previousPrefix: existing.keyPrefix };

@@ -175,7 +175,7 @@ describe('POST /api/v1/projects/:projectId/mcp-keys/:keyId/rotate', () => {
     expect(rotateMock).not.toHaveBeenCalled();
   });
 
-  it('rotates an owned key and returns fresh plaintext once (200)', async () => {
+  it('rotates an owned key with NO request body and returns fresh plaintext once (200)', async () => {
     signedIn();
     rotateMock.mockResolvedValue({
       key: {
@@ -189,9 +189,10 @@ describe('POST /api/v1/projects/:projectId/mcp-keys/:keyId/rotate', () => {
       plaintext: 'smcp_fresh',
       previousPrefix: 'smcp_old012',
     });
-    const res = await rotatePost(jsonReq(`/${KID}/rotate`, 'POST', {}), keyParams());
+    // A bare POST (no body) must work — rotation takes no body.
+    const res = await rotatePost(jsonReq(`/${KID}/rotate`, 'POST'), keyParams());
     expect(res.status).toBe(200);
-    expect(rotateMock).toHaveBeenCalledWith(expect.any(String), PID, KID, {});
+    expect(rotateMock).toHaveBeenCalledWith(expect.any(String), PID, KID);
     expect((await res.json()).data.plaintext).toBe('smcp_fresh');
   });
 

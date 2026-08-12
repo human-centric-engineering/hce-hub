@@ -4,19 +4,19 @@
  * POST /api/v1/projects/:projectId/mcp-keys/:keyId/rotate — fresh material,
  * the old secret is invalidated immediately; new plaintext returned once.
  *
- * Body (optional): { expiresAt?: ISO date | null }.
+ * No request body — rotation refreshes the secret (expiry is a create-time choice;
+ * a lapsed expiry is cleared by the service so the new secret works).
  *
  * Fork-owned, member-facing. The service enforces ownership + project scope
  * (not-yours / wrong-project / unknown ⇒ 404, anti-enumeration).
  */
 import { withAuth } from '@/lib/auth/guards';
 import { successResponse } from '@/lib/api/responses';
-import { validateRequestBody } from '@/lib/api/validation';
 import { getRouteLogger } from '@/lib/api/context';
 import { getClientIP } from '@/lib/security/ip';
 import { cuidSchema } from '@/lib/validations/common';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
-import { rotateProjectMcpKey, projectMcpKeyRotateSchema } from '@/lib/projects/mcp-keys';
+import { rotateProjectMcpKey } from '@/lib/projects/mcp-keys';
 
 export const POST = withAuth<{ projectId: string; keyId: string }>(
   async (request, session, { params }) => {
@@ -25,12 +25,10 @@ export const POST = withAuth<{ projectId: string; keyId: string }>(
     const { projectId, keyId } = await params;
     cuidSchema.parse(keyId);
 
-    const body = await validateRequestBody(request, projectMcpKeyRotateSchema);
     const { key, plaintext, previousPrefix } = await rotateProjectMcpKey(
       session.user.id,
       projectId,
-      keyId,
-      body
+      keyId
     );
 
     log.info('Project MCP key rotated', {

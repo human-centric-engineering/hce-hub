@@ -151,7 +151,7 @@ async function main(): Promise<void> {
 
     // 4. Ownership isolation — B cannot rotate/revoke A's key (and it's untouched).
     await expectNotFound(
-      () => rotateProjectMcpKey(memberB.id, projectP.id, minted.key.id, {}),
+      () => rotateProjectMcpKey(memberB.id, projectP.id, minted.key.id),
       "another member's key rotate is not_found"
     );
     await expectNotFound(
@@ -170,12 +170,12 @@ async function main(): Promise<void> {
 
     // 5. Cross-project isolation — A cannot manage the P-scoped key via project Q.
     await expectNotFound(
-      () => rotateProjectMcpKey(memberA.id, projectQ.id, minted.key.id, {}),
+      () => rotateProjectMcpKey(memberA.id, projectQ.id, minted.key.id),
       'wrong-project rotate is not_found'
     );
 
     // 6. Rotate (as the owner, in the right project) replaces the hash.
-    const rotated = await rotateProjectMcpKey(memberA.id, projectP.id, minted.key.id, {});
+    const rotated = await rotateProjectMcpKey(memberA.id, projectP.id, minted.key.id);
     check(rotated.plaintext !== minted.plaintext, 'rotate returns a fresh, different plaintext');
     check(rotated.previousPrefix === rowA?.keyPrefix, 'rotate reports the previous prefix');
     const rowAfterRotate = await prisma.mcpApiKey.findUnique({
