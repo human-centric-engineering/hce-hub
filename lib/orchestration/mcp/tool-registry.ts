@@ -13,6 +13,7 @@ import { logger } from '@/lib/logging';
 import { capabilityDispatcher } from '@/lib/orchestration/capabilities/dispatcher';
 import { registerBuiltInCapabilities } from '@/lib/orchestration/capabilities/registry';
 import { capabilityFunctionDefinitionSchema } from '@/lib/validations/orchestration';
+import { foldProjectScope, toolAcceptsProjectId } from '@/lib/orchestration/mcp/tool-scope';
 import type {
   McpToolDefinition,
   McpToolAnnotations,
@@ -183,6 +184,28 @@ export async function callMcpTool(
     ...(caller.scope ? { scope: caller.scope } : {}),
   };
 
+  // Fold a project-scoped key's `scope.projectId` into the args so the key's
+  // project is ambient (fill-if-absent) and a scoped key cannot target another
+  // project (reject an explicit contradicting `projectId`). Only applies to
+  // tools that declare a `projectId` argument; unscoped keys are untouched.
+  const fold = foldProjectScope(args ?? {}, caller.scope, toolAcceptsProjectId(tool.inputSchema));
+  if (fold.crossProject) {
+    logger.warn('MCP tool call: cross-project projectId rejected', {
+      toolSlug: tool.slug,
+      scoped: fold.crossProject.scoped,
+      requested: fold.crossProject.requested,
+    });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `This key is scoped to project ${fold.crossProject.scoped} and cannot act on project ${fold.crossProject.requested}.`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
   let result;
   try {
     // Warm the in-memory capability registry before dispatching. `tools/list`
@@ -202,7 +225,7 @@ export async function callMcpTool(
     // graph, so warming at boot leaves the route-realm registry empty.
     registerBuiltInCapabilities();
 
-    result = await capabilityDispatcher.dispatch(tool.slug, args ?? {}, context);
+    result = await capabilityDispatcher.dispatch(tool.slug, fold.args, context);
   } catch (err) {
     logger.error('MCP tool call: dispatcher threw', {
       toolSlug: tool.slug,
