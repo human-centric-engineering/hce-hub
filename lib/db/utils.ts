@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 
@@ -94,4 +94,22 @@ export async function executeTransaction<T>(
   }
 ): Promise<T> {
   return await prisma.$transaction(callback, options);
+}
+
+/**
+ * Is this error Postgres refusing to serialize a transaction?
+ *
+ * Under `isolationLevel: 'Serializable'` Postgres uses SSI: rather than blocking,
+ * it lets conflicting transactions run and aborts one at commit if the pair could
+ * not have been produced by any serial order. Prisma surfaces that as `P2034`
+ * ("write conflict or deadlock — please retry").
+ *
+ * This is an **expected outcome of a correct concurrent write**, not a fault: the
+ * loser simply re-reads and retries. Callers should map it to a retryable,
+ * caller-facing result rather than letting a raw Prisma error escape — a
+ * serialization failure means "someone else got there first", which is very
+ * different from "your request was invalid".
+ */
+export function isWriteConflict(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
 }

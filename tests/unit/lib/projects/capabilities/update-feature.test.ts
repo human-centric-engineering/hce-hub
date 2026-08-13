@@ -18,11 +18,15 @@ vi.mock('@/lib/projects/access', () => ({
 vi.mock('@/lib/db/client', () => ({
   prisma: {
     feature: { findMany: vi.fn() },
-    featureDependency: { findMany: vi.fn() },
     phase: { findFirst: vi.fn() },
   },
 }));
-vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
+// `isWriteConflict` is NOT mocked — the real predicate runs against the error the
+// transaction throws, so the P2034 mapping is proven rather than assumed.
+vi.mock('@/lib/db/utils', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/db/utils')>()),
+  executeTransaction: vi.fn(),
+}));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
 
 const { resolveFeatureAccess, canAccessProject } = await import('@/lib/projects/access');
@@ -34,7 +38,6 @@ const { UpdateFeatureCapability } = await import('@/lib/projects/capabilities/up
 const resolveFeature = resolveFeatureAccess as ReturnType<typeof vi.fn>;
 const canAccess = canAccessProject as ReturnType<typeof vi.fn>;
 const featureFindMany = prisma.feature.findMany as ReturnType<typeof vi.fn>;
-const depFindMany = prisma.featureDependency.findMany as ReturnType<typeof vi.fn>;
 const phaseFindFirst = prisma.phase.findFirst as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
@@ -48,17 +51,24 @@ const granted = (status = 'in_flight', ownerUserId: string | null = USER) => ({
 });
 
 const txFeatureUpdate = vi.fn();
+const txDepFindMany = vi.fn();
 const txDepDeleteMany = vi.fn();
 const txDepCreateMany = vi.fn();
 function mockTx() {
   txFeatureUpdate.mockResolvedValue({});
+  txDepFindMany.mockResolvedValue([]);
   txDepDeleteMany.mockResolvedValue({});
   txDepCreateMany.mockResolvedValue({});
+  // The graph read now lives INSIDE the transaction, so it is a `tx` method.
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       feature: { update: txFeatureUpdate },
-      featureDependency: { deleteMany: txDepDeleteMany, createMany: txDepCreateMany },
+      featureDependency: {
+        findMany: txDepFindMany,
+        deleteMany: txDepDeleteMany,
+        createMany: txDepCreateMany,
+      },
     })
   );
 }
@@ -209,7 +219,7 @@ describe('update_feature phase assignment', () => {
 describe('update_feature dependency edges', () => {
   it('replaces the edge set when the targets exist and stay acyclic', async () => {
     featureFindMany.mockResolvedValue([{ id: 'd1' }, { id: 'd2' }]);
-    depFindMany.mockResolvedValue([]); // no other edges in the project
+    txDepFindMany.mockResolvedValue([]); // no other edges in the project
     const r = await cap.execute(
       { featureId: 'f1', dependsOnFeatureIds: ['d1', 'd2', 'd1'] },
       ctx()
@@ -226,7 +236,7 @@ describe('update_feature dependency edges', () => {
   });
 
   it('clears the edges when given an empty array (delete, no create)', async () => {
-    depFindMany.mockResolvedValue([]);
+    txDepFindMany.mockResolvedValue([]);
     await cap.execute({ featureId: 'f1', dependsOnFeatureIds: [] }, ctx());
     expect(txDepDeleteMany).toHaveBeenCalledWith({ where: { featureId: 'f1' } });
     expect(txDepCreateMany).not.toHaveBeenCalled();
@@ -241,10 +251,14 @@ describe('update_feature dependency edges', () => {
   it('rejects an edit that would create a cycle via existing edges (real assertAcyclic)', async () => {
     // Existing: d1 → f1. New: f1 → d1 ⇒ cycle f1 → d1 → f1.
     featureFindMany.mockResolvedValue([{ id: 'd1' }]);
-    depFindMany.mockResolvedValue([{ featureId: 'd1', dependsOnFeatureId: 'f1' }]);
+    txDepFindMany.mockResolvedValue([{ featureId: 'd1', dependsOnFeatureId: 'f1' }]);
     const r = await cap.execute({ featureId: 'f1', dependsOnFeatureIds: ['d1'] }, ctx());
     expect(r.error?.code).toBe('dependency_cycle');
-    expect(runTx).not.toHaveBeenCalled();
+    // The proof now runs inside the transaction, so it IS entered — what matters
+    // is that it throws out before any edge is written (the tx then rolls back).
+    expect(runTx).toHaveBeenCalled();
+    expect(txDepDeleteMany).not.toHaveBeenCalled();
+    expect(txDepCreateMany).not.toHaveBeenCalled();
   });
 
   it('rejects a dependency not present in the project (invalid_dependency)', async () => {
@@ -252,6 +266,38 @@ describe('update_feature dependency edges', () => {
     const r = await cap.execute({ featureId: 'f1', dependsOnFeatureIds: ['d1', 'd2'] }, ctx());
     expect(r.error?.code).toBe('invalid_dependency');
     expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('proves acyclicity inside a Serializable transaction, not before it', async () => {
+    featureFindMany.mockResolvedValue([{ id: 'd1' }]);
+    await cap.execute({ featureId: 'f1', dependsOnFeatureIds: ['d1'] }, ctx());
+    // Kept in lockstep with update_task: SSI holds only among transactions that
+    // are themselves serializable, so the read-then-write pair must match.
+    expect(runTx).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
+    expect(txDepFindMany).toHaveBeenCalled();
+  });
+
+  it('maps a serialization failure to a retryable concurrent_modification error', async () => {
+    featureFindMany.mockResolvedValue([{ id: 'd1' }]);
+    // Postgres SSI aborts the loser of a write conflict; Prisma surfaces P2034.
+    const conflict = new Prisma.PrismaClientKnownRequestError('write conflict', {
+      code: 'P2034',
+      clientVersion: 'test',
+    });
+    runTx.mockRejectedValue(conflict);
+    const r = await cap.execute({ featureId: 'f1', dependsOnFeatureIds: ['d1'] }, ctx());
+    expect(r.error?.code).toBe('concurrent_modification');
+    expect(r.error?.message).toContain('retry');
+  });
+
+  it('lets an unrelated database error escape rather than mislabelling it', async () => {
+    featureFindMany.mockResolvedValue([{ id: 'd1' }]);
+    runTx.mockRejectedValue(new Error('connection reset'));
+    await expect(
+      cap.execute({ featureId: 'f1', dependsOnFeatureIds: ['d1'] }, ctx())
+    ).rejects.toThrow('connection reset');
   });
 });
 
