@@ -132,8 +132,9 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       orderBy: { declaredAt: 'asc' },
     }),
     prisma.idea.findMany({ where: { createdByUserId: userId }, orderBy: { createdAt: 'asc' } }),
-    // 1:1 satellite — their linked GitHub identity (or null if never connected).
-    prisma.userGithubIdentity.findUnique({ where: { userId } }),
+    // 1:1 satellite — their linked GitHub identity (0 or 1 rows). Kept as a
+    // findMany so every app-export section is uniformly a list (empty when none).
+    prisma.userGithubIdentity.findMany({ where: { userId } }),
   ]);
 
   return {
