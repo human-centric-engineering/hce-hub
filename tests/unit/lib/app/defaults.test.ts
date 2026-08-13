@@ -87,6 +87,11 @@ const UNASSERTED_SEAMS = new Set([
   // so "registers nothing by default" isn't a meaningful contract here; the
   // registry's own behaviour is covered by the (hub) shell tests.
   'lib/app/hub-modules.ts',
+  // HCE Hub (fork): filled — registers the GitHub-connection account section
+  // (f-github-identity §23 t-75, the seam proposed in platform-divergences row
+  // 22). "Registers nothing" is no longer the contract; its behaviour is covered
+  // by tests/unit/lib/account-sections/registry.test.ts + the section's own test.
+  'lib/app/account-sections.ts',
 ]);
 
 const SEAM_DEFAULTS: SeamDefault[] = [
