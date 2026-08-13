@@ -32,6 +32,7 @@ vi.mock('@/lib/db/client', () => {
       feature: { findMany: findMany() },
       focusDirective: { findMany: findMany() },
       idea: { findMany: findMany() },
+      userGithubIdentity: { findUnique: vi.fn().mockResolvedValue(null) },
     },
   };
 });
@@ -90,8 +91,16 @@ describe('Hub subject-data export', () => {
 describe('collectAppSubjectData', () => {
   const ideaFindMany = prisma.idea.findMany as ReturnType<typeof vi.fn>;
   const featureFindMany = prisma.feature.findMany as ReturnType<typeof vi.fn>;
+  const githubFindUnique = prisma.userGithubIdentity.findUnique as ReturnType<typeof vi.fn>;
 
   beforeEach(() => vi.clearAllMocks());
+
+  it('surfaces the subject’s linked GitHub identity, scoped by userId', async () => {
+    githubFindUnique.mockResolvedValue({ userId: 'u1', githubLogin: 'octocat' });
+    const data = await collectAppSubjectData({ userId: 'u1', email: 'u1@example.com' });
+    expect(githubFindUnique).toHaveBeenCalledWith({ where: { userId: 'u1' } });
+    expect(data.githubIdentity).toEqual({ userId: 'u1', githubLogin: 'octocat' });
+  });
 
   it('scopes each source to the subject — ideas by createdByUserId (their own jots only)', async () => {
     ideaFindMany.mockResolvedValue([{ id: 'idea-1', text: 'a jot' }]);
@@ -118,6 +127,7 @@ describe('collectAppSubjectData', () => {
         'authoredEvents',
         'featuresOwned',
         'focusDirectives',
+        'githubIdentity',
         'ideas',
         'projectMemberships',
         'projectsLed',

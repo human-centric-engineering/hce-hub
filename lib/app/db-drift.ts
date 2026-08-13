@@ -118,4 +118,14 @@ export function registerAppDriftProbes(): void {
     table: 'app_idea',
     probe: constraintExists('app_idea_createdByUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // GitHub identity (f-github-identity §23): a user's linked GitHub identity IS
+  // their personal data, so it cascades on erasure — the row is deleted with the
+  // user. (githubUserId/githubLogin are unique, but only the userId → user edge
+  // is an unmodelled FK needing a probe.)
+  registerAppDriftProbe({
+    name: 'app_user_github_userId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_user_github',
+    probe: constraintExists('app_user_github_userId_fkey', 'ON DELETE CASCADE'),
+  });
 }
