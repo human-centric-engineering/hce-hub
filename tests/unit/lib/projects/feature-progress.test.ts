@@ -79,14 +79,15 @@ describe('computeFeatureProgress', () => {
       expect(p.openFixes).toBe(0); // an enhancement is not a fix
     });
 
-    it('excludes post-ship feature_work too — the boundary is kind-blind', () => {
-      // The property that makes future kinds safe: it is the DATE that decides,
-      // not the enum. Even plain feature_work raised after ship stays off the axis.
+    it('excludes post-ship feature_work from COMPLETION too — the boundary is kind-blind', () => {
+      // The property that makes future kinds safe: it is the DATE that decides
+      // completion, not the enum. Even plain feature_work raised after ship is off
+      // the completion axis — while still reporting as live, because it is.
       const p = computeFeatureProgress(
         [t('merged', 'feature_work', BEFORE), t('active', 'feature_work', AFTER)],
         SHIPPED
       );
-      expect(p).toEqual({ total: 1, merged: 1, live: 0, blocked: 0, openFixes: 0 });
+      expect(p).toEqual({ total: 1, merged: 1, live: 1, blocked: 0, openFixes: 0 });
     });
 
     it('still counts a post-ship bug as an open fix', () => {
@@ -120,6 +121,32 @@ describe('computeFeatureProgress', () => {
       );
       expect(p.total).toBe(2);
       expect(p.merged).toBe(1);
+    });
+
+    it('still reports post-ship work as live — the boundary seals completion, not activity', () => {
+      // The row must not read "2/2" with no live marker while its own task table
+      // shows that task as active (the §09 summary-agrees-with-its-table
+      // invariant). Completion is history; activity is news.
+      const p = computeFeatureProgress(
+        [
+          t('merged', 'feature_work', BEFORE),
+          t('merged', 'feature_work', BEFORE),
+          t('active', 'enhancement', AFTER),
+        ],
+        SHIPPED
+      );
+      expect(p.total).toBe(2); // sealed
+      expect(p.merged).toBe(2); // sealed
+      expect(p.live).toBe(1); // NOT sealed — someone is working it right now
+    });
+
+    it('still reports a post-ship dependency-blocked task as blocked', () => {
+      const p = computeFeatureProgress(
+        [t('merged', 'feature_work', BEFORE), t('blocked', 'enhancement', AFTER)],
+        SHIPPED
+      );
+      expect(p.total).toBe(1);
+      expect(p.blocked).toBe(1);
     });
 
     it('counts a pre-ship enhancement as build-out', () => {

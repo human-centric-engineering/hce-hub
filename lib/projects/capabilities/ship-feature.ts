@@ -129,9 +129,17 @@ export class ShipFeatureCapability extends BaseCapability<Args, Data> {
       // kind. Stamped in the SAME update as the status flip so the two can never
       // disagree — a shipped feature without a boundary would silently go back to
       // counting every future task.
+      //
+      // FIRST ship wins (`?? new Date()`), matching the backfill's MIN(createdAt).
+      // `ship_feature` is idempotent and re-runnable — a corrected narrative, or an
+      // agent retrying after an MCP timeout — and re-stamping would move the
+      // boundary forward, pulling work raised since the real ship back inside it and
+      // denting the bar. That is precisely the dent this feature exists to remove.
+      // A null here still stamps, so re-shipping repairs a feature the backfill
+      // couldn't resolve (safe: a null was counting everything already).
       await tx.feature.update({
         where: { id: args.featureId },
-        data: { status: 'shipped', shippedAt: new Date() },
+        data: { status: 'shipped', shippedAt: access.feature.shippedAt ?? new Date() },
       });
       // The ship narrative is the journal entry's body; atomic with the flip.
       await recordProjectEvent(tx, {

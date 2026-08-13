@@ -176,6 +176,12 @@ export interface FeatureAccess {
   /** Depth axis: `indicative` sketch vs `planned` (real tasks materialised). */
   planningStage: FeaturePlanningStage;
   helpWanted: boolean;
+  /**
+   * The completion boundary, `null` until shipped (f-work-kinds §32 t-79). Loaded
+   * here so `ship_feature` can preserve the FIRST ship on a re-run instead of
+   * moving the boundary forward.
+   */
+  shippedAt: Date | null;
   basis: ProjectAccessBasis;
 }
 
@@ -207,6 +213,7 @@ export async function resolveFeatureAccess(
       status: true,
       planningStage: true,
       helpWanted: true,
+      shippedAt: true,
     },
   });
   if (!feature) return { ok: false, reason: 'not_found' };
@@ -234,6 +241,7 @@ export async function resolveFeatureAccess(
       status: feature.status,
       planningStage: feature.planningStage,
       helpWanted: feature.helpWanted,
+      shippedAt: feature.shippedAt,
       basis,
     },
   };

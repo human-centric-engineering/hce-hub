@@ -35,6 +35,7 @@ const granted = {
     status: 'in_flight',
     planningStage: 'planned',
     helpWanted: false,
+    shippedAt: null,
     basis: 'member',
   },
 };
@@ -101,6 +102,44 @@ describe('ship_feature close-out', () => {
       metadata: { unmergedCount: 0 },
     });
     expect(emit.mock.calls[0][0].feature.update).toBe(txFeatureUpdate);
+  });
+
+  it('keeps the ORIGINAL shippedAt when an already-shipped feature is re-shipped', async () => {
+    // ship_feature is idempotent and re-runnable — a corrected narrative, or an
+    // agent retrying after an MCP timeout. Re-stamping would move the boundary
+    // forward and pull work raised since the real ship back inside it, denting the
+    // bar this feature exists to protect. First ship wins, matching the backfill's
+    // MIN(createdAt).
+    const firstShip = new Date('2026-08-01T12:00:00Z');
+    resolveFeature.mockResolvedValue({
+      ...granted,
+      feature: { ...granted.feature, status: 'shipped', shippedAt: firstShip },
+    });
+    taskCount.mockResolvedValue(0);
+
+    await cap.execute({ featureId: 'f1', summary: 'corrected narrative' }, ctx());
+
+    expect(txFeatureUpdate).toHaveBeenCalledWith({
+      where: { id: 'f1' },
+      data: { status: 'shipped', shippedAt: firstShip },
+    });
+  });
+
+  it('stamps a shipped feature whose boundary the backfill could not resolve', async () => {
+    // A null was counting every task already, so stamping can only ever reduce the
+    // count — safe, and it repairs a row the migration's journal lookup missed.
+    resolveFeature.mockResolvedValue({
+      ...granted,
+      feature: { ...granted.feature, status: 'shipped', shippedAt: null },
+    });
+    taskCount.mockResolvedValue(0);
+
+    await cap.execute({ featureId: 'f1', summary: 'repair' }, ctx());
+
+    expect(txFeatureUpdate).toHaveBeenCalledWith({
+      where: { id: 'f1' },
+      data: { status: 'shipped', shippedAt: expect.any(Date) },
+    });
   });
 
   it('soft-warns on unmerged tasks but still ships', async () => {

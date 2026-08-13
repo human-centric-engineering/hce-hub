@@ -26,13 +26,19 @@
 import type { TaskKind } from '@prisma/client';
 import type { EffectiveStatus } from '@/lib/projects/task-status';
 
-/** A feature's completion progress + its open-fixes count. */
+/**
+ * A feature's completion progress + its live activity.
+ *
+ * `total`/`merged` are **sealed** at the ship boundary — a settled historical
+ * ratio. `live`/`blocked`/`openFixes` are **not**: they describe what is in
+ * flight right now, including work raised after the ship.
+ */
 export interface FeatureProgress {
   merged: number;
   total: number;
-  /** Feature-work tasks actively being worked (effective `active`). */
+  /** Feature-work being worked right now (effective `active`) — post-ship included. */
   live: number;
-  /** Feature-work tasks claimed but waiting on an unmerged dependency. */
+  /** Feature-work claimed but waiting on an unmerged dependency — post-ship included. */
   blocked: number;
   /** Open (unmerged) `bug`-kind tasks — the "· N open fixes" surface. */
   openFixes: number;
@@ -62,14 +68,20 @@ export function computeFeatureProgress(
   const builtOut = shippedAt
     ? tasks.filter((t) => t.createdAt.getTime() <= shippedAt.getTime())
     : tasks;
-  const work = builtOut.filter((t) => t.kind !== 'bug');
+  // COMPLETION (`total`/`merged`) is sealed at the boundary — that is the point.
+  const completion = builtOut.filter((t) => t.kind !== 'bug');
+  // ACTIVITY (`live`/`blocked`/`openFixes`) is NOT sealed, and spans every task.
+  // Sealing it too would hide a post-ship enhancement someone is actively working:
+  // the row would read "2/2" with no live marker while its own task table listed
+  // that task as active — breaking the §09 invariant that a feature's summary can
+  // never disagree with the tasks beneath it. `openFixes` already worked this way;
+  // the other two now match. What shipped is history; what's in flight is news.
+  const activity = tasks.filter((t) => t.kind !== 'bug');
   return {
-    total: work.length,
-    merged: work.filter((t) => t.status === 'merged').length,
-    live: work.filter((t) => t.status === 'active').length,
-    blocked: work.filter((t) => t.status === 'blocked').length,
-    // Spans every task, not just the built-out set — a post-ship defect is still
-    // an open fix, and suppressing it here would hide exactly what the strip exists to show.
+    total: completion.length,
+    merged: completion.filter((t) => t.status === 'merged').length,
+    live: activity.filter((t) => t.status === 'active').length,
+    blocked: activity.filter((t) => t.status === 'blocked').length,
     openFixes: tasks.filter((t) => t.kind === 'bug' && t.status !== 'merged').length,
   };
 }
