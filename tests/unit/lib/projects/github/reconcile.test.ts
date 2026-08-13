@@ -145,6 +145,15 @@ describe('reconcilePullRequestEvent — merged_by attribution (f-github-identity
     expect(resolveHubUserByGithubId).not.toHaveBeenCalled();
     expect(completeTask).toHaveBeenCalledWith('user-A', 'task-1', undefined, undefined);
   });
+
+  it('does NOT resolve the merger when no Hub task links the PR (webhook hot path)', async () => {
+    findMany.mockResolvedValue([]); // most merges on a connected repo have no Hub task
+
+    await reconcilePullRequestEvent(mergedClose(PR_URL, { login: 'octocat', id: 1 }));
+
+    expect(resolveHubUserByGithubId).not.toHaveBeenCalled();
+    expect(completeTask).not.toHaveBeenCalled();
+  });
 });
 
 describe('reconcilePullRequestEvent — resilience', () => {

@@ -167,6 +167,19 @@ describe('TaskSheet', () => {
     expect(screen.getByText('Ada')).toBeInTheDocument(); // the doer, still shown
   });
 
+  it('suppresses "Merged by" when the merger is the doer (merging your own PR)', async () => {
+    mockFetchOnce({
+      data: detail({
+        status: 'merged',
+        claimer: { id: 'u1', name: 'Ada Lovelace', email: 'a@x.io', image: null },
+        mergedBy: { id: 'u1', name: 'Ada Lovelace', email: 'a@x.io', image: null }, // same person
+      }),
+    });
+    renderSheet();
+    await screen.findByText('Ada'); // the doer line renders
+    expect(screen.queryByText('Merged by')).not.toBeInTheDocument();
+  });
+
   it('renders the assignee picker (not a read-only name) on an OPEN task', async () => {
     // An open task is (re)assignable — the sheet shows the member picker seeded
     // with the current assignee + the project's members (f-task-assignment §22 t2).

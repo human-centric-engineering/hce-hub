@@ -82,21 +82,24 @@ export async function reconcilePullRequestEvent(payload: unknown): Promise<Recon
 
   const prUrl = pr.html_url;
 
-  // Resolve the merger (merged_by) → a Hub user ONCE for the whole PR, by GitHub's
-  // immutable numeric id (f-github-identity §23). `userId` is null when the merger
-  // isn't linked to a Hub user (external contributor, or not yet connected); the
-  // raw login is kept for the journal trail either way. Additive — never the doer.
-  const mergedBy: MergeAttribution | undefined = pr.merged_by
-    ? {
-        userId: await resolveHubUserByGithubId(String(pr.merged_by.id)),
-        githubLogin: pr.merged_by.login,
-      }
-    : undefined;
-
   const tasks = await prisma.task.findMany({
     where: { prUrl },
     select: { id: true, claimedByUserId: true },
   });
+
+  // Resolve the merger (merged_by) → a Hub user ONCE for the whole PR, by GitHub's
+  // immutable numeric id (f-github-identity §23) — but only when a task actually
+  // links this PR: most merges on a connected repo have no Hub task, and this is
+  // the webhook hot path. `userId` is null when the merger isn't linked to a Hub
+  // user (external / not connected); the raw login is kept for the journal either
+  // way. Additive — never the doer.
+  const mergedBy: MergeAttribution | undefined =
+    tasks.length > 0 && pr.merged_by
+      ? {
+          userId: await resolveHubUserByGithubId(String(pr.merged_by.id)),
+          githubLogin: pr.merged_by.login,
+        }
+      : undefined;
 
   let reconciled = 0;
   let skipped = 0;

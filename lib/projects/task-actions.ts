@@ -423,8 +423,19 @@ export async function completeTask(
 ): Promise<TaskActionResult> {
   const task = await resolveScoped(userId, taskId, expectedProjectId);
 
-  // Already done — idempotent no-op (e.g. a re-fired f-github-sync merge event).
+  // Already done — idempotent no-op for the status flip. BUT a merge webhook may
+  // carry attribution for a task a human already completed manually (Complete
+  // clicked before the webhook fired): backfill `mergedByUserId` so that race
+  // doesn't silently lose the "who merged it" attribution. Idempotent — a
+  // re-delivery writes the same merger. (No new event — the merge is already
+  // journaled by the first completion.)
   if (task.status === 'merged') {
+    if (mergedBy) {
+      await prisma.task.update({
+        where: { id: task.taskId },
+        data: { mergedByUserId: mergedBy.userId },
+      });
+    }
     return { taskId: task.taskId, number: task.number, status: 'merged', warnings: [] };
   }
 
@@ -458,7 +469,13 @@ export async function completeTask(
     action: 'task.complete',
     entityType: 'app_task',
     entityId: task.taskId,
-    metadata: { from: task.status },
+    // Mirror the journal's attribution so the two authoritative logs agree.
+    metadata: {
+      from: task.status,
+      ...(mergedBy
+        ? { mergedByUserId: mergedBy.userId, mergedByGithubLogin: mergedBy.githubLogin }
+        : {}),
+    },
   });
 
   return { taskId: task.taskId, number: task.number, status: 'merged', warnings: [] };

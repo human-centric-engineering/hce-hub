@@ -15,7 +15,7 @@ vi.mock('@/lib/projects/access', () => ({
 }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
-  prisma: { taskClaim: { findMany: vi.fn() }, task: { findMany: vi.fn() } },
+  prisma: { taskClaim: { findMany: vi.fn() }, task: { findMany: vi.fn(), update: vi.fn() } },
 }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
 vi.mock('@/lib/projects/project-event', () => ({ recordProjectEvent: vi.fn() }));
@@ -36,6 +36,7 @@ const canAccess = canAccessProject as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const findClaims = prisma.taskClaim.findMany as ReturnType<typeof vi.fn>;
 const findTasks = prisma.task.findMany as ReturnType<typeof vi.fn>;
+const taskUpdate = prisma.task.update as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
 
@@ -234,6 +235,16 @@ describe('completeTask', () => {
         }),
       })
     );
+    // The admin audit mirrors the journal's attribution (the two logs agree).
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'task.complete',
+        metadata: expect.objectContaining({
+          mergedByUserId: 'merger-X',
+          mergedByGithubLogin: 'octocat',
+        }),
+      })
+    );
   });
 
   it('records an unmapped merger as a null userId (keeping the login in the journal)', async () => {
@@ -251,12 +262,29 @@ describe('completeTask', () => {
     );
   });
 
-  it('is a no-op on an already-merged task', async () => {
+  it('is a no-op on an already-merged task (no backfill without attribution)', async () => {
     resolveTask.mockResolvedValue(granted({ status: 'merged' }));
     const r = await completeTask(USER, 't1');
     expect(r).toEqual({ taskId: 't1', number: 42, status: 'merged', warnings: [] });
     expect(runTx).not.toHaveBeenCalled();
     expect(emit).not.toHaveBeenCalled();
+    expect(taskUpdate).not.toHaveBeenCalled();
+  });
+
+  it('backfills mergedByUserId on an already-merged task when the webhook carries attribution', async () => {
+    // Complete-before-webhook race: a human merged the task first, then the webhook
+    // arrives with the merger — the attribution must not be lost.
+    resolveTask.mockResolvedValue(granted({ status: 'merged' }));
+
+    await completeTask(USER, 't1', 'p1', { userId: 'merger-X', githubLogin: 'octocat' });
+
+    // No status flip / no new event (already merged) — just the attribution column.
+    expect(runTx).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
+    expect(taskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { mergedByUserId: 'merger-X' },
+    });
   });
 });
 
