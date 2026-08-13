@@ -33,9 +33,10 @@ import type {
   CapabilityResult,
 } from '@/lib/orchestration/capabilities/types';
 import { prisma } from '@/lib/db/client';
-import { executeTransaction, isWriteConflict } from '@/lib/db/utils';
+import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess } from '@/lib/projects/access';
 import { assertAcyclic, DependencyCycleError } from '@/lib/projects/dependency-graph';
+import { isWriteConflict } from '@/lib/projects/write-conflict';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { redactedString } from '@/lib/security/redact';
 
@@ -250,7 +251,12 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
         // outgoing-only leaves, which nothing can point back at during their own
         // validation, so they cannot combine with an `update_*` edge to close a
         // cycle and correctly stay at the default isolation.
-        { isolationLevel: 'Serializable' }
+        //
+        // Scoped to the edge path for the same reason: a plain title/doneWhen
+        // edit is a single-row write with nothing to serialize against, so
+        // raising its isolation would only convert a harmless row-lock wait into
+        // a P2034 the caller has to retry — a regression, not a guard.
+        depsToSet !== null ? { isolationLevel: 'Serializable' } : undefined
       );
     } catch (err) {
       if (err instanceof DependencyCycleError) {
@@ -260,8 +266,10 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
         );
       }
       if (isWriteConflict(err)) {
+        // Reached via SSI on the edge path, or a plain deadlock on either — so
+        // the message names neither, only the retry.
         return this.error(
-          "Another change to this project's dependencies committed first. Re-read the task and retry.",
+          'A concurrent change to this task committed first. Re-read it and retry.',
           'concurrent_modification'
         );
       }

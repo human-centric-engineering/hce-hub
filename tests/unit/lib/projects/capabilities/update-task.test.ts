@@ -16,12 +16,10 @@ vi.mock('@/lib/projects/access', () => ({ resolveFeatureAccess: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
   prisma: { task: { findUnique: vi.fn(), findMany: vi.fn() } },
 }));
-// `isWriteConflict` is NOT mocked — the real predicate runs against the error the
-// transaction throws, so the P2034 mapping is proven rather than assumed.
-vi.mock('@/lib/db/utils', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/db/utils')>()),
-  executeTransaction: vi.fn(),
-}));
+vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
+// `@/lib/projects/write-conflict` is deliberately NOT mocked — the real
+// `isWriteConflict` runs against the error the transaction throws, so the P2034
+// mapping is proven rather than assumed.
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
 
 const { resolveFeatureAccess } = await import('@/lib/projects/access');
@@ -250,6 +248,14 @@ describe('update_task dependency replacement', () => {
     });
     // And the graph read must be the transaction's, not the bare client's.
     expect(txDepFindMany).toHaveBeenCalled();
+  });
+
+  it('leaves a scalar-only edit at the default isolation', async () => {
+    await cap.execute({ taskId: 't1', title: 'New title' }, ctx());
+    // A single-row write has nothing to serialize against. Raising its isolation
+    // would trade a harmless row-lock wait for a P2034 the caller must retry —
+    // and nothing retries, so the edit would simply be lost.
+    expect(runTx).toHaveBeenCalledWith(expect.any(Function), undefined);
   });
 
   it('maps a serialization failure to a retryable concurrent_modification error', async () => {
