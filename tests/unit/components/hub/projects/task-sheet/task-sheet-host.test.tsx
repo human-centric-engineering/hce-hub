@@ -24,6 +24,7 @@ const DETAIL: TaskDetailDTO = {
   prUrl: null,
   filesScope: [],
   claimer: null,
+  mergedBy: null,
   assignee: null,
   isMine: false,
   members: [],

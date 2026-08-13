@@ -393,15 +393,33 @@ export async function reassignFeatureTasks(
 }
 
 /**
+ * How a task's PR merge is attributed (f-github-identity §23 t-76). **Additive** —
+ * the merger is distinct from the doer (`claimedByUserId`), which `completeTask`
+ * never touches; passed only by the f-github-sync webhook path, never a human
+ * Complete.
+ */
+export interface MergeAttribution {
+  /** The GitHub merger mapped to a Hub user, or `null` when they're unlinked/external. */
+  userId: string | null;
+  /** The merger's raw GitHub login — kept in the journal trail even when unmapped. */
+  githubLogin: string;
+}
+
+/**
  * Complete `taskId` (→ merged) for `userId`: closes the open active-work claim and
  * journals the merge. Lenient — advances from `claimed` or `active`, and a no-op
  * when already `merged`. Throws `NotFoundError` (→ 404) for a non-member / unknown
  * task, or one outside `expectedProjectId`.
+ *
+ * `mergedBy` (f-github-sync only) records **who merged the PR** on `Task.mergedByUserId`
+ * + the `task_merged` event — additive attribution that never overwrites the doer
+ * (`actorUserId` stays `userId`, the claimant). Omitted for a human Complete.
  */
 export async function completeTask(
   userId: string,
   taskId: string,
-  expectedProjectId?: string
+  expectedProjectId?: string,
+  mergedBy?: MergeAttribution
 ): Promise<TaskActionResult> {
   const task = await resolveScoped(userId, taskId, expectedProjectId);
 
@@ -415,14 +433,23 @@ export async function completeTask(
       where: { taskId: task.taskId, releasedAt: null },
       data: { releasedAt: new Date() },
     });
-    await tx.task.update({ where: { id: task.taskId }, data: { status: 'merged' } });
+    await tx.task.update({
+      where: { id: task.taskId },
+      // Additive: set the merger when given, but never the doer (claimedByUserId).
+      data: { status: 'merged', ...(mergedBy ? { mergedByUserId: mergedBy.userId } : {}) },
+    });
     await recordProjectEvent(tx, {
       projectId: task.projectId,
       featureId: task.featureId,
       taskId: task.taskId,
       kind: 'task_merged',
       actorUserId: userId,
-      metadata: { from: task.status },
+      metadata: {
+        from: task.status,
+        ...(mergedBy
+          ? { mergedByUserId: mergedBy.userId, mergedByGithubLogin: mergedBy.githubLogin }
+          : {}),
+      },
     });
   });
 

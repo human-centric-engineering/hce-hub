@@ -84,6 +84,14 @@ export function registerAppDriftProbes(): void {
     table: 'app_task',
     probe: constraintExists('app_task_assigneeUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // GitHub merge attribution (f-github-identity §23): task.mergedByUserId is the
+  // merger mapped to a Hub user — additive, retained work, so it nulls on erasure.
+  registerAppDriftProbe({
+    name: 'app_task_mergedByUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_task',
+    probe: constraintExists('app_task_mergedByUserId_fkey', 'ON DELETE SET NULL'),
+  });
   registerAppDriftProbe({
     name: 'app_task_claim_userId_fkey (hand-written FK → user)',
     kind: 'FK constraint',

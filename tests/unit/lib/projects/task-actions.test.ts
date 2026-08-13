@@ -213,6 +213,44 @@ describe('completeTask', () => {
     expect(txTaskUpdate).toHaveBeenCalledWith({ where: { id: 't1' }, data: { status: 'merged' } });
   });
 
+  it('records the merger additively (mergedByUserId + event metadata), never the doer', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'active' }));
+
+    await completeTask(USER, 't1', 'p1', { userId: 'merger-X', githubLogin: 'octocat' });
+
+    // The merger is set alongside status — but claimedByUserId is NOT written here.
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { status: 'merged', mergedByUserId: 'merger-X' },
+    });
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        kind: 'task_merged',
+        actorUserId: USER, // the doer — unchanged by the attribution
+        metadata: expect.objectContaining({
+          mergedByUserId: 'merger-X',
+          mergedByGithubLogin: 'octocat',
+        }),
+      })
+    );
+  });
+
+  it('records an unmapped merger as a null userId (keeping the login in the journal)', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'active' }));
+    await completeTask(USER, 't1', 'p1', { userId: null, githubLogin: 'ext' });
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { status: 'merged', mergedByUserId: null },
+    });
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        metadata: expect.objectContaining({ mergedByUserId: null, mergedByGithubLogin: 'ext' }),
+      })
+    );
+  });
+
   it('is a no-op on an already-merged task', async () => {
     resolveTask.mockResolvedValue(granted({ status: 'merged' }));
     const r = await completeTask(USER, 't1');

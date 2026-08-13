@@ -63,6 +63,7 @@ const taskRow = (o: Record<string, unknown> = {}) => ({
   filesScope: [],
   claimedByUserId: null,
   assigneeUserId: null,
+  mergedByUserId: null,
   feature: { id: 'f1', slug: 'f-mcp', title: 'Feature one', ownerUserId: null },
   dependencies: [],
   dependents: [],
@@ -179,6 +180,23 @@ describe('getTaskDetail', () => {
     expect(detail.claimer).toBeNull();
     expect(detail.isMine).toBe(false);
     expect(detail.feature.owner).toBeNull();
+  });
+
+  it('resolves mergedBy (the GitHub merger mapped to a Hub user), distinct from the claimer', async () => {
+    // The doer (u1) and the merger (m1) are different people — both resolved.
+    userFindMany.mockResolvedValue([userRow('u1'), userRow('m1')]);
+    taskFindFirst.mockResolvedValue(
+      taskRow({ status: 'merged', claimedByUserId: 'u1', mergedByUserId: 'm1' })
+    );
+    const detail = await getTaskDetail('u2', 'p1', 't1');
+    expect(detail.claimer?.id).toBe('u1'); // the doer
+    expect(detail.mergedBy?.id).toBe('m1'); // the merger — additive, distinct
+  });
+
+  it('leaves mergedBy null when the PR merger is unmapped / the merge was human-driven', async () => {
+    taskFindFirst.mockResolvedValue(taskRow({ status: 'merged', mergedByUserId: null }));
+    const detail = await getTaskDetail('u1', 'p1', 't1');
+    expect(detail.mergedBy).toBeNull();
   });
 
   it('resolves the assignee (the picker’s current value), independent of the claimer (§22 t2)', async () => {

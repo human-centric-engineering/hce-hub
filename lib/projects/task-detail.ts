@@ -56,6 +56,12 @@ export interface TaskDetail {
   /** `null` when unclaimed or the claimant was erased. The doer, once merged. */
   claimer: UserRef | null;
   /**
+   * The GitHub merger mapped to a Hub user (f-github-identity §23) — **additive**,
+   * distinct from `claimer` (the doer). `null` when the PR wasn't merged by a
+   * linked Hub user (external / not connected), or that user was later erased.
+   */
+  mergedBy: UserRef | null;
+  /**
    * Who the task is **assigned to** (f-task-assignment §22 t2) — the person the
    * assignee picker shows + reassigns. `null` when unassigned or the assignee was
    * erased. Defaults to the feature owner at plan time.
@@ -168,6 +174,7 @@ export async function getTaskDetail(
         filesScope: true,
         claimedByUserId: true,
         assigneeUserId: true,
+        mergedByUserId: true,
         feature: { select: { id: true, slug: true, title: true, ownerUserId: true } },
         dependencies: { select: { dependsOn: { select: NEIGHBOUR_SELECT } } },
         dependents: { select: { task: { select: NEIGHBOUR_SELECT } } },
@@ -186,6 +193,7 @@ export async function getTaskDetail(
   const users = await fetchUsers([
     ...(task.claimedByUserId ? [task.claimedByUserId] : []),
     ...(task.assigneeUserId ? [task.assigneeUserId] : []),
+    ...(task.mergedByUserId ? [task.mergedByUserId] : []),
     ...(task.feature.ownerUserId ? [task.feature.ownerUserId] : []),
     ...members.map((m) => m.userId),
   ]);
@@ -205,6 +213,7 @@ export async function getTaskDetail(
     filesScope: task.filesScope,
     claimer: task.claimedByUserId ? (users.get(task.claimedByUserId) ?? null) : null,
     assignee: task.assigneeUserId ? (users.get(task.assigneeUserId) ?? null) : null,
+    mergedBy: task.mergedByUserId ? (users.get(task.mergedByUserId) ?? null) : null,
     isMine: task.claimedByUserId === userId,
     members: buildPickerOptions(members, users, task.assigneeUserId),
     feature: {

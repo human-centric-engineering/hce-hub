@@ -247,6 +247,7 @@ model Task {
   filesScope      String[]   @default([]) // paths/globs a claim expects to touch — soft-collision hint
   assigneeUserId  String? // hand-FK → "user" · ON DELETE SET NULL — "this is yours" (defaults to feature owner at plan time; distinct from the pull-claim)
   claimedByUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the task, drop the claimant)
+  mergedByUserId  String? // hand-FK → "user" · ON DELETE SET NULL — the GitHub merger (merged_by) mapped to a Hub user (f-github-identity §23); ADDITIVE, never the doer (claimedByUserId)
   prUrl           String?
   createdAt       DateTime   @default(now())
 
@@ -258,6 +259,7 @@ model Task {
   @@index([featureId])
   @@index([assigneeUserId])
   @@index([claimedByUserId])
+  @@index([mergedByUserId])
   @@map("app_task")
 }
 
