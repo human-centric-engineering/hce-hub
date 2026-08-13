@@ -83,6 +83,7 @@ export const HUB_SUBJECT_TABLES = {
   app_feature: 'exported', // features they own
   app_focus_directive: 'exported', // directives they declared
   app_idea: 'exported', // ideas they captured (their free-text jots)
+  app_user_github: 'exported', // their linked GitHub identity (login + avatar)
 
   // Plan structure — no user column at all. A dependency edge, an indicative
   // task, a sprint or a phase describes the work, not a person; the people
@@ -112,6 +113,7 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     featuresOwned,
     directives,
     ideas,
+    githubIdentity,
   ] = await Promise.all([
     prisma.projectMember.findMany({ where: { userId }, orderBy: { addedAt: 'asc' } }),
     prisma.taskClaim.findMany({ where: { userId }, orderBy: { claimedAt: 'asc' } }),
@@ -130,6 +132,9 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       orderBy: { declaredAt: 'asc' },
     }),
     prisma.idea.findMany({ where: { createdByUserId: userId }, orderBy: { createdAt: 'asc' } }),
+    // 1:1 satellite — their linked GitHub identity (0 or 1 rows). Kept as a
+    // findMany so every app-export section is uniformly a list (empty when none).
+    prisma.userGithubIdentity.findMany({ where: { userId } }),
   ]);
 
   return {
@@ -141,5 +146,6 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     featuresOwned,
     focusDirectives: directives,
     ideas,
+    githubIdentity,
   };
 }

@@ -70,7 +70,7 @@ const HANDLED_OUTSIDE_MANIFEST = new Map([
   ],
   // HCE Hub (fork) — app-owned tables. The scan reads every prisma/schema/*.prisma
   // including the fork-reserved app.prisma, but the manifest it checks is core's
-  // and cannot hold fork rows. These three are exported through the seam Sunrise
+  // and cannot hold fork rows. These are exported through the seam Sunrise
   // provides for exactly this — `collectAppSubjectData` in lib/app/data-export.ts
   // — and are guarded by the fork's own net, tests/unit/lib/app/data-export.test.ts,
   // which rules on every app_* table in the schema. Upstream ask (a fork hook so
@@ -86,6 +86,10 @@ const HANDLED_OUTSIDE_MANIFEST = new Map([
   [
     'ProjectEvent',
     'Hub app table. Exported via lib/app/data-export.ts → `authoredEvents`; guarded by tests/unit/lib/app/data-export.test.ts.',
+  ],
+  [
+    'UserGithubIdentity',
+    'Hub app table (f-github-identity §23) — the only app satellite with no intra-Hub `@relation`, so it is the first to reach this net. Exported via lib/app/data-export.ts → `githubIdentity`; guarded by tests/unit/lib/app/data-export.test.ts.',
   ],
 ]);
 

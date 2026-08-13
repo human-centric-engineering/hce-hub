@@ -314,6 +314,7 @@ async function main(): Promise<void> {
             'authoredEvents',
             'featuresOwned',
             'focusDirectives',
+            'githubIdentity',
             'ideas',
             'projectMemberships',
             'projectsLed',

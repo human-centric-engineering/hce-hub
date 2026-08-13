@@ -11,6 +11,7 @@
  *   - `app_focus_directive.declaredByUserId` → SET NULL (directive retained)
  *   - `app_project_member`                 → CASCADE  (membership removed)
  *   - `app_task_claim`                     → CASCADE  (claim history removed)
+ *   - `app_user_github`                    → CASCADE  (GitHub link removed)
  *
  * The FK *contract* (constraint + action) is guarded continuously by
  * `npm run db:drift-check` (CI + /pre-pr); this smoke is the functional
@@ -91,6 +92,15 @@ async function main(): Promise<void> {
 
     await prisma.taskClaim.create({ data: { taskId: task.id, userId: user.id } });
 
+    // ...and has linked a GitHub identity (f-github-identity §23 — CASCADE).
+    await prisma.userGithubIdentity.create({
+      data: {
+        userId: user.id,
+        githubUserId: `${stamp}`,
+        githubLogin: `${PREFIX}-${stamp}`,
+      },
+    });
+
     // ...and declares a focus directive on the project (t-3 futures scaffolding).
     const directive = await prisma.focusDirective.create({
       data: { projectId: project.id, declaredByUserId: user.id, intent: `${PREFIX} intent` },
@@ -127,6 +137,11 @@ async function main(): Promise<void> {
     check(
       (await prisma.taskClaim.count({ where: { taskId: task.id } })) === 0,
       'task claim cascade-deleted (CASCADE)'
+    );
+
+    check(
+      (await prisma.userGithubIdentity.count({ where: { userId: user.id } })) === 0,
+      'github identity cascade-deleted (CASCADE)'
     );
 
     const directiveAfter = await prisma.focusDirective.findUnique({ where: { id: directive.id } });

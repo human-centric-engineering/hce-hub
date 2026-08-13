@@ -265,6 +265,7 @@ describe('shipped lib/app/db-drift.ts scaffold', () => {
       'app_focus_directive_declaredByUserId_fkey (hand-written FK → user)',
       'app_project_event_actorUserId_fkey (hand-written FK → user)',
       'app_idea_createdByUserId_fkey (hand-written FK → user)',
+      'app_user_github_userId_fkey (hand-written FK → user)',
     ]);
   });
 });

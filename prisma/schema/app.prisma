@@ -463,3 +463,23 @@ model ProjectEvent {
   @@index([taskId])
   @@map("app_project_event")
 }
+
+/// A Hub user's verified GitHub identity (f-github-identity §23). Satellite of
+/// core `user` via a plain-String hand-FK (no `@relation` — that needs a field
+/// ON User; CUSTOMIZATION §5), ON DELETE CASCADE (the link is the user's personal
+/// data, erased with them). Written once by the OAuth *linking* flow (t-2) and
+/// refreshed on re-link; the OAuth token is never stored. `githubUserId` is
+/// GitHub's immutable numeric id (the spoof/rename-proof key that `merged_by`
+/// attribution matches on); `githubLogin` is the current username. Both unique —
+/// one GitHub account maps to at most one Hub user.
+model UserGithubIdentity {
+  id           String   @id @default(cuid())
+  userId       String   @unique // hand-FK → "user" · ON DELETE CASCADE (the link is the user's)
+  githubUserId String   @unique // GitHub's immutable numeric id, stored as a string
+  githubLogin  String   @unique // current GitHub username (mutable upstream; id is the stable key)
+  avatarUrl    String?
+  connectedAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("app_user_github")
+}
