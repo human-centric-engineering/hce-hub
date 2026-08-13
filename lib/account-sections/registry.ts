@@ -45,7 +45,10 @@ export function registerAccountSection(section: AccountSection): void {
  * first-registration order (JS sort is stable).
  */
 export function getRegisteredAccountSections(): AccountSection[] {
-  return [...sections.values()].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
+  // Finite sentinel, not Infinity — two order-less sections would give
+  // `Infinity - Infinity` = NaN, an invalid comparator result.
+  const last = Number.MAX_SAFE_INTEGER;
+  return [...sections.values()].sort((a, b) => (a.order ?? last) - (b.order ?? last));
 }
 
 /** Test-only: clear the registry so each test starts from a known state. */

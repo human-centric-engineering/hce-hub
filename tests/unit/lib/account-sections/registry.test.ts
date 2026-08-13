@@ -37,6 +37,12 @@ describe('account-sections registry', () => {
     expect(getRegisteredAccountSections().map((s) => s.id)).toEqual(['y', 'x', 'unset']);
   });
 
+  it('keeps two order-less sections in insertion order (no NaN comparator)', () => {
+    registerAccountSection({ id: 'first', Component: A });
+    registerAccountSection({ id: 'second', Component: B });
+    expect(getRegisteredAccountSections().map((s) => s.id)).toEqual(['first', 'second']);
+  });
+
   it('reset clears the registry', () => {
     registerAccountSection({ id: 'a', Component: A });
     __resetAccountSectionsForTests();

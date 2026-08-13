@@ -63,6 +63,23 @@ describe('GithubConnection', () => {
     expect(screen.queryByRole('link', { name: /connect/i })).not.toBeInTheDocument();
   });
 
+  it('keeps the Disconnect control for a linked user even if the deployment is now unconfigured', async () => {
+    // configured:false must NOT hide a still-linked identity — unlink needs no OAuth config.
+    get.mockResolvedValue({ ...connected, configured: false });
+    render(<GithubConnection />);
+    await waitFor(() => expect(screen.getByText('@octocat')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument();
+    expect(screen.queryByText(/isn.t available/i)).not.toBeInTheDocument();
+  });
+
+  it('tolerates a non-URL avatar without breaking the section', async () => {
+    // The schema validates the avatar URL and degrades a bad value to null.
+    get.mockResolvedValue({ ...connected, avatarUrl: 'javascript:alert(1)' });
+    render(<GithubConnection />);
+    await waitFor(() => expect(screen.getByText('@octocat')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument();
+  });
+
   it('disconnects after confirming, then returns to the Connect CTA', async () => {
     const user = userEvent.setup();
     get.mockResolvedValueOnce(connected).mockResolvedValueOnce(disconnected);
@@ -80,11 +97,31 @@ describe('GithubConnection', () => {
     );
   });
 
-  it('surfaces the post-redirect status message from ?github=', async () => {
+  it('surfaces the post-redirect status message from ?github= and strips the param', async () => {
     window.history.replaceState({}, '', '/settings?github=connected');
     get.mockResolvedValue(connected);
     render(<GithubConnection />);
     await waitFor(() => expect(screen.getByText('GitHub account connected.')).toBeInTheDocument());
+    // The param is removed so a refresh can't re-show a now-stale banner.
+    expect(window.location.search).toBe('');
+  });
+
+  it('clears the status banner on disconnect (no "connected" above a Connect CTA)', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, '', '/settings?github=connected');
+    get.mockResolvedValueOnce(connected).mockResolvedValueOnce(disconnected);
+    del.mockResolvedValue(undefined);
+    render(<GithubConnection />);
+    await waitFor(() => expect(screen.getByText('GitHub account connected.')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Disconnect' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Disconnect' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: /connect github/i })).toBeInTheDocument()
+    );
+    expect(screen.queryByText('GitHub account connected.')).not.toBeInTheDocument();
   });
 
   it('surfaces the already-linked status distinctly', async () => {

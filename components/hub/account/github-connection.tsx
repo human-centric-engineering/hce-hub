@@ -34,7 +34,9 @@ import { apiClient } from '@/lib/api/client';
 const linkStateSchema = z.object({
   connected: z.boolean(),
   githubLogin: z.string().nullable(),
-  avatarUrl: z.string().nullable(),
+  // Validate the URL shape at the boundary (CLAUDE.md) and degrade a bad value to
+  // null rather than failing the whole section — it's rendered as an <img src>.
+  avatarUrl: z.string().url().nullable().catch(null),
   connectedAt: z.string().nullable().optional(),
   configured: z.boolean(),
 });
@@ -62,9 +64,16 @@ export function GithubConnection() {
   const [statusKey, setStatusKey] = useState<string | null>(null);
 
   // Read the post-redirect status from the URL client-side (avoids opting the
-  // whole section into useSearchParams' Suspense contract).
+  // whole section into useSearchParams' Suspense contract), then strip the param
+  // so a refresh — or a later disconnect — can't leave a stale banner behind.
   useEffect(() => {
-    setStatusKey(new URLSearchParams(window.location.search).get('github'));
+    const params = new URLSearchParams(window.location.search);
+    const key = params.get('github');
+    if (!key) return;
+    setStatusKey(key);
+    params.delete('github');
+    const qs = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
   }, []);
 
   const load = useCallback(async () => {
@@ -85,6 +94,7 @@ export function GithubConnection() {
   async function handleDisconnect() {
     setBusy(true);
     setError(null);
+    setStatusKey(null); // a stale "connected" banner must not sit above a Connect CTA
     try {
       await apiClient.delete(BASE);
       await load();
@@ -120,11 +130,9 @@ export function GithubConnection() {
 
         {loading ? (
           <p className="text-muted-foreground text-sm">Loading…</p>
-        ) : !state?.configured ? (
-          <p className="text-muted-foreground text-sm">
-            GitHub connection isn’t available on this deployment.
-          </p>
-        ) : state.connected ? (
+        ) : state?.connected ? (
+          // Connected wins over `configured`: a still-linked user must keep the
+          // Disconnect control even if the deployment later drops its OAuth config.
           <div className="flex items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <Avatar className="h-9 w-9">
@@ -169,6 +177,10 @@ export function GithubConnection() {
               </AlertDialogContent>
             </AlertDialog>
           </div>
+        ) : !state?.configured ? (
+          <p className="text-muted-foreground text-sm">
+            GitHub connection isn’t available on this deployment.
+          </p>
         ) : (
           <div className="flex items-center justify-between gap-4">
             <p className="text-muted-foreground text-sm">No GitHub account connected.</p>
