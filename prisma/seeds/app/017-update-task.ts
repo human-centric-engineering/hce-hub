@@ -41,6 +41,14 @@ const unit: SeedUnit = {
   async run({ prisma, logger }) {
     logger.info('🌱 Seeding update_task Hub capability...');
 
+    // The `update` branch deliberately re-syncs ONLY `functionDefinition` (a pure
+    // code projection — the MCP tool list serves it, and a parity test pins it
+    // equal to the class), never `description`. `AiCapability.description` is
+    // operator-owned — editable via `/api/v1/admin/orchestration/capabilities/[id]`
+    // — so rewriting it here would clobber an operator's edit on every `db:seed`
+    // (planning-retro B10: classify the row before reconciling it). Consequence,
+    // and it is the intended one: edits to the `description` below reach fresh
+    // installs only; existing dev/prod rows keep whatever the operator last saw.
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'update_task' },
       update: { isSystem: true, functionDefinition: updateTaskFunctionDefinition },

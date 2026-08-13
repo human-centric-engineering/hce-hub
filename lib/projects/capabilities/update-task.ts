@@ -208,6 +208,14 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
       }
       // Rebuild the project's full task-edge set with this task's outgoing edges
       // replaced, and prove it's still a DAG BEFORE writing anything.
+      //
+      // Known gap, shared with `update_feature` and tracked separately: this read
+      // is non-transactional, so two concurrent writers can each validate against
+      // a graph missing the other's edge and both commit a cycle. Note that
+      // merely moving this read inside `executeTransaction` does NOT close it —
+      // under Read Committed neither transaction sees the other's uncommitted
+      // write — so the fix is `isolationLevel: 'Serializable'`, applied to both
+      // verbs together rather than leaving the mirrored pair inconsistent.
       const others = await prisma.taskDependency.findMany({
         where: { task: { feature: { projectId } }, taskId: { not: task.id } },
         select: { taskId: true, dependsOnTaskId: true },
