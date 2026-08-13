@@ -36,7 +36,7 @@ import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess } from '@/lib/projects/access';
 import { assertAcyclic, DependencyCycleError } from '@/lib/projects/dependency-graph';
-import { isWriteConflict } from '@/lib/projects/write-conflict';
+import { isWriteConflict, withWriteConflictRetry } from '@/lib/projects/write-conflict';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { redactedString } from '@/lib/security/redact';
 
@@ -211,52 +211,63 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
     }
 
     try {
-      await executeTransaction(
-        async (tx) => {
-          if (Object.keys(data).length > 0) {
-            await tx.task.update({ where: { id: task.id }, data });
-          }
-          if (depsToSet !== null) {
-            // Rebuild the project's full task-edge set with this task's outgoing
-            // edges replaced, and prove it's still a DAG. This read lives INSIDE
-            // the transaction so the proof and the write share one snapshot.
-            const others = await tx.taskDependency.findMany({
-              where: { task: { feature: { projectId } }, taskId: { not: task.id } },
-              select: { taskId: true, dependsOnTaskId: true },
-            });
-            const edges = [
-              ...others.map((e) => ({ from: e.taskId, to: e.dependsOnTaskId })),
-              ...depsToSet.map((to) => ({ from: task.id, to })),
-            ];
-            // Throws DependencyCycleError → the transaction rolls back, so a
-            // rejected edge set never leaves a partial write behind.
-            assertAcyclic(edges);
-            // Replace the outgoing edge set (idempotent via the @@unique constraint).
-            await tx.taskDependency.deleteMany({ where: { taskId: task.id } });
-            if (depsToSet.length > 0) {
-              await tx.taskDependency.createMany({
-                data: depsToSet.map((dependsOnTaskId) => ({ taskId: task.id, dependsOnTaskId })),
+      await withWriteConflictRetry(() =>
+        executeTransaction(
+          async (tx) => {
+            // The proof runs FIRST, before any write. Rollback would undo a
+            // scalar update anyway, but writing a row we're about to reject
+            // means holding its lock across the graph read — and under
+            // Serializable that lock can drag an unrelated concurrent editor of
+            // the same row into an abort, for a request that was never going to
+            // succeed. Prove, then write.
+            if (depsToSet !== null) {
+              // Rebuild the project's full task-edge set with this task's
+              // outgoing edges replaced, and prove it's still a DAG. This read
+              // lives INSIDE the transaction so the proof and the write share
+              // one snapshot.
+              const others = await tx.taskDependency.findMany({
+                where: { task: { feature: { projectId } }, taskId: { not: task.id } },
+                select: { taskId: true, dependsOnTaskId: true },
               });
+              const edges = [
+                ...others.map((e) => ({ from: e.taskId, to: e.dependsOnTaskId })),
+                ...depsToSet.map((to) => ({ from: task.id, to })),
+              ];
+              // Throws DependencyCycleError → the transaction rolls back, so a
+              // rejected edge set never leaves a partial write behind.
+              assertAcyclic(edges);
             }
-          }
-        },
-        // Serializable is what actually closes the race — moving the read inside
-        // the transaction is necessary but NOT sufficient: under Read Committed
-        // neither transaction sees the other's uncommitted edge, so both would
-        // still validate clean and both would commit, leaving a cycle.
-        //
-        // Only the two `update_*` verbs read-then-write the graph, and SSI holds
-        // among transactions that are *themselves* serializable — so these two
-        // must match. `create_task` / `create_feature` / `plan_feature` add only
-        // outgoing-only leaves, which nothing can point back at during their own
-        // validation, so they cannot combine with an `update_*` edge to close a
-        // cycle and correctly stay at the default isolation.
-        //
-        // Scoped to the edge path for the same reason: a plain title/doneWhen
-        // edit is a single-row write with nothing to serialize against, so
-        // raising its isolation would only convert a harmless row-lock wait into
-        // a P2034 the caller has to retry — a regression, not a guard.
-        depsToSet !== null ? { isolationLevel: 'Serializable' } : undefined
+            if (Object.keys(data).length > 0) {
+              await tx.task.update({ where: { id: task.id }, data });
+            }
+            if (depsToSet !== null) {
+              // Replace the outgoing edge set (idempotent via the @@unique constraint).
+              await tx.taskDependency.deleteMany({ where: { taskId: task.id } });
+              if (depsToSet.length > 0) {
+                await tx.taskDependency.createMany({
+                  data: depsToSet.map((dependsOnTaskId) => ({ taskId: task.id, dependsOnTaskId })),
+                });
+              }
+            }
+          },
+          // Serializable is what actually closes the race — moving the read inside
+          // the transaction is necessary but NOT sufficient: under Read Committed
+          // neither transaction sees the other's uncommitted edge, so both would
+          // still validate clean and both would commit, leaving a cycle.
+          //
+          // Only the two `update_*` verbs read-then-write the graph, and SSI holds
+          // among transactions that are *themselves* serializable — so these two
+          // must match. `create_task` / `create_feature` / `plan_feature` add only
+          // outgoing-only leaves, which nothing can point back at during their own
+          // validation, so they cannot combine with an `update_*` edge to close a
+          // cycle and correctly stay at the default isolation.
+          //
+          // Scoped to the edge path for the same reason: a plain title/doneWhen
+          // edit is a single-row write with nothing to serialize against, so
+          // raising its isolation would only convert a harmless row-lock wait
+          // into a P2034 the caller has to retry — a regression, not a guard.
+          depsToSet !== null ? { isolationLevel: 'Serializable' } : undefined
+        )
       );
     } catch (err) {
       if (err instanceof DependencyCycleError) {
@@ -266,10 +277,9 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
         );
       }
       if (isWriteConflict(err)) {
-        // Reached via SSI on the edge path, or a plain deadlock on either — so
-        // the message names neither, only the retry.
+        // Only reached once the in-process retries are also exhausted.
         return this.error(
-          'A concurrent change to this task committed first. Re-read it and retry.',
+          'A concurrent change to this task kept winning. Re-read it and retry.',
           'concurrent_modification'
         );
       }

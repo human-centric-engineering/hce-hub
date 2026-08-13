@@ -9,9 +9,11 @@
  * caller to retry a request that will never succeed.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
-import { isWriteConflict } from '@/lib/projects/write-conflict';
+import { isWriteConflict, withWriteConflictRetry } from '@/lib/projects/write-conflict';
+
+vi.mock('@/lib/logging', () => ({ logger: { warn: vi.fn() } }));
 
 const prismaError = (code: string) =>
   new Prisma.PrismaClientKnownRequestError('boom', { code, clientVersion: 'test' });
@@ -41,5 +43,39 @@ describe('isWriteConflict', () => {
     expect(isWriteConflict('P2034')).toBe(false);
     expect(isWriteConflict(null)).toBe(false);
     expect(isWriteConflict(undefined)).toBe(false);
+  });
+});
+
+describe('withWriteConflictRetry', () => {
+  it('returns the first result without re-running work that succeeds', async () => {
+    const work = vi.fn().mockResolvedValue('ok');
+    await expect(withWriteConflictRetry(work)).resolves.toBe('ok');
+    expect(work).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-runs after a write conflict and returns the later success', async () => {
+    const work = vi
+      .fn()
+      .mockRejectedValueOnce(prismaError('P2034'))
+      .mockRejectedValueOnce(prismaError('P2034'))
+      .mockResolvedValue('ok');
+    await expect(withWriteConflictRetry(work)).resolves.toBe('ok');
+    expect(work).toHaveBeenCalledTimes(3);
+  });
+
+  it('gives up after a bounded number of attempts rather than spinning', async () => {
+    // A writer that loses every race must still terminate — an unbounded loop
+    // would hold a request open indefinitely under sustained contention.
+    const work = vi.fn().mockRejectedValue(prismaError('P2034'));
+    await expect(withWriteConflictRetry(work)).rejects.toThrow();
+    expect(work).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry errors that are not write conflicts', async () => {
+    // Retrying a deterministic failure (a rejected edge set, a bad argument)
+    // can only ever produce the same answer at three times the cost.
+    const work = vi.fn().mockRejectedValue(new Error('dependency cycle'));
+    await expect(withWriteConflictRetry(work)).rejects.toThrow('dependency cycle');
+    expect(work).toHaveBeenCalledTimes(1);
   });
 });

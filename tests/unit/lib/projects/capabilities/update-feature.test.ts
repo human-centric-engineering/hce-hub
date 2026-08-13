@@ -42,6 +42,12 @@ const audit = logAdminAction as ReturnType<typeof vi.fn>;
 
 const cap = new UpdateFeatureCapability();
 const USER = 'user-1';
+/** Postgres SSI aborts the loser of a write conflict; Prisma surfaces P2034. */
+const writeConflict = () =>
+  new Prisma.PrismaClientKnownRequestError('write conflict', {
+    code: 'P2034',
+    clientVersion: 'test',
+  });
 const ctx = (userId: string | null = USER) => ({ userId, agentId: 'a1' });
 const granted = (status = 'in_flight', ownerUserId: string | null = USER) => ({
   ok: true,
@@ -250,11 +256,17 @@ describe('update_feature dependency edges', () => {
     // Existing: d1 → f1. New: f1 → d1 ⇒ cycle f1 → d1 → f1.
     featureFindMany.mockResolvedValue([{ id: 'd1' }]);
     txDepFindMany.mockResolvedValue([{ featureId: 'd1', dependsOnFeatureId: 'f1' }]);
-    const r = await cap.execute({ featureId: 'f1', dependsOnFeatureIds: ['d1'] }, ctx());
+    const r = await cap.execute(
+      { featureId: 'f1', title: 'New title', dependsOnFeatureIds: ['d1'] },
+      ctx()
+    );
     expect(r.error?.code).toBe('dependency_cycle');
     // The proof now runs inside the transaction, so it IS entered — what matters
-    // is that it throws out before any edge is written (the tx then rolls back).
-    expect(runTx).toHaveBeenCalled();
+    // is that it throws out before ANY write. The scalar patch is included above
+    // deliberately: rollback would undo it, but the mock can't simulate rollback,
+    // so asserting it was never issued is what pins the proof-before-write order.
+    expect(runTx).toHaveBeenCalledTimes(1); // a cycle is not a race — never retried
+    expect(txFeatureUpdate).not.toHaveBeenCalled();
     expect(txDepDeleteMany).not.toHaveBeenCalled();
     expect(txDepCreateMany).not.toHaveBeenCalled();
   });
@@ -285,17 +297,24 @@ describe('update_feature dependency edges', () => {
     expect(runTx).toHaveBeenCalledWith(expect.any(Function), undefined);
   });
 
-  it('maps a serialization failure to a retryable concurrent_modification error', async () => {
+  it('retries a serialization failure and succeeds on the re-run', async () => {
     featureFindMany.mockResolvedValue([{ id: 'd1' }]);
-    // Postgres SSI aborts the loser of a write conflict; Prisma surfaces P2034.
-    const conflict = new Prisma.PrismaClientKnownRequestError('write conflict', {
-      code: 'P2034',
-      clientVersion: 'test',
-    });
-    runTx.mockRejectedValue(conflict);
+    // SSI aborts the loser of a write conflict, but the loser was not wrong —
+    // re-running it against the winner's committed edges is the whole remedy.
+    runTx.mockRejectedValueOnce(writeConflict());
+    const r = await cap.execute({ featureId: 'f1', dependsOnFeatureIds: ['d1'] }, ctx());
+    expect(r.success).toBe(true);
+    expect(runTx).toHaveBeenCalledTimes(2);
+  });
+
+  it('maps an unrelenting serialization failure to concurrent_modification', async () => {
+    featureFindMany.mockResolvedValue([{ id: 'd1' }]);
+    runTx.mockRejectedValue(writeConflict());
     const r = await cap.execute({ featureId: 'f1', dependsOnFeatureIds: ['d1'] }, ctx());
     expect(r.error?.code).toBe('concurrent_modification');
     expect(r.error?.message).toContain('retry');
+    // Bounded — a permanently-losing writer must not spin forever.
+    expect(runTx).toHaveBeenCalledTimes(3);
   });
 
   it('lets an unrelated database error escape rather than mislabelling it', async () => {

@@ -36,6 +36,12 @@ const audit = logAdminAction as ReturnType<typeof vi.fn>;
 
 const cap = new UpdateTaskCapability();
 const USER = 'user-1';
+/** Postgres SSI aborts the loser of a write conflict; Prisma surfaces P2034. */
+const writeConflict = () =>
+  new Prisma.PrismaClientKnownRequestError('write conflict', {
+    code: 'P2034',
+    clientVersion: 'test',
+  });
 const ctx = (userId: string | null = USER, scope?: Record<string, string>) => ({
   userId,
   agentId: 'a1',
@@ -218,12 +224,18 @@ describe('update_task dependency replacement', () => {
     taskFindMany.mockResolvedValue([{ id: 't2' }]);
     // t2 already depends on t1; making t1 depend on t2 closes t1 → t2 → t1.
     txDepFindMany.mockResolvedValue([{ taskId: 't2', dependsOnTaskId: 't1' }]);
-    const r = await cap.execute({ taskId: 't1', dependsOnTaskIds: ['t2'] }, ctx());
+    const r = await cap.execute(
+      { taskId: 't1', title: 'New title', dependsOnTaskIds: ['t2'] },
+      ctx()
+    );
     expect(r.error?.code).toBe('dependency_cycle');
     expect(r.error?.message).toContain('cycle');
     // The proof now runs inside the transaction, so it IS entered — what matters
-    // is that it throws out before any edge is written (the tx then rolls back).
+    // is that it throws out before ANY write. The scalar patch is included above
+    // deliberately: rollback would undo it, but the mock can't simulate rollback,
+    // so asserting it was never issued is what pins the proof-before-write order.
     expect(runTx).toHaveBeenCalled();
+    expect(txTaskUpdate).not.toHaveBeenCalled();
     expect(txDepDeleteMany).not.toHaveBeenCalled();
     expect(txDepCreateMany).not.toHaveBeenCalled();
   });
@@ -258,17 +270,34 @@ describe('update_task dependency replacement', () => {
     expect(runTx).toHaveBeenCalledWith(expect.any(Function), undefined);
   });
 
-  it('maps a serialization failure to a retryable concurrent_modification error', async () => {
+  it('retries a serialization failure and succeeds on the re-run', async () => {
     taskFindMany.mockResolvedValue([{ id: 't2' }]);
-    // Postgres SSI aborts the loser of a write conflict; Prisma surfaces P2034.
-    const conflict = new Prisma.PrismaClientKnownRequestError('write conflict', {
-      code: 'P2034',
-      clientVersion: 'test',
-    });
-    runTx.mockRejectedValue(conflict);
+    // SSI aborts the loser of a write conflict, but the loser was not wrong —
+    // re-running it against the winner's committed edges is the whole remedy.
+    runTx.mockRejectedValueOnce(writeConflict());
+    const r = await cap.execute({ taskId: 't1', dependsOnTaskIds: ['t2'] }, ctx());
+    expect(r.success).toBe(true);
+    expect(runTx).toHaveBeenCalledTimes(2);
+  });
+
+  it('maps an unrelenting serialization failure to concurrent_modification', async () => {
+    taskFindMany.mockResolvedValue([{ id: 't2' }]);
+    runTx.mockRejectedValue(writeConflict());
     const r = await cap.execute({ taskId: 't1', dependsOnTaskIds: ['t2'] }, ctx());
     expect(r.error?.code).toBe('concurrent_modification');
     expect(r.error?.message).toContain('retry');
+    // Bounded — a permanently-losing writer must not spin forever.
+    expect(runTx).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry a rejected edge set — a cycle is not a race', async () => {
+    taskFindMany.mockResolvedValue([{ id: 't2' }]);
+    txDepFindMany.mockResolvedValue([{ taskId: 't2', dependsOnTaskId: 't1' }]);
+    const r = await cap.execute({ taskId: 't1', dependsOnTaskIds: ['t2'] }, ctx());
+    expect(r.error?.code).toBe('dependency_cycle');
+    // Re-running would just re-derive the same cycle; retrying it would triple
+    // the work and could only ever return the same answer.
+    expect(runTx).toHaveBeenCalledTimes(1);
   });
 
   it('lets an unrelated database error escape rather than mislabelling it', async () => {
