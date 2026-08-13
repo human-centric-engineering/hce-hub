@@ -44,7 +44,7 @@ const keyRowSchema = z.object({
 });
 type KeyRow = z.infer<typeof keyRowSchema>;
 const keysResponseSchema = z.object({ keys: z.array(keyRowSchema) });
-const mintedSchema = z.object({ name: z.string(), keyPrefix: z.string(), plaintext: z.string() });
+const mintedSchema = z.object({ keyPrefix: z.string(), plaintext: z.string() });
 
 interface ConnectPanelProps {
   projectId: string;
@@ -80,7 +80,8 @@ export function ConnectPanel({ projectId, projectName, serverName, repoUrls }: C
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [secret, setSecret] = useState<{ label: string; plaintext: string } | null>(null);
+  // The one-time plaintext secret, shown once after generate / regenerate.
+  const [secret, setSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState<'key' | 'config' | null>(null);
 
   const load = useCallback(async () => {
@@ -105,7 +106,7 @@ export function ConnectPanel({ projectId, projectName, serverName, repoUrls }: C
     try {
       // No body — the key is one-per-project and auto-named by the service.
       const data = mintedSchema.parse(await apiClient.post(base));
-      setSecret({ label: data.name, plaintext: data.plaintext });
+      setSecret(data.plaintext);
       await load();
     } catch {
       setError('Couldn’t generate the key.');
@@ -120,7 +121,7 @@ export function ConnectPanel({ projectId, projectName, serverName, repoUrls }: C
     setError(null);
     try {
       const data = mintedSchema.parse(await apiClient.post(`${base}/${key.id}/rotate`));
-      setSecret({ label: data.name, plaintext: data.plaintext });
+      setSecret(data.plaintext);
       await load();
     } catch {
       setError('Couldn’t regenerate the key.');
@@ -131,19 +132,28 @@ export function ConnectPanel({ projectId, projectName, serverName, repoUrls }: C
 
   async function handleRevoke() {
     if (!key) return;
+    setBusy(true);
     setError(null);
     try {
       await apiClient.delete(`${base}/${key.id}`);
       setKey(null);
     } catch {
       setError('Couldn’t revoke the key.');
+    } finally {
+      setBusy(false);
     }
   }
 
-  function copy(kind: 'key' | 'config', text: string) {
-    void navigator.clipboard.writeText(text);
-    setCopied(kind);
-    window.setTimeout(() => setCopied((c) => (c === kind ? null : c)), 1500);
+  // Only flip to "Copied!" once the write actually lands — an insecure context or
+  // denied permission rejects, and a false "Copied!" over a one-time secret loses it.
+  async function copy(kind: 'key' | 'config', text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(kind);
+      window.setTimeout(() => setCopied((c) => (c === kind ? null : c)), 1500);
+    } catch {
+      setError('Couldn’t copy to your clipboard — select the text and copy it manually.');
+    }
   }
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -204,13 +214,13 @@ export function ConnectPanel({ projectId, projectName, serverName, repoUrls }: C
               <div>
                 <Label className="text-xs">Key</Label>
                 <div className="bg-muted mt-1 rounded-md p-3">
-                  <code className="text-xs break-all">{secret.plaintext}</code>
+                  <code className="text-xs break-all">{secret}</code>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
                   className="mt-2"
-                  onClick={() => copy('key', secret.plaintext)}
+                  onClick={() => void copy('key', secret)}
                 >
                   {copied === 'key' ? 'Copied!' : 'Copy key'}
                 </Button>
@@ -220,13 +230,13 @@ export function ConnectPanel({ projectId, projectName, serverName, repoUrls }: C
                   Paste into your repo’s <code className="text-xs">.mcp.json</code>
                 </Label>
                 <pre className="bg-muted mt-1 overflow-x-auto rounded-md p-3 text-xs">
-                  <code>{mcpConfig(serverName, origin, secret.plaintext)}</code>
+                  <code>{mcpConfig(serverName, origin, secret)}</code>
                 </pre>
                 <Button
                   size="sm"
                   variant="outline"
                   className="mt-2"
-                  onClick={() => copy('config', mcpConfig(serverName, origin, secret.plaintext))}
+                  onClick={() => void copy('config', mcpConfig(serverName, origin, secret))}
                 >
                   {copied === 'config' ? 'Copied!' : 'Copy .mcp.json snippet'}
                 </Button>
@@ -259,7 +269,7 @@ export function ConnectPanel({ projectId, projectName, serverName, repoUrls }: C
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="sm" className="text-destructive">
+                <Button variant="ghost" size="sm" className="text-destructive" disabled={busy}>
                   Revoke
                 </Button>
               </AlertDialogTrigger>

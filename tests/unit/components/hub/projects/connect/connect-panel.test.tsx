@@ -133,10 +133,29 @@ describe('ConnectPanel', () => {
 
     await user.click(screen.getByRole('button', { name: 'Copy key' }));
     expect(writeText).toHaveBeenCalledWith('smcp_SECRET');
-    expect(screen.getByRole('button', { name: 'Copied!' })).toBeInTheDocument();
+    // The "Copied!" flip lands only after the clipboard write resolves.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Copied!' })).toBeInTheDocument()
+    );
 
     await user.click(screen.getByRole('button', { name: /Copy \.mcp\.json/i }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Bearer smcp_SECRET'));
+  });
+
+  it('surfaces a message (no "Copied!") when the clipboard write is rejected', async () => {
+    const user = userEvent.setup();
+    // Insecure context / denied permission — writeText rejects.
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'));
+    post.mockResolvedValue({ name: 'Bo · HCE Hub', keyPrefix: 'smcp_p', plaintext: 'smcp_SECRET' });
+    renderPanel();
+    await waitFor(() => screen.getByRole('button', { name: 'Generate key' }));
+    await user.click(screen.getByRole('button', { name: 'Generate key' }));
+    await waitFor(() => screen.getByText('smcp_SECRET'));
+
+    await user.click(screen.getByRole('button', { name: 'Copy key' }));
+    await waitFor(() => expect(screen.getByText(/copy it manually/i)).toBeInTheDocument());
+    // A false "Copied!" over a one-time secret would be a data-loss trap — must not appear.
+    expect(screen.queryByRole('button', { name: 'Copied!' })).not.toBeInTheDocument();
   });
 
   it('surfaces a message when the key fails to load', async () => {

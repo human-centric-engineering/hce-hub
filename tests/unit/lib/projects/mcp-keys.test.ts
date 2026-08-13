@@ -155,7 +155,12 @@ describe('rotateProjectMcpKey (regenerate) — ownership + project isolation', (
 
     const res = await rotateProjectMcpKey(USER, 'hce-hub', 'k1');
 
-    expect(update.mock.calls[0][0].data).toEqual({ keyHash: 'HASH', keyPrefix: 'smcp_abcd12' });
+    // Fresh material + any lapsed expiry cleared, so the new secret is never dead on arrival.
+    expect(update.mock.calls[0][0].data).toEqual({
+      keyHash: 'HASH',
+      keyPrefix: 'smcp_abcd12',
+      expiresAt: null,
+    });
     expect(res.plaintext).toBe('smcp_secret');
     expect(res.previousPrefix).toBe('smcp_OLD012');
   });

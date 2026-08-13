@@ -134,7 +134,7 @@ export function ProjectView({
             <ConnectPanel
               projectId={project.id}
               projectName={project.name}
-              serverName={project.slug ?? 'hce-hub'}
+              serverName={project.slug ?? project.id}
               repoUrls={project.repoUrls}
             />
           ) : (

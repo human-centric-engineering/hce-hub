@@ -185,7 +185,10 @@ export async function rotateProjectMcpKey(
   const { plaintext, hash, prefix } = generateApiKey();
   const key = await prisma.mcpApiKey.update({
     where: { id: keyId },
-    data: { keyHash: hash, keyPrefix: prefix },
+    // Clear any expiry alongside the fresh material: a key minted before this path
+    // was bodyless could carry a now-lapsed `expiresAt`, and regenerating must hand
+    // back a *working* secret, not a dead-on-arrival one.
+    data: { keyHash: hash, keyPrefix: prefix, expiresAt: null },
     select: SAFE_SELECT,
   });
   return { key, plaintext, previousPrefix: existing.keyPrefix };
