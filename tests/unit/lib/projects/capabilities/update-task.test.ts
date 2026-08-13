@@ -10,15 +10,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Prisma } from '@prisma/client';
 
 vi.mock('@/lib/projects/access', () => ({ resolveFeatureAccess: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
-  prisma: {
-    task: { findUnique: vi.fn(), findMany: vi.fn() },
-    taskDependency: { findMany: vi.fn() },
-  },
+  prisma: { task: { findUnique: vi.fn(), findMany: vi.fn() } },
 }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
+// `@/lib/projects/write-conflict` is deliberately NOT mocked — the real
+// `isWriteConflict` runs against the error the transaction throws, so the P2034
+// mapping is proven rather than assumed.
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
 
 const { resolveFeatureAccess } = await import('@/lib/projects/access');
@@ -30,12 +31,17 @@ const { UpdateTaskCapability } = await import('@/lib/projects/capabilities/updat
 const resolveFeature = resolveFeatureAccess as ReturnType<typeof vi.fn>;
 const taskFindUnique = prisma.task.findUnique as ReturnType<typeof vi.fn>;
 const taskFindMany = prisma.task.findMany as ReturnType<typeof vi.fn>;
-const depFindMany = prisma.taskDependency.findMany as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 
 const cap = new UpdateTaskCapability();
 const USER = 'user-1';
+/** Postgres SSI aborts the loser of a write conflict; Prisma surfaces P2034. */
+const writeConflict = () =>
+  new Prisma.PrismaClientKnownRequestError('write conflict', {
+    code: 'P2034',
+    clientVersion: 'test',
+  });
 const ctx = (userId: string | null = USER, scope?: Record<string, string>) => ({
   userId,
   agentId: 'a1',
@@ -44,6 +50,7 @@ const ctx = (userId: string | null = USER, scope?: Record<string, string>) => ({
 const grantedOwner = { ok: true, feature: { projectId: 'p1', ownerUserId: USER, basis: 'member' } };
 
 const txTaskUpdate = vi.fn();
+const txDepFindMany = vi.fn();
 const txDepDeleteMany = vi.fn();
 const txDepCreateMany = vi.fn();
 
@@ -51,17 +58,22 @@ beforeEach(() => {
   vi.clearAllMocks();
   taskFindUnique.mockResolvedValue({ id: 't1', featureId: 'f1', feature: { projectId: 'p1' } });
   taskFindMany.mockResolvedValue([]);
-  depFindMany.mockResolvedValue([]);
   resolveFeature.mockResolvedValue(grantedOwner);
 
   txTaskUpdate.mockResolvedValue({});
+  txDepFindMany.mockResolvedValue([]);
   txDepDeleteMany.mockResolvedValue({});
   txDepCreateMany.mockResolvedValue({});
+  // The graph read now lives INSIDE the transaction, so it is a `tx` method.
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       task: { update: txTaskUpdate },
-      taskDependency: { deleteMany: txDepDeleteMany, createMany: txDepCreateMany },
+      taskDependency: {
+        findMany: txDepFindMany,
+        deleteMany: txDepDeleteMany,
+        createMany: txDepCreateMany,
+      },
     })
   );
 });
@@ -211,21 +223,89 @@ describe('update_task dependency replacement', () => {
   it('rejects an edge that would close a cycle against the existing graph', async () => {
     taskFindMany.mockResolvedValue([{ id: 't2' }]);
     // t2 already depends on t1; making t1 depend on t2 closes t1 → t2 → t1.
-    depFindMany.mockResolvedValue([{ taskId: 't2', dependsOnTaskId: 't1' }]);
-    const r = await cap.execute({ taskId: 't1', dependsOnTaskIds: ['t2'] }, ctx());
+    txDepFindMany.mockResolvedValue([{ taskId: 't2', dependsOnTaskId: 't1' }]);
+    const r = await cap.execute(
+      { taskId: 't1', title: 'New title', dependsOnTaskIds: ['t2'] },
+      ctx()
+    );
     expect(r.error?.code).toBe('dependency_cycle');
     expect(r.error?.message).toContain('cycle');
-    expect(runTx).not.toHaveBeenCalled();
+    // The proof now runs inside the transaction, so it IS entered — what matters
+    // is that it throws out before ANY write. The scalar patch is included above
+    // deliberately: rollback would undo it, but the mock can't simulate rollback,
+    // so asserting it was never issued is what pins the proof-before-write order.
+    expect(runTx).toHaveBeenCalled();
+    expect(txTaskUpdate).not.toHaveBeenCalled();
+    expect(txDepDeleteMany).not.toHaveBeenCalled();
+    expect(txDepCreateMany).not.toHaveBeenCalled();
   });
 
   it("excludes the task's own edges from the graph it validates against", async () => {
     taskFindMany.mockResolvedValue([{ id: 't2' }]);
     await cap.execute({ taskId: 't1', dependsOnTaskIds: ['t2'] }, ctx());
     // Its current edges are being replaced, so they must not count toward a cycle.
-    expect(depFindMany).toHaveBeenCalledWith({
+    expect(txDepFindMany).toHaveBeenCalledWith({
       where: { task: { feature: { projectId: 'p1' } }, taskId: { not: 't1' } },
       select: { taskId: true, dependsOnTaskId: true },
     });
+  });
+
+  it('proves acyclicity inside a Serializable transaction, not before it', async () => {
+    taskFindMany.mockResolvedValue([{ id: 't2' }]);
+    await cap.execute({ taskId: 't1', dependsOnTaskIds: ['t2'] }, ctx());
+    // Serializable is the part that actually closes the race: under Read
+    // Committed both writers would validate clean and both would commit.
+    expect(runTx).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
+    // And the graph read must be the transaction's, not the bare client's.
+    expect(txDepFindMany).toHaveBeenCalled();
+  });
+
+  it('leaves a scalar-only edit at the default isolation', async () => {
+    await cap.execute({ taskId: 't1', title: 'New title' }, ctx());
+    // A single-row write has nothing to serialize against. Raising its isolation
+    // would trade a harmless row-lock wait for a P2034 the caller must retry —
+    // and nothing retries, so the edit would simply be lost.
+    expect(runTx).toHaveBeenCalledWith(expect.any(Function), undefined);
+  });
+
+  it('retries a serialization failure and succeeds on the re-run', async () => {
+    taskFindMany.mockResolvedValue([{ id: 't2' }]);
+    // SSI aborts the loser of a write conflict, but the loser was not wrong —
+    // re-running it against the winner's committed edges is the whole remedy.
+    runTx.mockRejectedValueOnce(writeConflict());
+    const r = await cap.execute({ taskId: 't1', dependsOnTaskIds: ['t2'] }, ctx());
+    expect(r.success).toBe(true);
+    expect(runTx).toHaveBeenCalledTimes(2);
+  });
+
+  it('maps an unrelenting serialization failure to concurrent_modification', async () => {
+    taskFindMany.mockResolvedValue([{ id: 't2' }]);
+    runTx.mockRejectedValue(writeConflict());
+    const r = await cap.execute({ taskId: 't1', dependsOnTaskIds: ['t2'] }, ctx());
+    expect(r.error?.code).toBe('concurrent_modification');
+    expect(r.error?.message).toContain('retry');
+    // Bounded — a permanently-losing writer must not spin forever.
+    expect(runTx).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry a rejected edge set — a cycle is not a race', async () => {
+    taskFindMany.mockResolvedValue([{ id: 't2' }]);
+    txDepFindMany.mockResolvedValue([{ taskId: 't2', dependsOnTaskId: 't1' }]);
+    const r = await cap.execute({ taskId: 't1', dependsOnTaskIds: ['t2'] }, ctx());
+    expect(r.error?.code).toBe('dependency_cycle');
+    // Re-running would just re-derive the same cycle; retrying it would triple
+    // the work and could only ever return the same answer.
+    expect(runTx).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets an unrelated database error escape rather than mislabelling it', async () => {
+    taskFindMany.mockResolvedValue([{ id: 't2' }]);
+    runTx.mockRejectedValue(new Error('connection reset'));
+    await expect(cap.execute({ taskId: 't1', dependsOnTaskIds: ['t2'] }, ctx())).rejects.toThrow(
+      'connection reset'
+    );
   });
 
   it('combines a scalar patch and an edge replacement in one transaction', async () => {

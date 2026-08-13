@@ -32,6 +32,7 @@ import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess, canAccessProject } from '@/lib/projects/access';
 import { assertAcyclic, DependencyCycleError } from '@/lib/projects/dependency-graph';
+import { isWriteConflict, withWriteConflictRetry } from '@/lib/projects/write-conflict';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { redactedString } from '@/lib/security/redact';
 
@@ -270,27 +271,6 @@ export class UpdateFeatureCapability extends BaseCapability<Args, Data> {
           );
         }
       }
-      // Rebuild the project's full edge set with this feature's edges replaced,
-      // and prove it's still a DAG BEFORE writing anything.
-      const others = await prisma.featureDependency.findMany({
-        where: { feature: { projectId }, featureId: { not: args.featureId } },
-        select: { featureId: true, dependsOnFeatureId: true },
-      });
-      const edges = [
-        ...others.map((e) => ({ from: e.featureId, to: e.dependsOnFeatureId })),
-        ...depsToSet.map((to) => ({ from: args.featureId, to })),
-      ];
-      try {
-        assertAcyclic(edges);
-      } catch (err) {
-        if (err instanceof DependencyCycleError) {
-          return this.error(
-            `Dependencies would form a cycle: ${err.cycle.join(' → ')}.`,
-            'dependency_cycle'
-          );
-        }
-        throw err;
-      }
       updated.push('dependencies');
     }
 
@@ -298,23 +278,72 @@ export class UpdateFeatureCapability extends BaseCapability<Args, Data> {
       return this.error('No fields to update were provided.', 'nothing_to_update');
     }
 
-    await executeTransaction(async (tx) => {
-      if (Object.keys(data).length > 0) {
-        await tx.feature.update({ where: { id: args.featureId }, data });
+    try {
+      await withWriteConflictRetry(() =>
+        executeTransaction(
+          async (tx) => {
+            // The proof runs FIRST, before any write — see `update_task` for why
+            // relying on rollback alone is worse under Serializable.
+            if (depsToSet !== null) {
+              // Rebuild the project's full edge set with this feature's edges
+              // replaced, and prove it's still a DAG. This read lives INSIDE the
+              // transaction so the proof and the write share one snapshot.
+              const others = await tx.featureDependency.findMany({
+                where: { feature: { projectId }, featureId: { not: args.featureId } },
+                select: { featureId: true, dependsOnFeatureId: true },
+              });
+              const edges = [
+                ...others.map((e) => ({ from: e.featureId, to: e.dependsOnFeatureId })),
+                ...depsToSet.map((to) => ({ from: args.featureId, to })),
+              ];
+              // Throws DependencyCycleError → the transaction rolls back, so a
+              // rejected edge set never leaves a partial write behind.
+              assertAcyclic(edges);
+            }
+            if (Object.keys(data).length > 0) {
+              await tx.feature.update({ where: { id: args.featureId }, data });
+            }
+            if (depsToSet !== null) {
+              // Replace the outgoing edge set (idempotent via the @@unique constraint).
+              await tx.featureDependency.deleteMany({ where: { featureId: args.featureId } });
+              if (depsToSet.length > 0) {
+                await tx.featureDependency.createMany({
+                  data: depsToSet.map((dependsOnFeatureId) => ({
+                    featureId: args.featureId,
+                    dependsOnFeatureId,
+                  })),
+                });
+              }
+            }
+          },
+          // Serializable is what actually closes the race — moving the read inside
+          // the transaction is necessary but NOT sufficient: under Read Committed
+          // neither transaction sees the other's uncommitted edge, so both would
+          // still validate clean and both would commit, leaving a cycle. Kept in
+          // lockstep with `update_task`, the other read-then-write graph verb: SSI
+          // holds only among transactions that are themselves serializable, so the
+          // pair must match. See that file for why the create_*/plan_* writers
+          // correctly stay at the default isolation, and why this is scoped to
+          // the edge path rather than every edit this verb makes.
+          depsToSet !== null ? { isolationLevel: 'Serializable' } : undefined
+        )
+      );
+    } catch (err) {
+      if (err instanceof DependencyCycleError) {
+        return this.error(
+          `Dependencies would form a cycle: ${err.cycle.join(' → ')}.`,
+          'dependency_cycle'
+        );
       }
-      if (depsToSet !== null) {
-        // Replace the outgoing edge set (idempotent via the @@unique constraint).
-        await tx.featureDependency.deleteMany({ where: { featureId: args.featureId } });
-        if (depsToSet.length > 0) {
-          await tx.featureDependency.createMany({
-            data: depsToSet.map((dependsOnFeatureId) => ({
-              featureId: args.featureId,
-              dependsOnFeatureId,
-            })),
-          });
-        }
+      if (isWriteConflict(err)) {
+        // Only reached once the in-process retries are also exhausted.
+        return this.error(
+          'A concurrent change to this feature kept winning. Re-read it and retry.',
+          'concurrent_modification'
+        );
       }
-    });
+      throw err;
+    }
 
     logAdminAction({
       userId,
