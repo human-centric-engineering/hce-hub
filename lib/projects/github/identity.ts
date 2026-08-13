@@ -4,18 +4,20 @@
  * The satellite service behind the `app_user_github` table: a Hub user links a
  * verified GitHub identity (via the OAuth *linking* flow, t-2) so that GitHub
  * activity can be attributed to them. Two consumers read through
- * {@link resolveHubUserByGithub}: `merged_by` attribution in f-github-sync's
+ * {@link resolveHubUserByGithubId}: `merged_by` attribution in f-github-sync's
  * reconcile (t-4), and future Sunrise-project issue/PR authorship (§27).
  *
  * The identity is written from a verified OAuth round-trip — never a self-typed
  * login — so `githubUserId` (GitHub's immutable numeric id) is trustworthy and is
- * the primary match key. The token used to fetch it is discarded, not stored.
+ * the **only** match key for attribution. The token used to fetch it is
+ * discarded, not stored.
  *
  * @see prisma/schema/app.prisma — model `UserGithubIdentity` (@@map app_user_github)
  * @see .context/app/github-identity.md
  */
-import type { UserGithubIdentity } from '@prisma/client';
+import { Prisma, type UserGithubIdentity } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
+import { ConflictError } from '@/lib/api/errors';
 
 /** The verified GitHub identity fields, from the OAuth `/user` response. */
 export interface GithubIdentityInput {
@@ -39,7 +41,7 @@ export function getGithubIdentity(userId: string): Promise<UserGithubIdentity | 
  * `githubLogin` constraints reject linking a GitHub account already claimed by a
  * different Hub user (the caller — t-2 — surfaces that as a clean error).
  */
-export function upsertGithubIdentity(
+export async function upsertGithubIdentity(
   userId: string,
   input: GithubIdentityInput
 ): Promise<UserGithubIdentity> {
@@ -48,11 +50,22 @@ export function upsertGithubIdentity(
     githubLogin: input.githubLogin,
     avatarUrl: input.avatarUrl ?? null,
   };
-  return prisma.userGithubIdentity.upsert({
-    where: { userId },
-    create: { userId, ...fields },
-    update: fields,
-  });
+  try {
+    return await prisma.userGithubIdentity.upsert({
+      where: { userId },
+      create: { userId, ...fields },
+      update: fields,
+    });
+  } catch (err) {
+    // A unique-constraint hit (`githubUserId` / `githubLogin`) means this GitHub
+    // account is already linked to a *different* Hub user. Surface it as a domain
+    // conflict, not a raw Prisma 500, so every caller gets a clean error — not
+    // only the t-2 OAuth callback.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw new ConflictError('This GitHub account is already linked to another user.');
+    }
+    throw err;
+  }
 }
 
 /** Remove a user's GitHub link. Idempotent — a no-op if they have none. */
@@ -61,30 +74,20 @@ export async function disconnectGithubIdentity(userId: string): Promise<void> {
 }
 
 /**
- * Resolve a GitHub actor (from a webhook payload or the API) to the Hub user who
- * owns it, or `null` if that GitHub account is not linked to any Hub user.
+ * Resolve a GitHub account to the Hub user who linked it, by GitHub's **immutable
+ * numeric id** — or `null` if it is not linked to any Hub user.
  *
- * **Id-first.** The numeric id is immutable and rename-proof, so it is the
- * trustworthy match; `login` is only a fallback for payloads that carry a
- * username but no id. A renamed account still resolves by id.
+ * **Id only, by design.** A GitHub `login` is mutable and recyclable: a user can
+ * rename, freeing the old username for someone else to claim. Matching on a login
+ * would therefore resolve a stale username to the wrong Hub user — a silent
+ * misattribution of "who merged this". The numeric id never changes, and every
+ * source the Hub attributes from (the f-github-sync webhook `merged_by`, the
+ * GitHub API) always carries it, so id-only loses nothing.
  */
-export async function resolveHubUserByGithub(actor: {
-  id?: string | null;
-  login?: string | null;
-}): Promise<string | null> {
-  if (actor.id) {
-    const byId = await prisma.userGithubIdentity.findUnique({
-      where: { githubUserId: actor.id },
-      select: { userId: true },
-    });
-    if (byId) return byId.userId;
-  }
-  if (actor.login) {
-    const byLogin = await prisma.userGithubIdentity.findUnique({
-      where: { githubLogin: actor.login },
-      select: { userId: true },
-    });
-    if (byLogin) return byLogin.userId;
-  }
-  return null;
+export async function resolveHubUserByGithubId(githubUserId: string): Promise<string | null> {
+  const row = await prisma.userGithubIdentity.findUnique({
+    where: { githubUserId },
+    select: { userId: true },
+  });
+  return row?.userId ?? null;
 }

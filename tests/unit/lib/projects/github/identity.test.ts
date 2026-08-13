@@ -1,11 +1,13 @@
 /**
  * Tests for `lib/projects/github/identity.ts` — the GitHub identity ↔ Hub user
  * satellite service (f-github-identity §23 t-73). Pins the upsert-by-userId
- * (link/re-link idempotency), disconnect, and the security-relevant resolver
- * contract: **id-first, login fallback** — the numeric id is the trustworthy,
- * rename-proof match key that `merged_by` attribution relies on.
+ * (link/re-link idempotency), the conflict-error translation, disconnect, and the
+ * security-relevant resolver contract: **id only** — the immutable numeric id is
+ * the trustworthy match key; a mutable/recyclable login is deliberately never one.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Prisma } from '@prisma/client';
+import { ConflictError } from '@/lib/api/errors';
 
 vi.mock('@/lib/db/client', () => ({
   prisma: {
@@ -22,7 +24,7 @@ const {
   getGithubIdentity,
   upsertGithubIdentity,
   disconnectGithubIdentity,
-  resolveHubUserByGithub,
+  resolveHubUserByGithubId,
 } = await import('@/lib/projects/github/identity');
 
 const findUnique = prisma.userGithubIdentity.findUnique as ReturnType<typeof vi.fn>;
@@ -71,6 +73,27 @@ describe('upsertGithubIdentity', () => {
     await upsertGithubIdentity('u1', { githubUserId: '12345', githubLogin: 'octocat' });
     expect(upsert.mock.calls[0][0].create.avatarUrl).toBeNull();
   });
+
+  it('translates a unique-constraint hit into a ConflictError, not a raw Prisma 500', async () => {
+    // Re-linking to a GitHub account already owned by another Hub user violates
+    // the unique githubUserId/githubLogin constraint.
+    const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+      code: 'P2002',
+      clientVersion: 'test',
+    });
+    upsert.mockRejectedValue(p2002);
+    await expect(
+      upsertGithubIdentity('u1', { githubUserId: '200', githubLogin: 'taken' })
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('rethrows a non-P2002 database error unchanged', async () => {
+    const other = new Error('connection reset');
+    upsert.mockRejectedValue(other);
+    await expect(
+      upsertGithubIdentity('u1', { githubUserId: '200', githubLogin: 'x' })
+    ).rejects.toBe(other);
+  });
 });
 
 describe('disconnectGithubIdentity', () => {
@@ -81,47 +104,31 @@ describe('disconnectGithubIdentity', () => {
   });
 });
 
-describe('resolveHubUserByGithub — id-first, login fallback', () => {
-  it('matches on the immutable numeric id first (ignores login when id resolves)', async () => {
-    findUnique.mockResolvedValueOnce({ userId: 'u1' }); // by githubUserId
-    const res = await resolveHubUserByGithub({ id: '12345', login: 'renamed' });
+describe('resolveHubUserByGithubId — id only, by design', () => {
+  it('resolves the Hub user by the immutable numeric id', async () => {
+    findUnique.mockResolvedValue({ userId: 'u1' });
+    const res = await resolveHubUserByGithubId('12345');
     expect(res).toBe('u1');
-    expect(findUnique).toHaveBeenCalledTimes(1);
     expect(findUnique).toHaveBeenCalledWith({
       where: { githubUserId: '12345' },
       select: { userId: true },
     });
   });
 
-  it('falls back to login when the id does not resolve', async () => {
-    findUnique
-      .mockResolvedValueOnce(null) // by githubUserId
-      .mockResolvedValueOnce({ userId: 'u2' }); // by githubLogin
-    const res = await resolveHubUserByGithub({ id: '999', login: 'octocat' });
-    expect(res).toBe('u2');
-    expect(findUnique).toHaveBeenNthCalledWith(2, {
-      where: { githubLogin: 'octocat' },
-      select: { userId: true },
-    });
-  });
-
-  it('resolves by login alone when no id is present', async () => {
-    findUnique.mockResolvedValueOnce({ userId: 'u3' });
-    const res = await resolveHubUserByGithub({ login: 'octocat' });
-    expect(res).toBe('u3');
-    expect(findUnique).toHaveBeenCalledWith({
-      where: { githubLogin: 'octocat' },
-      select: { userId: true },
-    });
-  });
-
-  it('returns null when neither id nor login is linked', async () => {
+  it('returns null when the id is not linked to any Hub user', async () => {
     findUnique.mockResolvedValue(null);
-    expect(await resolveHubUserByGithub({ id: '999', login: 'ghost' })).toBeNull();
+    expect(await resolveHubUserByGithubId('999')).toBeNull();
   });
 
-  it('returns null for an empty actor without querying', async () => {
-    expect(await resolveHubUserByGithub({})).toBeNull();
-    expect(findUnique).not.toHaveBeenCalled();
+  it('never queries by login — a mutable/recyclable username is not a match key', async () => {
+    findUnique.mockResolvedValue(null);
+    await resolveHubUserByGithubId('12345');
+    // Exactly one lookup, and it is the id lookup — no login fallback exists.
+    expect(findUnique).toHaveBeenCalledTimes(1);
+    expect(findUnique).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ githubLogin: expect.anything() }),
+      })
+    );
   });
 });
