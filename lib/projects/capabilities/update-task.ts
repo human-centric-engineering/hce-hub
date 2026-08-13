@@ -1,9 +1,18 @@
 /**
  * `update_task` — edit an existing task's authored fields (f-authoring-fidelity
  * §21 t-b). The MCP verb that lets the record be *corrected from the Hub* rather
- * than the DB: `title`, `description`, `doneWhen`, `filesScope`. A `note`-style
- * amendment, so it emits **no** `ProjectEventKind` (the lifecycle events —
- * created/started/merged — stay meaningful); it is audit-logged.
+ * than the DB: `title`, `description`, `doneWhen`, `filesScope`, and its
+ * **dependency edges** (cycle-guarded). A `note`-style amendment, so it emits
+ * **no** `ProjectEventKind` (the lifecycle events — created/started/merged —
+ * stay meaningful); it is audit-logged.
+ *
+ * `dependsOnTaskIds`, when supplied, **replaces** the task's outgoing edge set
+ * (mirroring `update_feature`'s `dependsOnFeatureIds`): every target is verified
+ * to be in the same project, and the whole task graph is proven acyclic before
+ * any write. Unlike `create_task` — which adds a new leaf whose edges are
+ * outgoing-only and so can never close a cycle — this connects two *existing*
+ * tasks, which is precisely where the guard is load-bearing (planning-retro
+ * B26/HB4). An empty array clears every edge.
  *
  * Only the fields you supply change — an omitted field is left untouched; a
  * `null` `description`/`doneWhen` clears it. At least one editable field must be
@@ -24,7 +33,9 @@ import type {
   CapabilityResult,
 } from '@/lib/orchestration/capabilities/types';
 import { prisma } from '@/lib/db/client';
+import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess } from '@/lib/projects/access';
+import { assertAcyclic, DependencyCycleError } from '@/lib/projects/dependency-graph';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { redactedString } from '@/lib/security/redact';
 
@@ -47,6 +58,12 @@ const schema = z.object({
     .array(z.string())
     .optional()
     .describe('New file-scope list — replaces the existing one.'),
+  dependsOnTaskIds: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'New dependency set — replaces the existing edges (existing tasks in this project). An empty array clears them.'
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -64,7 +81,7 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'update_task',
     description:
-      "Edit an existing task's fields: title, description (markdown), done-when (acceptance contract), and/or file scope. Only the fields you supply change; a null description/done-when clears it. Only the feature's owner or a project lead may edit its tasks. Does not change status.",
+      "Edit an existing task's fields: title, description (markdown), done-when (acceptance contract), file scope, and/or its dependencies (replaces the existing edges; rejected if it would create a cycle). Only the fields you supply change; a null description/done-when clears it. Only the feature's owner or a project lead may edit its tasks. Does not change status.",
     parameters: {
       type: 'object',
       properties: {
@@ -79,6 +96,12 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
           type: 'array',
           items: { type: 'string' },
           description: 'New file-scope list — replaces the existing one.',
+        },
+        dependsOnTaskIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'New dependency set — replaces the existing edges (existing tasks in this project). An empty array clears them.',
         },
       },
       required: ['taskId'],
@@ -102,6 +125,7 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
         description: mask(args.description, 'description'),
         doneWhen: mask(args.doneWhen, 'doneWhen'),
         filesScope: args.filesScope,
+        dependsOnTaskIds: args.dependsOnTaskIds,
       },
       resultPreview: JSON.stringify(result),
     };
@@ -133,16 +157,18 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
       data.filesScope = { set: args.filesScope };
       updated.push('filesScope');
     }
-    if (updated.length === 0) {
+    // `dependsOnTaskIds` is editable but not part of `data`, so it counts here.
+    if (updated.length === 0 && args.dependsOnTaskIds === undefined) {
       return this.error('No fields to update were provided.', 'nothing_to_update');
     }
 
     // Resolve the task's feature for the owner-tier funnel. A missing task is
     // not_found; the funnel then maps non-member → not_found, member-non-owner →
-    // forbidden (no enumeration).
+    // forbidden (no enumeration). The feature's `projectId` scopes the dependency
+    // validation below.
     const task = await prisma.task.findUnique({
       where: { id: args.taskId },
-      select: { id: true, featureId: true },
+      select: { id: true, featureId: true, feature: { select: { projectId: true } } },
     });
     if (!task) {
       return this.error(`Task ${args.taskId} not found.`, 'not_found');
@@ -159,7 +185,65 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
         : this.error('Only the feature owner or a project lead can edit its tasks.', 'forbidden');
     }
 
-    await prisma.task.update({ where: { id: task.id }, data });
+    // Dependency-edge replacement — validate targets, prove the whole task graph
+    // stays acyclic, then swap the edges inside the transaction.
+    const projectId = task.feature.projectId;
+    let depsToSet: string[] | null = null;
+    if (args.dependsOnTaskIds !== undefined) {
+      depsToSet = [...new Set(args.dependsOnTaskIds)];
+      if (depsToSet.includes(task.id)) {
+        return this.error('A task cannot depend on itself.', 'dependency_cycle');
+      }
+      if (depsToSet.length > 0) {
+        const found = await prisma.task.findMany({
+          where: { id: { in: depsToSet }, feature: { projectId } },
+          select: { id: true },
+        });
+        if (found.length !== depsToSet.length) {
+          return this.error(
+            'One or more dependencies were not found in this project.',
+            'invalid_dependency'
+          );
+        }
+      }
+      // Rebuild the project's full task-edge set with this task's outgoing edges
+      // replaced, and prove it's still a DAG BEFORE writing anything.
+      const others = await prisma.taskDependency.findMany({
+        where: { task: { feature: { projectId } }, taskId: { not: task.id } },
+        select: { taskId: true, dependsOnTaskId: true },
+      });
+      const edges = [
+        ...others.map((e) => ({ from: e.taskId, to: e.dependsOnTaskId })),
+        ...depsToSet.map((to) => ({ from: task.id, to })),
+      ];
+      try {
+        assertAcyclic(edges);
+      } catch (err) {
+        if (err instanceof DependencyCycleError) {
+          return this.error(
+            `Dependencies would form a cycle: ${err.cycle.join(' → ')}.`,
+            'dependency_cycle'
+          );
+        }
+        throw err;
+      }
+      updated.push('dependencies');
+    }
+
+    await executeTransaction(async (tx) => {
+      if (Object.keys(data).length > 0) {
+        await tx.task.update({ where: { id: task.id }, data });
+      }
+      if (depsToSet !== null) {
+        // Replace the outgoing edge set (idempotent via the @@unique constraint).
+        await tx.taskDependency.deleteMany({ where: { taskId: task.id } });
+        if (depsToSet.length > 0) {
+          await tx.taskDependency.createMany({
+            data: depsToSet.map((dependsOnTaskId) => ({ taskId: task.id, dependsOnTaskId })),
+          });
+        }
+      }
+    });
 
     logAdminAction({
       userId,

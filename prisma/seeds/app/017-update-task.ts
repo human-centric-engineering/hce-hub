@@ -9,7 +9,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const updateTaskFunctionDefinition = {
   name: 'update_task',
   description:
-    "Edit an existing task's fields: title, description (markdown), done-when (acceptance contract), and/or file scope. Only the fields you supply change; a null description/done-when clears it. Only the feature's owner or a project lead may edit its tasks. Does not change status.",
+    "Edit an existing task's fields: title, description (markdown), done-when (acceptance contract), file scope, and/or its dependencies (replaces the existing edges; rejected if it would create a cycle). Only the fields you supply change; a null description/done-when clears it. Only the feature's owner or a project lead may edit its tasks. Does not change status.",
   parameters: {
     type: 'object',
     properties: {
@@ -24,6 +24,12 @@ export const updateTaskFunctionDefinition = {
         type: 'array',
         items: { type: 'string' },
         description: 'New file-scope list — replaces the existing one.',
+      },
+      dependsOnTaskIds: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'New dependency set — replaces the existing edges (existing tasks in this project). An empty array clears them.',
       },
     },
     required: ['taskId'],
@@ -42,7 +48,7 @@ const unit: SeedUnit = {
         slug: 'update_task',
         name: 'Update Task',
         description:
-          "Edit an existing task's title/description/done-when/file-scope. Owner-tier; no status change; audited.",
+          "Edit an existing task's title/description/done-when/file-scope, and replace its dependency edges (cycle-guarded). Owner-tier; no status change; audited.",
         category: 'coordination',
         executionType: 'internal',
         executionHandler: 'UpdateTaskCapability',
