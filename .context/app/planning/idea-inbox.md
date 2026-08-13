@@ -1,6 +1,7 @@
 ---
-status: holding-pen
+status: retired
 opened: 2026-08-06
+drained: 2026-08-13
 parent: next-phase-brief.md
 ---
 
@@ -13,6 +14,26 @@ fork — captured here so nothing's lost, and to be the **first real dataset** w
 the machinery lands: ideas become captures (then promote-to-current-phase), bugs
 become `bug`-kind tasks ([bug-handling](./bug-handling.md)). Once migrated in, this file retires —
 the same markdown→Hub move as the chubproject cutover.
+
+> **Retired 2026-08-13 — drained into the Hub.** This file is now history; the Hub
+> is the record. It outlived its own retirement clause by a week: it said it would
+> retire "once migrated in", `f-idea-capture` shipped, and nothing drained it — so
+> item 3 (no logout affordance) sat here unfiled the whole time. That leak is why
+> [work-triage](./work-triage.md) gives triage an explicit cadence rather than
+> leaving it to happen naturally.
+>
+> | # | Disposition |
+> | --- | --- |
+> | 1 | §23 `f-github-identity` — **shipped** |
+> | 2 | §24 `f-invite-provisioning` — available |
+> | 3 | §34 `f-account-menu` — filed 2026-08-13 (grew from a bug into a small feature: the popover, composed from Sunrise's `UserButton` building-blocks) |
+> | 4 | homed into §27 `f-sunrise-project` t-1 (now under the **Sunrise Management** phase) |
+> | 5 | **unverified** — no `bug`-kind task exists for it; check whether the Log renders markdown via `components/hub/markdown.tsx` before filing |
+> | 6 | folded into §22 `f-phases` t-2 — **shipped** (board merged-column cap) |
+> | 7 | idea **#10** in the Hub inbox — deferred with a trigger (when `read_only` is introduced) |
+> | 8 | **t-78** `bug` on §22 `f-phases` |
+> | 9 | **dropped** — decision recorded: feature close-out stays manual, the ship narrative is the point of the step |
+> | 10 | **delivered** — `create_feature` takes `phaseId`, and `list_phases` shipped with t-70. Retired, not filed |
 
 **Triage key:** `phase-feature` (a real feature for this phase) · `quick-win`
 (small, do soon) · `bug` (a defect → `bug`-kind task per [bug-handling](./bug-handling.md)) ·
