@@ -468,15 +468,19 @@ model ProjectEvent {
 /// core `user` via a plain-String hand-FK (no `@relation` — that needs a field
 /// ON User; CUSTOMIZATION §5), ON DELETE CASCADE (the link is the user's personal
 /// data, erased with them). Written once by the OAuth *linking* flow (t-2) and
-/// refreshed on re-link; the OAuth token is never stored. `githubUserId` is
-/// GitHub's immutable numeric id (the spoof/rename-proof key that `merged_by`
-/// attribution matches on); `githubLogin` is the current username. Both unique —
-/// one GitHub account maps to at most one Hub user.
+/// refreshed on re-link; the OAuth token is never stored.
+///
+/// `githubUserId` is GitHub's immutable numeric id — the **sole identity key**
+/// (`@unique`), the spoof/rename-proof value `merged_by` attribution matches on
+/// (see lib/projects/github/identity.ts). `githubLogin` is the *current* username:
+/// deliberately NOT unique, because a login is mutable and recyclable (a user
+/// renames, another claims the freed name), so a stale login must never collide
+/// with — and block — a legitimate new link.
 model UserGithubIdentity {
   id           String   @id @default(cuid())
   userId       String   @unique // hand-FK → "user" · ON DELETE CASCADE (the link is the user's)
-  githubUserId String   @unique // GitHub's immutable numeric id, stored as a string
-  githubLogin  String   @unique // current GitHub username (mutable upstream; id is the stable key)
+  githubUserId String   @unique // GitHub's immutable numeric id, stored as a string — the identity key
+  githubLogin  String // current GitHub username (mutable/recyclable — descriptive, not a key)
   avatarUrl    String?
   connectedAt  DateTime @default(now())
   updatedAt    DateTime @updatedAt

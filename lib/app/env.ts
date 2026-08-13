@@ -26,4 +26,20 @@ export const appEnvSchema = z.object({
    * can't reach `.test`/localhost, so this is a prod-only activation.
    */
   GITHUB_WEBHOOK_SECRET: z.string().min(1).optional(),
+
+  /**
+   * GitHub OAuth app credentials for the member GitHub **linking** flow
+   * (f-github-identity §23) — a signed-in user links their GitHub identity so
+   * their activity (`merged_by`, authorship) can be attributed. This is NOT a
+   * sign-in provider: it never creates or authenticates an account.
+   *
+   * Optional — when EITHER is unset the linking routes return 503 and the feature
+   * stays dormant, like `GITHUB_WEBHOOK_SECRET` above. Set BOTH (deployment env),
+   * paired with a GitHub OAuth app whose Authorization callback URL is
+   * `${BETTER_AUTH_URL}/api/v1/users/me/github/callback`. The access token the
+   * flow obtains is used once to read the GitHub id/login and then discarded —
+   * never stored.
+   */
+  GITHUB_CLIENT_ID: z.string().min(1).optional(),
+  GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
 });
