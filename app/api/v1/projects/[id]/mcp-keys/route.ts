@@ -1,30 +1,25 @@
 /**
  * Member self-service MCP keys — collection (f-mcp-project-scope §31 t-C).
  *
- * GET  /api/v1/projects/:projectId/mcp-keys — the caller's own keys for the project
- * POST /api/v1/projects/:projectId/mcp-keys — mint one (plaintext returned once)
+ * GET  /api/v1/projects/:id/mcp-keys — the caller's own keys for the project
+ * POST /api/v1/projects/:id/mcp-keys — mint one (plaintext returned once)
  *
  * Fork-owned, member-facing (`withAuth`, not `withAdminAuth`): any project member
  * may manage their OWN project-scoped keys. The scope + scopes are forced by the
- * service — a member never chooses them. `:projectId` is a slug or cuid, resolved
+ * service — a member never chooses them. `:id` is a slug or cuid, resolved
  * through the membership funnel (non-member / unknown ⇒ 404, anti-enumeration).
  * Rate limiting is the automatic `/api/v1/**` section cap (proxy.ts).
  */
 import { withAuth } from '@/lib/auth/guards';
 import { successResponse } from '@/lib/api/responses';
-import { validateRequestBody } from '@/lib/api/validation';
 import { getRouteLogger } from '@/lib/api/context';
 import { getClientIP } from '@/lib/security/ip';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
-import {
-  listProjectMcpKeys,
-  createProjectMcpKey,
-  projectMcpKeyCreateSchema,
-} from '@/lib/projects/mcp-keys';
+import { listProjectMcpKeys, createProjectMcpKey } from '@/lib/projects/mcp-keys';
 
-export const GET = withAuth<{ projectId: string }>(async (request, session, { params }) => {
+export const GET = withAuth<{ id: string }>(async (request, session, { params }) => {
   const log = await getRouteLogger(request);
-  const { projectId } = await params;
+  const { id: projectId } = await params;
 
   const keys = await listProjectMcpKeys(session.user.id, projectId);
 
@@ -36,13 +31,13 @@ export const GET = withAuth<{ projectId: string }>(async (request, session, { pa
   return successResponse({ keys });
 });
 
-export const POST = withAuth<{ projectId: string }>(async (request, session, { params }) => {
+export const POST = withAuth<{ id: string }>(async (request, session, { params }) => {
   const log = await getRouteLogger(request);
   const clientIP = getClientIP(request);
-  const { projectId } = await params;
+  const { id: projectId } = await params;
 
-  const body = await validateRequestBody(request, projectMcpKeyCreateSchema);
-  const { key, plaintext } = await createProjectMcpKey(session.user.id, projectId, body);
+  // No request body — the key is one-per-project and auto-named by the service.
+  const { key, plaintext } = await createProjectMcpKey(session.user.id, projectId);
 
   log.info('Project MCP key created', {
     userId: session.user.id,

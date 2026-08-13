@@ -64,4 +64,4 @@ export interface ProjectViewDTO {
 }
 
 /** The project-view tabs (linkable via `?view=`). */
-export type ProjectTab = 'plan' | 'board' | 'log' | 'ideas';
+export type ProjectTab = 'plan' | 'board' | 'log' | 'ideas' | 'connect';

@@ -1,7 +1,7 @@
 /**
  * Member self-service MCP keys — one key (f-mcp-project-scope §31 t-C).
  *
- * DELETE /api/v1/projects/:projectId/mcp-keys/:keyId — revoke (delete) your key
+ * DELETE /api/v1/projects/:id/mcp-keys/:keyId — revoke (delete) your key
  *
  * Fork-owned, member-facing. The service enforces ownership + project scope, so a
  * member can only revoke a key they created that is scoped to this project;
@@ -15,11 +15,11 @@ import { cuidSchema } from '@/lib/validations/common';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { revokeProjectMcpKey } from '@/lib/projects/mcp-keys';
 
-export const DELETE = withAuth<{ projectId: string; keyId: string }>(
+export const DELETE = withAuth<{ id: string; keyId: string }>(
   async (request, session, { params }) => {
     const log = await getRouteLogger(request);
     const clientIP = getClientIP(request);
-    const { projectId, keyId } = await params;
+    const { id: projectId, keyId } = await params;
     cuidSchema.parse(keyId);
 
     const revoked = await revokeProjectMcpKey(session.user.id, projectId, keyId);

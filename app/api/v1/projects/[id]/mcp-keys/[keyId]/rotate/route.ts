@@ -1,7 +1,7 @@
 /**
  * Member self-service MCP keys — rotate (f-mcp-project-scope §31 t-C).
  *
- * POST /api/v1/projects/:projectId/mcp-keys/:keyId/rotate — fresh material,
+ * POST /api/v1/projects/:id/mcp-keys/:keyId/rotate — fresh material,
  * the old secret is invalidated immediately; new plaintext returned once.
  *
  * No request body — rotation refreshes the secret (expiry is a create-time choice;
@@ -18,11 +18,11 @@ import { cuidSchema } from '@/lib/validations/common';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { rotateProjectMcpKey } from '@/lib/projects/mcp-keys';
 
-export const POST = withAuth<{ projectId: string; keyId: string }>(
+export const POST = withAuth<{ id: string; keyId: string }>(
   async (request, session, { params }) => {
     const log = await getRouteLogger(request);
     const clientIP = getClientIP(request);
-    const { projectId, keyId } = await params;
+    const { id: projectId, keyId } = await params;
     cuidSchema.parse(keyId);
 
     const { key, plaintext, previousPrefix } = await rotateProjectMcpKey(

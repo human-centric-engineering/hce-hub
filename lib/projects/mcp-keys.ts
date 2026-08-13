@@ -23,7 +23,6 @@
  * Membership is the [[f-access]] funnel's (`getAccessibleProjectByRef`): a
  * non-member — or unknown project — is `NotFoundError` (→ 404), never a 403.
  */
-import { z } from 'zod';
 import { prisma } from '@/lib/db/client';
 import type { Prisma } from '@prisma/client';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
@@ -40,11 +39,12 @@ import { McpScope } from '@/types/mcp';
 export const PROJECT_KEY_SCOPES: string[] = [McpScope.TOOLS_LIST, McpScope.TOOLS_EXECUTE];
 
 /**
- * Per-member, per-project cap on active keys — a self-service surface must not
- * accumulate unboundedly. Generous (a dev might have a few machines / repos) but
- * bounded; revoke one to mint past it.
+ * A member gets **one** key per project — a session binds a repo to a project, and
+ * one credential per member per project is all that needs. Generating when one
+ * already exists is refused; the member **regenerates** (fresh secret, same row) or
+ * revokes instead. The admin key routes remain for anything richer.
  */
-export const MAX_ACTIVE_KEYS_PER_PROJECT = 20;
+export const MAX_ACTIVE_KEYS_PER_PROJECT = 1;
 
 /** Client-safe projection — never the credential-derived `keyHash`. */
 const SAFE_SELECT = {
@@ -70,24 +70,6 @@ export interface MintedProjectMcpKey {
   /** On rotation, the invalidated key's prefix (for the audit trail). */
   previousPrefix?: string;
 }
-
-/**
- * Create-body: a member chooses only the name (and an optional future expiry).
- * The "future" bound is a `.refine` — evaluated **per request** — not
- * `.min(new Date())`, which Zod freezes at module construction (a stale bound on
- * a long-lived server would let an already-past expiry slip through).
- */
-export const projectMcpKeyCreateSchema = z.object({
-  name: z.string().min(1).max(100).trim(),
-  expiresAt: z.coerce
-    .date()
-    .nullable()
-    .optional()
-    .refine((d) => d == null || d.getTime() > Date.now(), {
-      message: 'Expiration must be in the future',
-    }),
-});
-export type ProjectMcpKeyCreateInput = z.infer<typeof projectMcpKeyCreateSchema>;
 
 /** Safely read a key's `scope.projectId` (the JSON column is never trusted raw). */
 function scopeProjectId(scope: Prisma.JsonValue | null): string | null {
@@ -138,20 +120,23 @@ export async function listProjectMcpKeys(
 }
 
 /**
- * Mint a project-scoped key for the caller. Scope + scopes are forced; the
- * plaintext is returned once. Refuses past the per-project active-key cap.
+ * Mint the caller's key for a project. Everything is derived / forced — the member
+ * chooses nothing:
+ *  - **one per project** — refuses if the caller already has an active key here
+ *    (they regenerate or revoke instead);
+ *  - **name** is `"<member> · <project>"` — not surfaced in the Connect UI, but the
+ *    label the admin API-keys page shows;
+ *  - **scope / scopes** are forced (see the module doc). The plaintext is returned
+ *    once.
  */
 export async function createProjectMcpKey(
   userId: string,
-  projectRef: string,
-  input: ProjectMcpKeyCreateInput
+  projectRef: string
 ): Promise<MintedProjectMcpKey> {
   const project = await getAccessibleProjectByRef(userId, projectRef);
 
-  // Accumulation guard — count the caller's active keys already on this project.
-  // Advisory, not a security boundary: a rare concurrent double-create is a
-  // read-then-write TOCTOU that could exceed the cap by one. Harmless (they're all
-  // the member's own project keys), so it isn't worth a transaction/lock.
+  // One key per project. (Read-then-write: a rare concurrent double-create could
+  // still make two — harmless, both the member's own; not worth a lock.)
   const existing = await prisma.mcpApiKey.findMany({
     where: { createdBy: userId, isActive: true },
     select: { scope: true },
@@ -159,19 +144,23 @@ export async function createProjectMcpKey(
   const activeForProject = existing.filter((k) => scopeProjectId(k.scope) === project.id).length;
   if (activeForProject >= MAX_ACTIVE_KEYS_PER_PROJECT) {
     throw new ValidationError(
-      `You already have ${MAX_ACTIVE_KEYS_PER_PROJECT} active keys for this project. Revoke one before minting another.`
+      'You already have a key for this project — regenerate it for a fresh secret, or revoke it first.'
     );
   }
+
+  // Auto-name: "<member> · <project>" (≤ 100 chars), so the admin API-keys page
+  // reads sensibly without asking the member for a label.
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+  const name = `${user?.name?.trim() || 'Member'} · ${project.name}`.slice(0, 100);
 
   const { plaintext, hash, prefix } = generateApiKey();
   const key = await prisma.mcpApiKey.create({
     data: {
-      name: input.name,
+      name,
       keyHash: hash,
       keyPrefix: prefix,
       scopes: PROJECT_KEY_SCOPES, // forced — a member cannot widen these
       scope: { projectId: project.id }, // forced — the canonical cuid, never a slug
-      expiresAt: input.expiresAt ?? null,
       createdBy: userId,
     },
     select: SAFE_SELECT,
@@ -180,10 +169,10 @@ export async function createProjectMcpKey(
 }
 
 /**
- * Rotate the caller's own project key: fresh material, the old secret invalidated
- * immediately. New plaintext returned once. Rotation refreshes the **secret** only
- * (expiry is a create-time choice); an **already-lapsed** expiry is cleared so the
- * fresh secret isn't dead on arrival, while a still-future expiry is preserved.
+ * Regenerate the caller's own project key: fresh secret on the same row, the old
+ * one invalidated immediately. New plaintext returned once. (Surfaced to the member
+ * as "Regenerate" — there is no separate rotation lifecycle; this *is* the fresh
+ * secret.)
  */
 export async function rotateProjectMcpKey(
   userId: string,
@@ -194,11 +183,14 @@ export async function rotateProjectMcpKey(
   const existing = await resolveOwnProjectKey(userId, project.id, keyId);
 
   const { plaintext, hash, prefix } = generateApiKey();
-  const data: Prisma.McpApiKeyUpdateInput = { keyHash: hash, keyPrefix: prefix };
-  // Don't rotate into a dead key: drop an already-lapsed expiry.
-  if (existing.expiresAt && existing.expiresAt.getTime() < Date.now()) data.expiresAt = null;
-
-  const key = await prisma.mcpApiKey.update({ where: { id: keyId }, data, select: SAFE_SELECT });
+  const key = await prisma.mcpApiKey.update({
+    where: { id: keyId },
+    // Clear any expiry alongside the fresh material: a key minted before this path
+    // was bodyless could carry a now-lapsed `expiresAt`, and regenerating must hand
+    // back a *working* secret, not a dead-on-arrival one.
+    data: { keyHash: hash, keyPrefix: prefix, expiresAt: null },
+    select: SAFE_SELECT,
+  });
   return { key, plaintext, previousPrefix: existing.keyPrefix };
 }
 

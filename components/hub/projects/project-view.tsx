@@ -8,6 +8,7 @@ import { PlanView } from '@/components/hub/projects/plan/plan-view';
 import { BoardView } from '@/components/hub/projects/board/board-view';
 import { LogView } from '@/components/hub/projects/log/log-view';
 import { IdeasView } from '@/components/hub/projects/ideas/ideas-view';
+import { ConnectPanel } from '@/components/hub/projects/connect/connect-panel';
 import { JotIdeaButton } from '@/components/hub/projects/ideas/jot-idea-button';
 import { ActiveFixesStrip } from '@/components/hub/projects/active-fixes-strip';
 import { TaskSheetProvider } from '@/components/hub/projects/task-sheet/task-sheet-host';
@@ -98,7 +99,7 @@ export function ProjectView({
             carries its own top spacing, so an empty strip leaves no gap). The Log
             is the history stream, so the strip doesn't belong over it. The list is
             defaulted defensively — a missing field should hide the strip, not crash. */}
-        {activeTab !== 'log' && activeTab !== 'ideas' && (
+        {activeTab !== 'log' && activeTab !== 'ideas' && activeTab !== 'connect' && (
           <ActiveFixesStrip fixes={project.activeFixes ?? []} projectId={project.id} />
         )}
 
@@ -127,6 +128,15 @@ export function ProjectView({
                 Couldn&rsquo;t load ideas just now — try refreshing.
               </p>
             )
+          ) : activeTab === 'connect' ? (
+            // Connect — the member's self-service scoped-key surface (f-mcp-project-scope
+            // §31 t-C/t-D), client-fetched. `repoUrls` come from the header DTO.
+            <ConnectPanel
+              projectId={project.id}
+              projectName={project.name}
+              serverName={project.slug ?? project.id}
+              repoUrls={project.repoUrls}
+            />
           ) : (
             // Log — the journal stream, client-fetched + filterable (f-journal §17).
             <LogView projectId={project.id} />
