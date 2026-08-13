@@ -19,6 +19,7 @@ import { clearInvalidSession } from '@/lib/auth/clear-session';
 import { prisma } from '@/lib/db/client';
 import { parseUserPreferences } from '@/lib/validations/user';
 import { SettingsTabs } from '@/components/settings/settings-tabs';
+import { AccountSections } from '@/components/account/account-sections';
 import { getInitials } from '@/lib/utils/initials';
 
 export const metadata: Metadata = {
@@ -103,6 +104,9 @@ export default async function SettingsPage() {
         oauthProviders={oauthProviders}
         initials={initials}
       />
+
+      {/* Fork-registered account sections (empty in vanilla Sunrise). */}
+      <AccountSections />
     </div>
   );
 }

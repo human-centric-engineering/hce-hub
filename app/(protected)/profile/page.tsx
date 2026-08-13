@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { AccountSections } from '@/components/account/account-sections';
 import { Mail, MapPin, Clock, Calendar, Pencil } from 'lucide-react';
 
 export const metadata: Metadata = {
@@ -163,6 +164,9 @@ export default async function ProfilePage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Fork-registered account sections (empty in vanilla Sunrise). */}
+      <AccountSections />
     </div>
   );
 }
