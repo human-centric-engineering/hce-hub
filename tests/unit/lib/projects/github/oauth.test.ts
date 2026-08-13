@@ -18,6 +18,7 @@ vi.mock('@/lib/env', () => ({
 const { env } = await import('@/lib/env');
 const {
   githubOAuthConfigured,
+  githubStateCookieSecure,
   githubCallbackUrl,
   buildGithubAuthorizeUrl,
   exchangeGithubCode,
@@ -27,6 +28,7 @@ const {
 const mutableEnv = env as unknown as Record<string, string | undefined>;
 const originalId = mutableEnv.GITHUB_CLIENT_ID;
 const originalSecret = mutableEnv.GITHUB_CLIENT_SECRET;
+const originalBaseUrl = mutableEnv.BETTER_AUTH_URL;
 
 function okJson(body: unknown) {
   return { ok: true, status: 200, json: async () => body } as unknown as Response;
@@ -38,6 +40,7 @@ function errStatus(status: number) {
 beforeEach(() => {
   mutableEnv.GITHUB_CLIENT_ID = originalId;
   mutableEnv.GITHUB_CLIENT_SECRET = originalSecret;
+  mutableEnv.BETTER_AUTH_URL = originalBaseUrl;
   vi.stubGlobal('fetch', vi.fn());
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -49,6 +52,14 @@ describe('githubOAuthConfigured', () => {
     expect(githubOAuthConfigured()).toBe(false);
     mutableEnv.GITHUB_CLIENT_ID = undefined;
     expect(githubOAuthConfigured()).toBe(false);
+  });
+});
+
+describe('githubStateCookieSecure', () => {
+  it('is true on an https base URL and false on plain http', () => {
+    expect(githubStateCookieSecure()).toBe(true); // https://hub.example
+    mutableEnv.BETTER_AUTH_URL = 'http://localhost:3012';
+    expect(githubStateCookieSecure()).toBe(false);
   });
 });
 
@@ -105,6 +116,15 @@ describe('fetchGithubUser', () => {
   it('normalises a missing avatar to null', async () => {
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue(okJson({ id: 1, login: 'x' }));
     expect((await fetchGithubUser('tok')).avatarUrl).toBeNull();
+  });
+
+  it('tolerates a present-but-non-URL avatar (empty string → null), still linking', async () => {
+    // A cosmetic bad avatar must not abort an otherwise-valid link.
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      okJson({ id: 7, login: 'x', avatar_url: '' })
+    );
+    const res = await fetchGithubUser('tok');
+    expect(res).toEqual({ githubUserId: '7', githubLogin: 'x', avatarUrl: null });
   });
 
   it('throws on a malformed user payload (no id)', async () => {

@@ -17,6 +17,7 @@ import {
   exchangeGithubCode,
   fetchGithubUser,
   githubOAuthConfigured,
+  githubStateCookieSecure,
 } from '@/lib/projects/github/oauth';
 import { upsertGithubIdentity } from '@/lib/projects/github/identity';
 
@@ -25,8 +26,12 @@ function settingsRedirect(status: string): NextResponse {
   const url = new URL('/settings', env.BETTER_AUTH_URL);
   url.searchParams.set('github', status);
   const response = NextResponse.redirect(url);
-  // Always clear the one-shot state cookie, whatever the outcome.
+  // Always clear the one-shot state cookie, whatever the outcome. Match the
+  // `secure` attribute the connect route set it with, so the deletion is honoured.
   response.cookies.set(GITHUB_OAUTH_STATE_COOKIE, '', {
+    httpOnly: true,
+    secure: githubStateCookieSecure(),
+    sameSite: 'lax',
     path: '/api/v1/users/me/github',
     maxAge: 0,
   });

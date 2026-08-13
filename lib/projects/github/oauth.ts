@@ -35,6 +35,16 @@ export function githubOAuthConfigured(): boolean {
   return Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET);
 }
 
+/**
+ * Whether the CSRF state cookie should carry `Secure` — true only when the base
+ * URL is https. On a plain-http origin a `Secure` cookie is silently dropped by
+ * the browser, which would break the round-trip with no diagnostic; gate it so a
+ * self-hosted/preview http deployment still works.
+ */
+export function githubStateCookieSecure(): boolean {
+  return env.BETTER_AUTH_URL.startsWith('https://');
+}
+
 /** The callback URL — must match the one registered on the GitHub OAuth app. */
 export function githubCallbackUrl(): string {
   return `${env.BETTER_AUTH_URL}/api/v1/users/me/github/callback`;
@@ -85,7 +95,9 @@ export async function exchangeGithubCode(code: string): Promise<string> {
 const githubUserSchema = z.object({
   id: z.number().int(),
   login: z.string().min(1),
-  avatar_url: z.string().url().nullish(),
+  // Cosmetic — a present-but-non-URL avatar (e.g. an empty string) must NOT abort
+  // an otherwise-valid link, so fall back to null rather than throwing.
+  avatar_url: z.string().url().nullish().catch(null),
 });
 
 /** The verified GitHub identity, in the shape the identity service persists. */

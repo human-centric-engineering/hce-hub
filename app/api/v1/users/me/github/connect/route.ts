@@ -13,6 +13,7 @@ import {
   GITHUB_OAUTH_STATE_COOKIE,
   buildGithubAuthorizeUrl,
   githubOAuthConfigured,
+  githubStateCookieSecure,
 } from '@/lib/projects/github/oauth';
 
 export const GET = withAuth(() => {
@@ -29,7 +30,7 @@ export const GET = withAuth(() => {
   // redirect back to the callback; scoped to the github route subtree, short TTL.
   response.cookies.set(GITHUB_OAUTH_STATE_COOKIE, state, {
     httpOnly: true,
-    secure: true,
+    secure: githubStateCookieSecure(),
     sameSite: 'lax',
     path: '/api/v1/users/me/github',
     maxAge: 600,
