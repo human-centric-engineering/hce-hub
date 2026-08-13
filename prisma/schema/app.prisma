@@ -158,6 +158,7 @@ model Feature {
   helpWanted    Boolean              @default(false)
   phaseId       String? // intra-Hub FK → app_phase · ON DELETE SET NULL (futures scaffolding, t-3)
   createdAt     DateTime             @default(now())
+  shippedAt     DateTime? // sealed by ship_feature (f-work-kinds §32 t-79): completion counts only tasks created at or before it, so post-ship work can't dent the bar. NULL ⇒ count every task (unshipped features, and any the backfill couldn't resolve)
 
   project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   phase           Phase?              @relation(fields: [phaseId], references: [id], onDelete: SetNull)
@@ -224,15 +225,25 @@ enum TaskStatus {
   merged
 }
 
-// A task's *kind* — a behavioural discriminator, not a free-form label
-// (f-bug-handling §22-02). `bug` = a defect on the feature it broke: `next_task`
-// biases it up and it's excluded from the feature's completion progress (an open
-// bug never makes a shipped feature read "3/4 merged"). A closed enum on purpose:
-// every value drives code, so an unknown value would silently do nothing. Future
-// organizational tagging (many-per-task, behaviour-free) would be a separate model.
+// A task's *kind* — what the work IS (provenance), no longer what it counts for
+// (f-bug-handling §22-02, split by f-work-kinds §32 t-79).
+//
+// `bug` = a defect on the feature it broke: `next_task` biases it up, and it's
+// excluded from completion progress and tallied as an open fix instead.
+// `enhancement` = a task-sized improvement to work that already exists — the kind
+// that used to have to masquerade as a `bug` to avoid denting a shipped feature's
+// progress bar, which falsified the very provenance the enum exists to record.
+//
+// Accounting now hangs off `Feature.shippedAt`, not off this enum: any task
+// created after its feature shipped sits off the completion axis regardless of
+// kind, so a new kind can't silently break the bar. Still a closed enum — the bar
+// is now "every value earns rendering and filtering" rather than "every value
+// drives accounting", which still excludes vanity labels. Free-form, many-per-task
+// tagging would be a separate model.
 enum TaskKind {
   feature_work
   bug
+  enhancement
 }
 
 model Task {

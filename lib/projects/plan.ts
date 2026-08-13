@@ -23,7 +23,7 @@ import {
   taskHolderId,
   type EffectiveStatus,
 } from '@/lib/projects/task-status';
-import { computeFeatureProgress } from '@/lib/projects/feature-progress';
+import { computeFeatureProgress, type ProgressTaskInput } from '@/lib/projects/feature-progress';
 import {
   computeFeatureStatus,
   type EffectiveFeatureStatus,
@@ -164,6 +164,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
       helpWanted: true,
       ownerUserId: true,
       phaseId: true,
+      shippedAt: true, // the completion boundary progress is measured against (§32 t-79)
       dependencies: { select: { dependsOnFeatureId: true } },
       indicativeTasks: {
         orderBy: { order: 'asc' },
@@ -179,6 +180,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
           title: true,
           status: true,
           kind: true,
+          createdAt: true, // placed against the feature's shippedAt (§32 t-79)
           prUrl: true,
           claimedByUserId: true,
           assigneeUserId: true,
@@ -207,11 +209,17 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
   );
 
   const views: PlanFeatureView[] = features.map((f) => {
+    // Progress needs each task's `createdAt` (to place it against the ship
+    // boundary) alongside the *derived* status the rows render. Accumulated here
+    // rather than zipped with `f.tasks` afterwards, so the pairing survives any
+    // later filter or reorder of the view list.
+    const progressInput: ProgressTaskInput[] = [];
     const tasks: PlanTaskView[] = f.tasks.map((t) => {
       const status = computeEffectiveStatus(
         t,
         t.dependencies.map((d) => d.dependsOn)
       );
+      progressInput.push({ status, kind: t.kind, createdAt: t.createdAt });
       // Show the assignee while open, the doer once merged (f-task-assignment §22 t2).
       const holderId = taskHolderId(status, t.claimedByUserId, t.assigneeUserId);
       return {
@@ -227,10 +235,11 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
 
     // Progress reads off the SAME effective status the rows render (§09 carry):
     // a dep-blocked task counts as `blocked`, never `live`, so a feature's
-    // summary can't disagree with its own task table. Kind-aware: `bug` tasks
-    // are excluded from completion and tallied as `openFixes` (f-bug-handling
-    // §22-02) — an open bug must not make a shipped feature read "3/4 merged".
-    const progress = computeFeatureProgress(tasks);
+    // summary can't disagree with its own task table. `bug` tasks are excluded
+    // from completion and tallied as `openFixes` (f-bug-handling §22-02) — an
+    // open bug must not make a shipped feature read "3/4 merged" — and, past
+    // `shippedAt`, no task counts toward completion at all (f-work-kinds §32 t-79).
+    const progress = computeFeatureProgress(progressInput, f.shippedAt);
 
     // Readiness-derived feature status: `planning` becomes `available`/`blocked`
     // from the loaded dependency statuses (`in_flight`/`shipped` pass through).

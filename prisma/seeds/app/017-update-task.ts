@@ -9,7 +9,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const updateTaskFunctionDefinition = {
   name: 'update_task',
   description:
-    "Edit an existing task's fields: title, description (markdown), done-when (acceptance contract), file scope, and/or its dependencies (replaces the existing edges; rejected if it would create a cycle). Only the fields you supply change; a null description/done-when clears it. Only the feature's owner or a project lead may edit its tasks. Does not change status.",
+    "Edit an existing task's fields: title, description (markdown), done-when (acceptance contract), file scope, kind (re-file a mis-filed task, e.g. bug → enhancement), and/or its dependencies (replaces the existing edges; rejected if it would create a cycle). Only the fields you supply change; a null description/done-when clears it. Only the feature's owner or a project lead may edit its tasks. Does not change status.",
   parameters: {
     type: 'object',
     properties: {
@@ -30,6 +30,12 @@ export const updateTaskFunctionDefinition = {
         items: { type: 'string' },
         description:
           'New dependency set — replaces the existing edges (existing tasks in this project). An empty array clears them.',
+      },
+      kind: {
+        type: 'string',
+        enum: ['feature_work', 'bug', 'enhancement'],
+        description:
+          "Re-file the task's kind: 'feature_work', 'bug', or 'enhancement'. Use it to correct work mis-filed as a bug that is really an improvement.",
       },
     },
     required: ['taskId'],

@@ -54,7 +54,7 @@ const schema = z.object({
     .nativeEnum(TaskKind)
     .optional()
     .describe(
-      "Task kind: 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of the feature's completion progress); defaults to 'feature_work'."
+      "Task kind: 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of completion progress and tallied as an open fix); 'enhancement' for a task-sized improvement to work that already exists; defaults to 'feature_work'. Work raised after its feature shipped never counts toward that feature's completion, whatever its kind — so file an improvement as 'enhancement', not as a 'bug'."
     ),
   fromIdeaId: z
     .string()
@@ -104,9 +104,9 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
         },
         kind: {
           type: 'string',
-          enum: ['feature_work', 'bug'],
+          enum: ['feature_work', 'bug', 'enhancement'],
           description:
-            "Optional task kind — 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of the feature's completion progress); defaults to 'feature_work'.",
+            "Optional task kind — 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of completion progress and tallied as an open fix); 'enhancement' for a task-sized improvement to work that already exists; defaults to 'feature_work'. Work raised after its feature shipped never counts toward that feature's completion, whatever its kind — so file an improvement as 'enhancement', not as a 'bug'.",
         },
         fromIdeaId: {
           type: 'string',

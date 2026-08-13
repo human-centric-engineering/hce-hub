@@ -1,10 +1,17 @@
 /**
  * `update_task` — edit an existing task's authored fields (f-authoring-fidelity
  * §21 t-b). The MCP verb that lets the record be *corrected from the Hub* rather
- * than the DB: `title`, `description`, `doneWhen`, `filesScope`, and its
- * **dependency edges** (cycle-guarded). A `note`-style amendment, so it emits
- * **no** `ProjectEventKind` (the lifecycle events — created/started/merged —
- * stay meaningful); it is audit-logged.
+ * than the DB: `title`, `description`, `doneWhen`, `filesScope`, its **kind**,
+ * and its **dependency edges** (cycle-guarded). A `note`-style amendment, so it
+ * emits **no** `ProjectEventKind` (the lifecycle events — created/started/merged
+ * — stay meaningful); it is audit-logged.
+ *
+ * `kind` re-files work that was filed wrong — which is not hypothetical: before
+ * `enhancement` existed (f-work-kinds §32 t-79), a task-sized improvement had to
+ * be filed as `bug` to keep it off a shipped feature's progress bar, so the
+ * existing record contains "bugs" that were never defects. Re-filing is a pure
+ * correction and emits no event: `bug_reported` recorded what was believed at
+ * creation, and rewriting history would lose that.
  *
  * `dependsOnTaskIds`, when supplied, **replaces** the task's outgoing edge set
  * (mirroring `update_feature`'s `dependsOnFeatureIds`): every target is verified
@@ -25,7 +32,7 @@
  */
 
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
+import { TaskKind, type Prisma } from '@prisma/client';
 import { BaseCapability } from '@/lib/orchestration/capabilities/base-capability';
 import type {
   CapabilityContext,
@@ -65,6 +72,12 @@ const schema = z.object({
     .describe(
       'New dependency set — replaces the existing edges (existing tasks in this project). An empty array clears them.'
     ),
+  kind: z
+    .nativeEnum(TaskKind)
+    .optional()
+    .describe(
+      "Re-file the task's kind: 'feature_work', 'bug', or 'enhancement'. Use it to correct work mis-filed as a bug that is really an improvement."
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -82,7 +95,7 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'update_task',
     description:
-      "Edit an existing task's fields: title, description (markdown), done-when (acceptance contract), file scope, and/or its dependencies (replaces the existing edges; rejected if it would create a cycle). Only the fields you supply change; a null description/done-when clears it. Only the feature's owner or a project lead may edit its tasks. Does not change status.",
+      "Edit an existing task's fields: title, description (markdown), done-when (acceptance contract), file scope, kind (re-file a mis-filed task, e.g. bug → enhancement), and/or its dependencies (replaces the existing edges; rejected if it would create a cycle). Only the fields you supply change; a null description/done-when clears it. Only the feature's owner or a project lead may edit its tasks. Does not change status.",
     parameters: {
       type: 'object',
       properties: {
@@ -103,6 +116,12 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
           items: { type: 'string' },
           description:
             'New dependency set — replaces the existing edges (existing tasks in this project). An empty array clears them.',
+        },
+        kind: {
+          type: 'string',
+          enum: ['feature_work', 'bug', 'enhancement'],
+          description:
+            "Re-file the task's kind: 'feature_work', 'bug', or 'enhancement'. Use it to correct work mis-filed as a bug that is really an improvement.",
         },
       },
       required: ['taskId'],
@@ -127,6 +146,7 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
         doneWhen: mask(args.doneWhen, 'doneWhen'),
         filesScope: args.filesScope,
         dependsOnTaskIds: args.dependsOnTaskIds,
+        kind: args.kind,
       },
       resultPreview: JSON.stringify(result),
     };
@@ -157,6 +177,10 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
     if (args.filesScope !== undefined) {
       data.filesScope = { set: args.filesScope };
       updated.push('filesScope');
+    }
+    if (args.kind !== undefined) {
+      data.kind = args.kind;
+      updated.push('kind');
     }
     // `dependsOnTaskIds` is editable but not part of `data`, so it counts here.
     if (updated.length === 0 && args.dependsOnTaskIds === undefined) {

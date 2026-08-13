@@ -16,6 +16,7 @@
  * *read* side. Together they let the human and the agent name the same task.
  */
 import { z } from 'zod';
+import type { TaskKind } from '@prisma/client';
 import { BaseCapability } from '@/lib/orchestration/capabilities/base-capability';
 import type {
   CapabilityContext,
@@ -53,7 +54,9 @@ interface TaskRefDto {
   /** Effective status: `claimed` | `active` | `blocked` | `merged`. */
   status: 'claimed' | 'active' | 'blocked' | 'merged';
   /** `bug` | `feature_work`. */
-  kind: 'feature_work' | 'bug';
+  // `TaskKind` rather than a literal union: a hand-written copy silently goes
+  // stale the next time the enum grows (it did, at §32 t-79's `enhancement`).
+  kind: TaskKind;
   /** Assignee (raw id; `null` when unassigned / erased). */
   assigneeUserId: string | null;
   prUrl: string | null;

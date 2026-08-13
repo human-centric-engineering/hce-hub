@@ -85,9 +85,12 @@ describe('ship_feature close-out', () => {
       success: true,
       data: { featureId: 'f1', shipped: true, warnings: [] },
     });
+    // `shippedAt` is stamped in the SAME update as the status flip (f-work-kinds
+    // §32 t-79) — a shipped feature without a boundary would silently keep
+    // counting every future task toward its completion.
     expect(txFeatureUpdate).toHaveBeenCalledWith({
       where: { id: 'f1' },
-      data: { status: 'shipped' },
+      data: { status: 'shipped', shippedAt: expect.any(Date) },
     });
     expect(emit).toHaveBeenCalledWith(expect.anything(), {
       projectId: 'p1',
@@ -111,8 +114,14 @@ describe('ship_feature close-out', () => {
     ]);
     // Never blocks — the status flip happened.
     expect(txFeatureUpdate).toHaveBeenCalled();
-    // Counts only unmerged FEATURE-WORK — bugs are off the completion axis
-    // (f-bug-handling §22-02), so the warning agrees with the Plan's progress.
+    // Counts only unmerged completion-relevant work — bugs are off the completion
+    // axis (f-bug-handling §22-02), so the warning agrees with the Plan's progress.
+    //
+    // `enhancement` is NOT excluded (f-work-kinds §32 t-79): the ship boundary
+    // isn't stamped until the transaction below, so every task that exists at this
+    // moment still counts as build-out in `computeFeatureProgress`. Excluding it
+    // here would make the warning contradict the bar it mirrors — the exact
+    // disagreement this assertion exists to prevent.
     expect(taskCount).toHaveBeenCalledWith({
       where: { featureId: 'f1', status: { not: 'merged' }, kind: { not: 'bug' } },
     });
