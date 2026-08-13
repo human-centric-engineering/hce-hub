@@ -122,7 +122,10 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       orderBy: { createdAt: 'asc' },
     }),
     prisma.task.findMany({
-      where: { OR: [{ assigneeUserId: userId }, { claimedByUserId: userId }] },
+      // Assigned to, claimed by (did the work), or merged by them (f-github-identity §23).
+      where: {
+        OR: [{ assigneeUserId: userId }, { claimedByUserId: userId }, { mergedByUserId: userId }],
+      },
       orderBy: { createdAt: 'asc' },
     }),
     prisma.project.findMany({ where: { leadUserId: userId }, orderBy: { createdAt: 'asc' } }),

@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotFoundError } from '@/lib/api/errors';
 
-const { findMany, completeTask } = vi.hoisted(() => ({
+const { findMany, completeTask, resolveHubUserByGithubId } = vi.hoisted(() => ({
   findMany: vi.fn(),
   completeTask: vi.fn(),
+  resolveHubUserByGithubId: vi.fn(),
 }));
 vi.mock('@/lib/db/client', () => ({ prisma: { task: { findMany } } }));
 vi.mock('@/lib/projects/task-actions', () => ({ completeTask }));
+vi.mock('@/lib/projects/github/identity', () => ({ resolveHubUserByGithubId }));
 
 vi.mock('@/lib/logging', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -16,9 +18,12 @@ import { reconcilePullRequestEvent } from '@/lib/projects/github/reconcile';
 
 const PR_URL = 'https://github.com/human-centric-engineering/hce-hub/pull/94';
 
-/** A minimal merged-PR-close payload. */
-function mergedClose(url: string = PR_URL): unknown {
-  return { action: 'closed', pull_request: { html_url: url, merged: true } };
+/** A minimal merged-PR-close payload, optionally carrying a `merged_by` actor. */
+function mergedClose(url: string = PR_URL, mergedBy?: { login: string; id: number }): unknown {
+  return {
+    action: 'closed',
+    pull_request: { html_url: url, merged: true, ...(mergedBy ? { merged_by: mergedBy } : {}) },
+  };
 }
 
 beforeEach(() => {
@@ -63,7 +68,8 @@ describe('reconcilePullRequestEvent — merged PR reconciliation', () => {
       where: { prUrl: PR_URL },
       select: { id: true, claimedByUserId: true },
     });
-    expect(completeTask).toHaveBeenCalledExactlyOnceWith('user-A', 'task-1');
+    // 4-arg call: (doer, taskId, expectedProjectId=undefined, mergedBy=undefined here).
+    expect(completeTask).toHaveBeenCalledExactlyOnceWith('user-A', 'task-1', undefined, undefined);
     expect(r).toEqual({ handled: true, prUrl: PR_URL, matched: 1, reconciled: 1, skipped: 0 });
   });
 
@@ -77,9 +83,9 @@ describe('reconcilePullRequestEvent — merged PR reconciliation', () => {
     const r = await reconcilePullRequestEvent(mergedClose());
 
     expect(completeTask).toHaveBeenCalledTimes(3);
-    expect(completeTask).toHaveBeenCalledWith('user-A', 't-41');
-    expect(completeTask).toHaveBeenCalledWith('user-A', 't-42');
-    expect(completeTask).toHaveBeenCalledWith('user-B', 't-43');
+    expect(completeTask).toHaveBeenCalledWith('user-A', 't-41', undefined, undefined);
+    expect(completeTask).toHaveBeenCalledWith('user-A', 't-42', undefined, undefined);
+    expect(completeTask).toHaveBeenCalledWith('user-B', 't-43', undefined, undefined);
     expect(r).toMatchObject({ handled: true, matched: 3, reconciled: 3, skipped: 0 });
   });
 
@@ -87,6 +93,65 @@ describe('reconcilePullRequestEvent — merged PR reconciliation', () => {
     findMany.mockResolvedValue([]);
     const r = await reconcilePullRequestEvent(mergedClose());
     expect(r).toEqual({ handled: true, prUrl: PR_URL, matched: 0, reconciled: 0, skipped: 0 });
+    expect(completeTask).not.toHaveBeenCalled();
+  });
+});
+
+describe('reconcilePullRequestEvent — merged_by attribution (f-github-identity §23)', () => {
+  it('resolves merged_by by numeric id and passes it additively to completeTask', async () => {
+    findMany.mockResolvedValue([{ id: 'task-1', claimedByUserId: 'user-A' }]);
+    resolveHubUserByGithubId.mockResolvedValue('hub-user-X');
+
+    await reconcilePullRequestEvent(mergedClose(PR_URL, { login: 'octocat', id: 583231 }));
+
+    // Id-first, as a string (the immutable identity key).
+    expect(resolveHubUserByGithubId).toHaveBeenCalledWith('583231');
+    // Doer (user-A) is unchanged; the merger rides in the 4th arg.
+    expect(completeTask).toHaveBeenCalledWith('user-A', 'task-1', undefined, {
+      userId: 'hub-user-X',
+      githubLogin: 'octocat',
+    });
+  });
+
+  it('passes a null userId when the merger is not a linked Hub user (external)', async () => {
+    findMany.mockResolvedValue([{ id: 'task-1', claimedByUserId: 'user-A' }]);
+    resolveHubUserByGithubId.mockResolvedValue(null);
+
+    await reconcilePullRequestEvent(mergedClose(PR_URL, { login: 'ext-contributor', id: 999 }));
+
+    expect(completeTask).toHaveBeenCalledWith('user-A', 'task-1', undefined, {
+      userId: null,
+      githubLogin: 'ext-contributor',
+    });
+  });
+
+  it('resolves the merger ONCE for a multi-task PR, not per task', async () => {
+    findMany.mockResolvedValue([
+      { id: 't-1', claimedByUserId: 'user-A' },
+      { id: 't-2', claimedByUserId: 'user-B' },
+    ]);
+    resolveHubUserByGithubId.mockResolvedValue('hub-user-X');
+
+    await reconcilePullRequestEvent(mergedClose(PR_URL, { login: 'octocat', id: 1 }));
+
+    expect(resolveHubUserByGithubId).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes no attribution (and never resolves) when merged_by is absent', async () => {
+    findMany.mockResolvedValue([{ id: 'task-1', claimedByUserId: 'user-A' }]);
+
+    await reconcilePullRequestEvent(mergedClose());
+
+    expect(resolveHubUserByGithubId).not.toHaveBeenCalled();
+    expect(completeTask).toHaveBeenCalledWith('user-A', 'task-1', undefined, undefined);
+  });
+
+  it('does NOT resolve the merger when no Hub task links the PR (webhook hot path)', async () => {
+    findMany.mockResolvedValue([]); // most merges on a connected repo have no Hub task
+
+    await reconcilePullRequestEvent(mergedClose(PR_URL, { login: 'octocat', id: 1 }));
+
+    expect(resolveHubUserByGithubId).not.toHaveBeenCalled();
     expect(completeTask).not.toHaveBeenCalled();
   });
 });

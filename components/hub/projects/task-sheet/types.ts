@@ -31,6 +31,11 @@ export interface TaskDetailDTO {
   filesScope: string[];
   /** The doer, once merged; `null` when unclaimed/erased. */
   claimer: UserRef | null;
+  /**
+   * The GitHub merger mapped to a Hub user (f-github-identity §23) — additive,
+   * distinct from `claimer`. `null` unless the PR was merged by a linked Hub user.
+   */
+  mergedBy: UserRef | null;
   /** Who the task is assigned to (the picker's current value); `null` if unassigned/erased. */
   assignee: UserRef | null;
   isMine: boolean;

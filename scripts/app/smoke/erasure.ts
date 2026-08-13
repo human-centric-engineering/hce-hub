@@ -8,6 +8,7 @@
  *   - `app_project.leadUserId`             → SET NULL (project retained)
  *   - `app_feature.ownerUserId`            → SET NULL (feature retained)
  *   - `app_task.claimedByUserId`           → SET NULL (task retained)
+ *   - `app_task.mergedByUserId`            → SET NULL (task retained)
  *   - `app_focus_directive.declaredByUserId` → SET NULL (directive retained)
  *   - `app_project_member`                 → CASCADE  (membership removed)
  *   - `app_task_claim`                     → CASCADE  (claim history removed)
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
         title: `${PREFIX} task`,
         status: 'claimed',
         claimedByUserId: user.id,
+        mergedByUserId: user.id, // additive merge attribution (f-github-identity §23)
       },
     });
     taskId = task.id;
@@ -133,6 +135,7 @@ async function main(): Promise<void> {
     const taskAfter = await prisma.task.findUnique({ where: { id: task.id } });
     check(taskAfter !== null, 'task retained');
     check(taskAfter?.claimedByUserId === null, 'task.claimedByUserId nulled (SET NULL)');
+    check(taskAfter?.mergedByUserId === null, 'task.mergedByUserId nulled (SET NULL)');
 
     check(
       (await prisma.taskClaim.count({ where: { taskId: task.id } })) === 0,

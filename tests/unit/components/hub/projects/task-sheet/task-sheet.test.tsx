@@ -35,6 +35,7 @@ const detail = (over: Partial<TaskDetailDTO> = {}): TaskDetailDTO => ({
   prUrl: null,
   filesScope: [],
   claimer: null,
+  mergedBy: null,
   assignee: null,
   isMine: false,
   members: [],
@@ -148,6 +149,35 @@ describe('TaskSheet', () => {
     // number null → the ref falls back to the id tail; slug null → the feature title.
     expect(screen.getByText(/^t-/)).toBeInTheDocument();
     expect(screen.getByText('MCP server')).toBeInTheDocument();
+  });
+
+  it('shows the additive "Merged by" attribution, distinct from the doer', async () => {
+    // f-github-identity §23: the GitHub merger (Bo) is shown alongside — not in
+    // place of — the doer (Ada).
+    mockFetchOnce({
+      data: detail({
+        status: 'merged',
+        claimer: { id: 'u1', name: 'Ada Lovelace', email: 'a@x.io', image: null },
+        mergedBy: { id: 'u2', name: 'Bo Diaz', email: 'b@x.io', image: null },
+      }),
+    });
+    renderSheet();
+    expect(await screen.findByText('Merged by')).toBeInTheDocument();
+    expect(screen.getByText('Bo')).toBeInTheDocument(); // the merger
+    expect(screen.getByText('Ada')).toBeInTheDocument(); // the doer, still shown
+  });
+
+  it('suppresses "Merged by" when the merger is the doer (merging your own PR)', async () => {
+    mockFetchOnce({
+      data: detail({
+        status: 'merged',
+        claimer: { id: 'u1', name: 'Ada Lovelace', email: 'a@x.io', image: null },
+        mergedBy: { id: 'u1', name: 'Ada Lovelace', email: 'a@x.io', image: null }, // same person
+      }),
+    });
+    renderSheet();
+    await screen.findByText('Ada'); // the doer line renders
+    expect(screen.queryByText('Merged by')).not.toBeInTheDocument();
   });
 
   it('renders the assignee picker (not a read-only name) on an OPEN task', async () => {

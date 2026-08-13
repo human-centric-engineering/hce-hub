@@ -8,9 +8,12 @@
  * `html_url` (one PR can deliver several tasks — e.g. this very §14 PR) and
  * drives each to `merged` through the shared `completeTask` core.
  *
- * **Actor = the task's own `claimedByUserId`** — the Hub worker who did the work,
- * credited as the one who completed it, NEVER the webhook (§14 owner decision;
- * mapping GitHub's `merged_by` to a Hub user is a deliberate later feature).
+ * **Doer = the task's own `claimedByUserId`** — the Hub worker who did the work,
+ * credited as the one who completed it (the `task_merged` event's actor), NEVER
+ * the webhook (§14 owner decision). **Additively** (f-github-identity §23), the
+ * PR's `merged_by` actor is mapped to a Hub user and recorded on
+ * `Task.mergedByUserId` — the "who merged it" attribution, kept distinct from the
+ * doer, never overwriting it.
  *
  * Resilient by design: `completeTask` is idempotent (an already-`merged` task is
  * a no-op), so a re-delivered event is safe; a matched task that is unclaimed,
@@ -22,7 +25,8 @@
 
 import { z } from 'zod';
 import { prisma } from '@/lib/db/client';
-import { completeTask } from '@/lib/projects/task-actions';
+import { completeTask, type MergeAttribution } from '@/lib/projects/task-actions';
+import { resolveHubUserByGithubId } from '@/lib/projects/github/identity';
 import { NotFoundError } from '@/lib/api/errors';
 import { logger } from '@/lib/logging';
 
@@ -32,6 +36,9 @@ const pullRequestEventSchema = z.object({
   pull_request: z.object({
     html_url: z.string().url(),
     merged: z.boolean().optional(),
+    // Who clicked "Merge" on GitHub — mapped to a Hub user for attribution
+    // (f-github-identity §23). Nullish: GitHub can omit it, and we don't require it.
+    merged_by: z.object({ login: z.string(), id: z.number().int() }).nullish(),
   }),
 });
 
@@ -74,10 +81,25 @@ export async function reconcilePullRequestEvent(payload: unknown): Promise<Recon
   }
 
   const prUrl = pr.html_url;
+
   const tasks = await prisma.task.findMany({
     where: { prUrl },
     select: { id: true, claimedByUserId: true },
   });
+
+  // Resolve the merger (merged_by) → a Hub user ONCE for the whole PR, by GitHub's
+  // immutable numeric id (f-github-identity §23) — but only when a task actually
+  // links this PR: most merges on a connected repo have no Hub task, and this is
+  // the webhook hot path. `userId` is null when the merger isn't linked to a Hub
+  // user (external / not connected); the raw login is kept for the journal either
+  // way. Additive — never the doer.
+  const mergedBy: MergeAttribution | undefined =
+    tasks.length > 0 && pr.merged_by
+      ? {
+          userId: await resolveHubUserByGithubId(String(pr.merged_by.id)),
+          githubLogin: pr.merged_by.login,
+        }
+      : undefined;
 
   let reconciled = 0;
   let skipped = 0;
@@ -91,7 +113,7 @@ export async function reconcilePullRequestEvent(payload: unknown): Promise<Recon
       continue;
     }
     try {
-      await completeTask(task.claimedByUserId, task.id);
+      await completeTask(task.claimedByUserId, task.id, undefined, mergedBy);
       reconciled++;
     } catch (err) {
       if (err instanceof NotFoundError) {
@@ -113,6 +135,8 @@ export async function reconcilePullRequestEvent(payload: unknown): Promise<Recon
     matched: tasks.length,
     reconciled,
     skipped,
+    mergedByGithubLogin: pr.merged_by?.login ?? null,
+    mergedByUserId: mergedBy?.userId ?? null,
   });
 
   return { handled: true, prUrl, matched: tasks.length, reconciled, skipped };

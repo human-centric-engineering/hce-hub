@@ -350,6 +350,23 @@ export function TaskSheet({
                 )}
               </div>
 
+              {/* Merged-by attribution (f-github-identity §23) — additive, distinct
+                  from the doer above; shown only when the merger is a linked Hub
+                  user AND a different person than the doer (merging your own PR is
+                  already conveyed by the doer line). */}
+              {detail.mergedBy && detail.mergedBy.id !== detail.claimer?.id && (
+                <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                  <span style={{ color: 'var(--ink-faint)' }}>Merged by</span>
+                  <Avatar className="h-4 w-4">
+                    {detail.mergedBy.image && <AvatarImage src={detail.mergedBy.image} alt="" />}
+                    <AvatarFallback className="text-[8px]">
+                      {initials(detail.mergedBy.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  {firstName(detail.mergedBy.name)}
+                </p>
+              )}
+
               {/* Action row — Start (claimed → active) then Complete (active →
                   merged). You claim features, not tasks (f-status-model §20). */}
               <div className="flex flex-wrap items-center gap-2 pt-1">

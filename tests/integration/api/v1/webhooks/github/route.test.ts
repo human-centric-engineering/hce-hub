@@ -61,7 +61,8 @@ describe('POST /api/v1/webhooks/github — genuine signature path', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.data).toMatchObject({ handled: true, matched: 1, reconciled: 1, skipped: 0 });
-    expect(completeTask).toHaveBeenCalledExactlyOnceWith('user-A', 't-40');
+    // 4-arg call (…, expectedProjectId=undefined, mergedBy=undefined — no merged_by here).
+    expect(completeTask).toHaveBeenCalledExactlyOnceWith('user-A', 't-40', undefined, undefined);
   });
 
   it('rejects a payload signed with the wrong secret (real 401)', async () => {
