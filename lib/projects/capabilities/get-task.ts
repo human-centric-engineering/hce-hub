@@ -68,6 +68,8 @@ interface Data {
   // `TaskKind` rather than a literal union: a hand-written copy silently goes
   // stale the next time the enum grows (it did, at §32 t-79's `enhancement`).
   kind: TaskKind;
+  /** The phase that *chose* this work, when it differs from its feature's; `null` = inherit (§32 t-80). */
+  phaseId: string | null;
   filesScope: string[];
   prUrl: string | null;
   /** Assignee (raw id; `null` when unassigned / erased). */
@@ -86,7 +88,7 @@ export class GetTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'get_task',
     description:
-      "Read one task's full detail — its description, acceptance contract (done-when), effective status, kind, file scope, PR url, feature (id + slug), and its dependency graph (blockedBy / blocks, each neighbour with its t-N + readiness). Use it after list_tasks to actually work a task you were handed by t-N — the detail list_tasks omits. Membership-scoped: a task you can't see (or in another project) is not_found.",
+      "Read one task's full detail — its description, acceptance contract (done-when), effective status, kind, the phase that chose it (phaseId; null = inherits its feature's phase), file scope, PR url, feature (id + slug), and its dependency graph (blockedBy / blocks, each neighbour with its t-N + readiness). Use it after list_tasks to actually work a task you were handed by t-N — the detail list_tasks omits. Membership-scoped: a task you can't see (or in another project) is not_found.",
     parameters: {
       type: 'object',
       properties: {
@@ -139,6 +141,7 @@ export class GetTaskCapability extends BaseCapability<Args, Data> {
         doneWhen: d.doneWhen,
         status: d.status,
         kind: d.kind,
+        phaseId: d.phaseId,
         filesScope: d.filesScope,
         prUrl: d.prUrl,
         assigneeUserId: d.assignee?.id ?? null,

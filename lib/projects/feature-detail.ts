@@ -52,8 +52,10 @@ export interface FeatureDetailTask {
   title: string;
   /** Effective status (via `computeEffectiveStatus`) — matches Plan/Board. */
   status: EffectiveStatus;
-  /** `bug` (a defect, marked distinctly) vs `feature_work` (f-bug-handling §22-02). */
+  /** `bug` (a defect) vs `feature_work` vs `enhancement` (f-bug-handling §22-02, f-work-kinds §32). */
   kind: TaskKind;
+  /** When the task was raised — placed against the feature's `shippedAt` to compute progress (§32). */
+  createdAt: Date;
   /** The per-task acceptance contract (§18). */
   doneWhen: string | null;
   prUrl: string | null;
@@ -93,6 +95,13 @@ export interface FeatureDetail {
   /** Depth axis: `indicative` sketch vs `planned` (real tasks materialised). */
   planningStage: FeaturePlanningStage;
   helpWanted: boolean;
+  /** The phase this feature is filed under; `null` when unfiled (§32 t-80). */
+  phase: { id: string; name: string } | null;
+  /**
+   * The completion boundary (§32 t-79): tasks raised after it are off the
+   * completion axis. `null` until shipped ⇒ every task counts.
+   */
+  shippedAt: Date | null;
   /** `null` when unowned or the owner was erased. */
   owner: UserRef | null;
   /**
@@ -165,6 +174,8 @@ export async function getFeatureDetail(
         planningStage: true,
         helpWanted: true,
         ownerUserId: true,
+        shippedAt: true,
+        phase: { select: { id: true, name: true } },
         dependencies: {
           // `status` feeds the readiness derivation; slug/title feed the chips.
           select: { dependsOn: { select: { id: true, slug: true, title: true, status: true } } },
@@ -178,6 +189,7 @@ export async function getFeatureDetail(
             title: true,
             status: true,
             kind: true,
+            createdAt: true,
             doneWhen: true,
             prUrl: true,
             claimedByUserId: true,
@@ -232,6 +244,8 @@ export async function getFeatureDetail(
     waitingOn,
     planningStage: feature.planningStage,
     helpWanted: feature.helpWanted,
+    phase: feature.phase,
+    shippedAt: feature.shippedAt,
     owner: feature.ownerUserId ? (users.get(feature.ownerUserId) ?? null) : null,
     members: memberRows.map((m) => users.get(m.userId)).filter((u): u is UserRef => u != null),
     dependsOn: feature.dependencies.map((d) => ({
@@ -248,6 +262,7 @@ export async function getFeatureDetail(
         t.dependencies.map((d) => d.dependsOn)
       ),
       kind: t.kind,
+      createdAt: t.createdAt,
       doneWhen: t.doneWhen,
       prUrl: t.prUrl,
       claimer: t.claimedByUserId ? (users.get(t.claimedByUserId) ?? null) : null,

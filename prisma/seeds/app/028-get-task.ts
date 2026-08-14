@@ -9,7 +9,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const getTaskFunctionDefinition = {
   name: 'get_task',
   description:
-    "Read one task's full detail — its description, acceptance contract (done-when), effective status, kind, file scope, PR url, feature (id + slug), and its dependency graph (blockedBy / blocks, each neighbour with its t-N + readiness). Use it after list_tasks to actually work a task you were handed by t-N — the detail list_tasks omits. Membership-scoped: a task you can't see (or in another project) is not_found.",
+    "Read one task's full detail — its description, acceptance contract (done-when), effective status, kind, the phase that chose it (phaseId; null = inherits its feature's phase), file scope, PR url, feature (id + slug), and its dependency graph (blockedBy / blocks, each neighbour with its t-N + readiness). Use it after list_tasks to actually work a task you were handed by t-N — the detail list_tasks omits. Membership-scoped: a task you can't see (or in another project) is not_found.",
   parameters: {
     type: 'object',
     properties: {

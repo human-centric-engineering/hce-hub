@@ -8,6 +8,9 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+/** A task-creation date safely before any ship boundary the fixtures use. */
+const BEFORE = new Date('2026-07-01T00:00:00Z');
+
 vi.mock('@/lib/projects/feature-detail', () => ({ getFeatureDetail: vi.fn() }));
 
 const { getFeatureDetail } = await import('@/lib/projects/feature-detail');
@@ -38,9 +41,25 @@ function detail(over: Record<string, unknown> = {}) {
     owner: { id: 'u2', name: 'Bo', email: 'b@x.io', image: null },
     members: [{ id: 'u2', name: 'Bo', email: 'b@x.io', image: null }],
     dependsOn: [{ id: 'd1', slug: 'f-x', title: 'Prereq' }],
+    phase: { id: 'ph1', name: 'Project flow' },
+    shippedAt: null,
     tasks: [
-      { id: 't1', number: 69, title: 'a', status: 'merged', kind: 'feature_work' },
-      { id: 't2', number: 70, title: 'b', status: 'active', kind: 'feature_work' },
+      {
+        id: 't1',
+        number: 69,
+        title: 'a',
+        status: 'merged',
+        kind: 'feature_work',
+        createdAt: BEFORE,
+      },
+      {
+        id: 't2',
+        number: 70,
+        title: 'b',
+        status: 'active',
+        kind: 'feature_work',
+        createdAt: BEFORE,
+      },
     ],
     indicativeTasks: [{ id: 'i1', order: 0, text: 'sketch a thing' }],
     ...over,
@@ -96,11 +115,80 @@ describe('get_feature', () => {
       planningStage: 'planned',
       helpWanted: false,
       ownerUserId: 'u2', // the owner's raw id, not the UserRef; no members leak
+      phase: { id: 'ph1', name: 'Project flow' },
       dependsOn: [{ id: 'd1', slug: 'f-x', title: 'Prereq' }],
       waitingOn: [{ slug: 'f-dep', title: 'A dependency' }], // no id on a WaitingOnRef
-      tasks: { total: 2, merged: 1 },
+      tasks: { total: 2, merged: 1, live: 1, openFixes: 0 },
       indicativeTasks: [{ order: 0, text: 'sketch a thing' }],
     });
+  });
+
+  it('excludes bugs from the roll-up, matching the Plan rather than counting raw rows', async () => {
+    // The defect this closed: get_feature counted every row, so §21 read 7/7 over
+    // MCP while the Plan showed 5/5. An agent asking "is this done?" and a human
+    // looking at the board must not get different answers.
+    getDetail.mockResolvedValue(
+      detail({
+        tasks: [
+          {
+            id: 't1',
+            number: 1,
+            title: 'a',
+            status: 'merged',
+            kind: 'feature_work',
+            createdAt: BEFORE,
+          },
+          {
+            id: 't2',
+            number: 2,
+            title: 'b',
+            status: 'merged',
+            kind: 'feature_work',
+            createdAt: BEFORE,
+          },
+          { id: 't3', number: 3, title: 'fix', status: 'claimed', kind: 'bug', createdAt: BEFORE },
+        ],
+      })
+    );
+    const r = await cap.execute({ featureRef: 'f-mcp', projectId: 'p1' }, ctx());
+    expect(r.data?.tasks).toEqual({ total: 2, merged: 2, live: 0, openFixes: 1 });
+  });
+
+  it('keeps post-ship work off the roll-up but still reports it as live', async () => {
+    const SHIPPED = new Date('2026-08-01T00:00:00Z');
+    const AFTER = new Date('2026-08-09T00:00:00Z');
+    getDetail.mockResolvedValue(
+      detail({
+        shippedAt: SHIPPED,
+        tasks: [
+          {
+            id: 't1',
+            number: 1,
+            title: 'a',
+            status: 'merged',
+            kind: 'feature_work',
+            createdAt: BEFORE,
+          },
+          {
+            id: 't2',
+            number: 2,
+            title: 'improve',
+            status: 'active',
+            kind: 'enhancement',
+            createdAt: AFTER,
+          },
+        ],
+      })
+    );
+    const r = await cap.execute({ featureRef: 'f-mcp', projectId: 'p1' }, ctx());
+    // Completion is sealed history: still 1/1, not 1/2.
+    expect(r.data?.tasks).toEqual({ total: 1, merged: 1, live: 1, openFixes: 0 });
+  });
+
+  it('reports the phase the feature is filed under, and null when unfiled', async () => {
+    getDetail.mockResolvedValue(detail({ phase: null }));
+    const r = await cap.execute({ featureRef: 'f-mcp', projectId: 'p1' }, ctx());
+    expect(r.data?.phase).toBeNull();
   });
 
   it('renders a null owner as null (no UserRef leak)', async () => {

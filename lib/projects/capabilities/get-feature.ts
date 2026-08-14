@@ -31,6 +31,7 @@ import type {
 } from '@/lib/orchestration/capabilities/types';
 import { NotFoundError } from '@/lib/api/errors';
 import { getFeatureDetail } from '@/lib/projects/feature-detail';
+import { computeFeatureProgress } from '@/lib/projects/feature-progress';
 import { redactedString } from '@/lib/security/redact';
 
 const schema = z.object({
@@ -74,12 +75,23 @@ interface Data {
   helpWanted: boolean;
   /** Owner (raw id; `null` when unowned / erased). */
   ownerUserId: string | null;
+  /** The phase this feature is filed under; `null` when unfiled (§32 t-80). */
+  phase: { id: string; name: string } | null;
   /** Features this one depends on. */
   dependsOn: FeatureNeighbour[];
   /** For a `blocked` feature: the unshipped dependencies it waits on. */
   waitingOn: WaitingNeighbour[];
-  /** Task roll-up (once planned): total + how many merged. */
-  tasks: { total: number; merged: number };
+  /**
+   * Task roll-up (once planned) — the SAME numbers the Plan renders, via
+   * `computeFeatureProgress` (§32 t-80). Bugs are off the completion axis and
+   * tallied as `openFixes`; past the feature's ship boundary nothing counts
+   * toward completion whatever its kind, so `total`/`merged` are settled history.
+   * `live` is current activity and deliberately spans post-ship work.
+   *
+   * Counting raw rows here used to make the agent and the human disagree about
+   * whether a feature was done (§21 read 7/7 over MCP vs 5/5 on the Plan).
+   */
+  tasks: { total: number; merged: number; live: number; openFixes: number };
   /** The high-level sketch (while indicative; replaced at plan time). */
   indicativeTasks: { order: number; text: string }[];
 }
@@ -91,7 +103,7 @@ export class GetFeatureCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'get_feature',
     description:
-      "Read one feature's spec — its description, definition of done, effective status, planning stage (indicative sketch vs planned), dependency graph (dependsOn / waitingOn), a task roll-up, and any indicative-task sketch. Use it after list_phases to understand a feature before working it. featureRef is the feature's slug (e.g. 'f-mcp') or id. Membership-scoped: a feature you can't see (or in another project) is not_found.",
+      "Read one feature's spec — its description, definition of done, effective status, planning stage (indicative sketch vs planned), the phase it is filed under, dependency graph (dependsOn / waitingOn), a task roll-up (total/merged count completion only: bugs and work raised after the feature shipped are excluded, and surface as openFixes/live instead — the same numbers the Plan shows), and any indicative-task sketch. Use it after list_phases to understand a feature before working it. featureRef is the feature's slug (e.g. 'f-mcp') or id. Membership-scoped: a feature you can't see (or in another project) is not_found.",
     parameters: {
       type: 'object',
       properties: {
@@ -140,7 +152,8 @@ export class GetFeatureCapability extends BaseCapability<Args, Data> {
       // throws NotFoundError on deny / cross-project), then project to the
       // agent-facing spec shape.
       const d = await getFeatureDetail(userId, args.projectId, args.featureRef);
-      const mergedTasks = d.tasks.filter((t) => t.status === 'merged').length;
+      // One shared computation with the Plan — never a second hand-rolled count.
+      const progress = computeFeatureProgress(d.tasks, d.shippedAt);
       return this.success({
         id: d.id,
         number: d.number,
@@ -152,9 +165,15 @@ export class GetFeatureCapability extends BaseCapability<Args, Data> {
         planningStage: d.planningStage,
         helpWanted: d.helpWanted,
         ownerUserId: d.owner?.id ?? null,
+        phase: d.phase,
         dependsOn: d.dependsOn.map((n) => ({ id: n.id, slug: n.slug, title: n.title })),
         waitingOn: d.waitingOn.map((n) => ({ slug: n.slug, title: n.title })),
-        tasks: { total: d.tasks.length, merged: mergedTasks },
+        tasks: {
+          total: progress.total,
+          merged: progress.merged,
+          live: progress.live,
+          openFixes: progress.openFixes,
+        },
         indicativeTasks: d.indicativeTasks.map((t) => ({ order: t.order, text: t.text })),
       });
     } catch (err) {

@@ -112,6 +112,12 @@ export interface PlanPhaseBand {
   name: string | null;
   /** `null` for the residual band; `parked` bands are rendered collapsed. */
   status: PhaseStatus | null;
+  /**
+   * The phase's authored intent — why this grouping exists (f-work-kinds §32
+   * t-80). Written since f-phases §22 and carried here so it can finally be
+   * rendered and projected; `null` for the residual band, which nobody authored.
+   */
+  description: string | null;
   /** Display position; `null` for the residual band. */
   ordinal: number | null;
   features: PlanFeatureView[];
@@ -146,7 +152,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
   const phasesPromise = prisma.phase.findMany({
     where: { projectId },
     orderBy: [{ ordinal: 'asc' }, { createdAt: 'asc' }],
-    select: { id: true, name: true, status: true, ordinal: true },
+    select: { id: true, name: true, status: true, ordinal: true, description: true },
   });
 
   const features = await prisma.feature.findMany({
@@ -308,7 +314,13 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
  * phase set (a mid-read delete) falls into the residual band — never dropped.
  */
 /** The phase-row projection the grouping consumes (matches the `phases` select). */
-type PhaseRow = { id: string; name: string; status: PhaseStatus; ordinal: number };
+type PhaseRow = {
+  id: string;
+  name: string;
+  status: PhaseStatus;
+  ordinal: number;
+  description: string | null;
+};
 
 function groupIntoPhaseBands(
   orderedViews: PlanFeatureView[],
@@ -337,10 +349,18 @@ function groupIntoPhaseBands(
     name: p.name,
     status: p.status,
     ordinal: p.ordinal,
+    description: p.description,
     features: byPhase.get(p.id) ?? [],
   }));
   if (residual.length > 0) {
-    bands.push({ id: null, name: null, status: null, ordinal: null, features: residual });
+    bands.push({
+      id: null,
+      name: null,
+      status: null,
+      ordinal: null,
+      description: null,
+      features: residual,
+    });
   }
   return bands;
 }

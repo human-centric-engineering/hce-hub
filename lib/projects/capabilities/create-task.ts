@@ -28,6 +28,7 @@ import type {
 import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess } from '@/lib/projects/access';
+import { phaseBelongsToProject } from '@/lib/projects/phases-service';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 import { checkIdeaPromotable, resolveIdeaOnPromotion } from '@/lib/projects/idea-promotion';
@@ -56,6 +57,12 @@ const schema = z.object({
     .describe(
       "Task kind: 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of completion progress and tallied as an open fix); 'enhancement' for a task-sized improvement to work that already exists; defaults to 'feature_work'. Work raised after its feature shipped never counts toward that feature's completion, whatever its kind — so file an improvement as 'enhancement', not as a 'bug'."
     ),
+  phaseId: z
+    .string()
+    .optional()
+    .describe(
+      "Optional: commit this task to a phase in this project — the phase that chose to do the work, when that differs from its feature's phase. Omit to inherit the feature's phase."
+    ),
   fromIdeaId: z
     .string()
     .optional()
@@ -81,7 +88,7 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'create_task',
     description:
-      "Add a task to a feature you own (or lead): declares its title, optional description + acceptance contract (done-when), optional file scope, and optional dependencies on existing tasks. The task is born claimed and owned by the feature owner (blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks. The result includes the created task id + assigned t-N (report it without a re-read).",
+      "Add a task to a feature you own (or lead): declares its title, optional description + acceptance contract (done-when), optional file scope, optional dependencies on existing tasks, and optionally the phase that chose the work (phaseId — omit to inherit the feature's phase). The task is born claimed and owned by the feature owner (blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks. The result includes the created task id + assigned t-N (report it without a re-read).",
     parameters: {
       type: 'object',
       properties: {
@@ -107,6 +114,11 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           enum: ['feature_work', 'bug', 'enhancement'],
           description:
             "Optional task kind — 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of completion progress and tallied as an open fix); 'enhancement' for a task-sized improvement to work that already exists; defaults to 'feature_work'. Work raised after its feature shipped never counts toward that feature's completion, whatever its kind — so file an improvement as 'enhancement', not as a 'bug'.",
+        },
+        phaseId: {
+          type: 'string',
+          description:
+            "Optional: commit this task to a phase in this project — the phase that chose to do the work, when that differs from its feature's phase. Omit to inherit the feature's phase.",
         },
         fromIdeaId: {
           type: 'string',
@@ -174,6 +186,16 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
       }
     }
 
+    // Phase commitment (§32 t-80) — the phase that CHOSE this work, when that
+    // differs from its feature's phase. Omitted means inherit, which is the
+    // default. Same-project guard shared with update_task / update_feature.
+    if (
+      args.phaseId !== undefined &&
+      !(await phaseBelongsToProject(args.phaseId, access.feature.projectId))
+    ) {
+      return this.error('That phase was not found in this project.', 'invalid_phase');
+    }
+
     const taskKind = args.kind ?? 'feature_work';
 
     // Promotion: the idea must exist in THIS project and be open (friendly
@@ -208,6 +230,7 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           filesScope: args.filesScope ?? [],
           assigneeUserId: access.feature.ownerUserId,
           claimedByUserId: access.feature.ownerUserId,
+          phaseId: args.phaseId ?? null,
         },
         select: { id: true, number: true, status: true },
       });

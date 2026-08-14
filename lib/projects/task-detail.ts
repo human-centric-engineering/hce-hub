@@ -47,8 +47,13 @@ export interface TaskDetail {
   doneWhen: string | null;
   /** Effective status (drives the pill + the Start/Complete/Blocked action state). */
   status: EffectiveStatus;
-  /** `bug` (a defect, marked distinctly) vs `feature_work` (f-bug-handling §22-02). */
+  /** `bug` (a defect) vs `feature_work` vs `enhancement` (f-bug-handling §22-02, f-work-kinds §32). */
   kind: TaskKind;
+  /**
+   * The phase that *chose* this work, when that differs from its feature's phase
+   * (f-work-kinds §32 t-80). `null` = inherit the feature's phase.
+   */
+  phaseId: string | null;
   /** Raw human-declared PR url — sanitized at render (see file header). */
   prUrl: string | null;
   /** Paths/globs the work is expected to touch — soft, "declared, not enforced". */
@@ -170,6 +175,7 @@ export async function getTaskDetail(
         doneWhen: true,
         status: true,
         kind: true,
+        phaseId: true,
         prUrl: true,
         filesScope: true,
         claimedByUserId: true,
@@ -209,6 +215,7 @@ export async function getTaskDetail(
       task.dependencies.map((d) => d.dependsOn)
     ),
     kind: task.kind,
+    phaseId: task.phaseId,
     prUrl: task.prUrl,
     filesScope: task.filesScope,
     claimer: task.claimedByUserId ? (users.get(task.claimedByUserId) ?? null) : null,

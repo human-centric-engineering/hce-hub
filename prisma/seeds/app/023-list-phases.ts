@@ -9,7 +9,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const listPhasesFunctionDefinition = {
   name: 'list_phases',
   description:
-    "Read a project's structure — its phases (with ids, names, status) and the features filed under each (with ids, slugs, numbers, status), plus a residual bucket (phase id null) for features not filed under any phase. Use it to discover the phase id to file a feature into, or a feature's id to act on. Membership-scoped: a project you can't see is not_found.",
+    "Read a project's structure — its phases (with ids, names, status, and the authored description saying why the grouping exists) and the features filed under each (with ids, slugs, numbers, status), plus a residual bucket (phase id null) for features not filed under any phase. Use it to discover the phase id to file a feature into, a phase's intent before committing work to it, or a feature's id to act on. Membership-scoped: a project you can't see is not_found.",
   parameters: {
     type: 'object',
     properties: {

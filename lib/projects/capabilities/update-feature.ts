@@ -32,6 +32,7 @@ import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess, canAccessProject } from '@/lib/projects/access';
 import { assertAcyclic, DependencyCycleError } from '@/lib/projects/dependency-graph';
+import { phaseBelongsToProject } from '@/lib/projects/phases-service';
 import { isWriteConflict, withWriteConflictRetry } from '@/lib/projects/write-conflict';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { redactedString } from '@/lib/security/redact';
@@ -239,11 +240,9 @@ export class UpdateFeatureCapability extends BaseCapability<Args, Data> {
       if (args.phaseId === null) {
         data.phase = { disconnect: true };
       } else {
-        const phase = await prisma.phase.findFirst({
-          where: { id: args.phaseId, projectId },
-          select: { id: true },
-        });
-        if (!phase) {
+        // Shared guard (§32 t-80) — one implementation across update_feature,
+        // assignFeatureToPhase and the two task verbs.
+        if (!(await phaseBelongsToProject(args.phaseId, projectId))) {
           return this.error('That phase was not found in this project.', 'invalid_phase');
         }
         data.phase = { connect: { id: args.phaseId } };
