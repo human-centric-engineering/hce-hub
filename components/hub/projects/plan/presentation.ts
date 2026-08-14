@@ -39,7 +39,20 @@ export function featureStatus(status: FeatureStatus): StatusTone {
   return FEATURE_TONE[status];
 }
 
-export function taskStatus(status: TaskEffectiveStatus): StatusTone {
+/**
+ * A task's chip tone + label. `hasHolder` is the §32 t-89 amendment: "assigned"
+ * assumed every `claimed` task had somebody on it, which was true while the create
+ * cascade guaranteed a holder. An `enhancement` is now born with none, and any task
+ * can be released — so an unheld task labelled "assigned" sat next to a picker
+ * reading "Unassigned", each contradicting the other.
+ *
+ * Only the *label* changes: the stage is the same, so the tone stays `claimed`.
+ * Defaults to held, so every caller that genuinely has an assignee reads as before.
+ */
+export function taskStatus(status: TaskEffectiveStatus, hasHolder = true): StatusTone {
+  if (status === 'claimed' && !hasHolder) {
+    return { tone: 'claimed', label: 'unassigned' };
+  }
   return TASK_TONE[status];
 }
 

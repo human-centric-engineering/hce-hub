@@ -57,7 +57,10 @@ const granted = (
     featureId: 'f1',
     projectId: overrides.projectId ?? 'p1',
     status: overrides.status ?? 'claimed',
-    claimedByUserId: overrides.claimedByUserId ?? USER,
+    // `!== undefined`, not `??`: an explicit `null` means "nobody holds this", which
+    // is a real state since §32 t-89 — `?? USER` silently turned it back into a
+    // held task and the case under test never existed.
+    claimedByUserId: overrides.claimedByUserId !== undefined ? overrides.claimedByUserId : USER,
     filesScope: overrides.filesScope ?? [],
     basis: 'member',
   },
@@ -284,6 +287,74 @@ describe('completeTask', () => {
     expect(taskUpdate).toHaveBeenCalledWith({
       where: { id: 't1' },
       data: { mergedByUserId: 'merger-X' },
+    });
+  });
+});
+
+describe('completeTask — an unclaimed task adopts the merger as its doer (§32 t-89)', () => {
+  const MERGER = { userId: 'merger-X', githubLogin: 'octocat' };
+
+  it('fills in the missing doer, so merged work never reads as nobody’s', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed', claimedByUserId: null }));
+
+    await completeTask('merger-X', 't1', undefined, MERGER);
+
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { status: 'merged', mergedByUserId: 'merger-X', claimedByUserId: 'merger-X' },
+    });
+  });
+
+  it('marks the credit as inferred in the journal, so it stays distinguishable from earned', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed', claimedByUserId: null }));
+
+    await completeTask('merger-X', 't1', undefined, MERGER);
+
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        kind: 'task_merged',
+        metadata: expect.objectContaining({ doerAdopted: true }),
+      })
+    );
+  });
+
+  it('NEVER overwrites an existing doer — the §14 rule it must not break', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'active', claimedByUserId: 'doer-A' }));
+
+    await completeTask('doer-A', 't1', undefined, MERGER);
+
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { status: 'merged', mergedByUserId: 'merger-X' }, // no claimedByUserId
+    });
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        metadata: expect.not.objectContaining({ doerAdopted: expect.anything() }),
+      })
+    );
+  });
+
+  it('adopts nobody when the merger is unmapped — there is no Hub user to credit', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed', claimedByUserId: null }));
+
+    await completeTask(USER, 't1', undefined, { userId: null, githubLogin: 'ext-contributor' });
+
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { status: 'merged', mergedByUserId: null },
+    });
+  });
+
+  it('also fills the doer in on the already-merged backfill path', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'merged', claimedByUserId: null }));
+
+    await completeTask('merger-X', 't1', undefined, MERGER);
+
+    expect(taskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { mergedByUserId: 'merger-X', claimedByUserId: 'merger-X' },
     });
   });
 });

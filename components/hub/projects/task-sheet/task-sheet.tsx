@@ -252,7 +252,11 @@ export function TaskSheet({
   }, [path, prInput, afterWrite]);
 
   const ref = detail?.number != null ? `t-${detail.number}` : `t-${taskId.slice(-4)}`;
-  const status = detail ? taskStatus(detail.status) : null;
+  // Held by the assignee while open, else the claimant. With neither, the chip must
+  // not read "assigned" — it sits directly above a picker reading "Unassigned".
+  const status = detail
+    ? taskStatus(detail.status, (detail.assignee ?? detail.claimer) != null)
+    : null;
   const prUrl = detail?.prUrl ? sanitizeUrl(detail.prUrl) : '';
   const canStart = detail?.status === 'claimed'; // ready — deps met, not started
   const canComplete = detail?.status === 'active';

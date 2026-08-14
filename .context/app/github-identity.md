@@ -94,6 +94,18 @@ never overwritten. An unlinked/external merger resolves to `null` — the raw lo
 is still kept in the journal. The task sheet shows a "Merged by &lt;member&gt;"
 line when the merger is a linked Hub user.
 
+**The one case where the merger also becomes the doer** (`f-work-kinds` §32 t-89,
+owner call): a task with **no** claimant at all. That became reachable when
+enhancements started being born unassigned and any task could be released — before
+that, the create cascade guaranteed a holder. `adoptsMergerAsDoer` fills
+`claimedByUserId` in, and the `task_merged` event records `doerAdopted: true` so
+inferred credit stays distinguishable from earned. This does not weaken "never the
+doer": that rule exists so a webhook cannot overwrite whoever did the work, and here
+there is nobody to overwrite. A real name beats a blank on merged work; it is an
+edge case, and if unclaimed merges turn out to be common the mechanism can change
+then. An **unmapped** merger still adopts nobody — there is no Hub user to credit,
+so the task is skipped and stays visibly open.
+
 ## GDPR
 
 `app_user_github` is `exported` in `HUB_SUBJECT_TABLES` and cascade-deleted on

@@ -23,9 +23,9 @@ import type {
 
 function TaskItem({ task }: { task: FeatureDetailTaskDTO }) {
   const { open } = useTaskSheet();
-  const status = taskStatus(task.status);
   // Assignee is the softer "this is yours"; the live claimer takes precedence.
   const person = task.claimer ?? task.assignee;
+  const status = taskStatus(task.status, person != null);
 
   return (
     <div

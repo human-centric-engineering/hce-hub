@@ -44,7 +44,11 @@ export function SwimLane({ lane }: { lane: BoardLane }) {
           </span>
           <span className="font-mono text-[10px]" style={{ color: 'var(--ink-faint)' }}>
             {isUnassigned
-              ? `${lane.taskCount} tasks · pull, don’t assign`
+              ? // "pull, don't assign" described the §5 doctrine, not this UI: the
+                // affordance here IS assign (to yourself, which is the pull). The
+                // lane went from theoretical to real in §32 t-89, so its copy is
+                // now read rather than imagined.
+                `${lane.taskCount} ${lane.taskCount === 1 ? 'task' : 'tasks'} · free to take`
               : (lane.role ?? 'member')}
           </span>
           {lane.ownedFeatures.length > 0 && (

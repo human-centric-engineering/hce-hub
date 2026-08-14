@@ -120,10 +120,13 @@ and drives each to `merged`:
   not something to fake by attributing to a system account.
 - **Idempotent.** `completeTask` is a no-op on an already-`merged` task, so a
   re-delivered event (GitHub retries, or a manual redelivery) changes nothing.
-- **Resilient skips.** A matched task that is unclaimed, or whose claimant is no
-  longer a project member (the [f-access](./planning/f-access.md) funnel's 404), is **skipped with a
+- **Resilient skips.** A matched task whose claimant is no longer a project member
+  (the [f-access](./planning/f-access.md) funnel's 404) is **skipped with a
   warning** rather than failing the whole delivery — one bad task never blocks
-  the others.
+  the others. An **unclaimed** task completes as the merger, who is adopted as its
+  doer (§32 t-89 — see
+  [github identity](./github-identity.md#merge-attribution)); it is skipped only
+  when the merger is unmapped, leaving nobody to credit.
 - **Unblocking is free.** Task/feature status is derived, so a merged task's
   dependents recompute as unblocked on the next board read — no cascade write.
 

@@ -89,10 +89,22 @@ describe('TaskSheet', () => {
     expect(await screen.findByText('Wire the streaming handler')).toBeInTheDocument();
     expect(screen.getByText('t-6')).toBeInTheDocument();
     expect(screen.getByText('f-mcp')).toBeInTheDocument();
-    expect(screen.getByText('assigned')).toBeInTheDocument(); // effective `claimed` reads "assigned" (f-task-assignment t1)
+    // This fixture has neither claimer nor assignee, so the chip reads
+    // "unassigned" — it used to read "assigned" directly above a picker saying
+    // "Unassigned", each contradicting the other (§32 t-89).
+    expect(screen.getByText('unassigned')).toBeInTheDocument();
     // An open, unassigned task shows the assignee picker with the "Unassigned"
     // placeholder (f-task-assignment §22 t2), not a read-only name.
     expect(screen.getByRole('combobox', { name: 'Assignee' })).toHaveTextContent('Unassigned');
+  });
+
+  it('reads "assigned" once somebody holds the task', async () => {
+    mockFetchOnce({
+      data: detail({ assignee: { id: 'u1', name: 'Ada Lovelace', email: 'a@x.io', image: null } }),
+    });
+    renderSheet();
+    // effective `claimed` + a holder reads "assigned" (f-task-assignment t1)
+    expect(await screen.findByText('assigned')).toBeInTheDocument();
   });
 
   it('closes on Escape', async () => {

@@ -419,7 +419,7 @@ export async function reassignFeatureTasks(
 /**
  * How a task's PR merge is attributed (f-github-identity §23 t-76). **Additive** —
  * the merger is distinct from the doer (`claimedByUserId`), which `completeTask`
- * never touches; passed only by the f-github-sync webhook path, never a human
+ * never overwrites; passed only by the f-github-sync webhook path, never a human
  * Complete.
  */
 export interface MergeAttribution {
@@ -427,6 +427,26 @@ export interface MergeAttribution {
   userId: string | null;
   /** The merger's raw GitHub login — kept in the journal trail even when unmapped. */
   githubLogin: string;
+}
+
+/**
+ * Should this merge **adopt** the merger as the task's doer (§32 t-89, owner call)?
+ *
+ * Only when there is no doer to overwrite. A task that nobody claimed can now reach
+ * a merged PR — an `enhancement` is born unassigned, and any task can be released —
+ * and the alternative to crediting the merger is a merged task attributed to nobody.
+ * Owner's call: a real name beats a blank, and this is an edge case; if unclaimed
+ * merges turn out to be common the mechanism can change then.
+ *
+ * The "additive, never the doer" rule (f-github-sync §14) is intact: it exists so a
+ * webhook can't overwrite the person who *did* the work. Here there is nobody to
+ * overwrite, so the rule has nothing to protect.
+ */
+function adoptsMergerAsDoer(
+  claimedByUserId: string | null,
+  mergedBy?: MergeAttribution
+): mergedBy is MergeAttribution & { userId: string } {
+  return claimedByUserId === null && mergedBy?.userId != null;
 }
 
 /**
@@ -438,6 +458,10 @@ export interface MergeAttribution {
  * `mergedBy` (f-github-sync only) records **who merged the PR** on `Task.mergedByUserId`
  * + the `task_merged` event — additive attribution that never overwrites the doer
  * (`actorUserId` stays `userId`, the claimant). Omitted for a human Complete.
+ *
+ * The one case where the merger also becomes the doer is an **unclaimed** task: see
+ * `adoptsMergerAsDoer`. The journal records `doerAdopted: true` there, so the trail
+ * distinguishes credit that was earned from credit that was inferred.
  */
 export async function completeTask(
   userId: string,
@@ -453,11 +477,18 @@ export async function completeTask(
   // doesn't silently lose the "who merged it" attribution. Idempotent — a
   // re-delivery writes the same merger. (No new event — the merge is already
   // journaled by the first completion.)
+  // An unclaimed task adopts the merger as its doer, so merged work always carries
+  // a name (§32 t-89) — applied on both the live and the backfill path.
+  const adoptDoer = adoptsMergerAsDoer(task.claimedByUserId, mergedBy);
+
   if (task.status === 'merged') {
     if (mergedBy) {
       await prisma.task.update({
         where: { id: task.taskId },
-        data: { mergedByUserId: mergedBy.userId },
+        data: {
+          mergedByUserId: mergedBy.userId,
+          ...(adoptDoer ? { claimedByUserId: mergedBy.userId } : {}),
+        },
       });
     }
     return { taskId: task.taskId, number: task.number, status: 'merged', warnings: [] };
@@ -470,8 +501,13 @@ export async function completeTask(
     });
     await tx.task.update({
       where: { id: task.taskId },
-      // Additive: set the merger when given, but never the doer (claimedByUserId).
-      data: { status: 'merged', ...(mergedBy ? { mergedByUserId: mergedBy.userId } : {}) },
+      // Additive: set the merger when given. The doer (claimedByUserId) is only
+      // ever *filled in*, never overwritten — see `adoptsMergerAsDoer`.
+      data: {
+        status: 'merged',
+        ...(mergedBy ? { mergedByUserId: mergedBy.userId } : {}),
+        ...(adoptDoer ? { claimedByUserId: mergedBy.userId } : {}),
+      },
     });
     await recordProjectEvent(tx, {
       projectId: task.projectId,
@@ -484,6 +520,8 @@ export async function completeTask(
         ...(mergedBy
           ? { mergedByUserId: mergedBy.userId, mergedByGithubLogin: mergedBy.githubLogin }
           : {}),
+        // Credit inferred, not earned — keep the two distinguishable in the trail.
+        ...(adoptDoer ? { doerAdopted: true } : {}),
       },
     });
   });

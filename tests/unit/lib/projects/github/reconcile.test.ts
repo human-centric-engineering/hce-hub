@@ -157,12 +157,41 @@ describe('reconcilePullRequestEvent — merged_by attribution (f-github-identity
 });
 
 describe('reconcilePullRequestEvent — resilience', () => {
-  it('skips an unclaimed task without calling completeTask', async () => {
-    // Reachable for real since §32 t-89 (born-unassigned enhancements + release),
-    // where before the create cascade made it impossible. The task stays open on
-    // the board rather than being closed under an invented doer.
+  it('skips an unclaimed task when there is no merger to credit', async () => {
+    // Unclaimed became reachable in §32 t-89 (born-unassigned enhancements +
+    // release). With no merged_by there is still no Hub user to complete as, so the
+    // task stays open on the board where a human will see it.
     findMany.mockResolvedValue([{ id: 'task-1', claimedByUserId: null }]);
     const r = await reconcilePullRequestEvent(mergedClose());
+    expect(completeTask).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ handled: true, matched: 1, reconciled: 0, skipped: 1 });
+  });
+
+  it('completes an UNCLAIMED task as the merger, who becomes its doer (§32 t-89)', async () => {
+    // Owner call: a real name beats a blank on merged work. completeTask adopts
+    // them as claimedByUserId; the actor here is the merger, not the absent doer.
+    findMany.mockResolvedValue([{ id: 'task-1', claimedByUserId: null }]);
+    resolveHubUserByGithubId.mockResolvedValue('hub-user-X');
+
+    const r = await reconcilePullRequestEvent(mergedClose(PR_URL, { login: 'octocat', id: 1 }));
+
+    expect(completeTask).toHaveBeenCalledWith('hub-user-X', 'task-1', undefined, {
+      userId: 'hub-user-X',
+      githubLogin: 'octocat',
+    });
+    expect(r).toMatchObject({ handled: true, matched: 1, reconciled: 1, skipped: 0 });
+  });
+
+  it('still skips an unclaimed task when the merger is external (unmapped)', async () => {
+    // An unlinked GitHub account resolves to a null Hub user — nobody to credit,
+    // and inventing someone is worse than leaving it visibly open.
+    findMany.mockResolvedValue([{ id: 'task-1', claimedByUserId: null }]);
+    resolveHubUserByGithubId.mockResolvedValue(null);
+
+    const r = await reconcilePullRequestEvent(
+      mergedClose(PR_URL, { login: 'ext-contributor', id: 999 })
+    );
+
     expect(completeTask).not.toHaveBeenCalled();
     expect(r).toMatchObject({ handled: true, matched: 1, reconciled: 0, skipped: 1 });
   });
