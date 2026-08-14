@@ -56,9 +56,18 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
 ### MCP / write (t1)
 
 - **`create_task { kind }`** — optional; `'bug'` files a defect, `'enhancement'` an
-  improvement to work that already exists, defaulting to `'feature_work'`. Owner-tier
-  via the [f-access](./planning/f-access.md) funnel; the seed's `functionDefinition`
-  re-syncs on the update branch so MCP advertises `kind`.
+  improvement to a feature that has **already shipped**, defaulting to
+  `'feature_work'`. Owner-tier via the [f-access](./planning/f-access.md) funnel; the
+  seed's `functionDefinition` re-syncs on the update branch so MCP advertises `kind`.
+  - **The line is _shipped_, not _small_** (§32 t-89): work on an unshipped feature is
+    `feature_work` even when it is scope discovered mid-build — an enhancement raised
+    before ship is scope, not an afterthought, which is the same rule
+    `ship_feature`'s unmerged-task warning already applies.
+  - **An `enhancement` is born unassigned** — it is new work on an existing, already
+    claimed feature, so the owner says nothing about who should do it. `bug` and
+    `feature_work` keep the owner cascade: a bug goes to the most relevant owner and
+    is visible to everyone on the active-fixes strip. See
+    [task assignment](./task-assignment.md).
 - **`update_task { kind }`** (§32 t-79) — re-files a task whose kind was recorded
   wrong. Not hypothetical: before `enhancement` existed, an improvement had to be
   filed as a `bug` to keep it off a shipped feature's bar, so the record contains

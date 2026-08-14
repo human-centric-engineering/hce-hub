@@ -158,6 +158,9 @@ describe('reconcilePullRequestEvent — merged_by attribution (f-github-identity
 
 describe('reconcilePullRequestEvent — resilience', () => {
   it('skips an unclaimed task without calling completeTask', async () => {
+    // Reachable for real since §32 t-89 (born-unassigned enhancements + release),
+    // where before the create cascade made it impossible. The task stays open on
+    // the board rather than being closed under an invented doer.
     findMany.mockResolvedValue([{ id: 'task-1', claimedByUserId: null }]);
     const r = await reconcilePullRequestEvent(mergedClose());
     expect(completeTask).not.toHaveBeenCalled();

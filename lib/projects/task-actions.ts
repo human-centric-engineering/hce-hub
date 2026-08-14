@@ -84,11 +84,19 @@ interface AssignableTask {
  * heads-up; re-assigning active work to the person already on it leaves their
  * in-progress work untouched. Journals `task_assigned`. **Callers must exclude
  * merged tasks** — finished work credits its doer, never reassigned.
+ *
+ * A **null `assigneeUserId` releases** the task back to the unassigned pool (§32
+ * t-89): both user fields clear, so it routes to the Board's Unassigned lane. The
+ * active case needs no special branch — "nobody" is a different holder than
+ * whoever held it, so the existing handoff path already resets `active → claimed`
+ * and closes the open claim. That closure matters beyond tidiness: the soft
+ * *collision* detector keys off open claims, so a released task left holding one
+ * would keep warning the next person off its own files.
  */
 async function applyAssignment(
   tx: Tx,
   task: AssignableTask,
-  assigneeUserId: string,
+  assigneeUserId: string | null,
   actorUserId: string
 ): Promise<{ nextStatus: TaskStatus; warning: CollisionWarning | null }> {
   const displacedWorker =
@@ -119,15 +127,20 @@ async function applyAssignment(
     metadata: { assigneeUserId, from: task.status },
   });
 
-  const warning: CollisionWarning | null = displacedWorker
-    ? {
-        kind: 'already_claimed',
-        userId: displacedWorker,
-        taskId: task.taskId,
-        message:
-          'Heads-up: this task was actively being worked by someone else — their claim was released on reassignment.',
-      }
-    : null;
+  // Only worth a heads-up when someone *else's* active work was displaced. Putting
+  // your own task down is the release path's normal case, not a collision — and
+  // "someone else" would simply be untrue there.
+  const warning: CollisionWarning | null =
+    displacedWorker && displacedWorker !== actorUserId
+      ? {
+          kind: 'already_claimed',
+          userId: displacedWorker,
+          taskId: task.taskId,
+          message: `Heads-up: this task was actively being worked by someone else — their claim was released on ${
+            assigneeUserId === null ? 'release' : 'reassignment'
+          }.`,
+        }
+      : null;
   return { nextStatus, warning };
 }
 
@@ -230,12 +243,14 @@ export async function startTask(
 /**
  * Assign `taskId` to `assigneeUserId` (f-task-assignment §f-ta t1) — the missing
  * verb that re-sets the dormant `assigneeUserId` (born = feature owner, never
- * re-set until now). Self = "take/claim it", another = "reassign" — one verb.
+ * re-set until now). Self = "take/claim it", another = "reassign", **`null` =
+ * "put it back"** — one verb.
  *
- * **Any project member may (re)assign** (call 2 — open/trusting; the caller's
- * membership is the `resolveTaskAccess` funnel's, deny ≡ 404). The **assignee**
- * must be a member of the task's project (else `ValidationError`). Decoupled from
- * feature ownership (call 4): never touches `Feature.ownerUserId`.
+ * **Any project member may (re)assign or release** (call 2 — open/trusting; the
+ * caller's membership is the `resolveTaskAccess` funnel's, deny ≡ 404). A *named*
+ * **assignee** must be a member of the task's project (else `ValidationError`);
+ * a null one has nobody to check. Decoupled from feature ownership (call 4):
+ * never touches `Feature.ownerUserId`.
  *
  * Semantics:
  * - **Merged is a no-op** — completed work credits its doer (`claimedByUserId`);
@@ -245,18 +260,24 @@ export async function startTask(
  *   `active → claimed` so the new assignee starts fresh, and returns a soft
  *   heads-up. Re-assigning an active task to the person already working it is a
  *   no-op on status/claim — it can't knock the active worker back to `claimed`.
+ * - **Release (`null`) is that same handoff, to nobody** (§32 t-89): both user
+ *   fields clear and the task lands in the Unassigned lane. An *active* task
+ *   released resets to `claimed` and its open claim closes — an active task with
+ *   no worker would be incoherent, and would go on tripping the collision
+ *   detector for whoever came next.
  * - `claimedByUserId` is synced to the new assignee in the `claimed` state (as a
  *   born task is), so the existing claimer-based plan/board display already shows
  *   the new person; the richer status-aware display is t2.
  *
  * Journals a `task_assigned` `ProjectEvent` (the handoff trail — who moved whose
- * work, and when) inside the same tx, and audit-logs it. An optional
- * `expectedProjectId` rejects a cross-project id-swap.
+ * work, and when; a release records a null `assigneeUserId`) inside the same tx,
+ * and audit-logs it. An optional `expectedProjectId` rejects a cross-project
+ * id-swap.
  */
 export async function assignTask(
   userId: string,
   taskId: string,
-  assigneeUserId: string,
+  assigneeUserId: string | null,
   expectedProjectId?: string
 ): Promise<TaskActionResult> {
   const task = await resolveScoped(userId, taskId, expectedProjectId);
@@ -266,10 +287,13 @@ export async function assignTask(
     return { taskId: task.taskId, number: task.number, status: 'merged', warnings: [] };
   }
 
-  // The assignee must be a member of the task's project (deny ≡ not a member).
-  const { basis } = await canAccessProject(assigneeUserId, task.projectId);
-  if (basis === null) {
-    throw new ValidationError('The assignee must be a member of this project.');
+  // A named assignee must be a member of the task's project (deny ≡ not a member).
+  // A release names nobody, so there is no membership to check.
+  if (assigneeUserId !== null) {
+    const { basis } = await canAccessProject(assigneeUserId, task.projectId);
+    if (basis === null) {
+      throw new ValidationError('The assignee must be a member of this project.');
+    }
   }
 
   // The (re)assignment itself — the shared per-task core (handoff reset + claim

@@ -47,7 +47,14 @@ export function describeEvent(event: ProjectEventDTO): string {
     case 'bug_reported':
       return 'reported a bug';
     case 'task_assigned':
-      return 'assigned the task';
+      // One kind, two moves: `assign_task` records a null assignee when a task is
+      // released back to the pool (§32 t-89), so read the metadata rather than
+      // spending a `ProjectEventKind` (and a migration) on the mirror image. The
+      // key must be *present and null* — a metadata-less event is an assignment
+      // whose detail we lost, not a release.
+      return 'assigneeUserId' in meta && meta.assigneeUserId === null
+        ? 'returned the task to the pool'
+        : 'assigned the task';
     case 'help_wanted':
       return meta.helpWanted === true ? 'flagged help wanted' : 'cleared help wanted';
     case 'member_added':

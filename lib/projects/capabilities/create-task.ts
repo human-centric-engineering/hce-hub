@@ -2,9 +2,11 @@
  * `create_task` — the feature owner adds a task to a feature they own
  * (v1-requirements §11): declares its title, file scope, and dependencies on
  * existing tasks. The created task is born `claimed` and owned by the feature
- * owner (f-status-model §20); if its dependencies aren't all merged yet,
- * `computeEffectiveStatus` reports it as `blocked` until they are, so `next_task`
- * won't recommend it prematurely.
+ * owner (f-status-model §20) — **except an `enhancement`, which is born
+ * unassigned** into the pool (§32 t-89): it is new work on an already-shipped
+ * feature, so the feature's owner says nothing about who should do it. If its
+ * dependencies aren't all merged yet, `computeEffectiveStatus` reports it as
+ * `blocked` until they are, so `next_task` won't recommend it prematurely.
  *
  * Authorization is the `owner` tier — the feature's owner or a project lead —
  * routed through `resolveFeatureAccess` (a non-member sees `not_found`, no
@@ -55,7 +57,7 @@ const schema = z.object({
     .nativeEnum(TaskKind)
     .optional()
     .describe(
-      "Task kind: 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of completion progress and tallied as an open fix); 'enhancement' for a task-sized improvement to work that already exists; defaults to 'feature_work'. Work raised after its feature shipped never counts toward that feature's completion, whatever its kind — so file an improvement as 'enhancement', not as a 'bug'."
+      "Task kind; defaults to 'feature_work'. Use 'feature_work' for any work on a feature that has NOT shipped yet — including scope discovered mid-build. Use 'enhancement' only for a task-sized improvement to a feature that has ALREADY shipped (typically in an earlier phase); an enhancement is born unassigned, for whoever picks it up. Use 'bug' for a defect on the feature that broke it (prioritised by next_task, kept out of completion progress and tallied as an open fix). Work raised after its feature shipped never counts toward that feature's completion, whatever its kind."
     ),
   phaseId: z
     .string()
@@ -89,7 +91,7 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'create_task',
     description:
-      "Add a task to a feature you own (or lead): declares its title, optional description + acceptance contract (done-when), optional file scope, optional dependencies on existing tasks, and optionally the phase that chose the work (phaseId — omit to inherit the feature's phase). The task is born claimed and owned by the feature owner (blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks. The result includes the created task id + assigned t-N (report it without a re-read).",
+      "Add a task to a feature you own (or lead): declares its title, optional description + acceptance contract (done-when), optional file scope, optional dependencies on existing tasks, and optionally the phase that chose the work (phaseId — omit to inherit the feature's phase). The task is born claimed and owned by the feature owner — except an 'enhancement', which is born unassigned in the pool for whoever picks it up (blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks. The result includes the created task id + assigned t-N (report it without a re-read).",
     parameters: {
       type: 'object',
       properties: {
@@ -114,10 +116,10 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           type: 'string',
           enum: ['feature_work', 'bug', 'enhancement'],
           description:
-            "Optional task kind — 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of completion progress and tallied as an open fix); 'enhancement' for a task-sized improvement to work that already exists; defaults to 'feature_work'. Work raised after its feature shipped never counts toward that feature's completion, whatever its kind — so file an improvement as 'enhancement', not as a 'bug'.",
+            "Optional task kind; defaults to 'feature_work'. Use 'feature_work' for any work on a feature that has NOT shipped yet — including scope discovered mid-build. Use 'enhancement' only for a task-sized improvement to a feature that has ALREADY shipped (typically in an earlier phase); an enhancement is born unassigned, for whoever picks it up. Use 'bug' for a defect on the feature that broke it (prioritised by next_task, kept out of completion progress and tallied as an open fix). Work raised after its feature shipped never counts toward that feature's completion, whatever its kind.",
         },
         phaseId: {
-          type: 'string',
+          type: ['string', 'null'],
           description:
             "Optional: commit this task to a phase in this project — the phase that chose to do the work, when that differs from its feature's phase. Omit to inherit the feature's phase.",
         },
@@ -190,10 +192,9 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
     // Phase commitment (§32 t-80) — the phase that CHOSE this work, when that
     // differs from its feature's phase. Omitted means inherit, which is the
     // default. Same-project guard shared with update_task / update_feature.
-    // `null` is accepted as "inherit" (not an error): update_task and
-    // update_feature both take a nullable phaseId, and the JSON functionDefinition
-    // carries no nullability signal, so an agent emitting null here is doing the
-    // natural thing. Only a non-null value needs validating.
+    // `null` is accepted as "inherit" (not an error): it is the same "no
+    // commitment" the omitted case means, and update_task publishes null as the
+    // way to clear one. Only a non-null value needs validating.
     if (
       args.phaseId != null &&
       !(await phaseBelongsToProject(args.phaseId, access.feature.projectId))
@@ -202,6 +203,8 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
     }
 
     const taskKind = args.kind ?? 'feature_work';
+    // Who the task is born holding, if anyone (§32 t-89) — see the create below.
+    const holderUserId = taskKind === 'enhancement' ? null : access.feature.ownerUserId;
 
     // Promotion: the idea must exist in THIS project and be open (friendly
     // pre-check; the in-tx guard below is the race backstop).
@@ -229,12 +232,20 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           description: args.description ?? null,
           doneWhen: args.doneWhen ?? null,
           kind: taskKind,
-          // Born `claimed`, owned by the feature owner (f-status-model §20); its
-          // effective status is `blocked` until its dependencies merge.
+          // Born `claimed` — the *stage* (not started), not a person; its effective
+          // status is `blocked` until its dependencies merge (f-status-model §20).
           status: 'claimed',
           filesScope: args.filesScope ?? [],
-          assigneeUserId: access.feature.ownerUserId,
-          claimedByUserId: access.feature.ownerUserId,
+          // The owner cascade, and the one kind that doesn't get it (§32 t-89).
+          // `feature_work` inherits the feature-claim; a `bug` goes to the most
+          // relevant owner and is visible to everyone on the active-fixes strip.
+          // An `enhancement` is by definition new work on an already-shipped
+          // feature, so its owner says nothing about who should pick it up — it is
+          // born **unassigned and unclaimed**, in the Board's Unassigned lane, and
+          // anyone may take it with `assign_task`. A null owner (an unclaimed
+          // feature) already produced this state for every kind.
+          assigneeUserId: holderUserId,
+          claimedByUserId: holderUserId,
           phaseId: args.phaseId ?? null,
         },
         select: { id: true, number: true, status: true },

@@ -429,6 +429,88 @@ describe('assignTask (f-task-assignment t1)', () => {
   });
 });
 
+describe('assignTask release — null returns a task to the pool (§32 t-89)', () => {
+  it('clears both user fields on a claimed task, leaving the stage untouched', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed', claimedByUserId: USER }));
+
+    const r = await assignTask(USER, 't1', null);
+
+    expect(r.status).toBe('claimed'); // the *stage*, not a person — unchanged
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { assigneeUserId: null, claimedByUserId: null, status: 'claimed' },
+    });
+    // Nothing was actively in flight, so no claim to close.
+    expect(txClaimUpdateMany).not.toHaveBeenCalled();
+    expect(r.warnings).toEqual([]);
+  });
+
+  it('journals task_assigned with a null assignee (the release is on the trail)', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed', claimedByUserId: USER }));
+
+    await assignTask(USER, 't1', null);
+
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        kind: 'task_assigned',
+        actorUserId: USER,
+        metadata: { assigneeUserId: null, from: 'claimed' },
+      })
+    );
+  });
+
+  it('skips the membership check — a release names nobody to validate', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed' }));
+
+    await assignTask(USER, 't1', null);
+
+    expect(canAccess).not.toHaveBeenCalled();
+  });
+
+  it('putting down your OWN active task resets it to claimed and closes the claim, without warning', async () => {
+    // The release path's normal case. An active task with no worker would be
+    // incoherent, and a claim left open would go on tripping the collision
+    // detector for whoever picks the task up next.
+    resolveTask.mockResolvedValue(granted({ status: 'active', claimedByUserId: USER }));
+
+    const r = await assignTask(USER, 't1', null);
+
+    expect(r.status).toBe('claimed');
+    expect(txClaimUpdateMany).toHaveBeenCalledWith({
+      where: { taskId: 't1', releasedAt: null },
+      data: { releasedAt: expect.any(Date) },
+    });
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { assigneeUserId: null, claimedByUserId: null, status: 'claimed' },
+    });
+    // "someone else" would simply be untrue — you displaced yourself.
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("releasing SOMEONE ELSE's active task still warns, and says release not reassignment", async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'active', claimedByUserId: 'someone' }));
+
+    const r = await assignTask(USER, 't1', null);
+
+    expect(r.status).toBe('claimed');
+    expect(r.warnings).toEqual([
+      expect.objectContaining({ kind: 'already_claimed', userId: 'someone', taskId: 't1' }),
+    ]);
+    expect(r.warnings[0].message).toContain('released on release');
+  });
+
+  it('is still a no-op on a merged task — finished work is not released either', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'merged' }));
+
+    const r = await assignTask(USER, 't1', null);
+
+    expect(r).toEqual({ taskId: 't1', number: 42, status: 'merged', warnings: [] });
+    expect(runTx).not.toHaveBeenCalled();
+  });
+});
+
 describe('reassignFeatureTasks (f-task-assignment §22 t2)', () => {
   const ASSIGNEE = 'user-2';
 

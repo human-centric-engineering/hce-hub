@@ -50,4 +50,24 @@ describe('assign_task capability', () => {
     });
     expect(assign).toHaveBeenCalledWith('caller', 't1', 'u2', 'p1');
   });
+
+  it('forwards a null assignee — the release path reaches the core (§32 t-89)', async () => {
+    assign.mockResolvedValue({ taskId: 't1', status: 'claimed', warnings: [] });
+
+    const r = await cap.execute({ taskId: 't1', assigneeUserId: null }, ctx('caller'));
+
+    expect(r.success).toBe(true);
+    expect(assign).toHaveBeenCalledWith('caller', 't1', null, undefined);
+  });
+
+  it('accepts a null assignee through its own Zod boundary, not just its types', async () => {
+    // The type says `string | null`, but the runtime gate is the Zod schema — and
+    // over MCP the *published* schema is what decides whether a null can be sent
+    // at all (t-91). Assert the validator itself, so a `.nullable()` dropped in a
+    // later edit fails here rather than at a live tool call.
+    const schema = (
+      cap as unknown as { schema: { safeParse: (v: unknown) => { success: boolean } } }
+    ).schema;
+    expect(schema.safeParse({ taskId: 't1', assigneeUserId: null }).success).toBe(true);
+  });
 });

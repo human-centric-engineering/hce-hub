@@ -104,6 +104,15 @@ export async function reconcilePullRequestEvent(payload: unknown): Promise<Recon
   let reconciled = 0;
   let skipped = 0;
   for (const task of tasks) {
+    // An unclaimed task has no doer, and `completeTask` needs one — both for the
+    // access funnel and for the `task_merged` actor. Skip rather than invent one.
+    //
+    // This guard was unreachable until §32 t-89: the create cascade always set a
+    // claimant, so no linked task could be unclaimed. Now an `enhancement` is born
+    // unassigned and any task can be released, so a PR *can* merge against a task
+    // nobody holds — and it will stay open, visibly, on the board. Who should get
+    // the doer credit there is an owner call, deliberately not made here: it is
+    // NOT the merger (f-github-sync §14 — the doer is never the webhook actor).
     if (!task.claimedByUserId) {
       skipped++;
       logger.warn('github-sync: task linked to merged PR is unclaimed — skipped', {

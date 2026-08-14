@@ -73,7 +73,7 @@ export class CreatePhaseCapability extends BaseCapability<Args, Data> {
         projectId: { type: 'string', description: 'The project to add the phase to.' },
         name: { type: 'string', description: 'The phase name (e.g. "v0.9.0", "Onboarding").' },
         description: {
-          type: 'string',
+          type: ['string', 'null'],
           description: 'Optional description of what the phase covers (markdown).',
         },
         status: {
