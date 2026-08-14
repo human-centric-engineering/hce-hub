@@ -47,6 +47,48 @@ SSE push (notifications/{tools,resources,prompts}/list_changed,
 | Validation    | `lib/validations/mcp.ts`                                                                                          |
 | Prisma models | McpServerConfig, McpExposedTool, McpExposedResource, McpExposedPrompt, McpApiKey, McpAuditLog                     |
 
+## Session model
+
+`MCP_SESSION_MODE` decides whether the server holds session state. It is a
+**deployment-topology** choice, not a feature toggle.
+
+| Mode                      | Holds sessions              | Correct on                        | Costs                                                                  |
+| ------------------------- | --------------------------- | --------------------------------- | ---------------------------------------------------------------------- |
+| `stateless` **(default)** | Nothing                     | Any topology                      | SSE, `resources/subscribe`, progress notifications, `logging/setLevel` |
+| `stateful`                | In-memory `Map` per process | **One** long-running process only | Nothing — but see below                                                |
+
+**Why stateless is the default.** The in-memory store is correct for a single
+process and silently wrong anywhere else. On a function-per-request platform
+`initialize` creates a session on one instance and the follow-up calls land on
+others, each missing its own empty `Map` and returning `404 Session not found` —
+so the handshake fails mid-connect, intermittently, only under concurrency. No
+client retry recovers it, because re-initialising just repeats the race.
+
+The defaults are chosen on failure-mode asymmetry. Wrong in the stateless
+direction, a developer finds out immediately: the feature is absent and the flag
+is named after it. Wrong in the stateful direction, it reaches production and
+presents as session expiry. Selecting `stateful` on a serverless platform
+therefore throws at startup rather than degrading (the `TENANCY_MODE` precedent
+in `lib/db/client.ts`).
+
+**How stateless works.** No `Mcp-Session-Id` is issued, so per the Streamable
+HTTP transport the client never sends one and every request stands alone. The
+route synthesises an ephemeral session per request
+(`createEphemeralSession`) carrying the only two things a tool call or resource
+read consults — `initialized` and `protocolVersion` — and marks it `ephemeral`
+so the continuity-dependent methods refuse by name (`STATELESS_UNSUPPORTED`,
+`-32005`) instead of accepting work they would drop. The protocol version comes
+from the client's `MCP-Protocol-Version` header, falling back to the **oldest**
+supported revision rather than the newest, so a missing header can never opt a
+client into features it did not negotiate.
+
+**Going stateful at scale.** Sessions must move to a store shared across
+instances. Sunrise ships no such store and takes no dependency on one: Redis is
+the obvious choice, and Postgres is legitimate precisely because it is already a
+hard dependency, so it adds no new infrastructure. That extension point is
+deliberately undesigned until something needs it — an interface with one
+implementation is usually the wrong interface.
+
 ## Security Model
 
 | Layer              | Mechanism                                                                               |

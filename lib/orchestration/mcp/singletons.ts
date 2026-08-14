@@ -10,6 +10,28 @@
 
 import { McpSessionManager } from '@/lib/orchestration/mcp/session-manager';
 import { McpRateLimiter } from '@/lib/orchestration/mcp/rate-limiter';
+import { env } from '@/lib/env';
+
+/**
+ * `MCP_SESSION_MODE=stateful` keeps sessions in this process's memory, which is
+ * only correct when there is exactly one process. On a function-per-request
+ * platform each instance gets its own empty `Map`, so a session created by
+ * `initialize` is invisible to whichever instance serves the next call — the
+ * handshake fails intermittently, disguised as session expiry, and only under
+ * concurrency. Fail at startup with the fix rather than let that reach
+ * production, matching the `TENANCY_MODE` seam in `lib/db/client.ts`.
+ */
+const SERVERLESS = Boolean(process.env.VERCEL ?? process.env.AWS_LAMBDA_FUNCTION_NAME);
+if (env.MCP_SESSION_MODE === 'stateful' && SERVERLESS) {
+  throw new Error(
+    'MCP_SESSION_MODE=stateful holds sessions in per-process memory and cannot work on a ' +
+      'function-per-request platform: consecutive requests land on different instances, so ' +
+      'the session from `initialize` is not found and the client cannot connect. Use ' +
+      'MCP_SESSION_MODE=stateless (the default), which needs no shared state — at the cost ' +
+      'of SSE, resources/subscribe and logging/setLevel. If you need those here, sessions ' +
+      'must move to a shared store (see .context/orchestration/mcp.md).'
+  );
+}
 
 let sessionManager: McpSessionManager | null = null;
 let rateLimiter: McpRateLimiter | null = null;

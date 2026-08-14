@@ -108,6 +108,23 @@ const serverEnvSchema = z.object({
         'silently run unscoped queries.'
     ),
 
+  // MCP session model (see .context/orchestration/mcp.md)
+  MCP_SESSION_MODE: z
+    .enum(['stateless', 'stateful'])
+    .default('stateless')
+    .describe(
+      'How the MCP server holds session state. "stateless" (default) keeps none: every ' +
+        'request stands alone, so the server is correct on ANY topology — including a ' +
+        'function-per-request platform, where each instance has its own memory and a ' +
+        'session created on one is invisible to its live siblings. The cost is the ' +
+        'features that need continuity: SSE notification streams, resources/subscribe, ' +
+        'progress notifications, and per-session logging/setLevel, which are refused by ' +
+        'name (STATELESS_UNSUPPORTED) rather than silently doing nothing. "stateful" ' +
+        'restores them using an in-memory session store — correct on ONE long-running ' +
+        'process only. Selecting it on a serverless platform throws at startup rather ' +
+        'than failing intermittently in production.'
+    ),
+
   // Capability authorization model (see lib/orchestration/capabilities/dispatcher.ts)
   CAPABILITY_BINDING_MODE: z
     .enum(['permissive', 'strict'])
