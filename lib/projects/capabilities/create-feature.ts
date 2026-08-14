@@ -26,6 +26,7 @@ import type {
 import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { canAccessProject } from '@/lib/projects/access';
+import { phaseBelongsToProject } from '@/lib/projects/phases-service';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 import { checkIdeaPromotable, resolveIdeaOnPromotion } from '@/lib/projects/idea-promotion';
@@ -218,14 +219,12 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
       }
     }
 
-    // Optional phase must exist in THIS project (mirrors update_feature) — you can't
-    // file into a phase you can't see. The FK is the race backstop.
+    // Optional phase must exist in THIS project — you can't file into a phase you
+    // can't see. The FK is the race backstop. Shared guard (§32 t-80): one
+    // implementation across create_feature, update_feature, the task verbs and
+    // assignFeatureToPhase, so the rule can't drift per call site.
     if (args.phaseId !== undefined) {
-      const phase = await prisma.phase.findFirst({
-        where: { id: args.phaseId, projectId: args.projectId },
-        select: { id: true },
-      });
-      if (!phase) {
+      if (!(await phaseBelongsToProject(args.phaseId, args.projectId))) {
         return this.error('That phase was not found in this project.', 'invalid_phase');
       }
     }

@@ -13,13 +13,17 @@
  * `not_found` (no enumeration). Ids only in, ids + short labels out ⇒ no PII.
  */
 import { z } from 'zod';
-import { BaseCapability } from '@/lib/orchestration/capabilities/base-capability';
+import {
+  BaseCapability,
+  type ProvenanceRedaction,
+} from '@/lib/orchestration/capabilities/base-capability';
 import type {
   CapabilityContext,
   CapabilityFunctionDefinition,
   CapabilityResult,
 } from '@/lib/orchestration/capabilities/types';
 import { NotFoundError } from '@/lib/api/errors';
+import { redactedString } from '@/lib/security/redact';
 import { getProjectPlan } from '@/lib/projects/plan';
 import type { PhaseStatus } from '@prisma/client';
 import type { EffectiveFeatureStatus } from '@/lib/projects/feature-status';
@@ -48,6 +52,8 @@ interface PhaseRef {
   name: string | null;
   status: PhaseStatus | null;
   ordinal: number | null;
+  /** The phase's authored intent — why this grouping exists (§32 t-80); `null` for the residual band. */
+  description: string | null;
   features: FeatureRef[];
 }
 
@@ -58,12 +64,16 @@ interface Data {
 
 export class ListPhasesCapability extends BaseCapability<Args, Data> {
   readonly slug = 'list_phases';
-  readonly processesPii = false; // ids + short labels only
+  // Was `false` on the premise "ids + short labels only" — true until §32 t-80
+  // added each phase's authored `description`, which is long-form prose
+  // (`@db.Text`), not a label. Same stance as get_task / get_feature: free text
+  // must not land verbatim on the durable provenance row.
+  readonly processesPii = true;
 
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'list_phases',
     description:
-      "Read a project's structure — its phases (with ids, names, status) and the features filed under each (with ids, slugs, numbers, status), plus a residual bucket (phase id null) for features not filed under any phase. Use it to discover the phase id to file a feature into, or a feature's id to act on. Membership-scoped: a project you can't see is not_found.",
+      "Read a project's structure — its phases (with ids, names, status, and the authored description saying why the grouping exists) and the features filed under each (with ids, slugs, numbers, status), plus a residual bucket (phase id null) for features not filed under any phase. Use it to discover the phase id to file a feature into, a phase's intent before committing work to it, or a feature's id to act on. Membership-scoped: a project you can't see is not_found.",
     parameters: {
       type: 'object',
       properties: {
@@ -74,6 +84,16 @@ export class ListPhasesCapability extends BaseCapability<Args, Data> {
   };
 
   protected readonly schema = schema;
+
+  redactProvenance(args: Args, result: CapabilityResult<Data>): ProvenanceRedaction {
+    // The args are just a project id — keep them. The RESULT now carries authored
+    // phase descriptions, so the durable row records shape, not prose.
+    const n = result.data?.phases.length ?? 0;
+    return {
+      args: { projectId: args.projectId },
+      resultPreview: redactedString(`${n} phase band(s)`),
+    };
+  }
 
   async execute(args: Args, context: CapabilityContext): Promise<CapabilityResult<Data>> {
     const { userId } = context;
@@ -92,6 +112,7 @@ export class ListPhasesCapability extends BaseCapability<Args, Data> {
           name: band.name,
           status: band.status,
           ordinal: band.ordinal,
+          description: band.description,
           features: band.features.map((f) => ({
             id: f.id,
             number: f.number,

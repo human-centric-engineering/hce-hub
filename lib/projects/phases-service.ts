@@ -260,6 +260,27 @@ export async function reorderPhases(
 }
 
 /**
+ * Is `phaseId` a phase in `projectId`?
+ *
+ * The one same-project guard every phase-assignment path shares:
+ * `assignFeatureToPhase` (below), `update_feature`, and — since f-work-kinds §32
+ * t-80 — `create_task` / `update_task`. Extracted because the query had already
+ * been hand-copied twice before this task would have made it four times, and a
+ * hand-copied rule is one that drifts (the stale-enum-copy failure this feature
+ * spent two review rounds on).
+ *
+ * Returns a boolean rather than throwing so each caller can raise its own idiom —
+ * `ValidationError` in the service, a capability `invalid_phase` error over MCP.
+ */
+export async function phaseBelongsToProject(phaseId: string, projectId: string): Promise<boolean> {
+  const phase = await prisma.phase.findFirst({
+    where: { id: phaseId, projectId },
+    select: { id: true },
+  });
+  return phase !== null;
+}
+
+/**
  * File a feature under a phase, or unfile it (`phaseId: null`) — f-phases §22 t3.
  * **Member-tier**: filing is collaborative roadmap organisation (like
  * `create_feature` and phase CRUD), NOT editing the feature's authored content,
@@ -282,12 +303,8 @@ export async function assignFeatureToPhase(
     throw new NotFoundError(`Feature ${featureId} not found`);
   }
 
-  if (phaseId !== null) {
-    const phase = await prisma.phase.findFirst({
-      where: { id: phaseId, projectId },
-      select: { id: true },
-    });
-    if (!phase) throw new ValidationError('That phase was not found in this project.');
+  if (phaseId !== null && !(await phaseBelongsToProject(phaseId, projectId))) {
+    throw new ValidationError('That phase was not found in this project.');
   }
 
   await prisma.feature.update({

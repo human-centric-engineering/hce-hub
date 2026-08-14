@@ -37,8 +37,13 @@ export interface TaskRef {
   featureTitle: string;
   /** Effective status (`claimed` | `active` | `blocked` | `merged`) — the shared computation. */
   status: EffectiveStatus;
-  /** `bug` (a defect) vs `feature_work` (f-bug-handling §22-02). */
+  /** `bug` (a defect) vs `feature_work` vs `enhancement` (f-bug-handling §22-02, f-work-kinds §32). */
   kind: TaskKind;
+  /**
+   * The phase that *chose* this work, when that differs from its feature's phase
+   * (f-work-kinds §32 t-80). `null` = inherit the feature's phase.
+   */
+  phaseId: string | null;
   /** Who the task is assigned to (raw id; `null` when unassigned / erased). */
   assigneeUserId: string | null;
   prUrl: string | null;
@@ -86,6 +91,7 @@ export async function getProjectTasks(
       featureId: true,
       status: true,
       kind: true,
+      phaseId: true,
       prUrl: true,
       assigneeUserId: true,
       feature: { select: { slug: true, title: true } },
@@ -106,6 +112,7 @@ export async function getProjectTasks(
         t.dependencies.map((d) => d.dependsOn)
       ),
       kind: t.kind,
+      phaseId: t.phaseId,
       assigneeUserId: t.assigneeUserId,
       prUrl: t.prUrl,
     }))

@@ -259,10 +259,12 @@ model Task {
   assigneeUserId  String? // hand-FK → "user" · ON DELETE SET NULL — "this is yours" (defaults to feature owner at plan time; distinct from the pull-claim)
   claimedByUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the task, drop the claimant)
   mergedByUserId  String? // hand-FK → "user" · ON DELETE SET NULL — the GitHub merger (merged_by) mapped to a Hub user (f-github-identity §23); ADDITIVE, never the doer (claimedByUserId)
+  phaseId         String? // intra-Hub FK → app_phase · ON DELETE SET NULL — COMMITMENT MARKER (f-work-kinds §32 t-80): the phase that *chose* to do this work, when that differs from its feature's phase. NULL = inherit the feature's phase (today's behaviour exactly). Never propagates upward — a feature's phase is solely Feature.phaseId, so a task can't drag its feature between phases.
   prUrl           String?
   createdAt       DateTime   @default(now())
 
   feature      Feature          @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  phase        Phase?           @relation(fields: [phaseId], references: [id], onDelete: SetNull)
   dependencies TaskDependency[] @relation("TaskDependencies") // edges where this task depends on another
   dependents   TaskDependency[] @relation("TaskDependents") // edges where another task depends on this
   claims       TaskClaim[]
@@ -271,6 +273,7 @@ model Task {
   @@index([assigneeUserId])
   @@index([claimedByUserId])
   @@index([mergedByUserId])
+  @@index([phaseId])
   @@map("app_task")
 }
 
@@ -398,6 +401,7 @@ model Phase {
 
   project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   features Feature[] // Feature.phaseId · ON DELETE SET NULL (phase membership is optional)
+  tasks    Task[] // Task.phaseId · ON DELETE SET NULL — tasks COMMITTED to this phase against another feature's phase (§32 t-80); the phase's own features are `features` above
 
   @@index([projectId])
   @@map("app_phase")

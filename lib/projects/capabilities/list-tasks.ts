@@ -59,6 +59,8 @@ interface TaskRefDto {
   // `TaskKind` rather than a literal union: a hand-written copy silently goes
   // stale the next time the enum grows (it did, at §32 t-79's `enhancement`).
   kind: TaskKind;
+  /** The phase that *chose* this work, when it differs from its feature's; `null` = inherit (§32 t-80). */
+  phaseId: string | null;
   /** Assignee (raw id; `null` when unassigned / erased). */
   assigneeUserId: string | null;
   prUrl: string | null;
@@ -76,7 +78,7 @@ export class ListTasksCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'list_tasks',
     description:
-      "Read a project's tasks — each with its t-N number, id, title, feature (id + slug), effective status (claimed | active | blocked | merged), kind (feature_work | bug | enhancement), assignee id, and PR url. Narrow with featureId (one feature's tasks), kind (e.g. 'bug' for the open bugs, 'enhancement' for the open improvements), and/or status. Use it to see and name the same tasks/bugs the human sees on the board — e.g. before picking work up. On a large project, prefer narrowing with featureId or kind over reading every task. Membership-scoped: a project you can't see is not_found.",
+      "Read a project's tasks — each with its t-N number, id, title, feature (id + slug), effective status (claimed | active | blocked | merged), kind (feature_work | bug | enhancement), the phase that chose it (phaseId; null = inherits its feature's phase), assignee id, and PR url. Narrow with featureId (one feature's tasks), kind (e.g. 'bug' for the open bugs, 'enhancement' for the open improvements), and/or status. Use it to see and name the same tasks/bugs the human sees on the board — e.g. before picking work up. On a large project, prefer narrowing with featureId or kind over reading every task. Membership-scoped: a project you can't see is not_found.",
     parameters: {
       type: 'object',
       properties: {

@@ -8,7 +8,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const createTaskFunctionDefinition = {
   name: 'create_task',
   description:
-    "Add a task to a feature you own (or lead): declares its title, optional description + acceptance contract (done-when), optional file scope, and optional dependencies on existing tasks. The task is born claimed and owned by the feature owner (blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks. The result includes the created task id + assigned t-N (report it without a re-read).",
+    "Add a task to a feature you own (or lead): declares its title, optional description + acceptance contract (done-when), optional file scope, optional dependencies on existing tasks, and optionally the phase that chose the work (phaseId — omit to inherit the feature's phase). The task is born claimed and owned by the feature owner (blocked until its dependencies merge). Only the feature's owner or a project lead may create tasks. The result includes the created task id + assigned t-N (report it without a re-read).",
   parameters: {
     type: 'object',
     properties: {
@@ -34,6 +34,11 @@ export const createTaskFunctionDefinition = {
         enum: ['feature_work', 'bug', 'enhancement'],
         description:
           "Optional task kind — 'bug' for a defect on the feature it broke (prioritised by next_task, kept out of completion progress and tallied as an open fix); 'enhancement' for a task-sized improvement to work that already exists; defaults to 'feature_work'. Work raised after its feature shipped never counts toward that feature's completion, whatever its kind — so file an improvement as 'enhancement', not as a 'bug'.",
+      },
+      phaseId: {
+        type: 'string',
+        description:
+          "Optional: commit this task to a phase in this project — the phase that chose to do the work, when that differs from its feature's phase. Omit to inherit the feature's phase.",
       },
       fromIdeaId: {
         type: 'string',

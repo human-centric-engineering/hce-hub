@@ -2,9 +2,18 @@
  * `update_task` — edit an existing task's authored fields (f-authoring-fidelity
  * §21 t-b). The MCP verb that lets the record be *corrected from the Hub* rather
  * than the DB: `title`, `description`, `doneWhen`, `filesScope`, its **kind**,
- * and its **dependency edges** (cycle-guarded). A `note`-style amendment, so it
- * emits **no** `ProjectEventKind` (the lifecycle events — created/started/merged
- * — stay meaningful); it is audit-logged.
+ * its **phase commitment**, and its **dependency edges** (cycle-guarded). A
+ * `note`-style amendment, so it emits **no** `ProjectEventKind` (the lifecycle
+ * events — created/started/merged — stay meaningful); it is audit-logged.
+ *
+ * `phaseId` is a **commitment marker** (f-work-kinds §32 t-80): *the phase that
+ * chose to do this work*, when that differs from its feature's phase. **Null
+ * clears it**, so the task inherits its feature's phase again — which is the
+ * default and today's behaviour. It never propagates upward: a feature's phase
+ * stays solely `Feature.phaseId`, so committing a task here can't drag its
+ * feature between phases. Setting it equal to the feature's own phase is a
+ * harmless no-op, not an error — §33 renders a borrowed row only when the two
+ * differ, so the rule is self-correcting with no guard to write.
  *
  * `kind` re-files work that was filed wrong — which is not hypothetical: before
  * `enhancement` existed (f-work-kinds §32 t-79), a task-sized improvement had to
@@ -43,6 +52,7 @@ import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess } from '@/lib/projects/access';
 import { assertAcyclic, DependencyCycleError } from '@/lib/projects/dependency-graph';
+import { phaseBelongsToProject } from '@/lib/projects/phases-service';
 import { isWriteConflict, withWriteConflictRetry } from '@/lib/projects/write-conflict';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { redactedString } from '@/lib/security/redact';
@@ -78,6 +88,13 @@ const schema = z.object({
     .describe(
       "Re-file the task's kind: 'feature_work', 'bug', or 'enhancement'. Use it to correct work mis-filed as a bug that is really an improvement."
     ),
+  phaseId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "Commit this task to a phase in this project — the phase that chose to do the work, when that differs from its feature's phase. Null clears the commitment, so the task inherits its feature's phase again."
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -95,7 +112,7 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'update_task',
     description:
-      "Edit an existing task's fields: title, description (markdown), done-when (acceptance contract), file scope, kind (re-file a mis-filed task, e.g. bug → enhancement), and/or its dependencies (replaces the existing edges; rejected if it would create a cycle). Only the fields you supply change; a null description/done-when clears it. Only the feature's owner or a project lead may edit its tasks. Does not change status.",
+      "Edit an existing task's fields: title, description (markdown), done-when (acceptance contract), file scope, kind (re-file a mis-filed task, e.g. bug → enhancement), phase commitment (the phase that chose the work; null clears it so it inherits its feature's phase), and/or its dependencies (replaces the existing edges; rejected if it would create a cycle). Only the fields you supply change; a null description/done-when clears it. Only the feature's owner or a project lead may edit its tasks. Does not change status.",
     parameters: {
       type: 'object',
       properties: {
@@ -123,6 +140,11 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
           description:
             "Re-file the task's kind: 'feature_work', 'bug', or 'enhancement'. Use it to correct work mis-filed as a bug that is really an improvement.",
         },
+        phaseId: {
+          type: 'string',
+          description:
+            "Commit this task to a phase in this project — the phase that chose to do the work, when that differs from its feature's phase. Null clears the commitment, so the task inherits its feature's phase again.",
+        },
       },
       required: ['taskId'],
     },
@@ -147,6 +169,7 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
         filesScope: args.filesScope,
         dependsOnTaskIds: args.dependsOnTaskIds,
         kind: args.kind,
+        phaseId: args.phaseId,
       },
       resultPreview: JSON.stringify(result),
     };
@@ -182,8 +205,9 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
       data.kind = args.kind;
       updated.push('kind');
     }
-    // `dependsOnTaskIds` is editable but not part of `data`, so it counts here.
-    if (updated.length === 0 && args.dependsOnTaskIds === undefined) {
+    // `dependsOnTaskIds` and `phaseId` are editable but can't join `data` until the
+    // feature's project is known (below), so they count toward "something to do" here.
+    if (updated.length === 0 && args.dependsOnTaskIds === undefined && args.phaseId === undefined) {
       return this.error('No fields to update were provided.', 'nothing_to_update');
     }
 
@@ -210,9 +234,27 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
         : this.error('Only the feature owner or a project lead can edit its tasks.', 'forbidden');
     }
 
+    const projectId = task.feature.projectId;
+
+    // Phase commitment (§32 t-80) — the phase that CHOSE this work, when that
+    // differs from its feature's phase. Null clears it, so the task inherits its
+    // feature's phase again. Scoped to the task's own project via the shared
+    // guard; it never propagates upward, so committing a task here can't move its
+    // feature between phases.
+    if (args.phaseId !== undefined) {
+      if (args.phaseId === null) {
+        data.phase = { disconnect: true };
+      } else {
+        if (!(await phaseBelongsToProject(args.phaseId, projectId))) {
+          return this.error('That phase was not found in this project.', 'invalid_phase');
+        }
+        data.phase = { connect: { id: args.phaseId } };
+      }
+      updated.push('phase');
+    }
+
     // Dependency-edge replacement — validate targets, prove the whole task graph
     // stays acyclic, then swap the edges inside the transaction.
-    const projectId = task.feature.projectId;
     let depsToSet: string[] | null = null;
     if (args.dependsOnTaskIds !== undefined) {
       depsToSet = [...new Set(args.dependsOnTaskIds)];

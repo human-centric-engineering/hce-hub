@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { TaskKind } from '@prisma/client';
 
 vi.mock('@/lib/projects/access', () => ({ resolveFeatureAccess: vi.fn() }));
+vi.mock('@/lib/projects/phases-service', () => ({ phaseBelongsToProject: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
   prisma: { task: { findMany: vi.fn() }, idea: { findFirst: vi.fn() } },
 }));
@@ -20,6 +21,7 @@ vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction:
 vi.mock('@/lib/projects/project-event', () => ({ recordProjectEvent: vi.fn() }));
 
 const { resolveFeatureAccess } = await import('@/lib/projects/access');
+const { phaseBelongsToProject } = await import('@/lib/projects/phases-service');
 const { prisma } = await import('@/lib/db/client');
 const { executeTransaction } = await import('@/lib/db/utils');
 const { logAdminAction } = await import('@/lib/orchestration/audit/admin-audit-logger');
@@ -32,6 +34,8 @@ const ideaFindFirst = prisma.idea.findFirst as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
+
+const phaseInProject = phaseBelongsToProject as ReturnType<typeof vi.fn>;
 
 const cap = new CreateTaskCapability();
 const USER = 'user-1';
@@ -67,6 +71,12 @@ function mockTxCreatesTask(id = 't-new', status = 'claimed', nextNumber = 7) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Set here, not in a describe-level hook: `clearAllMocks` clears CALLS but not
+  // implementations, so a mock set in one block silently satisfies another and
+  // the test passes for the wrong reason (it did — the phase tests below only
+  // passed in a whole-file run, and failed under `-t`). Global default keeps
+  // every block honest under `.only`, reordering, or a switch to resetAllMocks.
+  phaseInProject.mockResolvedValue(true);
 });
 
 describe('create_task guards', () => {
@@ -91,7 +101,10 @@ describe('create_task guards', () => {
 });
 
 describe('create_task dependency integrity', () => {
-  beforeEach(() => resolveFeature.mockResolvedValue(granted));
+  beforeEach(() => {
+    resolveFeature.mockResolvedValue(granted);
+    phaseInProject.mockResolvedValue(true);
+  });
 
   it('rejects deps that are not all present in the same project', async () => {
     taskFindMany.mockResolvedValue([{ id: 'd1' }]); // only 1 of 2 found
@@ -167,6 +180,44 @@ describe('create_task happy path (no deps)', () => {
         entityName: 'Ship it',
       })
     );
+  });
+
+  it('commits a new task to a phase when one is given', async () => {
+    mockTxCreatesTask('t-1', 'claimed');
+    await cap.execute({ featureId: 'f1', title: 'Ship it', phaseId: 'ph1' }, ctx());
+    expect(phaseInProject).toHaveBeenCalledWith('ph1', 'p1');
+    expect(txTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ phaseId: 'ph1' }) })
+    );
+  });
+
+  it('defaults to inheriting the feature phase (null) when none is given', async () => {
+    mockTxCreatesTask('t-1', 'claimed');
+    await cap.execute({ featureId: 'f1', title: 'Ship it' }, ctx());
+    // Null = inherit, which is the pre-§32 behaviour — the column ships inert.
+    expect(txTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ phaseId: null }) })
+    );
+  });
+
+  it('accepts a null phaseId as "inherit" rather than rejecting it', async () => {
+    // update_task and update_feature both take a nullable phaseId, and the JSON
+    // functionDefinition carries no nullability signal — so an agent emitting
+    // null here is doing the natural thing and must not get a Zod error.
+    mockTxCreatesTask('t-1', 'claimed');
+    const r = await cap.execute({ featureId: 'f1', title: 'Ship it', phaseId: null }, ctx());
+    expect(r.success).toBe(true);
+    expect(phaseInProject).not.toHaveBeenCalled(); // nothing to validate
+    expect(txTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ phaseId: null }) })
+    );
+  });
+
+  it('rejects a phase from another project without creating the task', async () => {
+    phaseInProject.mockResolvedValue(false);
+    const r = await cap.execute({ featureId: 'f1', title: 'Ship it', phaseId: 'elsewhere' }, ctx());
+    expect(r.error?.code).toBe('invalid_phase');
+    expect(txTaskCreate).not.toHaveBeenCalled();
   });
 
   it('persists description + doneWhen when supplied (f-authoring-fidelity §21 t-a)', async () => {

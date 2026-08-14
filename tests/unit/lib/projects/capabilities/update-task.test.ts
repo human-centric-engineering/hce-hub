@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { Prisma, TaskKind } from '@prisma/client';
 
 vi.mock('@/lib/projects/access', () => ({ resolveFeatureAccess: vi.fn() }));
+vi.mock('@/lib/projects/phases-service', () => ({ phaseBelongsToProject: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
   prisma: { task: { findUnique: vi.fn(), findMany: vi.fn() } },
 }));
@@ -24,12 +25,14 @@ vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
 
 const { resolveFeatureAccess } = await import('@/lib/projects/access');
+const { phaseBelongsToProject } = await import('@/lib/projects/phases-service');
 const { prisma } = await import('@/lib/db/client');
 const { executeTransaction } = await import('@/lib/db/utils');
 const { logAdminAction } = await import('@/lib/orchestration/audit/admin-audit-logger');
 const { UpdateTaskCapability } = await import('@/lib/projects/capabilities/update-task');
 
 const resolveFeature = resolveFeatureAccess as ReturnType<typeof vi.fn>;
+const phaseInProject = phaseBelongsToProject as ReturnType<typeof vi.fn>;
 const taskFindUnique = prisma.task.findUnique as ReturnType<typeof vi.fn>;
 const taskFindMany = prisma.task.findMany as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
@@ -60,6 +63,7 @@ beforeEach(() => {
   taskFindUnique.mockResolvedValue({ id: 't1', featureId: 'f1', feature: { projectId: 'p1' } });
   taskFindMany.mockResolvedValue([]);
   resolveFeature.mockResolvedValue(grantedOwner);
+  phaseInProject.mockResolvedValue(true);
 
   txTaskUpdate.mockResolvedValue({});
   txDepFindMany.mockResolvedValue([]);
@@ -177,6 +181,38 @@ describe('update_task patch semantics', () => {
       .object({ properties: z.object({ kind: z.object({ enum: z.array(z.string()) }) }) })
       .parse(cap.functionDefinition.parameters);
     expect(kind.properties.kind.enum).toEqual(Object.values(TaskKind));
+  });
+
+  it('commits the task to a phase in its project', async () => {
+    const r = await cap.execute({ taskId: 't1', phaseId: 'ph1' }, ctx());
+    expect(r.data?.updated).toEqual(['phase']);
+    expect(phaseInProject).toHaveBeenCalledWith('ph1', 'p1'); // scoped to the task's own project
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { phase: { connect: { id: 'ph1' } } },
+    });
+  });
+
+  it('clears the commitment with a null phaseId so the task inherits its feature again', async () => {
+    const r = await cap.execute({ taskId: 't1', phaseId: null }, ctx());
+    expect(r.data?.updated).toEqual(['phase']);
+    expect(phaseInProject).not.toHaveBeenCalled(); // nothing to validate when clearing
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { phase: { disconnect: true } },
+    });
+  });
+
+  it('rejects a phase from another project, writing nothing', async () => {
+    phaseInProject.mockResolvedValue(false);
+    const r = await cap.execute({ taskId: 't1', phaseId: 'other-project-phase' }, ctx());
+    expect(r.error?.code).toBe('invalid_phase');
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('treats a phaseId-only call as something to do, not nothing_to_update', async () => {
+    const r = await cap.execute({ taskId: 't1', phaseId: 'ph1' }, ctx());
+    expect(r.success).toBe(true);
   });
 
   it('replaces filesScope via a `set` (scalar-list update)', async () => {

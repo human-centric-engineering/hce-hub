@@ -15,11 +15,15 @@ tasks, each projected to the refs an agent needs to identify and name one:
 
 ```
 { id, number (t-N), title, featureId, featureSlug, featureTitle,
-  status, kind, assigneeUserId, prUrl }
+  status, kind, phaseId, assigneeUserId, prUrl }
 ```
 
+- **`phaseId`** (f-work-kinds §32 t-80) — the phase that _chose_ this work, when that
+  differs from its feature's phase; `null` = inherit. A commitment marker, never a
+  second home: it does not propagate upward, so a task can't move its feature.
 - **Narrowing.** `featureId` → one feature's tasks; `kind: 'bug'` → the open-bugs read
-  (the concrete need that motivated the feature); `status` → one effective status.
+  (the concrete need that motivated the feature), `kind: 'enhancement'` → the open
+  improvements; `status` → one effective status.
   Filters compose. The motivating calls all narrow, so they're self-bounding; the read
   is otherwise **unbounded** — the tool description nudges narrowing on a large project,
   and a hard cap / pagination across the `list_` verbs is a tracked hardening idea.
@@ -54,7 +58,7 @@ Both exist so the human and Claude Code name the same task by the same `t-N`.
 
 `list_tasks` _identifies_ a task; **`get_task` returns its body** — the detail an
 agent needs to actually build it: `description`, `doneWhen`, effective `status`,
-`kind`, `filesScope`, `prUrl`, the `feature { id, slug, title }`, and the dependency
+`kind`, `phaseId`, `filesScope`, `prUrl`, the `feature { id, slug, title }`, and the dependency
 graph (`blockedBy` / `blocks`, each neighbour with its `t-N` + readiness). A thin
 projection over `getTaskDetail` ([`lib/projects/task-detail.ts`](../../lib/projects/task-detail.ts)),
 the same funnel-scoped read the web task-sheet renders — so a non-member, unknown, or
