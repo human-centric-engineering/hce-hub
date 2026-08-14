@@ -4,37 +4,48 @@
  *
  * Every Hub capability carries two descriptions of the same contract: the Zod
  * `schema` that actually validates a call, and the `functionDefinition.parameters`
- * JSON Schema that is handed to the LLM — over MCP it becomes the tool's
- * `inputSchema` verbatim (`lib/orchestration/mcp/tool-registry.ts`). When they
- * disagree, the agent is working from a lie: it will not send an argument the
- * published schema forbids, however clearly the *prose* invites it.
+ * JSON Schema handed to the LLM — over MCP it becomes the tool's `inputSchema`
+ * verbatim (`lib/orchestration/mcp/tool-registry.ts`). When they disagree, the
+ * agent is working from a lie: it will not send an argument the published schema
+ * forbids, however clearly the *prose* invites it.
  *
- * That is not hypothetical. Ten parameters documented "null clears it" while
- * publishing a bare `"type": "string"`, so `null` was unreachable over MCP —
- * `update_feature { ownerUserId: null }` is the unclaim path, which meant a
- * feature could not be unclaimed from the Hub at all. Found on prod, not by
- * inspection.
+ * Not hypothetical. Twelve parameters documented "null clears it" while publishing
+ * a bare `"type": "string"`, so `null` was unreachable over MCP —
+ * `update_feature { ownerUserId: null }` is the unclaim path, which meant a feature
+ * could not be unclaimed from the Hub at all. Found on prod, not by inspection.
  *
- * This walks the capability folder rather than a hand-list, so a capability added
- * later is covered without anyone remembering to add it here — the same reason
- * the seed↔class parity tests exist.
+ * Driven off `initAppCapabilities()` rather than a hand-list, so a capability added
+ * later is covered without anyone remembering to come back here — and off the
+ * *registration seam* specifically, so what's checked is what's actually served.
  *
- * Nullability is probed by `safeParse(null)` rather than by reading Zod internals:
- * it asks the question the caller actually asks ("will this accept a null?") and
- * survives a Zod major.
+ * Nullability is probed with `safeParse(null)` rather than by reading Zod
+ * internals: it asks the question the caller actually asks ("will this accept a
+ * null?") and survives a Zod major.
  */
-import { describe, it, expect } from 'vitest';
-import type { z } from 'zod';
+import { describe, it, expect, vi } from 'vitest';
 import type { BaseCapability } from '@/lib/orchestration/capabilities/base-capability';
 
-/** A capability class as constructed here — no-arg, with its protected Zod schema read. */
-type CapabilityInstance = BaseCapability & { schema: z.ZodObject<z.ZodRawShape> };
-
 /**
- * Every capability module in the Hub's own folder. Root-absolute so the glob
- * carries no relative path (`@/` isn't resolvable inside `import.meta.glob`).
+ * A registered capability, with its Zod `schema` surfaced. Composed by `Pick`
+ * rather than by extending `BaseCapability`: `schema` is `protected` there, and an
+ * interface can only re-declare it from a derived class.
  */
-const modules = import.meta.glob<Record<string, unknown>>('/lib/projects/capabilities/*.ts');
+type Introspected = Pick<BaseCapability, 'slug' | 'functionDefinition'> & {
+  schema: { shape: Record<string, { safeParse: (v: unknown) => { success: boolean } }> };
+};
+
+// Collect every capability the app registers, by standing in for the registry.
+// `vi.hoisted` because a `vi.mock` factory is lifted above normal declarations.
+const registered = vi.hoisted(() => [] as unknown[]);
+vi.mock('@/lib/orchestration/capabilities/registry', () => ({
+  registerAppCapability: (capability: unknown) => {
+    registered.push(capability);
+  },
+}));
+
+const { initAppCapabilities } = await import('@/lib/app/capabilities');
+initAppCapabilities();
+const capabilities = registered as Introspected[];
 
 /** Does a published property permit a JSON `null`? Encoding-agnostic on purpose. */
 function publishesNull(property: unknown): boolean {
@@ -48,40 +59,24 @@ function publishesNull(property: unknown): boolean {
 }
 
 /** The `properties` map of a capability's published parameter schema. */
-function publishedProperties(cap: BaseCapability): Record<string, unknown> {
+function publishedProperties(cap: Introspected): Record<string, unknown> {
   const params = cap.functionDefinition.parameters as { properties?: unknown };
   return params.properties && typeof params.properties === 'object'
     ? (params.properties as Record<string, unknown>)
     : {};
 }
 
-/** Instantiate every exported `*Capability` class found in the folder. */
-async function loadCapabilities(): Promise<CapabilityInstance[]> {
-  const instances: CapabilityInstance[] = [];
-  for (const load of Object.values(modules)) {
-    const mod = await load();
-    for (const [name, exported] of Object.entries(mod)) {
-      if (!name.endsWith('Capability') || typeof exported !== 'function') continue;
-      const Ctor = exported as new () => CapabilityInstance;
-      instances.push(new Ctor());
-    }
-  }
-  return instances;
-}
-
 describe('capability published-schema parity', () => {
-  it('finds the Hub capability classes (guards the glob itself)', async () => {
-    const caps = await loadCapabilities();
-    // A glob that silently resolves to nothing would make every case below vacuous.
-    expect(caps.length).toBeGreaterThan(20);
-    expect(caps.map((c) => c.slug)).toContain('update_feature');
+  it('collected the registered Hub capabilities (guards the harness itself)', () => {
+    // A harness that silently collected nothing would make every case below vacuous.
+    expect(capabilities.length).toBeGreaterThan(20);
+    expect(capabilities.map((c) => c.slug)).toContain('update_feature');
   });
 
-  it('publishes null for exactly the parameters whose Zod accepts null', async () => {
-    const caps = await loadCapabilities();
+  it('publishes null for exactly the parameters whose Zod accepts null', () => {
     const mismatches: string[] = [];
 
-    for (const cap of caps) {
+    for (const cap of capabilities) {
       const properties = publishedProperties(cap);
       for (const [field, validator] of Object.entries(cap.schema.shape)) {
         const zodAcceptsNull = validator.safeParse(null).success;
@@ -98,11 +93,10 @@ describe('capability published-schema parity', () => {
     expect(mismatches).toEqual([]);
   });
 
-  it('publishes every parameter the Zod schema accepts', async () => {
-    const caps = await loadCapabilities();
+  it('publishes every parameter the Zod schema accepts', () => {
     const unpublished: string[] = [];
 
-    for (const cap of caps) {
+    for (const cap of capabilities) {
       const properties = publishedProperties(cap);
       for (const field of Object.keys(cap.schema.shape)) {
         if (!(field in properties)) unpublished.push(`${cap.slug}.${field}`);
@@ -110,7 +104,7 @@ describe('capability published-schema parity', () => {
     }
 
     // An accepted-but-unpublished parameter is invisible to the agent — the same
-    // defect one layer over (a capability the write path can't actually reach).
+    // defect one layer over (a capability the write path cannot actually reach).
     expect(unpublished).toEqual([]);
   });
 });
