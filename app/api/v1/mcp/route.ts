@@ -25,8 +25,16 @@ import {
   getMcpRateLimiter,
   logMcpAudit,
 } from '@/lib/orchestration/mcp';
+import { createEphemeralSession } from '@/lib/orchestration/mcp/session-manager';
 import { jsonRpcRequestSchema } from '@/lib/validations/mcp';
-import { JsonRpcErrorCode, type JsonRpcResponse } from '@/types/mcp';
+import {
+  JsonRpcErrorCode,
+  MCP_MIN_PROTOCOL_VERSION,
+  MCP_PROTOCOL_VERSIONS,
+  type JsonRpcResponse,
+  type McpProtocolVersion,
+} from '@/types/mcp';
+import { env } from '@/lib/env';
 
 function jsonRpcErrorResponse(code: JsonRpcErrorCode, message: string, status: number): Response {
   const headers: Record<string, string> = {};
@@ -44,6 +52,35 @@ function jsonRpcErrorResponse(code: JsonRpcErrorCode, message: string, status: n
 const MAX_BODY_SIZE = 1_048_576; // 1MB
 const MAX_BATCH_SIZE = 20;
 const MCP_SESSION_HEADER = 'mcp-session-id';
+/** Spec revision 2025-06-18 onward: the client echoes the negotiated version per request. */
+const MCP_PROTOCOL_HEADER = 'mcp-protocol-version';
+
+/**
+ * True when the server holds no session state (the default).
+ *
+ * Read per request rather than captured at module load. There is nothing to
+ * gain from caching a string comparison, and a module-level const is read once
+ * at import — which in a `happy-dom` unit test happens before any mock can
+ * change it, so the whole branch silently tests as `false`.
+ */
+function isStateless(): boolean {
+  return env.MCP_SESSION_MODE === 'stateless';
+}
+
+/**
+ * The protocol version for a stateless request. Read from the client's
+ * `MCP-Protocol-Version` header, because there is no session remembering what
+ * was negotiated — falling back to the server's latest would emit annotations
+ * the client never agreed to. An unrecognised value falls back to the oldest
+ * behaviour rather than the newest, so a stranger's header cannot opt them into
+ * features they don't understand.
+ */
+function statelessProtocolVersion(request: NextRequest): McpProtocolVersion {
+  const declared = request.headers.get(MCP_PROTOCOL_HEADER);
+  return declared && (MCP_PROTOCOL_VERSIONS as readonly string[]).includes(declared)
+    ? (declared as McpProtocolVersion)
+    : MCP_MIN_PROTOCOL_VERSION;
+}
 
 export async function POST(request: NextRequest): Promise<Response> {
   try {
@@ -158,7 +195,16 @@ export async function POST(request: NextRequest): Promise<Response> {
     const sessionId = request.headers.get(MCP_SESSION_HEADER);
     let session;
 
-    if (hasInitialize) {
+    if (isStateless()) {
+      // No store, no lookup, no 404. Every request carries everything it needs,
+      // which is what makes the server correct when consecutive calls land on
+      // different instances — the case that breaks the stateful store.
+      //
+      // A client that still sends a session id is not an error: the header is
+      // simply ignored. `initialize` is likewise unremarkable here — there is no
+      // session to create, so it needs none of the guards below.
+      session = createEphemeralSession(auth.apiKeyId, statelessProtocolVersion(request));
+    } else if (hasInitialize) {
       // initialize must be the sole request in the batch — mixing it with
       // other methods leads to ambiguous session state.
       if (validRequests.length > 1) {
@@ -243,7 +289,9 @@ export async function POST(request: NextRequest): Promise<Response> {
       // Persist the negotiated protocol version + flip the session to
       // initialised after a successful `initialize` call. The version comes
       // out of the response payload, which the handler has already validated.
-      if (rpcRequest.method === 'initialize' && response && !response.error) {
+      // Skipped when stateless: there is nothing to persist it into, and the
+      // client re-declares the version on every subsequent request instead.
+      if (!isStateless() && rpcRequest.method === 'initialize' && response && !response.error) {
         const result = response.result as { protocolVersion?: string } | undefined;
         const negotiated = result?.protocolVersion;
         if (
@@ -261,7 +309,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    headers[MCP_SESSION_HEADER] = session.id;
+    // Withholding this is what makes stateless work end-to-end: the transport
+    // says a client sends `Mcp-Session-Id` only if the server issued one, so no
+    // header means no session id on subsequent requests, and nothing to fail to
+    // find. Advertising an id we don't store would be worse than not having one.
+    if (!isStateless()) {
+      headers[MCP_SESSION_HEADER] = session.id;
+    }
 
     if (isBatch) {
       // Filter out nulls (notifications don't produce responses)
@@ -303,6 +357,32 @@ export async function GET(request: NextRequest): Promise<Response> {
     const serverState = await getMcpServerConfig();
     if (!serverState.isEnabled) {
       return jsonRpcErrorResponse(JsonRpcErrorCode.SERVER_DISABLED, 'MCP server is disabled', 503);
+    }
+
+    // A notification stream is continuity by definition — the server must hold a
+    // listener for a session and push into it later. Stateless has neither.
+    //
+    // 405, not 501, because the transport spec names it: the server "MUST either
+    // return Content-Type: text/event-stream in response to this HTTP GET, or
+    // else return HTTP 405 Method Not Allowed, indicating that the server does
+    // not offer an SSE stream at this endpoint." 405 is the one status clients
+    // special-case as "no SSE here, carry on"; anything else surfaces as a
+    // transport error, which would report a failure on every healthy connect —
+    // the opposite of what this mode is for.
+    if (isStateless()) {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: null,
+          error: {
+            code: JsonRpcErrorCode.STATELESS_UNSUPPORTED,
+            message:
+              'This server does not offer an SSE stream (MCP_SESSION_MODE=stateless). ' +
+              'Server-push notifications require MCP_SESSION_MODE=stateful.',
+          },
+        }),
+        { status: 405, headers: { 'Content-Type': 'application/json', Allow: 'POST' } }
+      );
     }
 
     const sessionId = request.headers.get(MCP_SESSION_HEADER);
@@ -376,6 +456,28 @@ export async function DELETE(request: NextRequest): Promise<Response> {
     const auth = await authenticateMcpRequest(bearerToken, clientIp, userAgent);
     if (!auth) {
       return jsonRpcErrorResponse(JsonRpcErrorCode.UNAUTHORIZED, 'Unauthorized', 401);
+    }
+
+    // Nothing was created, so there is no session to tear down. 405 is the
+    // spec's designated answer here — a server "MAY respond to this request with
+    // HTTP 405 Method Not Allowed, indicating that the server does not allow
+    // clients to terminate sessions" — and it is the same signal the GET gives,
+    // so a client learns "this server does not do sessions" consistently.
+    //
+    // Still audited: the log records what a key ASKED for, not only what changed,
+    // and the stateful path already audits a DELETE it cannot honour. Skipping it
+    // would leave the trail one-sided.
+    if (isStateless()) {
+      logMcpAudit({
+        apiKeyId: auth.apiKeyId,
+        method: 'session/destroy',
+        responseCode: 'error',
+        errorMessage: 'Sessions are not tracked in stateless mode',
+        durationMs: 0,
+        clientIp: auth.clientIp,
+        userAgent: auth.userAgent,
+      });
+      return new Response(null, { status: 405, headers: { Allow: 'POST' } });
     }
 
     const sessionId = request.headers.get(MCP_SESSION_HEADER);

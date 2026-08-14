@@ -41,6 +41,24 @@ connection limit. Set it to 1 **and** point `DATABASE_URL` at a pooled endpoint
 instance is plenty. See
 [database-env.md](../../environment/database-env.md#database_pool_max).
 
+### If you enable the MCP server
+
+`MCP_SESSION_MODE` defaults to `stateless`, which is the correct setting here and
+needs no configuration. It is called out because the **opposite** choice is the
+trap: `stateful` keeps MCP sessions in one process's memory, and on a
+function-per-request platform each instance has its own. A session created by
+`initialize` on one instance is invisible to whichever instance serves the next
+call, so the client's follow-up requests get `404 Session not found` and the
+connection fails — intermittently, only under concurrency, and worst right after
+a deploy when several fresh instances exist.
+
+Selecting `stateful` here throws at startup rather than letting that reach
+production. The cost of `stateless` is the features that need continuity: SSE
+notification streams, `resources/subscribe`, progress notifications, and
+per-session `logging/setLevel`, each refused by name rather than silently
+ignored. If you need those on a serverless deploy, sessions have to move to a
+shared store — see [mcp.md](../../orchestration/mcp.md#session-model).
+
 **Optional (for email):**
 
 ```

@@ -1,9 +1,19 @@
 /**
  * MCP Session Manager
  *
- * In-memory session tracking with TTL eviction and per-key limits.
- * Sessions are lost on restart — MCP clients re-initialize on
- * session-not-found, which is acceptable for v1.
+ * In-memory session tracking with TTL eviction and per-key limits, used when
+ * `MCP_SESSION_MODE=stateful`. Sessions are lost on restart — MCP clients
+ * re-initialize on session-not-found, which is fine for the one deployment
+ * shape this store is correct for: a **single long-running process**.
+ *
+ * It is NOT correct across instances, and the failure is not the restart case
+ * this doc used to describe. On a function-per-request platform the sessions
+ * aren't lost, they're invisible to live siblings: `initialize` creates one on
+ * instance A, the follow-up calls land on B and C, and each misses its own
+ * empty `Map` and returns "Session not found". That breaks mid-handshake, so no
+ * amount of client re-initialisation recovers it. `MCP_SESSION_MODE=stateless`
+ * (the default) holds no session state at all and is correct on any topology —
+ * see `createEphemeralSession` below.
  *
  * Platform-agnostic: no Next.js imports.
  */
@@ -26,6 +36,37 @@ const EVICTION_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 /** Max URIs a single session may subscribe to. */
 export const MAX_SUBSCRIPTIONS_PER_SESSION = 50;
+
+/**
+ * A session for one request under `MCP_SESSION_MODE=stateless`, never stored.
+ *
+ * The protocol handler is written against a session, so rather than thread a
+ * mode flag through every method the stateless path hands it one that satisfies
+ * the two things a tool call or resource read actually reads — `initialized`
+ * and `protocolVersion` — and marks itself `ephemeral` so the handful of methods
+ * that genuinely need continuity can refuse by name.
+ *
+ * `protocolVersion` comes from the caller (the `MCP-Protocol-Version` header the
+ * client sends from spec revision 2025-06-18 onward) rather than defaulting to
+ * the server's latest: defaulting would emit annotations the client never
+ * negotiated. The id is informational — nothing looks it up.
+ */
+export function createEphemeralSession(
+  apiKeyId: string,
+  protocolVersion: McpProtocolVersion
+): McpSession {
+  const now = Date.now();
+  return {
+    id: `stateless-${randomUUID()}`,
+    apiKeyId,
+    initialized: true, // no handshake to remember; each request stands alone
+    protocolVersion,
+    logLevel: 'warning', // the default; `logging/setLevel` cannot persist here
+    createdAt: now,
+    lastActivityAt: now,
+    ephemeral: true,
+  };
+}
 
 export class McpSessionManager {
   private sessions = new Map<string, McpSession>();

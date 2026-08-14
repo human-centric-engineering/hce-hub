@@ -173,16 +173,19 @@ async function dispatchMethod(request: JsonRpcRequest, context: HandlerContext):
 
     case 'resources/subscribe':
       requireInitialized(session);
+      requireDurableSession(session, 'resources/subscribe');
       requireScope(auth, McpScope.RESOURCES_READ);
       return handleResourcesSubscribe(request.params, session);
 
     case 'resources/unsubscribe':
       requireInitialized(session);
+      requireDurableSession(session, 'resources/unsubscribe');
       requireScope(auth, McpScope.RESOURCES_READ);
       return handleResourcesUnsubscribe(request.params, session);
 
     case 'logging/setLevel':
       requireInitialized(session);
+      requireDurableSession(session, 'logging/setLevel');
       // Logging level is a per-session knob; the spec does not require a
       // scope. Anyone with a valid session can ask for less verbose logs.
       return handleLoggingSetLevel(request.params, session);
@@ -219,7 +222,7 @@ function handleInitialize(
   params: Record<string, unknown> | undefined,
   context: HandlerContext
 ): McpInitializeResult {
-  const { serverState } = context;
+  const { serverState, session } = context;
 
   const negotiation = negotiateMcpProtocolVersion(params?.protocolVersion);
   if (!negotiation) {
@@ -242,11 +245,22 @@ function handleInitialize(
   // resources/unsubscribe and pushes notifications/resources/updated.
   // logging:{} signals logging/setLevel + notifications/message support.
   // completions:{} signals completion/complete support.
+  //
+  // Under `MCP_SESSION_MODE=stateless` three of those are unreachable, so they
+  // are withheld rather than advertised and then refused. Everything here is
+  // server→client push or per-session memory: `listChanged` and
+  // `notifications/resources/updated` ride the SSE stream that `GET` declines,
+  // and `logging/setLevel` has nowhere to persist a level. A client that
+  // honours declared capabilities would otherwise call one during setup and
+  // take a `-32005` on a healthy connection — the same silent lie this mode
+  // exists to remove, one level up.
+  const durable = !session.ephemeral;
   const capabilities: McpCapabilities = {
-    tools: { listChanged: true },
-    resources: { listChanged: true, subscribe: true },
-    prompts: { listChanged: true },
-    logging: {},
+    tools: durable ? { listChanged: true } : {},
+    resources: durable ? { listChanged: true, subscribe: true } : {},
+    prompts: durable ? { listChanged: true } : {},
+    ...(durable ? { logging: {} } : {}),
+    // Stateless-safe: `completion/complete` is a plain request/response lookup.
     completions: {},
   };
 
@@ -597,6 +611,22 @@ function requireInitialized(session: McpSession): void {
     throw new McpProtocolError(
       JsonRpcErrorCode.INTERNAL_ERROR,
       'Session not initialized — call initialize first'
+    );
+  }
+}
+
+/**
+ * Guard the methods whose whole point is outliving one request: a subscription
+ * the server pushes to later, or a log level it remembers. Under
+ * `MCP_SESSION_MODE=stateless` the session is discarded the moment the response
+ * is written, so accepting these would return success and then do nothing —
+ * a silent failure that looks like a broken client. Refuse by name instead.
+ */
+function requireDurableSession(session: McpSession, method: string): void {
+  if (session.ephemeral) {
+    throw new McpProtocolError(
+      JsonRpcErrorCode.STATELESS_UNSUPPORTED,
+      `${method} requires a durable session; this server runs MCP_SESSION_MODE=stateless`
     );
   }
 }

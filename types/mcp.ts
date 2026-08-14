@@ -59,6 +59,13 @@ export const JsonRpcErrorCode = {
   SERVER_DISABLED: -32003,
   /** Application-level: per-key or global rate limit exceeded — client should back off and retry */
   RATE_LIMITED: -32004,
+  /**
+   * Application-level: the method needs a durable session and this server runs
+   * `MCP_SESSION_MODE=stateless`. A named refusal, deliberately not silence —
+   * a subscribe that returns success and then never notifies is worse than one
+   * that says it cannot.
+   */
+  STATELESS_UNSUPPORTED: -32005,
 } as const;
 export type JsonRpcErrorCode = (typeof JsonRpcErrorCode)[keyof typeof JsonRpcErrorCode];
 
@@ -323,6 +330,14 @@ export interface McpSession {
   logLevel: McpLogLevel;
   createdAt: number;
   lastActivityAt: number;
+  /**
+   * True for a session synthesised per-request under
+   * `MCP_SESSION_MODE=stateless` — it is never stored, so nothing that must
+   * outlive one request can work on it (subscriptions, log level, SSE).
+   * Handlers branch on this to refuse those methods by name rather than
+   * accepting them into a `Map` that is discarded microseconds later.
+   */
+  ephemeral?: boolean;
 }
 
 /**

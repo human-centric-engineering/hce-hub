@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+/**
+ * `@/lib/env` is mocked because `vitest.config.ts` runs on happy-dom, where
+ * `lib/env.ts` validates only the client schema and every server variable reads
+ * as `undefined` — so the startup guard below could never be exercised for real.
+ */
+const mockEnv = vi.hoisted(() => ({ MCP_SESSION_MODE: 'stateless' }));
+vi.mock('@/lib/env', () => ({ env: mockEnv }));
 
 import {
   getMcpRateLimiter,
@@ -63,5 +71,46 @@ describe('singletons: resetMcpSingletons', () => {
 
   it('is safe to call when nothing has been initialised yet', () => {
     expect(() => resetMcpSingletons()).not.toThrow();
+  });
+});
+
+describe('singletons: the stateful-on-serverless startup guard (t-92)', () => {
+  const originalVercel = process.env.VERCEL;
+
+  afterEach(() => {
+    if (originalVercel === undefined) delete process.env.VERCEL;
+    else process.env.VERCEL = originalVercel;
+    mockEnv.MCP_SESSION_MODE = 'stateless';
+    vi.resetModules();
+  });
+
+  /** Re-evaluate the module so its load-time guard runs against the current env. */
+  async function loadSingletons(): Promise<void> {
+    vi.resetModules();
+    await import('@/lib/orchestration/mcp/singletons');
+  }
+
+  it('throws with the fix when stateful is selected on a serverless platform', async () => {
+    // The whole point: an in-memory store cannot span instances, so this is a
+    // misconfiguration that would otherwise surface as an intermittent 404
+    // mid-handshake, in production, under concurrency only.
+    process.env.VERCEL = '1';
+    mockEnv.MCP_SESSION_MODE = 'stateful';
+
+    await expect(loadSingletons()).rejects.toThrow(/MCP_SESSION_MODE=stateless/);
+  });
+
+  it('permits stateless on the same platform', async () => {
+    process.env.VERCEL = '1';
+    mockEnv.MCP_SESSION_MODE = 'stateless';
+
+    await expect(loadSingletons()).resolves.toBeUndefined();
+  });
+
+  it('permits stateful off serverless — one long-running process is what it is for', async () => {
+    delete process.env.VERCEL;
+    mockEnv.MCP_SESSION_MODE = 'stateful';
+
+    await expect(loadSingletons()).resolves.toBeUndefined();
   });
 });

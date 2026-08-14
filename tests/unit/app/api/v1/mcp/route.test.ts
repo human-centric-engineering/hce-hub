@@ -4,6 +4,14 @@
  * POST   /api/v1/mcp — JSON-RPC 2.0 requests
  * GET    /api/v1/mcp — SSE notification stream
  * DELETE /api/v1/mcp — Session termination
+ *
+ * **`@/lib/env` is mocked, and that is load-bearing.** `vitest.config.ts` runs
+ * on `happy-dom`, so `typeof window !== 'undefined'` is true and `lib/env.ts`
+ * validates only the *client* schema — every server variable reads as
+ * `undefined` in a unit test. Without this mock `MCP_SESSION_MODE` is undefined,
+ * `isStateless()` is silently false, and the entire stateless path tests as if
+ * it were the stateful one (it did: 40 tests passed against a mode that was
+ * never exercised). Set `mockEnv.MCP_SESSION_MODE` per block instead.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -11,6 +19,20 @@ import { NextRequest } from 'next/server';
 import { JsonRpcErrorCode } from '@/types/mcp';
 
 // ─── Module mocks ───────────────────────────────────────────────────────
+
+/**
+ * Mutable so a block can choose its session mode; the route reads it per request.
+ * `vi.hoisted` because the `vi.mock` factory is lifted above normal declarations.
+ * `NODE_ENV` is carried too — this mock replaces `@/lib/env` for *every* importer
+ * in the graph, and `lib/api/errors.ts` branches on it to decide what detail to
+ * leak; leaving it undefined would quietly put the error path in non-production
+ * mode for these tests.
+ */
+const mockEnv = vi.hoisted(() => ({
+  MCP_SESSION_MODE: 'stateful',
+  NODE_ENV: 'test',
+}));
+vi.mock('@/lib/env', () => ({ env: mockEnv }));
 
 const mockSession = {
   id: 'session-abc',
@@ -154,6 +176,10 @@ async function parseJson<T>(response: Response): Promise<T> {
 beforeEach(() => {
   vi.clearAllMocks();
   capturedIterable = null;
+  // Reset the mode globally, not per-block: `clearAllMocks` does not touch a
+  // plain object, so a block that switched to stateless would silently govern
+  // every block after it.
+  mockEnv.MCP_SESSION_MODE = 'stateful';
 
   // Restore default mock behaviours
   vi.mocked(authenticateMcpRequest).mockResolvedValue(mockAuthContext);
@@ -764,5 +790,126 @@ describe('DELETE /mcp', () => {
     // handleAPIError handles the thrown error — not a success response
     expect(response.status).not.toBe(200);
     expect(response.status).not.toBe(204);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MCP_SESSION_MODE=stateless (the default) — t-92
+//
+// The mode exists because the in-memory store is only correct on ONE process.
+// On a function-per-request platform `initialize` creates a session on instance
+// A and the follow-up calls land on B and C, each missing its own empty Map and
+// returning "Session not found" — a handshake that fails intermittently under
+// concurrency. Stateless holds nothing, so there is nothing to miss.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('POST /mcp — stateless', () => {
+  beforeEach(() => {
+    mockEnv.MCP_SESSION_MODE = 'stateless';
+  });
+
+  it('serves a non-initialize request with NO session header — the bug this fixes', async () => {
+    const response = await POST(makePostRequest(makeRpcRequest('tools/list')));
+
+    // Stateful returns 400 "Missing Mcp-Session-Id" here; that requirement is
+    // exactly what cannot be met when the session lives on another instance.
+    expect(response.status).toBe(200);
+    expect(vi.mocked(handleMcpRequest)).toHaveBeenCalled();
+  });
+
+  it('issues no Mcp-Session-Id, so the client never sends one back', async () => {
+    // Load-bearing: the transport says a client returns the header only if the
+    // server set it. Withholding it is what keeps every request self-contained.
+    const response = await POST(makePostRequest(makeRpcRequest('initialize')));
+
+    expect(response.headers.get(MCP_SESSION_HEADER)).toBeNull();
+  });
+
+  it('never touches the session store', async () => {
+    await POST(makePostRequest(makeRpcRequest('initialize')));
+    await POST(makePostRequest(makeRpcRequest('tools/list')));
+
+    expect(mockSessionManager.createSession).not.toHaveBeenCalled();
+    expect(mockSessionManager.getSession).not.toHaveBeenCalled();
+    expect(mockSessionManager.markInitialized).not.toHaveBeenCalled();
+  });
+
+  it('ignores a stale session id instead of 404ing on it', async () => {
+    // A client that connected while the server was stateful, or against another
+    // instance, still has an id. It is meaningless now, not an error.
+    mockSessionManager.getSession.mockReturnValue(null as never);
+
+    const response = await POST(
+      makePostRequest(makeRpcRequest('tools/list'), { [MCP_SESSION_HEADER]: 'from-another-life' })
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it('hands the handler the protocol version the client declares per request', async () => {
+    await POST(
+      makePostRequest(makeRpcRequest('tools/list'), { 'mcp-protocol-version': '2025-06-18' })
+    );
+
+    const [, context] = vi.mocked(handleMcpRequest).mock.calls[0];
+    expect(context.session.protocolVersion).toBe('2025-06-18');
+    expect(context.session.ephemeral).toBe(true);
+    expect(context.session.initialized).toBe(true); // no handshake to remember
+  });
+
+  it('falls back to the OLDEST version, never the newest, on a missing or junk header', async () => {
+    // Guessing high would emit annotations the client never negotiated.
+    await POST(makePostRequest(makeRpcRequest('tools/list')));
+    await POST(
+      makePostRequest(makeRpcRequest('tools/list'), { 'mcp-protocol-version': '1999-01-01' })
+    );
+
+    for (const [, context] of vi.mocked(handleMcpRequest).mock.calls) {
+      expect(context.session.protocolVersion).toBe('2024-11-05');
+    }
+  });
+});
+
+describe('GET/DELETE /mcp — stateless', () => {
+  beforeEach(() => {
+    mockEnv.MCP_SESSION_MODE = 'stateless';
+  });
+
+  it('refuses the SSE stream with 405 — the status clients special-case as "no SSE here"', async () => {
+    // The transport spec: the server MUST either return text/event-stream, "or
+    // else return HTTP 405 Method Not Allowed, indicating that the server does
+    // not offer an SSE stream at this endpoint." Any other non-2xx surfaces as a
+    // transport error, which would report a failure on every healthy connect.
+    const response = await GET(makeGetRequest());
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get('Allow')).toBe('POST');
+    const body = await parseJson<{ error: { code: number; message: string } }>(response);
+    expect(body.error.code).toBe(JsonRpcErrorCode.STATELESS_UNSUPPORTED);
+    expect(body.error.message).toContain('stateful');
+  });
+
+  it('answers session termination with 405 and still audits the attempt', async () => {
+    // The spec's named answer for a server that "does not allow clients to
+    // terminate sessions". Audited anyway: the log records what a key asked for,
+    // not only what changed, so the trail does not go one-sided.
+    const response = await DELETE(makeDeleteRequest());
+
+    expect(response.status).toBe(405);
+    expect(mockSessionManager.destroySession).not.toHaveBeenCalled();
+    expect(vi.mocked(logMcpAudit)).toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'session/destroy', responseCode: 'error' })
+    );
+  });
+});
+
+describe('POST /mcp — stateful still issues sessions (regression guard)', () => {
+  it('sets Mcp-Session-Id when the mode is stateful', async () => {
+    mockEnv.MCP_SESSION_MODE = 'stateful';
+
+    const response = await POST(makePostRequest(makeRpcRequest('initialize')));
+
+    expect(response.headers.get(MCP_SESSION_HEADER)).toBe(mockSession.id);
+    expect(mockSessionManager.createSession).toHaveBeenCalled();
   });
 });

@@ -1165,3 +1165,108 @@ describe('handleMcpRequest', () => {
     });
   });
 });
+
+describe('ephemeral sessions refuse the methods that need continuity (t-92)', () => {
+  // Under MCP_SESSION_MODE=stateless the session is discarded the moment the
+  // response is written. Accepting a subscription onto it would return success
+  // and then never notify — a silent failure that reads as a broken client.
+  const ephemeral = makeSession({ ephemeral: true });
+
+  // Own fixtures: the ones above are `let`s scoped to the `handleMcpRequest`
+  // describe and assigned in its `beforeEach`, so they are undefined out here.
+  let auth: McpAuthContext;
+  let serverState: McpServerState;
+  let rateLimiter: McpRateLimiter;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    auth = makeAuth();
+    serverState = makeServerState();
+    rateLimiter = makeRateLimiter(true);
+    // `clearAllMocks` wipes the registry's return value, and a tools/list with
+    // nothing behind it fails on its own params rather than on the session.
+    vi.mocked(listMcpTools).mockResolvedValue([]);
+  });
+
+  it.each([
+    ['resources/subscribe', { uri: 'sunrise://agents' }],
+    ['resources/unsubscribe', { uri: 'sunrise://agents' }],
+    ['logging/setLevel', { level: 'debug' }],
+  ])('refuses %s by name', async (method, params) => {
+    const req = makeRequest({ method, params });
+
+    const result = await handleMcpRequest(req, {
+      auth,
+      session: ephemeral,
+      serverState,
+      rateLimiter,
+    });
+
+    expect(result?.error?.code).toBe(JsonRpcErrorCode.STATELESS_UNSUPPORTED);
+    expect(result?.error?.message).toContain(method);
+    expect(result?.error?.message).toContain('stateless');
+  });
+
+  it('still serves the reads an agent actually needs', async () => {
+    // The whole bet: tools and resource reads want nothing from a session but a
+    // protocol version and an initialized flag, so stateless costs them nothing.
+    const req = makeRequest({ method: 'tools/list' });
+
+    const result = await handleMcpRequest(req, {
+      auth,
+      session: ephemeral,
+      serverState,
+      rateLimiter,
+    });
+
+    expect(result?.error).toBeUndefined();
+  });
+});
+
+describe('initialize advertises only what the session mode can honour (t-92)', () => {
+  let auth: McpAuthContext;
+  let serverState: McpServerState;
+  let rateLimiter: McpRateLimiter;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    auth = makeAuth();
+    serverState = makeServerState();
+    rateLimiter = makeRateLimiter(true);
+  });
+
+  async function capabilitiesFor(session: McpSession) {
+    const req = makeRequest({ method: 'initialize', params: {} });
+    const result = await handleMcpRequest(req, { auth, session, serverState, rateLimiter });
+    return (result?.result as { capabilities: Record<string, unknown> }).capabilities;
+  }
+
+  it('withholds the push/continuity capabilities from an ephemeral session', async () => {
+    // Everything dropped here is server→client push or per-session memory, and
+    // all of it rides the SSE stream a stateless GET declines. Advertising them
+    // and then refusing is the same silent lie this mode exists to remove, one
+    // level up: a client that honours the handshake would call logging/setLevel
+    // during setup and take a -32005 on a perfectly healthy connection.
+    const caps = await capabilitiesFor(makeSession({ ephemeral: true }));
+
+    expect(caps).toEqual({
+      tools: {},
+      resources: {},
+      prompts: {},
+      completions: {}, // a plain request/response lookup — stateless-safe
+    });
+    expect(caps).not.toHaveProperty('logging');
+  });
+
+  it('advertises the full set for a durable session', async () => {
+    const caps = await capabilitiesFor(makeSession());
+
+    expect(caps).toEqual({
+      tools: { listChanged: true },
+      resources: { listChanged: true, subscribe: true },
+      prompts: { listChanged: true },
+      logging: {},
+      completions: {},
+    });
+  });
+});
