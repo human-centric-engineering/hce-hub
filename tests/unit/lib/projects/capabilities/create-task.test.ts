@@ -297,6 +297,42 @@ describe('create_task happy path (no deps)', () => {
   });
 });
 
+describe('create_task claim cascade by kind (§32 t-89)', () => {
+  beforeEach(() => resolveFeature.mockResolvedValue(granted));
+
+  it('an enhancement is born UNASSIGNED — the feature owner says nothing about who does it', async () => {
+    mockTxCreatesTask('t-1', 'claimed');
+    await cap.execute(
+      { featureId: 'f1', title: 'Collapse the merged column', kind: 'enhancement' },
+      ctx()
+    );
+
+    expect(txTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          kind: 'enhancement',
+          // Both null → the Board's Unassigned lane, pullable by any member.
+          assigneeUserId: null,
+          claimedByUserId: null,
+          // Still born `claimed`: that is the *stage* (not started), not a person.
+          status: 'claimed',
+        }),
+      })
+    );
+  });
+
+  it.each(['feature_work', 'bug'] as const)('a %s task keeps the owner cascade', async (kind) => {
+    mockTxCreatesTask('t-1', 'claimed');
+    await cap.execute({ featureId: 'f1', title: 'x', kind }, ctx());
+
+    expect(txTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ kind, assigneeUserId: USER, claimedByUserId: USER }),
+      })
+    );
+  });
+});
+
 describe('create_task promotion (fromIdeaId)', () => {
   beforeEach(() => {
     resolveFeature.mockResolvedValue(granted);

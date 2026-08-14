@@ -104,25 +104,43 @@ export async function reconcilePullRequestEvent(payload: unknown): Promise<Recon
   let reconciled = 0;
   let skipped = 0;
   for (const task of tasks) {
-    if (!task.claimedByUserId) {
+    // Who to complete as. Normally the doer; for an **unclaimed** task, the merger
+    // (§32 t-89, owner call) — `completeTask` adopts them as the doer too, so the
+    // merged task carries a real name instead of a blank.
+    //
+    // This branch was unreachable until t-89: the create cascade always set a
+    // claimant, so no linked task could be unclaimed. Now an `enhancement` is born
+    // unassigned and any task can be released, so a PR can merge against a task
+    // nobody holds.
+    //
+    // It still skips when the merger is unmapped (external, or no linked GitHub
+    // identity) or absent — there is no Hub user to complete as, and inventing one
+    // is worse than leaving the task open where a human will see it.
+    const actorUserId = task.claimedByUserId ?? mergedBy?.userId ?? null;
+    if (!actorUserId) {
       skipped++;
-      logger.warn('github-sync: task linked to merged PR is unclaimed — skipped', {
+      logger.warn('github-sync: merged-PR task is unclaimed with no mappable merger — skipped', {
         taskId: task.id,
         prUrl,
       });
       continue;
     }
     try {
-      await completeTask(task.claimedByUserId, task.id, undefined, mergedBy);
+      await completeTask(actorUserId, task.id, undefined, mergedBy);
       reconciled++;
     } catch (err) {
       if (err instanceof NotFoundError) {
-        // The claimant is no longer a member of the task's project (the access
-        // funnel's 404). Skip this task; don't fail the rest of the delivery.
+        // Whoever we tried to complete as isn't a member of the task's project (the
+        // access funnel's 404). Since §32 t-89 that is not always the claimant — for
+        // an unclaimed task it is the *merger*, so naming "claimant" here would send
+        // an operator looking for one that never existed. Skip this task; don't fail
+        // the rest of the delivery.
         skipped++;
-        logger.warn('github-sync: merged-PR task claimant not resolvable — skipped', {
+        logger.warn('github-sync: merged-PR task actor not resolvable in project — skipped', {
           taskId: task.id,
           prUrl,
+          actorUserId,
+          actorIsMerger: task.claimedByUserId === null,
         });
         continue;
       }

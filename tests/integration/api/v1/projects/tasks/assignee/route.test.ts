@@ -51,8 +51,19 @@ describe('PATCH /api/v1/projects/:id/tasks/:taskId/assignee', () => {
     expect(json.data.status).toBe('claimed');
   });
 
+  it('releases on an explicit null assignee, forwarding it to the core (§32 t-89)', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
+    assignMock.mockResolvedValue({ taskId: TID, status: 'claimed', warnings: [] });
+
+    const res = await assigneePatch(req({ assigneeUserId: null }), params());
+
+    expect(res.status).toBe(200);
+    expect(assignMock).toHaveBeenCalledWith(expect.any(String), TID, null, PID);
+  });
+
   it('400s a missing/invalid assignee id before touching the core', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
+    // Absent is still invalid — only an *explicit* null means release.
     expect((await assigneePatch(req({}), params())).status).toBe(400);
     expect((await assigneePatch(req({ assigneeUserId: 'not-a-cuid' }), params())).status).toBe(400);
     expect(assignMock).not.toHaveBeenCalled();

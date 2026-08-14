@@ -36,6 +36,22 @@ describe('describeEvent', () => {
     expect(describeEvent(ev({ kind: 'task_assigned' }))).toBe('assigned the task');
   });
 
+  it('reads a null-assignee task_assigned as a release, not an assignment (§32 t-89)', () => {
+    // One kind carries both moves; the metadata is what separates them.
+    expect(
+      describeEvent(
+        ev({ kind: 'task_assigned', metadata: { assigneeUserId: null, from: 'active' } })
+      )
+    ).toBe('returned the task to the pool');
+    expect(
+      describeEvent(
+        ev({ kind: 'task_assigned', metadata: { assigneeUserId: 'u2', from: 'claimed' } })
+      )
+    ).toBe('assigned the task');
+    // Absent metadata is an assignment we lost the detail of — never a release.
+    expect(describeEvent(ev({ kind: 'task_assigned', metadata: null }))).toBe('assigned the task');
+  });
+
   it('labels task_created unconditionally (no backlog branch — every task is born claimed)', () => {
     expect(describeEvent(ev({ kind: 'task_created', metadata: { status: 'claimed' } }))).toBe(
       'created the task'

@@ -12,6 +12,11 @@ documents what shipped.
 > when a dev is off sick or pulled onto something else) from the task sheet, or hand
 > a feature's whole remaining workload over in one move. Merged work always keeps
 > its doer's name — you don't reassign finished work.
+>
+> Two later amendments from `f-work-kinds` §32 t-89 (kinds are documented in
+> [bug handling](./bug-handling.md)): an **`enhancement` is born assigned to
+> nobody**, and **any task can be put back** by assigning it to `null`. Both land in
+> the Board's Unassigned lane.
 
 ## The model (`prisma/schema/app.prisma`)
 
@@ -43,6 +48,14 @@ No other schema change: assignment is a state move on existing columns.
    their doer credit.
 4. **Decoupled from ownership** — reassignment **never** touches
    `Feature.ownerUserId`. It moves the _tasks_, not the feature.
+5. **Release is assignment to nobody** (§32 t-89) — `assigneeUserId: null` clears
+   both user fields and returns the task to the pool. It lives on `assign_task`
+   rather than `update_task` because it moves the task's _status_, and `update_task`
+   is explicitly the verb that doesn't. Releasing an **active** task resets it to
+   `claimed` and closes its open `TaskClaim` — an active task with no worker is
+   incoherent, and a stale open claim would keep tripping the collision detector for
+   whoever picked it up next. Only a _different_ person's displaced work warns;
+   putting your own task down is the normal case, not a collision.
 
 ## The shared core (`lib/projects/task-actions.ts`)
 
@@ -65,8 +78,8 @@ existing claimer-based surfaces already show the new person in the common case.
 
 ### MCP / write
 
-- **`assign_task { taskId, assigneeUserId, projectId? }`** (seed `021`) — take a task
-  or hand it over.
+- **`assign_task { taskId, assigneeUserId, projectId? }`** (seed `021`) — take a task,
+  hand it over, or pass `assigneeUserId: null` to put it back in the pool.
 - **`reassign_feature_tasks { featureId, assigneeUserId, projectId? }`** (seed `022`)
   — hand a feature's remaining work over. Both are member-tier, audited, and their
   `functionDefinition` re-syncs on the seed's update branch so MCP advertises the
@@ -75,9 +88,11 @@ existing claimer-based surfaces already show the new person in the common case.
 ### REST (the HTTP face of the same cores)
 
 - **`PATCH /api/v1/projects/:id/tasks/:taskId/assignee`** `{ assigneeUserId }` — the
-  task-sheet picker.
+  task-sheet picker. Accepts `null` to release (§32 t-89), so the HTTP face is not
+  narrower than the core; the picker itself has no "unassign" option yet.
 - **`PATCH /api/v1/projects/:id/features/:key/assignee`** `{ assigneeUserId }` — the
-  feature-page "reassign remaining" affordance.
+  feature-page "reassign remaining" affordance. Not nullable: releasing a whole
+  feature's workload in one click is a different, unrequested move.
 
 Both are `withAuth`, Zod-validated (`cuidSchema`), and `:id`-scoped (no
 cross-project id-swap). A non-member assignee is a 400; an unknown/foreign target is
@@ -88,9 +103,11 @@ a 404.
 - **Plan / Board** (`lib/projects/plan.ts`, `lib/projects/board.ts`) show the
   **holder** on each task: the assignee while open, the doer once merged. The Board
   **routes each task into its holder's lane** — so an open task sits in _whose work
-  it is_, a merged one credits who did it, falling to the feature owner when neither
-  is set. This closes the split where the Plan showed the claimer while the feature
-  page showed the assignee.
+  it is_, and a merged one credits who did it. This closes the split where the Plan
+  showed the claimer while the feature page showed the assignee. A task with **no
+  holder, or one who is no longer a member, routes to Unassigned** — there is no
+  feature-owner fallback (§32 t-89 removed it; it had made that lane unreachable
+  since §10, and it misattributed an erased holder's work to the owner).
 - **Task sheet** (`components/hub/projects/task-sheet/`) — an open task shows the
   `AssigneePicker` (a member Select seeded with the current assignee); a merged task
   shows the doer read-only.

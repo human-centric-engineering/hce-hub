@@ -16,11 +16,20 @@ export const updateFeatureFunctionDefinition = {
     properties: {
       featureId: { type: 'string', description: 'The feature to edit.' },
       title: { type: 'string', description: 'New title.' },
-      summary: { type: 'string', description: 'New plain one-line summary; null clears it.' },
-      description: { type: 'string', description: 'New full detail (markdown); null clears it.' },
-      doneWhen: { type: 'string', description: 'New definition of done; null clears it.' },
+      summary: {
+        type: ['string', 'null'],
+        description: 'New plain one-line summary; null clears it.',
+      },
+      description: {
+        type: ['string', 'null'],
+        description: 'New full detail (markdown); null clears it.',
+      },
+      doneWhen: {
+        type: ['string', 'null'],
+        description: 'New definition of done; null clears it.',
+      },
       references: {
-        type: 'array',
+        type: ['array', 'null'],
         items: {
           type: 'object',
           properties: {
@@ -38,11 +47,11 @@ export const updateFeatureFunctionDefinition = {
           'New dependency set — replaces the existing edges (existing features in this project).',
       },
       ownerUserId: {
-        type: 'string',
+        type: ['string', 'null'],
         description: 'Reassign the owner to a project member, or null to unclaim.',
       },
       phaseId: {
-        type: 'string',
+        type: ['string', 'null'],
         description: 'File the feature under a phase in this project, or null to unfile it.',
       },
     },

@@ -9,10 +9,11 @@
  *
  * Routing rules (v1-requirements §5, pull-not-push; statuses per f-status-model §20):
  *   - **lane** = the task's **holder** (`taskHolderId`, f-task-assignment §22 t2):
- *     the **assignee** while the task is open, the **doer** (claimant) once merged,
- *     else its feature's owner (a born task routes to its assignee — the owner by
- *     default); a null/non-member target → the terminal **Unassigned** lane
- *     (carried f-data-model t-3 — never deref).
+ *     the **assignee** while the task is open, the **doer** (claimant) once merged
+ *     (a born task routes to its assignee — the feature owner by default, but an
+ *     `enhancement` is born with none); a null or non-member holder → the terminal
+ *     **Unassigned** lane (carried f-data-model t-3 — never deref), which is where
+ *     unclaimed work waits to be pulled (§32 t-89).
  *   - **column** = the task's *effective* status (`computeEffectiveStatus`, so
  *     Plan and Board never diverge); a deps-blocked task (effective `blocked`)
  *     folds into the **Claimed** column with the blocked treatment (it's a
@@ -174,13 +175,18 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
     const column: BoardColumn = effective === 'blocked' ? 'claimed' : effective;
     // Lane = the task holder (f-task-assignment §22 t2): the assignee while open,
     // the doer once merged — so an open task sits in *whose work it is*, and a
-    // merged task credits who did it. Falls to the feature owner when neither is
-    // set (unclaimed, or erased → carried f-data-model t-2); a null/non-member
-    // target lands in the terminal Unassigned lane. Effective status still handles
-    // the *column* (a born-claimed task lands in its holder lane's Claimed column).
+    // merged task credits who did it. A null or non-member holder lands in the
+    // terminal Unassigned lane. Effective status still handles the *column* (a
+    // born-claimed task lands in its holder lane's Claimed column).
+    //
+    // No feature-owner fallback (§32 t-89). It used to stand in for a null holder,
+    // which made the Unassigned lane unreachable — it has existed since §10 and
+    // nothing ever landed in it, because the create cascade always set a holder.
+    // Now that an `enhancement` is born unassigned, that lane is the point. The
+    // fallback also mis-attributed a task whose holder was erased or left the
+    // project, showing it as the owner's work rather than as nobody's.
     const holderId = taskHolderId(effective, t.claimedByUserId, t.assigneeUserId);
-    const target = holderId ?? feature.ownerUserId;
-    const laneKey = target && memberIds.has(target) ? target : UNASSIGNED;
+    const laneKey = holderId && memberIds.has(holderId) ? holderId : UNASSIGNED;
 
     cardsByLane.get(laneKey)!.push({
       id: t.id,

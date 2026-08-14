@@ -22,7 +22,9 @@ export const TASK_ROW_GRID = 'grid grid-cols-[2.5rem_1fr_7rem_4.5rem_6.5rem] ite
 
 export function TaskRow({ task, ordinal }: { task: PlanTask; ordinal: number }) {
   const { open } = useTaskSheet();
-  const status = taskStatus(task.status);
+  // `claimer` is the resolved *holder* here (lib/projects/plan.ts) — null when
+  // nobody holds the task, or when the holder was erased. Either way it is nobody's.
+  const status = taskStatus(task.status, task.claimer != null);
   // Sanitize the (human-declared) PR url — a `javascript:`/`data:` scheme yields
   // '' → no link. Safe by construction before the `in_pr` write flow lands.
   const prUrl = task.prUrl ? sanitizeUrl(task.prUrl) : '';

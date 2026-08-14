@@ -70,7 +70,9 @@ describe('FeatureTaskList — planned', () => {
         />
       </TaskSheetControlsProvider>
     );
-    expect(screen.getByText('unassigned')).toBeInTheDocument();
+    // Two now: the person slot AND the status chip, which since §32 t-89 stops
+    // claiming "assigned" for a task nobody holds. Their agreeing is the point.
+    expect(screen.getAllByText('unassigned')).toHaveLength(2);
     expect(screen.getByText('t-—')).toBeInTheDocument();
   });
 

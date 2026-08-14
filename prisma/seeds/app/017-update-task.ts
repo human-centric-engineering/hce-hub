@@ -16,10 +16,13 @@ export const updateTaskFunctionDefinition = {
       taskId: { type: 'string', description: 'The task to edit.' },
       title: { type: 'string', description: 'New title.' },
       description: {
-        type: 'string',
+        type: ['string', 'null'],
         description: 'New full detail (markdown); null clears it.',
       },
-      doneWhen: { type: 'string', description: 'New acceptance contract; null clears it.' },
+      doneWhen: {
+        type: ['string', 'null'],
+        description: 'New acceptance contract; null clears it.',
+      },
       filesScope: {
         type: 'array',
         items: { type: 'string' },
@@ -38,7 +41,7 @@ export const updateTaskFunctionDefinition = {
           "Re-file the task's kind: 'feature_work', 'bug', or 'enhancement'. Use it to correct work mis-filed as a bug that is really an improvement.",
       },
       phaseId: {
-        type: 'string',
+        type: ['string', 'null'],
         description:
           "Commit this task to a phase in this project — the phase that chose to do the work, when that differs from its feature's phase. Null clears the commitment, so the task inherits its feature's phase again.",
       },

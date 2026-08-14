@@ -57,7 +57,10 @@ const granted = (
     featureId: 'f1',
     projectId: overrides.projectId ?? 'p1',
     status: overrides.status ?? 'claimed',
-    claimedByUserId: overrides.claimedByUserId ?? USER,
+    // `!== undefined`, not `??`: an explicit `null` means "nobody holds this", which
+    // is a real state since §32 t-89 — `?? USER` silently turned it back into a
+    // held task and the case under test never existed.
+    claimedByUserId: overrides.claimedByUserId !== undefined ? overrides.claimedByUserId : USER,
     filesScope: overrides.filesScope ?? [],
     basis: 'member',
   },
@@ -288,6 +291,74 @@ describe('completeTask', () => {
   });
 });
 
+describe('completeTask — an unclaimed task adopts the merger as its doer (§32 t-89)', () => {
+  const MERGER = { userId: 'merger-X', githubLogin: 'octocat' };
+
+  it('fills in the missing doer, so merged work never reads as nobody’s', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed', claimedByUserId: null }));
+
+    await completeTask('merger-X', 't1', undefined, MERGER);
+
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { status: 'merged', mergedByUserId: 'merger-X', claimedByUserId: 'merger-X' },
+    });
+  });
+
+  it('marks the credit as inferred in the journal, so it stays distinguishable from earned', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed', claimedByUserId: null }));
+
+    await completeTask('merger-X', 't1', undefined, MERGER);
+
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        kind: 'task_merged',
+        metadata: expect.objectContaining({ doerAdopted: true }),
+      })
+    );
+  });
+
+  it('NEVER overwrites an existing doer — the §14 rule it must not break', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'active', claimedByUserId: 'doer-A' }));
+
+    await completeTask('doer-A', 't1', undefined, MERGER);
+
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { status: 'merged', mergedByUserId: 'merger-X' }, // no claimedByUserId
+    });
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        metadata: expect.not.objectContaining({ doerAdopted: expect.anything() }),
+      })
+    );
+  });
+
+  it('adopts nobody when the merger is unmapped — there is no Hub user to credit', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed', claimedByUserId: null }));
+
+    await completeTask(USER, 't1', undefined, { userId: null, githubLogin: 'ext-contributor' });
+
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { status: 'merged', mergedByUserId: null },
+    });
+  });
+
+  it('also fills the doer in on the already-merged backfill path', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'merged', claimedByUserId: null }));
+
+    await completeTask('merger-X', 't1', undefined, MERGER);
+
+    expect(taskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { mergedByUserId: 'merger-X', claimedByUserId: 'merger-X' },
+    });
+  });
+});
+
 describe('setTaskPr', () => {
   const PR = 'https://github.com/org/repo/pull/42';
 
@@ -426,6 +497,113 @@ describe('assignTask (f-task-assignment t1)', () => {
       where: { id: 't1' },
       data: { assigneeUserId: ASSIGNEE, claimedByUserId: ASSIGNEE, status: 'active' },
     });
+  });
+});
+
+describe('assignTask release — null returns a task to the pool (§32 t-89)', () => {
+  it('clears both user fields on a claimed task, leaving the stage untouched', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed', claimedByUserId: USER }));
+
+    const r = await assignTask(USER, 't1', null);
+
+    expect(r.status).toBe('claimed'); // the *stage*, not a person — unchanged
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { assigneeUserId: null, claimedByUserId: null, status: 'claimed' },
+    });
+    // Nothing was actively in flight, so no claim to close.
+    expect(txClaimUpdateMany).not.toHaveBeenCalled();
+    expect(r.warnings).toEqual([]);
+  });
+
+  it('journals task_assigned with a null assignee (the release is on the trail)', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed', claimedByUserId: USER }));
+
+    await assignTask(USER, 't1', null);
+
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        kind: 'task_assigned',
+        actorUserId: USER,
+        metadata: { assigneeUserId: null, from: 'claimed' },
+      })
+    );
+  });
+
+  it('skips the membership check — a release names nobody to validate', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'claimed' }));
+
+    await assignTask(USER, 't1', null);
+
+    expect(canAccess).not.toHaveBeenCalled();
+  });
+
+  it('putting down your OWN active task resets it to claimed and closes the claim, without warning', async () => {
+    // The release path's normal case. An active task with no worker would be
+    // incoherent, and a claim left open would go on tripping the collision
+    // detector for whoever picks the task up next.
+    resolveTask.mockResolvedValue(granted({ status: 'active', claimedByUserId: USER }));
+
+    const r = await assignTask(USER, 't1', null);
+
+    expect(r.status).toBe('claimed');
+    expect(txClaimUpdateMany).toHaveBeenCalledWith({
+      where: { taskId: 't1', releasedAt: null },
+      data: { releasedAt: expect.any(Date) },
+    });
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { assigneeUserId: null, claimedByUserId: null, status: 'claimed' },
+    });
+    // "someone else" would simply be untrue — you displaced yourself.
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("releasing SOMEONE ELSE's active task still warns, in the release's own words", async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'active', claimedByUserId: 'someone' }));
+
+    const r = await assignTask(USER, 't1', null);
+
+    expect(r.status).toBe('claimed');
+    expect(r.warnings).toEqual([
+      expect.objectContaining({ kind: 'already_claimed', userId: 'someone', taskId: 't1' }),
+    ]);
+    // Whole clauses per case: swapping one noun into "…released on ___" produced
+    // "released on release", which this assertion used to pin in place.
+    expect(r.warnings[0].message).toContain('returning it to the pool closed their claim');
+    expect(r.warnings[0].message).not.toMatch(/released on release/);
+  });
+
+  it('stands an ACTIVE task down even when its claimant was already null', async () => {
+    // Erasure nulls `claimedByUserId` while leaving the task active, so there is no
+    // worker to "displace" — releasing used to leave `active` with nobody on it, an
+    // active card in the Unassigned lane.
+    resolveTask.mockResolvedValue(granted({ status: 'active', claimedByUserId: null }));
+
+    const r = await assignTask(USER, 't1', null);
+
+    expect(r.status).toBe('claimed');
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { assigneeUserId: null, claimedByUserId: null, status: 'claimed' },
+    });
+    // Its open claim closes with it — a stale one keeps tripping the collision
+    // detector for whoever picks the task up next.
+    expect(txClaimUpdateMany).toHaveBeenCalledWith({
+      where: { taskId: 't1', releasedAt: null },
+      data: { releasedAt: expect.any(Date) },
+    });
+    expect(r.warnings).toEqual([]); // nobody was displaced
+  });
+
+  it('is still a no-op on a merged task — finished work is not released either', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'merged' }));
+
+    const r = await assignTask(USER, 't1', null);
+
+    expect(r).toEqual({ taskId: 't1', number: 42, status: 'merged', warnings: [] });
+    expect(runTx).not.toHaveBeenCalled();
   });
 });
 

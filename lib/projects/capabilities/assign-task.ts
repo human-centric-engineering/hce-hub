@@ -1,16 +1,23 @@
 /**
- * `assign_task` — (re)assign a task to a project member (f-task-assignment t1).
+ * `assign_task` — (re)assign or **release** a task (f-task-assignment t1, §32 t-89).
  *
  * The MCP-first verb that re-sets the task's `assigneeUserId`: assign it to
- * yourself ("take it") or to someone else ("reassign" — e.g. a teammate is off
- * sick and you hand their task over). Wraps the shared `assignTask` core
- * (`task-actions.ts`) so the MCP, UI, and any automation path can't diverge.
+ * yourself ("take it"), to someone else ("reassign" — e.g. a teammate is off
+ * sick and you hand their task over), or to **`null`** ("put it back" — return it
+ * to the unassigned pool for anyone to pick up). Wraps the shared `assignTask`
+ * core (`task-actions.ts`) so the MCP, UI, and any automation path can't diverge.
  *
- * **Any project member may (re)assign** (open/trusting for now); the assignee
- * must be a member of the task's project. Reassigning an *active* task resets it
- * to `claimed` (a clean handoff); a *merged* task is a no-op (its doer keeps the
- * credit). Never touches feature ownership. Membership is the [[f-access]]
- * funnel's (`not_found`, never `forbidden` — no enumeration); no free text ⇒ no PII.
+ * Release lives here rather than on `update_task` because it moves the task's
+ * *status*, and `update_task` is explicitly the verb that doesn't. It is also the
+ * same door in reverse: this verb already owns "an active task handed on resets to
+ * claimed", which is exactly what releasing one must do.
+ *
+ * **Any project member may (re)assign or release** (open/trusting for now); a
+ * *named* assignee must be a member of the task's project (a null one has nobody
+ * to check). Reassigning or releasing an *active* task resets it to `claimed` (a
+ * clean handoff); a *merged* task is a no-op (its doer keeps the credit). Never
+ * touches feature ownership. Membership is the [[f-access]] funnel's (`not_found`,
+ * never `forbidden` — no enumeration); no free text ⇒ no PII.
  */
 import { z } from 'zod';
 import { BaseCapability } from '@/lib/orchestration/capabilities/base-capability';
@@ -28,7 +35,10 @@ const schema = z.object({
   taskId: z.string().describe('The task to assign.'),
   assigneeUserId: z
     .string()
-    .describe('The project member to assign it to (yourself to take it, or someone else).'),
+    .nullable()
+    .describe(
+      'The project member to assign it to (yourself to take it, or someone else), or null to return it to the unassigned pool.'
+    ),
   projectId: z
     .string()
     .optional()
@@ -53,14 +63,15 @@ export class AssignTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'assign_task',
     description:
-      'Assign (or reassign) a task to a project member: assigneeUserId to yourself to take it, or to someone else to hand it over (e.g. a teammate is away). Any project member may assign; the assignee must be a project member. Reassigning an active task resets it to claimed so the new person starts fresh; a merged task is left as-is (it credits whoever did it). Never changes feature ownership.',
+      'Assign, reassign, or release a task: assigneeUserId to yourself to take it, to someone else to hand it over (e.g. a teammate is away), or null to return it to the unassigned pool for anyone to pick up. Any project member may assign; a named assignee must be a project member. Reassigning or releasing an active task resets it to claimed so the next person starts fresh; a merged task is left as-is (it credits whoever did it). Never changes feature ownership.',
     parameters: {
       type: 'object',
       properties: {
         taskId: { type: 'string', description: 'The task to assign.' },
         assigneeUserId: {
-          type: 'string',
-          description: 'The project member to assign it to (yourself, or someone else).',
+          type: ['string', 'null'],
+          description:
+            'The project member to assign it to (yourself, or someone else), or null to return it to the unassigned pool.',
         },
         projectId: {
           type: 'string',

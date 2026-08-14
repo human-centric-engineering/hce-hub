@@ -48,7 +48,7 @@ describe('SwimLane', () => {
     expect(screen.getByText('f-access')).toBeInTheDocument();
   });
 
-  it('renders the Unassigned lane head (no member) with the pull-not-assign copy', () => {
+  it('renders the Unassigned lane head (no member) as a pool anyone can take from', () => {
     render(
       <SwimLane
         lane={lane({
@@ -61,7 +61,25 @@ describe('SwimLane', () => {
       />
     );
     expect(screen.getByText('Unassigned')).toBeInTheDocument();
-    expect(screen.getByText(/pull, don.t assign/i)).toBeInTheDocument();
+    // The copy must match the affordance: the task sheet offers Assign (to
+    // yourself, which is the pull), so the old "pull, don't assign" contradicted
+    // the only control the lane leads to (§32 t-89).
+    expect(screen.getByText('2 tasks · free to take')).toBeInTheDocument();
+  });
+
+  it('singularises the lane count', () => {
+    render(
+      <SwimLane
+        lane={lane({
+          key: 'unassigned',
+          member: null,
+          role: null,
+          taskCount: 1,
+          tasks: [card({ id: 'a' })],
+        })}
+      />
+    );
+    expect(screen.getByText('1 task · free to take')).toBeInTheDocument();
   });
 
   it('places a task in its column and shows dots for the empty ones', () => {

@@ -84,22 +84,39 @@ interface AssignableTask {
  * heads-up; re-assigning active work to the person already on it leaves their
  * in-progress work untouched. Journals `task_assigned`. **Callers must exclude
  * merged tasks** — finished work credits its doer, never reassigned.
+ *
+ * A **null `assigneeUserId` releases** the task back to the unassigned pool (§32
+ * t-89): both user fields clear, so it routes to the Board's Unassigned lane. An
+ * `active` task stands down to `claimed` and its open claim closes — an active task
+ * with nobody on it is incoherent, and the closure matters beyond tidiness: the soft
+ * *collision* detector keys off open claims, so a released task left holding one
+ * would keep warning the next person off its own files.
  */
 async function applyAssignment(
   tx: Tx,
   task: AssignableTask,
-  assigneeUserId: string,
+  assigneeUserId: string | null,
   actorUserId: string
 ): Promise<{ nextStatus: TaskStatus; warning: CollisionWarning | null }> {
   const displacedWorker =
     task.status === 'active' && task.claimedByUserId && task.claimedByUserId !== assigneeUserId
       ? task.claimedByUserId
       : null;
-  const nextStatus: TaskStatus = displacedWorker ? 'claimed' : task.status;
 
-  // Only a genuine handoff (to a different person than the active worker) releases
-  // the open active-work claim.
-  if (displacedWorker) {
+  // The invariant: an `active` task ends this call with a worker on it, or it is not
+  // active any more. Two ways it can lose one — handed to a different person, or
+  // released to nobody. The second is NOT covered by `displacedWorker`, which needs
+  // a claimant to displace: an active task can already have a null one (erasure
+  // nulls `claimedByUserId`), and releasing that left `active` + nobody standing —
+  // an active card in the Unassigned lane, the exact state this doc calls incoherent.
+  const endsWithNoWorker = task.status === 'active' && assigneeUserId === null;
+  const standsDown = displacedWorker !== null || endsWithNoWorker;
+  const nextStatus: TaskStatus = standsDown ? 'claimed' : task.status;
+
+  // Whenever the task stands down, its open active-work claim closes with it —
+  // a genuine handoff, or a release. Re-assigning active work to the person already
+  // on it is neither, and leaves their claim alone.
+  if (standsDown) {
     await tx.taskClaim.updateMany({
       where: { taskId: task.taskId, releasedAt: null },
       data: { releasedAt: new Date() },
@@ -119,15 +136,23 @@ async function applyAssignment(
     metadata: { assigneeUserId, from: task.status },
   });
 
-  const warning: CollisionWarning | null = displacedWorker
-    ? {
-        kind: 'already_claimed',
-        userId: displacedWorker,
-        taskId: task.taskId,
-        message:
-          'Heads-up: this task was actively being worked by someone else — their claim was released on reassignment.',
-      }
-    : null;
+  // Only worth a heads-up when someone *else's* active work was displaced. Putting
+  // your own task down is the release path's normal case, not a collision — and
+  // "someone else" would simply be untrue there.
+  const warning: CollisionWarning | null =
+    displacedWorker && displacedWorker !== actorUserId
+      ? {
+          kind: 'already_claimed',
+          userId: displacedWorker,
+          taskId: task.taskId,
+          // Whole clauses, not a swapped noun: interpolating "release" into
+          // "…released on ___" produced "released on release."
+          message:
+            assigneeUserId === null
+              ? 'Heads-up: someone else was actively working this task — returning it to the pool closed their claim.'
+              : 'Heads-up: this task was actively being worked by someone else — their claim was released on reassignment.',
+        }
+      : null;
   return { nextStatus, warning };
 }
 
@@ -230,12 +255,14 @@ export async function startTask(
 /**
  * Assign `taskId` to `assigneeUserId` (f-task-assignment §f-ta t1) — the missing
  * verb that re-sets the dormant `assigneeUserId` (born = feature owner, never
- * re-set until now). Self = "take/claim it", another = "reassign" — one verb.
+ * re-set until now). Self = "take/claim it", another = "reassign", **`null` =
+ * "put it back"** — one verb.
  *
- * **Any project member may (re)assign** (call 2 — open/trusting; the caller's
- * membership is the `resolveTaskAccess` funnel's, deny ≡ 404). The **assignee**
- * must be a member of the task's project (else `ValidationError`). Decoupled from
- * feature ownership (call 4): never touches `Feature.ownerUserId`.
+ * **Any project member may (re)assign or release** (call 2 — open/trusting; the
+ * caller's membership is the `resolveTaskAccess` funnel's, deny ≡ 404). A *named*
+ * **assignee** must be a member of the task's project (else `ValidationError`);
+ * a null one has nobody to check. Decoupled from feature ownership (call 4):
+ * never touches `Feature.ownerUserId`.
  *
  * Semantics:
  * - **Merged is a no-op** — completed work credits its doer (`claimedByUserId`);
@@ -245,18 +272,24 @@ export async function startTask(
  *   `active → claimed` so the new assignee starts fresh, and returns a soft
  *   heads-up. Re-assigning an active task to the person already working it is a
  *   no-op on status/claim — it can't knock the active worker back to `claimed`.
+ * - **Release (`null`) is that same handoff, to nobody** (§32 t-89): both user
+ *   fields clear and the task lands in the Unassigned lane. An *active* task
+ *   released resets to `claimed` and its open claim closes — an active task with
+ *   no worker would be incoherent, and would go on tripping the collision
+ *   detector for whoever came next.
  * - `claimedByUserId` is synced to the new assignee in the `claimed` state (as a
  *   born task is), so the existing claimer-based plan/board display already shows
  *   the new person; the richer status-aware display is t2.
  *
  * Journals a `task_assigned` `ProjectEvent` (the handoff trail — who moved whose
- * work, and when) inside the same tx, and audit-logs it. An optional
- * `expectedProjectId` rejects a cross-project id-swap.
+ * work, and when; a release records a null `assigneeUserId`) inside the same tx,
+ * and audit-logs it. An optional `expectedProjectId` rejects a cross-project
+ * id-swap.
  */
 export async function assignTask(
   userId: string,
   taskId: string,
-  assigneeUserId: string,
+  assigneeUserId: string | null,
   expectedProjectId?: string
 ): Promise<TaskActionResult> {
   const task = await resolveScoped(userId, taskId, expectedProjectId);
@@ -266,10 +299,13 @@ export async function assignTask(
     return { taskId: task.taskId, number: task.number, status: 'merged', warnings: [] };
   }
 
-  // The assignee must be a member of the task's project (deny ≡ not a member).
-  const { basis } = await canAccessProject(assigneeUserId, task.projectId);
-  if (basis === null) {
-    throw new ValidationError('The assignee must be a member of this project.');
+  // A named assignee must be a member of the task's project (deny ≡ not a member).
+  // A release names nobody, so there is no membership to check.
+  if (assigneeUserId !== null) {
+    const { basis } = await canAccessProject(assigneeUserId, task.projectId);
+    if (basis === null) {
+      throw new ValidationError('The assignee must be a member of this project.');
+    }
   }
 
   // The (re)assignment itself — the shared per-task core (handoff reset + claim
@@ -395,7 +431,7 @@ export async function reassignFeatureTasks(
 /**
  * How a task's PR merge is attributed (f-github-identity §23 t-76). **Additive** —
  * the merger is distinct from the doer (`claimedByUserId`), which `completeTask`
- * never touches; passed only by the f-github-sync webhook path, never a human
+ * never overwrites; passed only by the f-github-sync webhook path, never a human
  * Complete.
  */
 export interface MergeAttribution {
@@ -403,6 +439,26 @@ export interface MergeAttribution {
   userId: string | null;
   /** The merger's raw GitHub login — kept in the journal trail even when unmapped. */
   githubLogin: string;
+}
+
+/**
+ * Should this merge **adopt** the merger as the task's doer (§32 t-89, owner call)?
+ *
+ * Only when there is no doer to overwrite. A task that nobody claimed can now reach
+ * a merged PR — an `enhancement` is born unassigned, and any task can be released —
+ * and the alternative to crediting the merger is a merged task attributed to nobody.
+ * Owner's call: a real name beats a blank, and this is an edge case; if unclaimed
+ * merges turn out to be common the mechanism can change then.
+ *
+ * The "additive, never the doer" rule (f-github-sync §14) is intact: it exists so a
+ * webhook can't overwrite the person who *did* the work. Here there is nobody to
+ * overwrite, so the rule has nothing to protect.
+ */
+function adoptsMergerAsDoer(
+  claimedByUserId: string | null,
+  mergedBy?: MergeAttribution
+): mergedBy is MergeAttribution & { userId: string } {
+  return claimedByUserId === null && mergedBy?.userId != null;
 }
 
 /**
@@ -414,6 +470,10 @@ export interface MergeAttribution {
  * `mergedBy` (f-github-sync only) records **who merged the PR** on `Task.mergedByUserId`
  * + the `task_merged` event — additive attribution that never overwrites the doer
  * (`actorUserId` stays `userId`, the claimant). Omitted for a human Complete.
+ *
+ * The one case where the merger also becomes the doer is an **unclaimed** task: see
+ * `adoptsMergerAsDoer`. The journal records `doerAdopted: true` there, so the trail
+ * distinguishes credit that was earned from credit that was inferred.
  */
 export async function completeTask(
   userId: string,
@@ -429,11 +489,18 @@ export async function completeTask(
   // doesn't silently lose the "who merged it" attribution. Idempotent — a
   // re-delivery writes the same merger. (No new event — the merge is already
   // journaled by the first completion.)
+  // An unclaimed task adopts the merger as its doer, so merged work always carries
+  // a name (§32 t-89) — applied on both the live and the backfill path.
+  const adoptDoer = adoptsMergerAsDoer(task.claimedByUserId, mergedBy);
+
   if (task.status === 'merged') {
     if (mergedBy) {
       await prisma.task.update({
         where: { id: task.taskId },
-        data: { mergedByUserId: mergedBy.userId },
+        data: {
+          mergedByUserId: mergedBy.userId,
+          ...(adoptDoer ? { claimedByUserId: mergedBy.userId } : {}),
+        },
       });
     }
     return { taskId: task.taskId, number: task.number, status: 'merged', warnings: [] };
@@ -446,8 +513,13 @@ export async function completeTask(
     });
     await tx.task.update({
       where: { id: task.taskId },
-      // Additive: set the merger when given, but never the doer (claimedByUserId).
-      data: { status: 'merged', ...(mergedBy ? { mergedByUserId: mergedBy.userId } : {}) },
+      // Additive: set the merger when given. The doer (claimedByUserId) is only
+      // ever *filled in*, never overwritten — see `adoptsMergerAsDoer`.
+      data: {
+        status: 'merged',
+        ...(mergedBy ? { mergedByUserId: mergedBy.userId } : {}),
+        ...(adoptDoer ? { claimedByUserId: mergedBy.userId } : {}),
+      },
     });
     await recordProjectEvent(tx, {
       projectId: task.projectId,
@@ -460,6 +532,8 @@ export async function completeTask(
         ...(mergedBy
           ? { mergedByUserId: mergedBy.userId, mergedByGithubLogin: mergedBy.githubLogin }
           : {}),
+        // Credit inferred, not earned — keep the two distinguishable in the trail.
+        ...(adoptDoer ? { doerAdopted: true } : {}),
       },
     });
   });

@@ -17,7 +17,7 @@ export const updatePhaseFunctionDefinition = {
       phaseId: { type: 'string', description: 'The phase to edit.' },
       name: { type: 'string', description: 'New phase name.' },
       description: {
-        type: 'string',
+        type: ['string', 'null'],
         description: 'New description (markdown); null clears it.',
       },
       status: {
