@@ -130,12 +130,17 @@ export async function reconcilePullRequestEvent(payload: unknown): Promise<Recon
       reconciled++;
     } catch (err) {
       if (err instanceof NotFoundError) {
-        // The claimant is no longer a member of the task's project (the access
-        // funnel's 404). Skip this task; don't fail the rest of the delivery.
+        // Whoever we tried to complete as isn't a member of the task's project (the
+        // access funnel's 404). Since §32 t-89 that is not always the claimant — for
+        // an unclaimed task it is the *merger*, so naming "claimant" here would send
+        // an operator looking for one that never existed. Skip this task; don't fail
+        // the rest of the delivery.
         skipped++;
-        logger.warn('github-sync: merged-PR task claimant not resolvable — skipped', {
+        logger.warn('github-sync: merged-PR task actor not resolvable in project — skipped', {
           taskId: task.id,
           prUrl,
+          actorUserId,
+          actorIsMerger: task.claimedByUserId === null,
         });
         continue;
       }

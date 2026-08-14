@@ -15,6 +15,9 @@ export interface TaskDetailRef {
   title: string;
   featureSlug: string | null;
   status: TaskEffectiveStatus;
+  /** Whether anyone holds it (§32 t-89) — a `claimed` chip reads "assigned" or
+   * "unassigned" on this, so it can't contradict the neighbour's own row. */
+  hasHolder: boolean;
 }
 
 /** One task's full detail (`GET /api/v1/projects/:id/tasks/:taskId`). */

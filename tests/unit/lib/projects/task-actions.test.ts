@@ -560,7 +560,7 @@ describe('assignTask release — null returns a task to the pool (§32 t-89)', (
     expect(r.warnings).toEqual([]);
   });
 
-  it("releasing SOMEONE ELSE's active task still warns, and says release not reassignment", async () => {
+  it("releasing SOMEONE ELSE's active task still warns, in the release's own words", async () => {
     resolveTask.mockResolvedValue(granted({ status: 'active', claimedByUserId: 'someone' }));
 
     const r = await assignTask(USER, 't1', null);
@@ -569,7 +569,32 @@ describe('assignTask release — null returns a task to the pool (§32 t-89)', (
     expect(r.warnings).toEqual([
       expect.objectContaining({ kind: 'already_claimed', userId: 'someone', taskId: 't1' }),
     ]);
-    expect(r.warnings[0].message).toContain('released on release');
+    // Whole clauses per case: swapping one noun into "…released on ___" produced
+    // "released on release", which this assertion used to pin in place.
+    expect(r.warnings[0].message).toContain('returning it to the pool closed their claim');
+    expect(r.warnings[0].message).not.toMatch(/released on release/);
+  });
+
+  it('stands an ACTIVE task down even when its claimant was already null', async () => {
+    // Erasure nulls `claimedByUserId` while leaving the task active, so there is no
+    // worker to "displace" — releasing used to leave `active` with nobody on it, an
+    // active card in the Unassigned lane.
+    resolveTask.mockResolvedValue(granted({ status: 'active', claimedByUserId: null }));
+
+    const r = await assignTask(USER, 't1', null);
+
+    expect(r.status).toBe('claimed');
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { assigneeUserId: null, claimedByUserId: null, status: 'claimed' },
+    });
+    // Its open claim closes with it — a stale one keeps tripping the collision
+    // detector for whoever picks the task up next.
+    expect(txClaimUpdateMany).toHaveBeenCalledWith({
+      where: { taskId: 't1', releasedAt: null },
+      data: { releasedAt: expect.any(Date) },
+    });
+    expect(r.warnings).toEqual([]); // nobody was displaced
   });
 
   it('is still a no-op on a merged task — finished work is not released either', async () => {

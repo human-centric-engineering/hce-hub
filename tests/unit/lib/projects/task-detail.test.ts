@@ -40,12 +40,15 @@ const neighbour = (o: {
   status?: string;
   slug?: string | null;
   deps?: string[];
+  claimedByUserId?: string | null;
+  assigneeUserId?: string | null;
 }) => ({
   id: o.id,
   number: o.number ?? null,
   title: o.id,
   status: o.status ?? 'claimed',
-  claimedByUserId: null,
+  claimedByUserId: o.claimedByUserId ?? null,
+  assigneeUserId: o.assigneeUserId ?? null,
   feature: { slug: o.slug ?? null },
   dependencies: (o.deps ?? []).map((s) => ({ dependsOn: { status: s } })),
 });
@@ -145,11 +148,54 @@ describe('getTaskDetail', () => {
     );
     const detail = await getTaskDetail('u1', 'p1', 't1');
     expect(detail.blockedBy).toEqual([
-      { id: 'b1', number: 2, title: 'b1', featureSlug: 'f-a', status: 'merged' },
+      { id: 'b1', number: 2, title: 'b1', featureSlug: 'f-a', status: 'merged', hasHolder: false },
     ]);
     expect(detail.blocks).toEqual([
-      { id: 'd1', number: 3, title: 'd1', featureSlug: null, status: 'blocked' },
+      { id: 'd1', number: 3, title: 'd1', featureSlug: null, status: 'blocked', hasHolder: false },
     ]);
+  });
+
+  it('carries each neighbour’s hasHolder, so a dep chip can’t contradict its own row (§32 t-89)', async () => {
+    taskFindFirst.mockResolvedValue(
+      taskRow({
+        dependencies: [
+          // held by its assignee → the chip may say "assigned"
+          { dependsOn: neighbour({ id: 'held', assigneeUserId: 'u2' }) },
+          // a born-unassigned enhancement → the chip must say "unassigned"
+          { dependsOn: neighbour({ id: 'free' }) },
+        ],
+      })
+    );
+
+    const detail = await getTaskDetail('u1', 'p1', 't1');
+
+    expect(detail.blockedBy.map((d) => [d.id, d.hasHolder])).toEqual([
+      ['held', true],
+      ['free', false],
+    ]);
+  });
+
+  it('reads a MERGED neighbour’s holder from the doer, not the assignee', async () => {
+    // `taskHolderId` switches source at merged — credit follows who did it. A merged
+    // task whose claimant was erased is nobody's, even if an assignee lingers.
+    taskFindFirst.mockResolvedValue(
+      taskRow({
+        dependencies: [
+          {
+            dependsOn: neighbour({
+              id: 'erased-doer',
+              status: 'merged',
+              claimedByUserId: null,
+              assigneeUserId: 'u2',
+            }),
+          },
+        ],
+      })
+    );
+
+    const detail = await getTaskDetail('u1', 'p1', 't1');
+
+    expect(detail.blockedBy[0].hasHolder).toBe(false);
   });
 
   it('resolves claimer + owner, marks isMine, and never derefs a null/erased ref', async () => {

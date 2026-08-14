@@ -66,7 +66,7 @@ function ActionButton({
 
 /** A click-to-jump dependency row (blocker or dependent). */
 function DepRow({ dep, onJump }: { dep: TaskDetailRef; onJump: (id: string) => void }) {
-  const s = taskStatus(dep.status);
+  const s = taskStatus(dep.status, dep.hasHolder);
   return (
     <button
       type="button"

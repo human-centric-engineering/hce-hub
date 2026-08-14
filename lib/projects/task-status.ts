@@ -67,16 +67,21 @@ export function isReadyToStart(task: TaskStatusInput, deps: DependencyStatusInpu
  *
  *  - **open** (`claimed`/`active`/`blocked`) → the **assignee** (`assigneeUserId`)
  *    — whose work it is, per design call 1b. Falls back to the claimant when a
- *    task somehow has no assignee (defensive; born tasks are always assigned).
+ *    task has no assignee.
  *  - **merged** → the **claimant/doer** (`claimedByUserId`) — completed work
  *    credits who actually did it, not who it was last assigned to.
  *
  * In the common case these coincide (assigning a task syncs the claim to the new
  * assignee — t1); they diverge only when someone **other than the assignee**
  * started the task (`start_task` moves the claim to the starter, leaving the
- * assignee unchanged). Returns `null` when neither id is set (unassigned, or the
- * user was erased) — callers add their own fallback (the Board lane falls to the
- * feature owner).
+ * assignee unchanged).
+ *
+ * Returns `null` when neither id is set — and since §32 t-89 that is a **first-class
+ * state, not a defensive edge**: an `enhancement` is born holding nobody, any task
+ * can be released back to the pool, and an erased user leaves the same shape.
+ * Callers must render it as nobody's; the Board routes it to the Unassigned lane and
+ * deliberately does **not** fall back to the feature owner, which is what kept that
+ * lane unreachable until t-89.
  */
 export function taskHolderId(
   status: EffectiveStatus,

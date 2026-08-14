@@ -21,7 +21,11 @@ import { Prisma, type TaskKind } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { NotFoundError } from '@/lib/api/errors';
 import { getAccessibleProject } from '@/lib/projects/access';
-import { computeEffectiveStatus, type EffectiveStatus } from '@/lib/projects/task-status';
+import {
+  computeEffectiveStatus,
+  taskHolderId,
+  type EffectiveStatus,
+} from '@/lib/projects/task-status';
 import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
 
 /** A neighbour in the dependency graph (a blocker or a dependent), click-to-jump. */
@@ -34,6 +38,13 @@ export interface TaskDetailRef {
   featureSlug: string | null;
   /** Effective status (via `computeEffectiveStatus`) — matches Plan/Board. */
   status: EffectiveStatus;
+  /**
+   * Whether anyone holds the neighbour (§32 t-89). Carried because a `claimed` task
+   * reads "assigned" or "unassigned" depending on it, and a dependency chip that
+   * guessed would contradict that same task's own row one surface over. A boolean,
+   * not a `UserRef`: the chip names the task, never the person.
+   */
+  hasHolder: boolean;
 }
 
 /** The task sheet's full payload for one task. */
@@ -106,6 +117,7 @@ const NEIGHBOUR_SELECT = Prisma.validator<Prisma.TaskSelect>()({
   title: true,
   status: true,
   claimedByUserId: true,
+  assigneeUserId: true,
   feature: { select: { slug: true } },
   dependencies: { select: { dependsOn: { select: { status: true } } } },
 });
@@ -115,15 +127,19 @@ const NEIGHBOUR_SELECT = Prisma.validator<Prisma.TaskSelect>()({
 type Neighbour = Prisma.TaskGetPayload<{ select: typeof NEIGHBOUR_SELECT }>;
 
 function toRef(n: Neighbour): TaskDetailRef {
+  const status = computeEffectiveStatus(
+    n,
+    n.dependencies.map((d) => d.dependsOn)
+  );
   return {
     id: n.id,
     number: n.number,
     title: n.title,
     featureSlug: n.feature.slug,
-    status: computeEffectiveStatus(
-      n,
-      n.dependencies.map((d) => d.dependsOn)
-    ),
+    status,
+    // The same holder rule every other surface uses, so the chip can't disagree
+    // with the row it points at. Status-dependent, hence computed after it.
+    hasHolder: taskHolderId(status, n.claimedByUserId, n.assigneeUserId) !== null,
   };
 }
 

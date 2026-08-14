@@ -86,10 +86,9 @@ interface AssignableTask {
  * merged tasks** — finished work credits its doer, never reassigned.
  *
  * A **null `assigneeUserId` releases** the task back to the unassigned pool (§32
- * t-89): both user fields clear, so it routes to the Board's Unassigned lane. The
- * active case needs no special branch — "nobody" is a different holder than
- * whoever held it, so the existing handoff path already resets `active → claimed`
- * and closes the open claim. That closure matters beyond tidiness: the soft
+ * t-89): both user fields clear, so it routes to the Board's Unassigned lane. An
+ * `active` task stands down to `claimed` and its open claim closes — an active task
+ * with nobody on it is incoherent, and the closure matters beyond tidiness: the soft
  * *collision* detector keys off open claims, so a released task left holding one
  * would keep warning the next person off its own files.
  */
@@ -103,11 +102,21 @@ async function applyAssignment(
     task.status === 'active' && task.claimedByUserId && task.claimedByUserId !== assigneeUserId
       ? task.claimedByUserId
       : null;
-  const nextStatus: TaskStatus = displacedWorker ? 'claimed' : task.status;
 
-  // Only a genuine handoff (to a different person than the active worker) releases
-  // the open active-work claim.
-  if (displacedWorker) {
+  // The invariant: an `active` task ends this call with a worker on it, or it is not
+  // active any more. Two ways it can lose one — handed to a different person, or
+  // released to nobody. The second is NOT covered by `displacedWorker`, which needs
+  // a claimant to displace: an active task can already have a null one (erasure
+  // nulls `claimedByUserId`), and releasing that left `active` + nobody standing —
+  // an active card in the Unassigned lane, the exact state this doc calls incoherent.
+  const endsWithNoWorker = task.status === 'active' && assigneeUserId === null;
+  const standsDown = displacedWorker !== null || endsWithNoWorker;
+  const nextStatus: TaskStatus = standsDown ? 'claimed' : task.status;
+
+  // Whenever the task stands down, its open active-work claim closes with it —
+  // a genuine handoff, or a release. Re-assigning active work to the person already
+  // on it is neither, and leaves their claim alone.
+  if (standsDown) {
     await tx.taskClaim.updateMany({
       where: { taskId: task.taskId, releasedAt: null },
       data: { releasedAt: new Date() },
@@ -136,9 +145,12 @@ async function applyAssignment(
           kind: 'already_claimed',
           userId: displacedWorker,
           taskId: task.taskId,
-          message: `Heads-up: this task was actively being worked by someone else — their claim was released on ${
-            assigneeUserId === null ? 'release' : 'reassignment'
-          }.`,
+          // Whole clauses, not a swapped noun: interpolating "release" into
+          // "…released on ___" produced "released on release."
+          message:
+            assigneeUserId === null
+              ? 'Heads-up: someone else was actively working this task — returning it to the pool closed their claim.'
+              : 'Heads-up: this task was actively being worked by someone else — their claim was released on reassignment.',
         }
       : null;
   return { nextStatus, warning };

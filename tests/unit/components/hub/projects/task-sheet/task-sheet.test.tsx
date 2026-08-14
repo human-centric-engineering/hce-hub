@@ -300,6 +300,7 @@ describe('TaskSheet body + actions', () => {
             title: 'Provider abstraction',
             featureSlug: 'f-llm',
             status: 'merged',
+            hasHolder: true,
           },
         ],
         blocks: [],
@@ -341,13 +342,43 @@ describe('TaskSheet body + actions', () => {
     renderSheet({
       detail: detail({
         blockedBy: [
-          { id: 'dep-9', number: 9, title: 'Do the base', featureSlug: 'f-x', status: 'claimed' },
+          {
+            id: 'dep-9',
+            number: 9,
+            title: 'Do the base',
+            featureSlug: 'f-x',
+            status: 'claimed',
+            hasHolder: true,
+          },
         ],
       }),
       onOpen,
     });
     fireEvent.click(await screen.findByText('Do the base'));
     expect(onOpen).toHaveBeenCalledWith('dep-9');
+  });
+
+  it('a blocker nobody holds reads "unassigned" on its chip, matching its own row (§32 t-89)', async () => {
+    // The contradiction one surface over: before `hasHolder` reached the chip, a
+    // born-unassigned blocker read "assigned" here while its own sheet said
+    // "unassigned".
+    renderSheet({
+      detail: detail({
+        blockedBy: [
+          {
+            id: 'free-1',
+            number: 7,
+            title: 'Unheld blocker',
+            featureSlug: 'f-x',
+            status: 'claimed',
+            hasHolder: false,
+          },
+        ],
+      }),
+    });
+    expect(await screen.findByText('Unheld blocker')).toBeInTheDocument();
+    // Two: the sheet's own chip (fixture has no holder) and the blocker's.
+    expect(screen.getAllByText('unassigned')).toHaveLength(2);
   });
 
   it('starts via POST and renders the returned soft warnings', async () => {
