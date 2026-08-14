@@ -87,6 +87,24 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
 - A `bug`-kind task in a feature's inset table gets a quiet **"bug"** tag
   (`components/hub/projects/plan/task-row.tsx`).
 
+> **The bug tag is now a _kind_ tag** (f-work-kinds §32 t-88). The four render sites
+> below each used to test `kind === 'bug'` on their own, so when `enhancement` joined
+> the enum it rendered nowhere. The word, glyph and hue for every kind now come from a
+> single **total** `Record<TaskKind, …>` — `TASK_KIND_CUE` in
+> `components/hub/projects/kind-tag.tsx` (renamed from `bug-tag.tsx`) — which makes the
+> next kind added to the union a compile error rather than a silence on screen.
+> `feature_work` maps to `null`: it is the unmarked default, so only work that isn't
+> the ordinary case earns a mark. An enhancement sits a step quieter than a bug
+> (`--ink-mute` vs the bug's brick) — a classification, not a signal.
+>
+> **The label is not the kind's name.** An `enhancement` reads **"new"** (owner call):
+> at "bug"'s width the two kinds occupy the same visual slot, where an eleven-character
+> tag shunts the title right in the row surfaces and truncates it. "New" is looser than
+> the kind it stands for — a merged enhancement still reads "new" long after it stopped
+> being new — so the tooltip carries the full meaning, and it is the only place the tag
+> says _new relative to what_. The exact word is pinned in `kind-tag.test.tsx` alone;
+> the four surface tests assert on the tooltip, so the label stays free to change.
+
 ### Active-fixes strip (t2)
 
 - A **pinned, project-scoped, self-hiding** band above the Plan/Board body
@@ -105,14 +123,20 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
 - A `bug` card shows a quiet **bug** cue (a muted glyph, no red, no pulse — a fix, not
   a crisis) in the card meta row (`components/hub/projects/board/task-card.tsx`). The
   card already carries its origin feature ref, so a bug reads apart from feature-work.
+  The Board keeps its **own** register here — `KindMark` sits with the Blocked and
+  Collision marks rather than borrowing the row surfaces' tag — and takes only the
+  vocabulary from `TASK_KIND_CUE`, so the two can differ in weight but never in wording.
 
 ### Task sheet + feature page (t3)
 
-- The same quiet **bug** tag rides the **task sheet** header (next to the status pill,
+- The same quiet **kind** tag rides the **task sheet** header (next to the status pill,
   `components/hub/projects/task-sheet/task-sheet.tsx`) and the **feature page's** task
   rows (`components/hub/projects/feature-view/feature-task-list.tsx`), so a defect reads
   apart from feature-work on **every** task-render surface — glanceable while working it,
-  and legible historically once it's merged. `kind` is threaded through the single-task
+  and legible historically once it's merged. The feature page is where the enhancement
+  gap showed: a post-ship enhancement lands in a shipped feature's task table, outside
+  its `N/N` roll-up (completion is sealed at `Feature.shippedAt`), so untagged it read
+  as an unaccounted-for extra row. `kind` is threaded through the single-task
   read (`task-detail.ts`) and the feature read (`feature-detail.ts`) to feed them.
 - Verifying the bug UX end-to-end here (t3) also closed the sheet's stale-surface gap:
   Start / Complete / Link-PR (and reassign) now refresh the Plan/Board behind the sheet,

@@ -13,7 +13,7 @@ import { StatusPill } from '@/components/hub/projects/plan/status-pill';
 import { taskStatus, firstName, prLabel } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
-import { BugTag } from '@/components/hub/projects/bug-tag';
+import { KindTag } from '@/components/hub/projects/kind-tag';
 import type { PlanTask } from '@/components/hub/projects/plan/types';
 
 /** Shared grid template — fixed trailing widths so the header and rows align
@@ -48,7 +48,7 @@ export function TaskRow({ task, ordinal }: { task: PlanTask; ordinal: number }) 
         t-{task.number ?? ordinal}
       </span>
       <span className="flex min-w-0 items-center gap-1.5" style={{ color: 'var(--ink-soft)' }}>
-        {task.kind === 'bug' && <BugTag />}
+        <KindTag kind={task.kind} />
         <span className="truncate">{task.title}</span>
       </span>
 

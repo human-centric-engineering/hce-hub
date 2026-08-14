@@ -44,9 +44,19 @@ describe('TaskCard', () => {
     expect(screen.getByTitle(/A bug — a fix/)).toBeInTheDocument();
   });
 
-  it('shows no bug cue on a feature-work card', () => {
+  // The fixture card is otherwise bare — no claimer, PR, collision or blocked
+  // status — so this also pins that the kind alone brings the meta row into
+  // existence. Before §32 t-88 that guard named `bug` explicitly, which would
+  // have swallowed the cue on exactly this card.
+  it('marks an enhancement-kind card with its own cue, on a card with nothing else (§32 t-88)', () => {
+    render(<TaskCard card={card({ kind: 'enhancement' })} />);
+    expect(screen.getByTitle(/An enhancement — new work/)).toBeInTheDocument();
+  });
+
+  it('shows no kind cue on a feature-work card — the unmarked default', () => {
     render(<TaskCard card={card({ kind: 'feature_work' })} />);
     expect(screen.queryByText('bug')).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/An enhancement/)).not.toBeInTheDocument();
   });
 
   it('opens the task sheet with the task id on click', () => {

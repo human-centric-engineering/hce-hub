@@ -219,8 +219,16 @@ describe('TaskSheet', () => {
 
     mockFetchOnce({ data: detail({ kind: 'feature_work' }) });
     renderSheet();
-    // Wait for the sheet to load, then confirm no bug tag on feature-work.
+    // Wait for the sheet to load, then confirm no kind tag on feature-work.
     expect(await screen.findByText('Wire the streaming handler')).toBeInTheDocument();
+    expect(screen.queryByText('bug')).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/An enhancement/)).not.toBeInTheDocument();
+  });
+
+  it('shows an enhancement tag for an enhancement-kind task (§32 t-88)', async () => {
+    mockFetchOnce({ data: detail({ kind: 'enhancement' }) });
+    renderSheet();
+    expect(await screen.findByTitle(/An enhancement — new work/)).toBeInTheDocument();
     expect(screen.queryByText('bug')).not.toBeInTheDocument();
   });
 
