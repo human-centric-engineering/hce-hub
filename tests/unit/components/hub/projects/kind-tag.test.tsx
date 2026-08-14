@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { KindTag, TASK_KIND_CUE } from '@/components/hub/projects/kind-tag';
+import { KindTag, TASK_KIND_CUE, taskKindCue } from '@/components/hub/projects/kind-tag';
 import type { TaskKind } from '@/components/hub/projects/plan/types';
 
 describe('KindTag', () => {
@@ -37,6 +37,22 @@ describe('KindTag', () => {
     // signal, so it sits below the bug's brick rather than escalating past it.
     expect(TASK_KIND_CUE.bug?.color).toBe('var(--signal-blocked)');
     expect(TASK_KIND_CUE.enhancement?.color).toBe('var(--ink-mute)');
+  });
+
+  /**
+   * `TaskKind` is hand-mirrored from the Prisma enum and the DTO reaches these
+   * components through an unchecked cast, so a value outside the union type-checks
+   * its way in here. A bare index would reach the prototype chain — `'constructor'`
+   * returns a truthy function with no `.Icon`, which throws inside React and takes
+   * the surrounding Plan down. Degrade to unmarked instead.
+   */
+  it('treats an off-union kind as unmarked rather than throwing', () => {
+    for (const rogue of ['constructor', 'toString', 'not_a_kind']) {
+      expect(taskKindCue(rogue as TaskKind)).toBeNull();
+      const { container, unmount } = render(<KindTag kind={rogue as TaskKind} />);
+      expect(container).toBeEmptyDOMElement();
+      unmount();
+    }
   });
 
   /**

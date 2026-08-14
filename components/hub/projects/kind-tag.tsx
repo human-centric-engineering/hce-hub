@@ -52,12 +52,29 @@ export const TASK_KIND_CUE: Record<TaskKind, TaskKindCue | null> = {
 };
 
 /**
+ * The cue for a kind, or `null` for one that carries no mark.
+ *
+ * Guarded rather than a bare index because `TaskKind` is, by its own admission,
+ * the one copy no type-check keeps honest (see `plan/types.ts`) — the DTO reaches
+ * these components through an unchecked `parseApiResponse` cast. A value outside
+ * the union therefore *type-checks* here and would index the prototype chain at
+ * runtime: `'constructor'` returns a truthy function whose `.Icon` is undefined,
+ * which throws inside React and takes the whole Plan down with it. It needs a
+ * string in a Prisma enum column to get here, so this is a floor, not a live
+ * threat — but the floor is three lines and it degrades to "unmarked" instead of
+ * to a blank page.
+ */
+export function taskKindCue(kind: TaskKind): TaskKindCue | null {
+  return Object.hasOwn(TASK_KIND_CUE, kind) ? TASK_KIND_CUE[kind] : null;
+}
+
+/**
  * The kind cue for the row/tag surfaces — the Plan row, the feature page's task
  * rows, and the task sheet header. Renders nothing for the unmarked default, so
  * call sites pass the kind unconditionally and never re-test it.
  */
 export function KindTag({ kind }: { kind: TaskKind }) {
-  const cue = TASK_KIND_CUE[kind];
+  const cue = taskKindCue(kind);
   if (!cue) return null;
 
   return (

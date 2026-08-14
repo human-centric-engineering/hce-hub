@@ -19,7 +19,7 @@ import { sanitizeUrl } from '@/lib/security/sanitize';
 import { firstName, prLabel } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
-import { TASK_KIND_CUE, type TaskKindCue } from '@/components/hub/projects/kind-tag';
+import { taskKindCue, type TaskKindCue } from '@/components/hub/projects/kind-tag';
 import type { BoardTaskCard } from '@/components/hub/projects/board/types';
 
 /** A quiet marker for a task that can't start yet (a claimed task with unmerged
@@ -83,7 +83,7 @@ export function TaskCard({ card }: { card: BoardTaskCard }) {
   const prUrl = card.prUrl ? sanitizeUrl(card.prUrl) : '';
   // Null for the unmarked default (`feature_work`) — so it also decides whether the
   // meta row has anything to show at all, rather than each kind being re-tested there.
-  const kindCue = TASK_KIND_CUE[card.kind];
+  const kindCue = taskKindCue(card.kind);
 
   return (
     <div
