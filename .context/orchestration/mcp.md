@@ -52,10 +52,10 @@ SSE push (notifications/{tools,resources,prompts}/list_changed,
 `MCP_SESSION_MODE` decides whether the server holds session state. It is a
 **deployment-topology** choice, not a feature toggle.
 
-| Mode                      | Holds sessions              | Correct on                        | Costs                                                                  |
-| ------------------------- | --------------------------- | --------------------------------- | ---------------------------------------------------------------------- |
-| `stateless` **(default)** | Nothing                     | Any topology                      | SSE, `resources/subscribe`, progress notifications, `logging/setLevel` |
-| `stateful`                | In-memory `Map` per process | **One** long-running process only | Nothing — but see below                                                |
+| Mode                      | Holds sessions              | Correct on                        | Costs                                                                                                           |
+| ------------------------- | --------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `stateless` **(default)** | Nothing                     | Any topology                      | SSE, `resources/subscribe`, `logging/setLevel` (refused by name); progress notifications (accepted, never sent) |
+| `stateful`                | In-memory `Map` per process | **One** long-running process only | Nothing — but see below                                                                                         |
 
 **Why stateless is the default.** The in-memory store is correct for a single
 process and silently wrong anywhere else. On a function-per-request platform
@@ -75,12 +75,36 @@ in `lib/db/client.ts`).
 HTTP transport the client never sends one and every request stands alone. The
 route synthesises an ephemeral session per request
 (`createEphemeralSession`) carrying the only two things a tool call or resource
-read consults — `initialized` and `protocolVersion` — and marks it `ephemeral`
-so the continuity-dependent methods refuse by name (`STATELESS_UNSUPPORTED`,
-`-32005`) instead of accepting work they would drop. The protocol version comes
-from the client's `MCP-Protocol-Version` header, falling back to the **oldest**
-supported revision rather than the newest, so a missing header can never opt a
-client into features it did not negotiate.
+read consults — `initialized` and `protocolVersion` — and marks it `ephemeral`.
+The protocol version comes from the client's `MCP-Protocol-Version` header,
+falling back to the **oldest** supported revision rather than the newest, so a
+missing header can never opt a client into features it did not negotiate.
+
+**What the client is told.** `initialize` withholds `logging`, `subscribe` and
+every `listChanged` from its advertised capabilities, so a client that honours
+the handshake never asks for them. If it asks anyway,
+`resources/subscribe`, `resources/unsubscribe` and `logging/setLevel` are
+**refused by name** (`STATELESS_UNSUPPORTED`, `-32005`) and the SSE `GET`
+returns **405** — the status the transport spec designates for "this endpoint
+offers no SSE stream", and the one clients special-case rather than treat as a
+transport error. `DELETE` returns 405 for the same reason: the spec's named
+answer for a server that does not let clients terminate sessions.
+
+The one exception is a **progress token**. It is accepted and then never
+delivered, rather than refused: `_meta.progressToken` is an optional hint on an
+otherwise valid `tools/call`, and rejecting the whole call over it would break
+work that succeeds. The spec makes progress notifications a MAY, so silence is
+conformant — but it is silence, and that is the honest description.
+
+**Admin → MCP → Sessions is empty under stateless, and that is not a fault.**
+The page reads `getMcpSessionManager().getActiveSessions()`, which is
+permanently `[]` when nothing is stored. An operator debugging a client will see
+zero active sessions on a server that is serving traffic normally. Session
+destruction was never an access-revocation primitive — a client can always
+re-`initialize` with the same key — so nothing is lost but visibility. Real
+revocation is `McpApiKey.isActive = false`, re-checked on every request. The
+per-request audit log (`McpAuditLog`) is unaffected and remains the record of
+who called what.
 
 **Going stateful at scale.** Sessions must move to a store shared across
 instances. Sunrise ships no such store and takes no dependency on one: Redis is
@@ -88,6 +112,12 @@ the obvious choice, and Postgres is legitimate precisely because it is already a
 hard dependency, so it adds no new infrastructure. That extension point is
 deliberately undesigned until something needs it — an interface with one
 implementation is usually the wrong interface.
+
+The startup guard is a **safety net, not a boundary**. The real criterion is
+"more than one process", which a process cannot detect about itself: only
+platforms that announce themselves (`VERCEL`, `AWS_LAMBDA_FUNCTION_NAME`) are
+caught. A Kubernetes Deployment with `replicas: 2`, an autoscaled Render/Fly/ECS
+service, or a clustered Node process hits the identical bug with no warning.
 
 ## Security Model
 

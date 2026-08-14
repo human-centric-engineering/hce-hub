@@ -360,13 +360,28 @@ export async function GET(request: NextRequest): Promise<Response> {
     }
 
     // A notification stream is continuity by definition — the server must hold a
-    // listener for a session and push into it later. Stateless has neither, so
-    // refuse by name instead of opening a stream that can never deliver anything.
+    // listener for a session and push into it later. Stateless has neither.
+    //
+    // 405, not 501, because the transport spec names it: the server "MUST either
+    // return Content-Type: text/event-stream in response to this HTTP GET, or
+    // else return HTTP 405 Method Not Allowed, indicating that the server does
+    // not offer an SSE stream at this endpoint." 405 is the one status clients
+    // special-case as "no SSE here, carry on"; anything else surfaces as a
+    // transport error, which would report a failure on every healthy connect —
+    // the opposite of what this mode is for.
     if (isStateless()) {
-      return jsonRpcErrorResponse(
-        JsonRpcErrorCode.STATELESS_UNSUPPORTED,
-        'Server-push notifications require MCP_SESSION_MODE=stateful',
-        501
+      return new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: null,
+          error: {
+            code: JsonRpcErrorCode.STATELESS_UNSUPPORTED,
+            message:
+              'This server does not offer an SSE stream (MCP_SESSION_MODE=stateless). ' +
+              'Server-push notifications require MCP_SESSION_MODE=stateful.',
+          },
+        }),
+        { status: 405, headers: { 'Content-Type': 'application/json', Allow: 'POST' } }
       );
     }
 
@@ -443,11 +458,26 @@ export async function DELETE(request: NextRequest): Promise<Response> {
       return jsonRpcErrorResponse(JsonRpcErrorCode.UNAUTHORIZED, 'Unauthorized', 401);
     }
 
-    // Nothing was created, so nothing needs tearing down — a well-behaved client
-    // that terminates its session gets a clean 204 rather than an error for
-    // doing the right thing.
+    // Nothing was created, so there is no session to tear down. 405 is the
+    // spec's designated answer here — a server "MAY respond to this request with
+    // HTTP 405 Method Not Allowed, indicating that the server does not allow
+    // clients to terminate sessions" — and it is the same signal the GET gives,
+    // so a client learns "this server does not do sessions" consistently.
+    //
+    // Still audited: the log records what a key ASKED for, not only what changed,
+    // and the stateful path already audits a DELETE it cannot honour. Skipping it
+    // would leave the trail one-sided.
     if (isStateless()) {
-      return new Response(null, { status: 204 });
+      logMcpAudit({
+        apiKeyId: auth.apiKeyId,
+        method: 'session/destroy',
+        responseCode: 'error',
+        errorMessage: 'Sessions are not tracked in stateless mode',
+        durationMs: 0,
+        clientIp: auth.clientIp,
+        userAgent: auth.userAgent,
+      });
+      return new Response(null, { status: 405, headers: { Allow: 'POST' } });
     }
 
     const sessionId = request.headers.get(MCP_SESSION_HEADER);

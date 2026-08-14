@@ -222,7 +222,7 @@ function handleInitialize(
   params: Record<string, unknown> | undefined,
   context: HandlerContext
 ): McpInitializeResult {
-  const { serverState } = context;
+  const { serverState, session } = context;
 
   const negotiation = negotiateMcpProtocolVersion(params?.protocolVersion);
   if (!negotiation) {
@@ -245,11 +245,22 @@ function handleInitialize(
   // resources/unsubscribe and pushes notifications/resources/updated.
   // logging:{} signals logging/setLevel + notifications/message support.
   // completions:{} signals completion/complete support.
+  //
+  // Under `MCP_SESSION_MODE=stateless` three of those are unreachable, so they
+  // are withheld rather than advertised and then refused. Everything here is
+  // server→client push or per-session memory: `listChanged` and
+  // `notifications/resources/updated` ride the SSE stream that `GET` declines,
+  // and `logging/setLevel` has nowhere to persist a level. A client that
+  // honours declared capabilities would otherwise call one during setup and
+  // take a `-32005` on a healthy connection — the same silent lie this mode
+  // exists to remove, one level up.
+  const durable = !session.ephemeral;
   const capabilities: McpCapabilities = {
-    tools: { listChanged: true },
-    resources: { listChanged: true, subscribe: true },
-    prompts: { listChanged: true },
-    logging: {},
+    tools: durable ? { listChanged: true } : {},
+    resources: durable ? { listChanged: true, subscribe: true } : {},
+    prompts: durable ? { listChanged: true } : {},
+    ...(durable ? { logging: {} } : {}),
+    // Stateless-safe: `completion/complete` is a plain request/response lookup.
     completions: {},
   };
 

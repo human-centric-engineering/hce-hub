@@ -875,20 +875,31 @@ describe('GET/DELETE /mcp — stateless', () => {
     mockEnv.MCP_SESSION_MODE = 'stateless';
   });
 
-  it('refuses the SSE stream by name rather than opening one that can never deliver', async () => {
+  it('refuses the SSE stream with 405 — the status clients special-case as "no SSE here"', async () => {
+    // The transport spec: the server MUST either return text/event-stream, "or
+    // else return HTTP 405 Method Not Allowed, indicating that the server does
+    // not offer an SSE stream at this endpoint." Any other non-2xx surfaces as a
+    // transport error, which would report a failure on every healthy connect.
     const response = await GET(makeGetRequest());
 
-    expect(response.status).toBe(501);
+    expect(response.status).toBe(405);
+    expect(response.headers.get('Allow')).toBe('POST');
     const body = await parseJson<{ error: { code: number; message: string } }>(response);
     expect(body.error.code).toBe(JsonRpcErrorCode.STATELESS_UNSUPPORTED);
     expect(body.error.message).toContain('stateful');
   });
 
-  it('accepts session termination as a no-op — nothing was created to destroy', async () => {
+  it('answers session termination with 405 and still audits the attempt', async () => {
+    // The spec's named answer for a server that "does not allow clients to
+    // terminate sessions". Audited anyway: the log records what a key asked for,
+    // not only what changed, so the trail does not go one-sided.
     const response = await DELETE(makeDeleteRequest());
 
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(405);
     expect(mockSessionManager.destroySession).not.toHaveBeenCalled();
+    expect(vi.mocked(logMcpAudit)).toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'session/destroy', responseCode: 'error' })
+    );
   });
 });
 
