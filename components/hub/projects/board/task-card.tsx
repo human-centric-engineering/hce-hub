@@ -12,13 +12,14 @@
  * deep-linkable task sheet (f-task-sheet §11); the PR link stops propagation so
  * it opens the PR, not the sheet.
  */
-import { Lock, Bug } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
 import { firstName, prLabel } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
+import { TASK_KIND_CUE, type TaskKindCue } from '@/components/hub/projects/kind-tag';
 import type { BoardTaskCard } from '@/components/hub/projects/board/types';
 
 /** A quiet marker for a task that can't start yet (a claimed task with unmerged
@@ -36,17 +37,20 @@ function BlockedMark() {
   );
 }
 
-/** A quiet marker for a bug-kind task — a fix, not a crisis (anti-urgency): no
- *  red, no pulse, just a small tag so a defect reads apart from feature-work. */
-function BugMark() {
+/** A quiet marker for a task whose kind isn't the unmarked default — no red, no
+ *  pulse, just a small tag so a bug or an enhancement reads apart from feature-work.
+ *  Word, glyph and hue come from the shared `TASK_KIND_CUE`; only the weight is the
+ *  Board's own, so this sits with the Blocked and Collision marks rather than
+ *  borrowing the row surfaces' tag. */
+function KindMark({ cue }: { cue: TaskKindCue }) {
   return (
     <span
       className="inline-flex items-center gap-1 font-mono text-[9.5px] tracking-wide"
-      style={{ color: 'var(--signal-blocked)' }}
-      title="A bug — a fix on the feature it broke"
+      style={{ color: cue.color }}
+      title={cue.title}
     >
-      <Bug className="h-2.5 w-2.5" aria-hidden />
-      bug
+      <cue.Icon className="h-2.5 w-2.5" aria-hidden />
+      {cue.label}
     </span>
   );
 }
@@ -77,6 +81,9 @@ function CollisionMark({ note }: { note: string }) {
 export function TaskCard({ card }: { card: BoardTaskCard }) {
   const { open } = useTaskSheet();
   const prUrl = card.prUrl ? sanitizeUrl(card.prUrl) : '';
+  // Null for the unmarked default (`feature_work`) — so it also decides whether the
+  // meta row has anything to show at all, rather than each kind being re-tested there.
+  const kindCue = TASK_KIND_CUE[card.kind];
 
   return (
     <div
@@ -110,13 +117,9 @@ export function TaskCard({ card }: { card: BoardTaskCard }) {
         {card.featureSlug ?? card.featureTitle}
         {card.number != null && <span> · t-{card.number}</span>}
       </span>
-      {(card.claimer ||
-        card.collision ||
-        prUrl ||
-        card.status === 'blocked' ||
-        card.kind === 'bug') && (
+      {(card.claimer || card.collision || prUrl || card.status === 'blocked' || kindCue) && (
         <div className="flex flex-wrap items-center gap-2">
-          {card.kind === 'bug' && <BugMark />}
+          {kindCue && <KindMark cue={kindCue} />}
           {card.status === 'blocked' && <BlockedMark />}
           {card.claimer && (
             <span className="flex items-center gap-1">

@@ -15,7 +15,7 @@ import { StatusPill } from '@/components/hub/projects/plan/status-pill';
 import { taskStatus, firstName } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
-import { BugTag } from '@/components/hub/projects/bug-tag';
+import { KindTag } from '@/components/hub/projects/kind-tag';
 import type {
   FeatureDetailTaskDTO,
   FeatureDetailIndicativeTaskDTO,
@@ -50,7 +50,7 @@ function TaskItem({ task }: { task: FeatureDetailTaskDTO }) {
           className="flex items-center gap-1.5 text-[14px]"
           style={{ color: 'var(--ink-soft)' }}
         >
-          {task.kind === 'bug' && <BugTag />}
+          <KindTag kind={task.kind} />
           <span className="truncate">{task.title}</span>
         </span>
         {task.doneWhen && (

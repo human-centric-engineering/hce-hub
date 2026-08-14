@@ -10,7 +10,7 @@ import { useSidekick } from '@/components/hub/sidekick-context';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
 import { TaskActivity } from '@/components/hub/projects/task-sheet/task-activity';
 import { AssigneePicker } from '@/components/hub/projects/task-sheet/assignee-picker';
-import { BugTag } from '@/components/hub/projects/bug-tag';
+import { KindTag } from '@/components/hub/projects/kind-tag';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
 import { taskStatus, firstName, prLabel } from '@/components/hub/projects/plan/presentation';
 import { initials } from '@/components/hub/projects/presentation';
@@ -320,7 +320,7 @@ export function TaskSheet({
               <h2 className="text-[17px] leading-snug font-medium">{detail.title}</h2>
               <div className="flex items-center gap-3">
                 {status && <StatusPill tone={status.tone} label={status.label} />}
-                {detail.kind === 'bug' && <BugTag />}
+                <KindTag kind={detail.kind} />
                 {detail.status === 'merged' ? (
                   // Merged → the doer, read-only (credit — you don't reassign finished
                   // work; f-task-assignment §22 t2).

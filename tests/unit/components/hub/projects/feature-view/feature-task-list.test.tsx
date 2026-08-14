@@ -59,6 +59,20 @@ describe('FeatureTaskList — planned', () => {
       </TaskSheetControlsProvider>
     );
     expect(screen.queryByText('bug')).not.toBeInTheDocument();
+    expect(screen.queryByText('enhancement')).not.toBeInTheDocument();
+  });
+
+  // This is the surface the gap was found on: a post-ship enhancement lands in a
+  // shipped feature's task table, outside the `N/N` roll-up, and until §32 t-88
+  // arrived there untagged — visually identical to the feature-work above it.
+  it('tags an enhancement-kind task (§32 t-88)', () => {
+    render(
+      <TaskSheetControlsProvider value={{ open: vi.fn(), close: vi.fn() }}>
+        <FeatureTaskList tasks={[task({ kind: 'enhancement' })]} indicativeTasks={[]} />
+      </TaskSheetControlsProvider>
+    );
+    expect(screen.getByText('enhancement')).toBeInTheDocument();
+    expect(screen.queryByText('bug')).not.toBeInTheDocument();
   });
 
   it('renders "unassigned" with no claimer/assignee and a "t-—" for a null number', () => {
