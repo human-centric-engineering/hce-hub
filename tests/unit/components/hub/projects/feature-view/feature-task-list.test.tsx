@@ -59,7 +59,7 @@ describe('FeatureTaskList — planned', () => {
       </TaskSheetControlsProvider>
     );
     expect(screen.queryByText('bug')).not.toBeInTheDocument();
-    expect(screen.queryByText('enhancement')).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/An enhancement/)).not.toBeInTheDocument();
   });
 
   // This is the surface the gap was found on: a post-ship enhancement lands in a
@@ -71,7 +71,7 @@ describe('FeatureTaskList — planned', () => {
         <FeatureTaskList tasks={[task({ kind: 'enhancement' })]} indicativeTasks={[]} />
       </TaskSheetControlsProvider>
     );
-    expect(screen.getByText('enhancement')).toBeInTheDocument();
+    expect(screen.getByTitle(/An enhancement — new work/)).toBeInTheDocument();
     expect(screen.queryByText('bug')).not.toBeInTheDocument();
   });
 

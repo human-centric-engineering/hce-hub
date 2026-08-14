@@ -34,6 +34,13 @@ export interface TaskKindCue {
  * no red, no pulse, no badge count). An enhancement sits a step below a bug, on
  * `--ink-mute` rather than the bug's brick, because an improvement to shipped work
  * is a classification, not a signal.
+ *
+ * **The label is not the kind's name** (owner call, t-88): an `enhancement` reads
+ * "new", because at "bug"'s width the two sit in the same visual slot rather than
+ * one dwarfing the other — and inside a title column, an eleven-character tag shunts
+ * the title right and truncates it. The word carries the cost of being loose (a
+ * merged enhancement still reads "new" long after it stopped being new), which the
+ * tooltip is there to absorb. Provisional, like the rest of the treatment.
  */
 export const TASK_KIND_CUE: Record<TaskKind, TaskKindCue | null> = {
   feature_work: null,
@@ -45,8 +52,10 @@ export const TASK_KIND_CUE: Record<TaskKind, TaskKindCue | null> = {
   },
   enhancement: {
     Icon: Plus,
-    label: 'enhancement',
-    title: 'An enhancement — an improvement to a feature that already shipped',
+    label: 'new',
+    // The tag word and the kind's name differ, so the tooltip carries both — it is
+    // the only place "new" gets to say *new relative to what*.
+    title: 'An enhancement — new work on a feature that already shipped',
     color: 'var(--ink-mute)',
   },
 };

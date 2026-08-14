@@ -96,6 +96,14 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
 > `feature_work` maps to `null`: it is the unmarked default, so only work that isn't
 > the ordinary case earns a mark. An enhancement sits a step quieter than a bug
 > (`--ink-mute` vs the bug's brick) — a classification, not a signal.
+>
+> **The label is not the kind's name.** An `enhancement` reads **"new"** (owner call):
+> at "bug"'s width the two kinds occupy the same visual slot, where an eleven-character
+> tag shunts the title right in the row surfaces and truncates it. "New" is looser than
+> the kind it stands for — a merged enhancement still reads "new" long after it stopped
+> being new — so the tooltip carries the full meaning, and it is the only place the tag
+> says _new relative to what_. The exact word is pinned in `kind-tag.test.tsx` alone;
+> the four surface tests assert on the tooltip, so the label stays free to change.
 
 ### Active-fixes strip (t2)
 

@@ -50,14 +50,13 @@ describe('TaskCard', () => {
   // have swallowed the cue on exactly this card.
   it('marks an enhancement-kind card with its own cue, on a card with nothing else (§32 t-88)', () => {
     render(<TaskCard card={card({ kind: 'enhancement' })} />);
-    expect(screen.getByText('enhancement')).toBeInTheDocument();
-    expect(screen.getByTitle(/An enhancement — an improvement/)).toBeInTheDocument();
+    expect(screen.getByTitle(/An enhancement — new work/)).toBeInTheDocument();
   });
 
   it('shows no kind cue on a feature-work card — the unmarked default', () => {
     render(<TaskCard card={card({ kind: 'feature_work' })} />);
     expect(screen.queryByText('bug')).not.toBeInTheDocument();
-    expect(screen.queryByText('enhancement')).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/An enhancement/)).not.toBeInTheDocument();
   });
 
   it('opens the task sheet with the task id on click', () => {

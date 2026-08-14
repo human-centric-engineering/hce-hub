@@ -6,8 +6,25 @@
  */
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { TaskKind as PrismaTaskKind } from '@prisma/client';
 import { KindTag, TASK_KIND_CUE, taskKindCue } from '@/components/hub/projects/kind-tag';
 import type { TaskKind } from '@/components/hub/projects/plan/types';
+
+/**
+ * The cue map is total over `TaskKind` — but `TaskKind` is *hand-mirrored* from the
+ * Prisma enum (client components can't import `@prisma/client`), so on its own the
+ * compiler only guards the second link of the chain. Add `chore` to the enum and
+ * the capability parity tests force the MCP schemas to advertise it, rows land in
+ * the DB, and this stale union keeps the cue map "total" without erroring —
+ * reproducing the exact t-88 bug, now with `taskKindCue`'s guard turning it into a
+ * designed silence. This closes the first link, in the same spirit as the
+ * enum-pinned checks in `create-task.test.ts` / `update-task.test.ts`.
+ */
+describe('TaskKind ↔ TASK_KIND_CUE parity', () => {
+  it('carries a cue entry for every kind in the Prisma enum, and no stale ones', () => {
+    expect(Object.keys(TASK_KIND_CUE).sort()).toEqual(Object.values(PrismaTaskKind).sort());
+  });
+});
 
 describe('KindTag', () => {
   it('renders the "bug" label with the explanatory tooltip', () => {
@@ -17,14 +34,29 @@ describe('KindTag', () => {
     expect(tag).toHaveAttribute('title', 'A bug — a fix on the feature it broke');
   });
 
-  it('renders the "enhancement" label with the explanatory tooltip', () => {
+  /**
+   * This file is the one place the exact tag word is pinned; the four surface tests
+   * assert on the tooltip instead, so the label stays free to change (owner: it is
+   * provisional) without touching them. An `enhancement` reads "new" so it occupies
+   * the same visual slot as "bug" — hence the tooltip carrying what "new" is new
+   * relative to.
+   */
+  it('renders the "new" label with the tooltip that names the kind behind it', () => {
     render(<KindTag kind="enhancement" />);
-    const tag = screen.getByText('enhancement');
+    const tag = screen.getByText('new');
     expect(tag).toBeInTheDocument();
     expect(tag).toHaveAttribute(
       'title',
-      'An enhancement — an improvement to a feature that already shipped'
+      'An enhancement — new work on a feature that already shipped'
     );
+  });
+
+  it('keeps the enhancement label within a character of the bug label', () => {
+    // The point of "new" over "enhancement": at "bug"'s width the two kinds sit in
+    // the same slot, instead of one shunting the title right and truncating it.
+    const bug = TASK_KIND_CUE.bug?.label ?? '';
+    const enhancement = TASK_KIND_CUE.enhancement?.label ?? '';
+    expect(Math.abs(enhancement.length - bug.length)).toBeLessThanOrEqual(1);
   });
 
   it('renders nothing for feature_work — the unmarked default', () => {

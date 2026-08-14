@@ -43,13 +43,13 @@ describe('TaskRow', () => {
 
   it('marks an enhancement-kind task with its own tag (§32 t-88)', () => {
     render(<TaskRow task={task({ kind: 'enhancement' })} ordinal={1} />);
-    expect(screen.getByText('enhancement')).toBeInTheDocument();
+    expect(screen.getByTitle(/An enhancement — new work/)).toBeInTheDocument();
   });
 
   it('shows no kind tag on a feature-work task — the unmarked default', () => {
     render(<TaskRow task={task({ kind: 'feature_work' })} ordinal={1} />);
     expect(screen.queryByText('bug')).not.toBeInTheDocument();
-    expect(screen.queryByText('enhancement')).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/An enhancement/)).not.toBeInTheDocument();
   });
 
   it('opens the task sheet with the task id on click', () => {
