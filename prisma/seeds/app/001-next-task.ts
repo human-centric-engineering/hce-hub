@@ -38,7 +38,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const nextTaskFunctionDefinition = {
   name: 'next_task',
   description:
-    "Recommend the single highest-priority task the caller can start next — a claimed task whose dependencies are all merged (nothing blocked by an open PR), in a feature the caller owns, or any help-wanted feature when includeHelpWanted is true. Membership-scoped: only the caller's projects are considered. A recommendation, not an assignment. The result includes the task t-N + feature slug so you can name it.",
+    "Recommend the single highest-priority task the caller can start next — a claimed task whose dependencies are all merged (nothing blocked by an open PR). Considers both the caller's own work (a feature they own, or any task assigned to or held by them) and the unclaimed pool any member may pull from; own work is offered first, and the caller is only pointed at the pool when none of their own is ready. Membership-scoped: only the caller's projects are considered. A recommendation, not an assignment. The result includes the task t-N + feature slug so you can name it.",
   parameters: {
     type: 'object',
     properties: {
@@ -48,7 +48,8 @@ export const nextTaskFunctionDefinition = {
       },
       includeHelpWanted: {
         type: 'boolean',
-        description: "Optional: also consider help-wanted features, not just the caller's own.",
+        description:
+          'Optional: also consider tasks on help-wanted features, alongside the unclaimed pool.',
       },
     },
     required: [],
@@ -67,7 +68,7 @@ const unit: SeedUnit = {
         slug: 'next_task',
         name: 'Next Task',
         description:
-          "Recommend the caller's highest-priority pullable task — dependencies all merged, in a feature they own (or any help-wanted feature). Membership-scoped; a recommendation, not an assignment.",
+          "Recommend the caller's highest-priority pullable task — dependencies all merged, from their own work first and the unclaimed pool otherwise (plus help-wanted features when asked). Membership-scoped; a recommendation, not an assignment.",
         category: 'coordination',
         executionType: 'internal',
         executionHandler: 'NextTaskCapability',

@@ -38,6 +38,20 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
   the caller's _pullable_ tasks (deps merged, oldest-ready order) a `bug` is
   preferred over feature-work of **equal readiness**. A bias, never an override: a
   dependency-blocked bug isn't pullable, so it's never chosen. Pulled, not pushed.
+  - **Since f-work-kinds §32 t-90 the bias runs _within a focus tier_**, not across
+    the whole ready set. `next_task`'s pool is now your work **plus the commons** (the
+    unclaimed pool t-89 made real), and `pickFocusedTask` offers own work first — so
+    an unclaimed bug on somebody else's feature does **not** interrupt your own ready
+    work. Deliberate: the active-fixes strip is project-scoped and already shows every
+    open bug to everyone, so a bug sweep is a thing you _go and do_, not something
+    pushed at you mid-feature.
+  - **Known divergence from the target principle.**
+    [futures](./planning/futures.md#dynamic-focus-and-prioritisation) states focus
+    should be _"bias, not exclusivity"_ — and a hard tier is exclusivity. That is the
+    accepted cost of a **static default** chosen for the current posture (heads-down
+    product development). When focus becomes _declared_, the tier order is what turns
+    into the parameter, and hard tiers should soften into weights. This is why the
+    policy is one named function over a ready set rather than a `where` clause.
 - **Kind-aware completion** (`lib/projects/feature-progress.ts` ·
   `computeFeatureProgress`) — `bug` tasks are **excluded** from a feature's
   `merged/total/live/blocked` and tallied separately as **`openFixes`**. So a shipped
