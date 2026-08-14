@@ -1,48 +1,87 @@
 /**
- * Kind-aware feature-completion progress (f-bug-handling §22-02).
+ * Feature-completion progress, sealed at the ship boundary (f-bug-handling
+ * §22-02; ship boundary added by f-work-kinds §32 t-79).
  *
- * `bug`-kind tasks are EXCLUDED from a feature's completion counts
- * (`merged`/`total`/`live`/`blocked`) and surfaced separately as `openFixes`.
- * The reason: a feature's `shipped` status is authoritative (`ship_feature` sets
- * it; nothing recomputes it from tasks), so an open bug can't un-ship a feature —
- * but its *progress* would otherwise read "3/4 merged" and look unfinished. Bugs
- * are a second axis (fixes pulled from any phase), not part of the build-out, so
- * they get counted as open fixes, never against completion. Feature-work is every
- * task that isn't a bug. Pure + total (planning-retro B12): reads a task's
- * effective status + kind, no DB.
+ * **Completion is a historical fact, not a live ratio.** Once a feature ships,
+ * what it took to build it is settled — so any task created *after* `shippedAt`
+ * is off the completion axis **regardless of kind**. That is what lets a
+ * task-sized improvement be filed honestly as `enhancement` on the feature it
+ * improves instead of masquerading as a `bug` to avoid denting the bar, and it
+ * means a future kind can't silently break completion the way a new value would
+ * have when accounting hung off the enum.
+ *
+ * A **null `shippedAt` counts every task** — exactly today's behaviour — so
+ * unshipped features, and any feature whose ship date couldn't be resolved,
+ * degrade safely rather than reading as complete.
+ *
+ * `bug` keeps its own accounting *before* the boundary: a defect found during
+ * build-out isn't build-out, so it stays out of `merged`/`total`/`live`/`blocked`
+ * and is tallied as `openFixes` instead — an open bug must never make a shipped
+ * feature read "3/4 merged". `openFixes` deliberately spans the whole set,
+ * pre- and post-ship: an open fix is open whenever it was raised.
+ *
+ * Pure + total (planning-retro B12): reads a task's effective status, kind and
+ * creation date, no DB.
  */
 import type { TaskKind } from '@prisma/client';
 import type { EffectiveStatus } from '@/lib/projects/task-status';
 
-/** A feature's completion progress + its open-fixes count. */
+/**
+ * A feature's completion progress + its live activity.
+ *
+ * `total`/`merged` are **sealed** at the ship boundary — a settled historical
+ * ratio. `live`/`blocked`/`openFixes` are **not**: they describe what is in
+ * flight right now, including work raised after the ship.
+ */
 export interface FeatureProgress {
   merged: number;
   total: number;
-  /** Feature-work tasks actively being worked (effective `active`). */
+  /** Feature-work being worked right now (effective `active`) — post-ship included. */
   live: number;
-  /** Feature-work tasks claimed but waiting on an unmerged dependency. */
+  /** Feature-work claimed but waiting on an unmerged dependency — post-ship included. */
   blocked: number;
   /** Open (unmerged) `bug`-kind tasks — the "· N open fixes" surface. */
   openFixes: number;
 }
 
-/** The minimal task shape progress reads: effective status + kind. */
+/** The minimal task shape progress reads: effective status, kind, and when it was raised. */
 export interface ProgressTaskInput {
   status: EffectiveStatus;
   kind: TaskKind;
+  /** Used against the feature's `shippedAt` to place the task on or off the completion axis. */
+  createdAt: Date;
 }
 
 /**
- * Compute kind-aware progress: completion counts over feature-work only, with
- * open bugs tallied separately as `openFixes`.
+ * Compute progress: completion counts over the work the feature was built from,
+ * with open bugs tallied separately as `openFixes`.
+ *
+ * `shippedAt` is the feature's ship boundary — pass `null` for a feature that
+ * hasn't shipped (or whose date is unknown), which counts every task.
  */
-export function computeFeatureProgress(tasks: readonly ProgressTaskInput[]): FeatureProgress {
-  const work = tasks.filter((t) => t.kind !== 'bug');
+export function computeFeatureProgress(
+  tasks: readonly ProgressTaskInput[],
+  shippedAt: Date | null = null
+): FeatureProgress {
+  // `<=` so a task created in the same transaction as the ship still counts as
+  // build-out; only work raised strictly afterwards falls off the axis.
+  const builtOut = shippedAt
+    ? tasks.filter((t) => t.createdAt.getTime() <= shippedAt.getTime())
+    : tasks;
+  // COMPLETION (`total`/`merged`) is sealed at the boundary — that is the point.
+  const completion = builtOut.filter((t) => t.kind !== 'bug');
+  // ACTIVITY (`live`/`blocked`/`openFixes`) is NOT sealed, and spans every task.
+  // Sealing it too would hide a post-ship enhancement someone is actively working:
+  // the row would read "2/2" with no live marker while its own task table listed
+  // that task as active — breaking the §09 invariant that a feature's summary can
+  // never disagree with the tasks beneath it. `openFixes` already worked this way;
+  // the other two now match. What shipped is history; what's in flight is news.
+  const activity = tasks.filter((t) => t.kind !== 'bug');
   return {
-    total: work.length,
-    merged: work.filter((t) => t.status === 'merged').length,
-    live: work.filter((t) => t.status === 'active').length,
-    blocked: work.filter((t) => t.status === 'blocked').length,
+    total: completion.length,
+    merged: completion.filter((t) => t.status === 'merged').length,
+    live: activity.filter((t) => t.status === 'active').length,
+    blocked: activity.filter((t) => t.status === 'blocked').length,
     openFixes: tasks.filter((t) => t.kind === 'bug' && t.status !== 'merged').length,
   };
 }

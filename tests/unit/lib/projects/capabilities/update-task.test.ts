@@ -10,7 +10,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Prisma } from '@prisma/client';
+import { z } from 'zod';
+import { Prisma, TaskKind } from '@prisma/client';
 
 vi.mock('@/lib/projects/access', () => ({ resolveFeatureAccess: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
@@ -151,6 +152,31 @@ describe('update_task patch semantics', () => {
       where: { id: 't1' },
       data: { description: null, doneWhen: null },
     });
+  });
+
+  it('re-files a mis-filed task from bug to enhancement', async () => {
+    // The motivating correction (f-work-kinds §32 t-79): before `enhancement`
+    // existed, an improvement had to be filed as `bug` to keep it off a shipped
+    // feature's progress bar, so the record contains "bugs" that were never
+    // defects. This is how they get put right without touching the DB.
+    const r = await cap.execute({ taskId: 't1', kind: 'enhancement' }, ctx());
+    expect(r.data?.updated).toEqual(['kind']);
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { kind: 'enhancement' },
+    });
+  });
+
+  it('advertises every TaskKind value in the tool schema', () => {
+    // The Zod schema derives from `TaskKind` and so can't drift, but the
+    // `functionDefinition` JSON is hand-written — and it is what MCP clients
+    // actually see. That copy DID go stale when the enum grew: `create_task`
+    // still advertised ['feature_work','bug'] after `enhancement` landed, which
+    // no type-check catches. Pin it to the enum instead of to a literal list.
+    const kind = z
+      .object({ properties: z.object({ kind: z.object({ enum: z.array(z.string()) }) }) })
+      .parse(cap.functionDefinition.parameters);
+    expect(kind.properties.kind.enum).toEqual(Object.values(TaskKind));
   });
 
   it('replaces filesScope via a `set` (scalar-list update)', async () => {

@@ -99,10 +99,18 @@ export class ShipFeatureCapability extends BaseCapability<Args, Data> {
         : this.error('Only the feature owner or a project lead can ship a feature.', 'forbidden');
     }
 
-    // Soft signal: how many *feature-work* tasks aren't merged yet. Never blocks
-    // the ship. Bug-kind tasks are off the completion axis (f-bug-handling §22-02
-    // — they're open fixes, not unfinished build-out), so they don't count here,
-    // matching computeFeatureProgress and the Plan's "N/N + · N open fixes".
+    // Soft signal: how many tasks that count toward completion aren't merged yet.
+    // Never blocks the ship. Bug-kind tasks are off the completion axis
+    // (f-bug-handling §22-02 — they're open fixes, not unfinished build-out), so
+    // they don't count here, matching computeFeatureProgress and the Plan's
+    // "N/N + · N open fixes".
+    //
+    // `enhancement` is deliberately NOT excluded (f-work-kinds §32 t-79). The
+    // ship boundary hasn't been stamped yet at this point, so every existing task
+    // is build-out as far as `computeFeatureProgress` is concerned — an
+    // enhancement raised *before* ship is scope, not an afterthought. Excluding it
+    // here would make this warning disagree with the bar it is meant to mirror.
+    // Post-ship enhancements never reach this count: they don't exist yet.
     const unmergedCount = await prisma.task.count({
       where: { featureId: args.featureId, status: { not: 'merged' }, kind: { not: 'bug' } },
     });
@@ -116,9 +124,22 @@ export class ShipFeatureCapability extends BaseCapability<Args, Data> {
     }
 
     await executeTransaction(async (tx) => {
+      // `shippedAt` seals completion (f-work-kinds §32 t-79): from here, tasks
+      // raised against this feature sit off its completion axis whatever their
+      // kind. Stamped in the SAME update as the status flip so the two can never
+      // disagree — a shipped feature without a boundary would silently go back to
+      // counting every future task.
+      //
+      // FIRST ship wins (`?? new Date()`), matching the backfill's MIN(createdAt).
+      // `ship_feature` is idempotent and re-runnable — a corrected narrative, or an
+      // agent retrying after an MCP timeout — and re-stamping would move the
+      // boundary forward, pulling work raised since the real ship back inside it and
+      // denting the bar. That is precisely the dent this feature exists to remove.
+      // A null here still stamps, so re-shipping repairs a feature the backfill
+      // couldn't resolve (safe: a null was counting everything already).
       await tx.feature.update({
         where: { id: args.featureId },
-        data: { status: 'shipped' },
+        data: { status: 'shipped', shippedAt: access.feature.shippedAt ?? new Date() },
       });
       // The ship narrative is the journal entry's body; atomic with the flip.
       await recordProjectEvent(tx, {

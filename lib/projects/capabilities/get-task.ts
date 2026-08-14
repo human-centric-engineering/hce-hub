@@ -22,6 +22,7 @@
  * identity ⇒ no PII beyond the masked body.
  */
 import { z } from 'zod';
+import type { TaskKind } from '@prisma/client';
 import {
   BaseCapability,
   type ProvenanceRedaction,
@@ -64,7 +65,9 @@ interface Data {
   /** The acceptance contract (markdown); `null` until authored. */
   doneWhen: string | null;
   status: 'claimed' | 'active' | 'blocked' | 'merged';
-  kind: 'feature_work' | 'bug';
+  // `TaskKind` rather than a literal union: a hand-written copy silently goes
+  // stale the next time the enum grows (it did, at §32 t-79's `enhancement`).
+  kind: TaskKind;
   filesScope: string[];
   prUrl: string | null;
   /** Assignee (raw id; `null` when unassigned / erased). */

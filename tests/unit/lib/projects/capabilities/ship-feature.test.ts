@@ -35,6 +35,7 @@ const granted = {
     status: 'in_flight',
     planningStage: 'planned',
     helpWanted: false,
+    shippedAt: null,
     basis: 'member',
   },
 };
@@ -85,9 +86,12 @@ describe('ship_feature close-out', () => {
       success: true,
       data: { featureId: 'f1', shipped: true, warnings: [] },
     });
+    // `shippedAt` is stamped in the SAME update as the status flip (f-work-kinds
+    // §32 t-79) — a shipped feature without a boundary would silently keep
+    // counting every future task toward its completion.
     expect(txFeatureUpdate).toHaveBeenCalledWith({
       where: { id: 'f1' },
-      data: { status: 'shipped' },
+      data: { status: 'shipped', shippedAt: expect.any(Date) },
     });
     expect(emit).toHaveBeenCalledWith(expect.anything(), {
       projectId: 'p1',
@@ -98,6 +102,44 @@ describe('ship_feature close-out', () => {
       metadata: { unmergedCount: 0 },
     });
     expect(emit.mock.calls[0][0].feature.update).toBe(txFeatureUpdate);
+  });
+
+  it('keeps the ORIGINAL shippedAt when an already-shipped feature is re-shipped', async () => {
+    // ship_feature is idempotent and re-runnable — a corrected narrative, or an
+    // agent retrying after an MCP timeout. Re-stamping would move the boundary
+    // forward and pull work raised since the real ship back inside it, denting the
+    // bar this feature exists to protect. First ship wins, matching the backfill's
+    // MIN(createdAt).
+    const firstShip = new Date('2026-08-01T12:00:00Z');
+    resolveFeature.mockResolvedValue({
+      ...granted,
+      feature: { ...granted.feature, status: 'shipped', shippedAt: firstShip },
+    });
+    taskCount.mockResolvedValue(0);
+
+    await cap.execute({ featureId: 'f1', summary: 'corrected narrative' }, ctx());
+
+    expect(txFeatureUpdate).toHaveBeenCalledWith({
+      where: { id: 'f1' },
+      data: { status: 'shipped', shippedAt: firstShip },
+    });
+  });
+
+  it('stamps a shipped feature whose boundary the backfill could not resolve', async () => {
+    // A null was counting every task already, so stamping can only ever reduce the
+    // count — safe, and it repairs a row the migration's journal lookup missed.
+    resolveFeature.mockResolvedValue({
+      ...granted,
+      feature: { ...granted.feature, status: 'shipped', shippedAt: null },
+    });
+    taskCount.mockResolvedValue(0);
+
+    await cap.execute({ featureId: 'f1', summary: 'repair' }, ctx());
+
+    expect(txFeatureUpdate).toHaveBeenCalledWith({
+      where: { id: 'f1' },
+      data: { status: 'shipped', shippedAt: expect.any(Date) },
+    });
   });
 
   it('soft-warns on unmerged tasks but still ships', async () => {
@@ -111,8 +153,14 @@ describe('ship_feature close-out', () => {
     ]);
     // Never blocks — the status flip happened.
     expect(txFeatureUpdate).toHaveBeenCalled();
-    // Counts only unmerged FEATURE-WORK — bugs are off the completion axis
-    // (f-bug-handling §22-02), so the warning agrees with the Plan's progress.
+    // Counts only unmerged completion-relevant work — bugs are off the completion
+    // axis (f-bug-handling §22-02), so the warning agrees with the Plan's progress.
+    //
+    // `enhancement` is NOT excluded (f-work-kinds §32 t-79): the ship boundary
+    // isn't stamped until the transaction below, so every task that exists at this
+    // moment still counts as build-out in `computeFeatureProgress`. Excluding it
+    // here would make the warning contradict the bar it mirrors — the exact
+    // disagreement this assertion exists to prevent.
     expect(taskCount).toHaveBeenCalledWith({
       where: { featureId: 'f1', status: { not: 'merged' }, kind: { not: 'bug' } },
     });

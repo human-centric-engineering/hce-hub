@@ -15,17 +15,22 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
 
 ## The model (`prisma/schema/app.prisma`)
 
-- **`enum TaskKind { feature_work bug }`** + `Task.kind TaskKind @default(feature_work)`
-  — non-null, so existing rows backfill. A **behavioural discriminator** (it drives
-  `next_task` and progress), deliberately a **closed enum, not a free-form label**:
-  every value earns code, so an unknown one would silently do nothing. A future
-  organizational-label system (many-per-task, behaviour-free) would be a separate
-  model.
+- **`enum TaskKind { feature_work bug enhancement }`** + `Task.kind TaskKind @default(feature_work)`
+  — non-null, so existing rows backfill. Records **what the work is** (provenance),
+  and since `f-work-kinds` §32 t-79 that is _all_ it records: `enhancement` was added
+  for a task-sized improvement to work that already exists, and the accounting moved
+  to `Feature.shippedAt` (below). `bug` still drives `next_task`'s bias and the
+  open-fixes tally. Still a **closed enum, not a free-form label** — the bar is now
+  "every value earns rendering and filtering" rather than "every value drives
+  accounting", which still excludes vanity labels. A future organizational-label
+  system (many-per-task, behaviour-free) would be a separate model.
+- **`Feature.shippedAt`** (§32 t-79) — the completion boundary. `computeFeatureProgress`
+  counts only tasks created at or before it, so **any** post-ship task is off the
+  completion axis whatever its kind; a null means count everything, which is exactly
+  the pre-§32 behaviour. This is what lets an improvement be filed honestly instead of
+  disguised as a `bug` to keep a shipped feature's progress bar intact.
 - **`ProjectEventKind.bug_reported`** — a reported bug journals distinctly from
   `task_created`, so "which shipped work generates defects" stays queryable.
-
-`Task.kind` round-trips through the project transfer export/import (defaulted so
-pre-`kind` backups still import) and the cutover snapshot.
 
 ## Enforcement — three surfaces
 
@@ -40,7 +45,8 @@ pre-`kind` backups still import) and the cutover snapshot.
   _Reconciliation:_ a bug **can't** un-ship a feature anyway — `computeFeatureStatus`
   reads stored status + deps only, and `ship_feature` sets `shipped` with nothing
   recomputing it from tasks — so the fix was the _progress count_, not the status
-  derivation.
+  derivation. Since §32 t-79 this exclusion is the **pre-ship** rule only: past
+  `Feature.shippedAt` the date decides and no task counts, whatever its kind.
 - **Ship warning** (`lib/projects/capabilities/ship-feature.ts`) — the soft
   "unmerged tasks" heads-up counts feature-work only (`kind: { not: 'bug' }`), so it
   agrees with the progress bar.
@@ -49,9 +55,15 @@ pre-`kind` backups still import) and the cutover snapshot.
 
 ### MCP / write (t1)
 
-- **`create_task { kind }`** — optional; `'bug'` files a defect, defaulting to
-  `'feature_work'`. Owner-tier via the [f-access](./planning/f-access.md) funnel; the
-  seed's `functionDefinition` re-syncs on the update branch so MCP advertises `kind`.
+- **`create_task { kind }`** — optional; `'bug'` files a defect, `'enhancement'` an
+  improvement to work that already exists, defaulting to `'feature_work'`. Owner-tier
+  via the [f-access](./planning/f-access.md) funnel; the seed's `functionDefinition`
+  re-syncs on the update branch so MCP advertises `kind`.
+- **`update_task { kind }`** (§32 t-79) — re-files a task whose kind was recorded
+  wrong. Not hypothetical: before `enhancement` existed, an improvement had to be
+  filed as a `bug` to keep it off a shipped feature's bar, so the record contains
+  "bugs" that were never defects. Re-filing emits no event — `bug_reported` recorded
+  what was believed at creation, and rewriting that would lose the provenance.
 
 ### Journal
 

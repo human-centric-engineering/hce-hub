@@ -33,8 +33,18 @@ export interface PlanIndicativeTask {
 /** A task's *effective* status (`computeEffectiveStatus`) — includes computed `blocked`. */
 export type TaskEffectiveStatus = 'claimed' | 'active' | 'merged' | 'blocked';
 
-/** A task's kind (mirrors Prisma `TaskKind`, f-bug-handling §22-02). */
-export type TaskKind = 'feature_work' | 'bug';
+/**
+ * A task's kind (mirrors Prisma `TaskKind`, f-bug-handling §22-02; `enhancement`
+ * added by f-work-kinds §32 t-79).
+ *
+ * Hand-mirrored rather than imported because this type crosses into client
+ * components, which can't pull from `@prisma/client`. That makes it the one copy
+ * no type-check can keep honest — the DTO reaches it through an unchecked
+ * `parseApiResponse` cast, so a missing value here doesn't error, it just makes
+ * `kind === 'enhancement'` a "no overlap" compile error at every render site.
+ * Keep it in step with the enum.
+ */
+export type TaskKind = 'feature_work' | 'bug' | 'enhancement';
 
 /** A depended-on feature, for the "depends on …" chips. */
 export interface PlanDependencyRef {

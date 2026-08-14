@@ -8,6 +8,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
+import { TaskKind } from '@prisma/client';
 
 vi.mock('@/lib/projects/access', () => ({ resolveFeatureAccess: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
@@ -303,6 +305,20 @@ describe('create_task promotion (fromIdeaId)', () => {
     ).toBe('idea_not_open');
 
     expect(runTx).not.toHaveBeenCalled();
+  });
+});
+
+describe('create_task tool schema', () => {
+  it('advertises every TaskKind value', () => {
+    // The Zod schema uses `nativeEnum(TaskKind)` so it tracks the enum, but this
+    // JSON copy is hand-written and is what MCP clients see. It is exactly the
+    // copy that went stale when `enhancement` was added (f-work-kinds §32 t-79) —
+    // an agent cannot pass a kind the tool never advertised, and no type-check
+    // catches it. Pinned to the enum, not to a literal list.
+    const params = z
+      .object({ properties: z.object({ kind: z.object({ enum: z.array(z.string()) }) }) })
+      .parse(cap.functionDefinition.parameters);
+    expect(params.properties.kind.enum).toEqual(Object.values(TaskKind));
   });
 });
 
