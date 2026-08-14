@@ -71,6 +71,12 @@ function mockTxCreatesTask(id = 't-new', status = 'claimed', nextNumber = 7) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Set here, not in a describe-level hook: `clearAllMocks` clears CALLS but not
+  // implementations, so a mock set in one block silently satisfies another and
+  // the test passes for the wrong reason (it did — the phase tests below only
+  // passed in a whole-file run, and failed under `-t`). Global default keeps
+  // every block honest under `.only`, reordering, or a switch to resetAllMocks.
+  phaseInProject.mockResolvedValue(true);
 });
 
 describe('create_task guards', () => {
@@ -189,6 +195,19 @@ describe('create_task happy path (no deps)', () => {
     mockTxCreatesTask('t-1', 'claimed');
     await cap.execute({ featureId: 'f1', title: 'Ship it' }, ctx());
     // Null = inherit, which is the pre-§32 behaviour — the column ships inert.
+    expect(txTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ phaseId: null }) })
+    );
+  });
+
+  it('accepts a null phaseId as "inherit" rather than rejecting it', async () => {
+    // update_task and update_feature both take a nullable phaseId, and the JSON
+    // functionDefinition carries no nullability signal — so an agent emitting
+    // null here is doing the natural thing and must not get a Zod error.
+    mockTxCreatesTask('t-1', 'claimed');
+    const r = await cap.execute({ featureId: 'f1', title: 'Ship it', phaseId: null }, ctx());
+    expect(r.success).toBe(true);
+    expect(phaseInProject).not.toHaveBeenCalled(); // nothing to validate
     expect(txTaskCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ phaseId: null }) })
     );

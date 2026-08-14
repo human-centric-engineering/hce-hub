@@ -9,7 +9,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const getFeatureFunctionDefinition = {
   name: 'get_feature',
   description:
-    "Read one feature's spec — its description, definition of done, effective status, planning stage (indicative sketch vs planned), the phase it is filed under, dependency graph (dependsOn / waitingOn), a task roll-up (total/merged count completion only: bugs and work raised after the feature shipped are excluded, and surface as openFixes/live instead — the same numbers the Plan shows), and any indicative-task sketch. Use it after list_phases to understand a feature before working it. featureRef is the feature's slug (e.g. 'f-mcp') or id. Membership-scoped: a feature you can't see (or in another project) is not_found.",
+    "Read one feature's spec — its description, definition of done, effective status, planning stage (indicative sketch vs planned), the phase it is filed under, dependency graph (dependsOn / waitingOn), a task roll-up (total/merged count completion only: bugs and work raised after the feature shipped are excluded, and surface as live/blocked/openFixes instead — the same numbers the Plan shows), and any indicative-task sketch. Use it after list_phases to understand a feature before working it. featureRef is the feature's slug (e.g. 'f-mcp') or id. Membership-scoped: a feature you can't see (or in another project) is not_found.",
   parameters: {
     type: 'object',
     properties: {

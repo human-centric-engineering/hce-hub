@@ -260,16 +260,6 @@ export async function reorderPhases(
 }
 
 /**
- * File a feature under a phase, or unfile it (`phaseId: null`) — f-phases §22 t3.
- * **Member-tier**: filing is collaborative roadmap organisation (like
- * `create_feature` and phase CRUD), NOT editing the feature's authored content,
- * so any project member may file *any* feature — not just its owner. (The
- * owner-tier `update_feature.phaseId` path stays for comprehensive edits.) The
- * phase must belong to the feature's own project. `expectedProjectId`, when
- * given, scopes the feature to that project so a REST route can reject a
- * cross-project id-swap. Non-member / unknown feature → 404 (no enumeration).
- */
-/**
  * Is `phaseId` a phase in `projectId`?
  *
  * The one same-project guard every phase-assignment path shares:
@@ -290,6 +280,16 @@ export async function phaseBelongsToProject(phaseId: string, projectId: string):
   return phase !== null;
 }
 
+/**
+ * File a feature under a phase, or unfile it (`phaseId: null`) — f-phases §22 t3.
+ * **Member-tier**: filing is collaborative roadmap organisation (like
+ * `create_feature` and phase CRUD), NOT editing the feature's authored content,
+ * so any project member may file *any* feature — not just its owner. (The
+ * owner-tier `update_feature.phaseId` path stays for comprehensive edits.) The
+ * phase must belong to the feature's own project. `expectedProjectId`, when
+ * given, scopes the feature to that project so a REST route can reject a
+ * cross-project id-swap. Non-member / unknown feature → 404 (no enumeration).
+ */
 export async function assignFeatureToPhase(
   userId: string,
   featureId: string,

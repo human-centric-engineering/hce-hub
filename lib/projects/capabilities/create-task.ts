@@ -59,6 +59,7 @@ const schema = z.object({
     ),
   phaseId: z
     .string()
+    .nullable()
     .optional()
     .describe(
       "Optional: commit this task to a phase in this project — the phase that chose to do the work, when that differs from its feature's phase. Omit to inherit the feature's phase."
@@ -189,8 +190,12 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
     // Phase commitment (§32 t-80) — the phase that CHOSE this work, when that
     // differs from its feature's phase. Omitted means inherit, which is the
     // default. Same-project guard shared with update_task / update_feature.
+    // `null` is accepted as "inherit" (not an error): update_task and
+    // update_feature both take a nullable phaseId, and the JSON functionDefinition
+    // carries no nullability signal, so an agent emitting null here is doing the
+    // natural thing. Only a non-null value needs validating.
     if (
-      args.phaseId !== undefined &&
+      args.phaseId != null &&
       !(await phaseBelongsToProject(args.phaseId, access.feature.projectId))
     ) {
       return this.error('That phase was not found in this project.', 'invalid_phase');

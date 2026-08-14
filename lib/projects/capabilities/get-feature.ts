@@ -86,12 +86,15 @@ interface Data {
    * `computeFeatureProgress` (§32 t-80). Bugs are off the completion axis and
    * tallied as `openFixes`; past the feature's ship boundary nothing counts
    * toward completion whatever its kind, so `total`/`merged` are settled history.
-   * `live` is current activity and deliberately spans post-ship work.
+   * `live` and `blocked` are current activity and deliberately span post-ship
+   * work — dropping `blocked` would hide a dependency-blocked post-ship task
+   * entirely (off `total`, not `active`, not a `bug`), so an agent would read
+   * "nothing outstanding" while the Plan renders a blocked row.
    *
    * Counting raw rows here used to make the agent and the human disagree about
    * whether a feature was done (§21 read 7/7 over MCP vs 5/5 on the Plan).
    */
-  tasks: { total: number; merged: number; live: number; openFixes: number };
+  tasks: { total: number; merged: number; live: number; blocked: number; openFixes: number };
   /** The high-level sketch (while indicative; replaced at plan time). */
   indicativeTasks: { order: number; text: string }[];
 }
@@ -103,7 +106,7 @@ export class GetFeatureCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'get_feature',
     description:
-      "Read one feature's spec — its description, definition of done, effective status, planning stage (indicative sketch vs planned), the phase it is filed under, dependency graph (dependsOn / waitingOn), a task roll-up (total/merged count completion only: bugs and work raised after the feature shipped are excluded, and surface as openFixes/live instead — the same numbers the Plan shows), and any indicative-task sketch. Use it after list_phases to understand a feature before working it. featureRef is the feature's slug (e.g. 'f-mcp') or id. Membership-scoped: a feature you can't see (or in another project) is not_found.",
+      "Read one feature's spec — its description, definition of done, effective status, planning stage (indicative sketch vs planned), the phase it is filed under, dependency graph (dependsOn / waitingOn), a task roll-up (total/merged count completion only: bugs and work raised after the feature shipped are excluded, and surface as live/blocked/openFixes instead — the same numbers the Plan shows), and any indicative-task sketch. Use it after list_phases to understand a feature before working it. featureRef is the feature's slug (e.g. 'f-mcp') or id. Membership-scoped: a feature you can't see (or in another project) is not_found.",
     parameters: {
       type: 'object',
       properties: {
@@ -172,6 +175,7 @@ export class GetFeatureCapability extends BaseCapability<Args, Data> {
           total: progress.total,
           merged: progress.merged,
           live: progress.live,
+          blocked: progress.blocked,
           openFixes: progress.openFixes,
         },
         indicativeTasks: d.indicativeTasks.map((t) => ({ order: t.order, text: t.text })),
