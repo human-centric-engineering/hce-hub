@@ -100,4 +100,34 @@ describe('list_phases', () => {
       ],
     });
   });
+
+  describe('list_phases provenance', () => {
+    it('declares processesPii and masks the phase prose on the durable row', () => {
+      // §32 t-80 added each phase's authored `description` — long-form prose, not a
+      // label — so the free text must not land verbatim in the audit trail.
+      expect(cap.processesPii).toBe(true);
+      const out = cap.redactProvenance(
+        { projectId: 'p1' },
+        {
+          success: true,
+          data: {
+            projectId: 'p1',
+            phases: [
+              {
+                id: 'ph1',
+                name: 'Project flow',
+                status: 'active',
+                ordinal: 0,
+                description: 'sensitive planning prose that must not be persisted',
+                features: [],
+              },
+            ],
+          },
+        }
+      );
+      expect(out.args).toEqual({ projectId: 'p1' });
+      expect(out.resultPreview).not.toContain('sensitive planning prose');
+      expect(out.resultPreview).toContain('1 phase band');
+    });
+  });
 });
