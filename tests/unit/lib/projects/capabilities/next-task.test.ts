@@ -88,6 +88,13 @@ const commonsArm = (projectId: unknown) => ({
 });
 /** Opted-in commons — deliberately assignment-blind, so it stays a widening. */
 const helpWantedArm = (projectId: unknown) => ({ feature: { projectId, helpWanted: true } });
+/**
+ * Merged work is dropped at the DB rather than client-side: since t-90 the commons
+ * arm spans whole projects, so without it the query drags back every finished task
+ * in every accessible project. Result-preserving — the pullable filter already
+ * excluded them — but it keeps `consideredCount` meaning "candidates".
+ */
+const NOT_MERGED = { not: 'merged' };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -119,6 +126,7 @@ describe('next_task project scoping (f-access funnel)', () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          status: NOT_MERGED,
           OR: [...ownArms({ in: ['p1', 'p2'] }), commonsArm({ in: ['p1', 'p2'] })],
         },
       })
@@ -150,7 +158,7 @@ describe('next_task project scoping (f-access funnel)', () => {
 
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { OR: [...ownArms('p1'), commonsArm('p1')] },
+        where: { status: NOT_MERGED, OR: [...ownArms('p1'), commonsArm('p1')] },
       })
     );
   });
@@ -164,7 +172,10 @@ describe('next_task project scoping (f-access funnel)', () => {
     const scope = { in: ['p1'] };
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { OR: [...ownArms(scope), commonsArm(scope), helpWantedArm(scope)] },
+        where: {
+          status: NOT_MERGED,
+          OR: [...ownArms(scope), commonsArm(scope), helpWantedArm(scope)],
+        },
       })
     );
   });
@@ -284,9 +295,15 @@ describe('next_task focus policy — own work before the commons', () => {
 
   it('an unowned, unheld task on a feature nobody owns is commons, not own work', async () => {
     // `ownerUserId: null` must not read as "matches nobody, therefore mine" — the
-    // comparison is against the caller's id, never a nullish fallback.
-    findMany.mockResolvedValue([task({ id: 'ownerless', ownerUserId: null })]);
-    expect(await pick()).toBe('ownerless');
+    // comparison is against the caller's id, never a nullish fallback. Needs a
+    // second, genuinely-own task to discriminate: with `ownerless` alone the pick
+    // is the same under either classification, so the assertion would hold even
+    // with the `?? userId` bug it exists to catch.
+    findMany.mockResolvedValue([
+      task({ id: 'ownerless', ownerUserId: null }),
+      task({ id: 'mine' }),
+    ]);
+    expect(await pick()).toBe('mine');
   });
 });
 

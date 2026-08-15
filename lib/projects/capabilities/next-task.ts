@@ -48,7 +48,7 @@ const schema = z.object({
   includeHelpWanted: z
     .boolean()
     .optional()
-    .describe("Also consider tasks in help-wanted features, not just the caller's own."),
+    .describe('Also consider tasks on help-wanted features, alongside the unclaimed pool.'),
 });
 
 type Args = z.infer<typeof schema>;
@@ -133,7 +133,18 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
     // which tier it lands in is decided below, not here.
     const inScope = { projectId: projectScope };
     const commons: Prisma.TaskWhereInput[] = [
-      // The unclaimed pool: nobody assigned, nobody holding.
+      // The unclaimed pool: nobody assigned, nobody holding. Deliberately includes
+      // the tasks of a feature a lead planned ahead without claiming — those are
+      // born holding nobody (`plan-feature.ts`), and the Board already routes them
+      // to its Unassigned lane, so leaving them out here would rebuild the very
+      // human/agent divergence t-90 exists to close.
+      //
+      // ACCEPTED GAP: the Board also shows a task as unassigned when its holder is
+      // no longer a project member (`board.ts` — `holderId && memberIds.has(...)`).
+      // That case matches no arm here, so it stays invisible to the agent. Erasure
+      // nulls the ids, so this is only the still-exists-but-removed case; catching
+      // it needs the member list in this query, which is not worth it until member
+      // removal has a defined policy for the work someone leaves behind.
       { assigneeUserId: null, claimedByUserId: null, feature: inScope },
     ];
     if (args.includeHelpWanted) {
@@ -145,6 +156,13 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
 
     const candidates = await prisma.task.findMany({
       where: {
+        // Merged work can never be pullable, and since t-90 the commons arm spans
+        // whole projects rather than one person's features — so without this the
+        // query drags every finished task in every accessible project back, joins
+        // its dependency rows, and throws them away. Result-preserving (the
+        // pullable filter already drops them) and it keeps `consideredCount`
+        // meaning "candidates", not "rows that happened to match".
+        status: { not: 'merged' },
         OR: [
           { feature: { ...inScope, ownerUserId: userId } }, // a feature you own
           { assigneeUserId: userId, feature: inScope }, // assigned to you anywhere
