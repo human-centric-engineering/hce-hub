@@ -208,10 +208,18 @@ export function FeatureRow({
                 {/* Work raised after the ship (§32 t-94). Without it the ratio reads a
                     bare "N/N" while unmerged rows sit in the table below — and since
                     t-89 an enhancement is born unassigned, so it matches neither
-                    `live` nor `blocked`. `--ink-mute`, a step under the bug's brick:
-                    an improvement is a classification, not a signal. */}
+                    `live` nor `blocked`.
+
+                    `--signal-claimed`, the tone of the "unassigned" pill such a task
+                    actually shows in the table below, so the row and its rows agree.
+                    NOT `--ink-mute`: that is what the enclosing span already sets, so
+                    it rendered identically to the ratio — a marker indistinguishable
+                    from the number it qualifies. Every sibling marker carries its own
+                    signal token; this one now does too. Quiet without being invisible:
+                    slate-blue is a different family from the bug's brick, not a
+                    louder shade of it. */}
                 {openSinceShip > 0 && (
-                  <span style={{ color: 'var(--ink-mute)' }}> · {openSinceShip} new</span>
+                  <span style={{ color: 'var(--signal-claimed)' }}> · {openSinceShip} new</span>
                 )}
               </span>
             </span>

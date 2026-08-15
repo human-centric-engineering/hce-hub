@@ -87,9 +87,16 @@ interface Data {
    * tallied as `openFixes`; past the feature's ship boundary nothing counts
    * toward completion whatever its kind, so `total`/`merged` are settled history.
    * `live` and `blocked` are current activity and deliberately span post-ship
-   * work — dropping `blocked` would hide a dependency-blocked post-ship task
-   * entirely (off `total`, not `active`, not a `bug`), so an agent would read
-   * "nothing outstanding" while the Plan renders a blocked row.
+   * work. That span used to be *load-bearing* — `blocked` was the only counter
+   * catching a dependency-blocked post-ship task. Since §32 t-94 it isn't:
+   * `openSinceShip` covers every unmerged post-ship non-bug, started or not, so
+   * `live`/`blocked` are now purely descriptive overlays that may overlap it.
+   * Keep them spanning post-ship work because "someone is on it" is real
+   * information — not because dropping them would hide anything.
+   *
+   * `openFixes` + `openSinceShip` are the two counterparts to what `total`/`merged`
+   * exclude, and together they close the accounting:
+   * `unmerged === (total − merged) + openFixes + openSinceShip`.
    *
    * Counting raw rows here used to make the agent and the human disagree about
    * whether a feature was done (§21 read 7/7 over MCP vs 5/5 on the Plan).

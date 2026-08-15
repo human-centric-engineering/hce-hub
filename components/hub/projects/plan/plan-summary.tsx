@@ -15,8 +15,25 @@ const BANDS: { key: FeatureStatus; label: string; tone: string }[] = [
 export function PlanSummary({ features }: { features: PlanFeature[] }) {
   const counts: Partial<Record<FeatureStatus, number>> = {};
   for (const f of features) counts[f.status] = (counts[f.status] ?? 0) + 1;
-  const totalTasks = features.reduce((n, f) => n + f.progress.total, 0);
-  const mergedTasks = features.reduce((n, f) => n + f.progress.merged, 0);
+  // EVERY task, bugs and post-ship work included (owner, §32 t-94): "a bug and an
+  // enhancement are both types of task — that's the honest accounting."
+  //
+  // Deliberately NOT `progress.total`/`progress.merged`, which are the *feature*
+  // ratio and exclude bugs and post-ship work so neither can dent a feature's
+  // build-out (f-bug-handling §22-02 · §32 t-79). That exclusion is right one row
+  // down and wrong here: the two lines answer different questions — "did this
+  // feature's build-out complete?" versus "how much of this project's work is
+  // done?" — and summing the feature ratio made the project line silently drop
+  // every bug and every post-ship task. It read `76/81` directly beneath a header
+  // saying `96 tasks`, with nothing to explain the 15.
+  //
+  // Counts what the Plan RENDERS, so it reconciles with the project header. A
+  // parked band is collapsed, not suppressed, so its tasks are still counted.
+  const totalTasks = features.reduce((n, f) => n + f.tasks.length, 0);
+  const mergedTasks = features.reduce(
+    (n, f) => n + f.tasks.filter((t) => t.status === 'merged').length,
+    0
+  );
 
   return (
     <div className="space-y-2">
