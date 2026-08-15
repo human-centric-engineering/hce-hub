@@ -4,9 +4,19 @@
  * The flagship Hub read capability (v1-requirements §11, §5). Returns the single
  * best task the caller can start right now: a `claimed` task whose every
  * dependency is merged (never one blocked by an unmerged PR — that's the derived
- * `blocked`), in a feature the caller **owns**, or — when `includeHelpWanted` is
- * set — any `help-wanted` feature. Everything is membership-scoped through the
- * f-access funnel: a caller only ever sees tasks in projects they're a member of.
+ * `blocked`). Everything is membership-scoped through the f-access funnel: a
+ * caller only ever sees tasks in projects they're a member of.
+ *
+ * **The pool is your work plus the commons** (§32 t-90). "Your work" is a feature
+ * you own or any task held by you; the "commons" is the unclaimed pool t-89 made
+ * real, plus help-wanted features when asked. Before t-90 only owned features were
+ * considered, so an unassigned task on someone else's feature — visible to a human
+ * in the Board's Unassigned lane and pullable by anyone — was invisible to the
+ * agent. That is precisely the human-view / MCP-view divergence the Hub exists to
+ * prevent: two surfaces answering "what next?" differently.
+ *
+ * Which tier you are handed is `pickFocusedTask`'s call, not this module's — see
+ * `next-task-pick.ts` for the policy and why it is a default rather than a rule.
  *
  * It is a *recommendation*, never enforcement — the caller may work any task
  * they can see; this just answers "what would I pick up next?" (§3.5,
@@ -18,6 +28,7 @@
  */
 
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { BaseCapability } from '@/lib/orchestration/capabilities/base-capability';
 import type {
   CapabilityContext,
@@ -27,7 +38,7 @@ import type {
 import { prisma } from '@/lib/db/client';
 import { canAccessProject, accessibleProjectIds } from '@/lib/projects/access';
 import { computeEffectiveStatus } from '@/lib/projects/task-status';
-import { pickBiasedTask } from '@/lib/projects/next-task-pick';
+import { pickFocusedTask } from '@/lib/projects/next-task-pick';
 
 const schema = z.object({
   projectId: z
@@ -37,7 +48,7 @@ const schema = z.object({
   includeHelpWanted: z
     .boolean()
     .optional()
-    .describe("Also consider tasks in help-wanted features, not just the caller's own."),
+    .describe('Also consider tasks on help-wanted features, alongside the unclaimed pool.'),
 });
 
 type Args = z.infer<typeof schema>;
@@ -69,7 +80,7 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'next_task',
     description:
-      "Recommend the single highest-priority task the caller can start next — a claimed task whose dependencies are all merged (nothing blocked by an open PR), in a feature the caller owns, or any help-wanted feature when includeHelpWanted is true. Membership-scoped: only the caller's projects are considered. A recommendation, not an assignment. The result includes the task t-N + feature slug so you can name it.",
+      "Recommend the single highest-priority task the caller can start next — a claimed task whose dependencies are all merged (nothing blocked by an open PR). Considers both the caller's own work (a feature they own, or any task assigned to or held by them) and the unclaimed pool any member may pull from; own work is offered first, and the caller is only pointed at the pool when none of their own is ready. Membership-scoped: only the caller's projects are considered. A recommendation, not an assignment. The result includes the task t-N + feature slug so you can name it.",
     parameters: {
       type: 'object',
       properties: {
@@ -79,7 +90,8 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
         },
         includeHelpWanted: {
           type: 'boolean',
-          description: "Optional: also consider help-wanted features, not just the caller's own.",
+          description:
+            'Optional: also consider tasks on help-wanted features, alongside the unclaimed pool.',
         },
       },
       required: [],
@@ -114,14 +126,50 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
       projectScope = { in: ids };
     }
 
-    // Candidate tasks: in the caller's owned features (plus help-wanted when
-    // asked), within the resolved project scope, oldest-ready-first.
-    const featureWhere = args.includeHelpWanted
-      ? { projectId: projectScope, OR: [{ ownerUserId: userId }, { helpWanted: true }] }
-      : { projectId: projectScope, ownerUserId: userId };
+    // Candidate tasks, within the resolved project scope, oldest-ready-first. Two
+    // axes, deliberately (§32 t-90): **your work** is a fact about ownership, and
+    // the **commons** is a fact about a task being held by nobody — the state t-89
+    // made real. A task can satisfy both (an unassigned task on a feature you own);
+    // which tier it lands in is decided below, not here.
+    const inScope = { projectId: projectScope };
+    const commons: Prisma.TaskWhereInput[] = [
+      // The unclaimed pool: nobody assigned, nobody holding. Deliberately includes
+      // the tasks of a feature a lead planned ahead without claiming — those are
+      // born holding nobody (`plan-feature.ts`), and the Board already routes them
+      // to its Unassigned lane, so leaving them out here would rebuild the very
+      // human/agent divergence t-90 exists to close.
+      //
+      // ACCEPTED GAP: the Board also shows a task as unassigned when its holder is
+      // no longer a project member (`board.ts` — `holderId && memberIds.has(...)`).
+      // That case matches no arm here, so it stays invisible to the agent. Erasure
+      // nulls the ids, so this is only the still-exists-but-removed case; catching
+      // it needs the member list in this query, which is not worth it until member
+      // removal has a defined policy for the work someone leaves behind.
+      { assigneeUserId: null, claimedByUserId: null, feature: inScope },
+    ];
+    if (args.includeHelpWanted) {
+      // Opted-in commons — "the owner can't get to this". Kept assignment-blind so
+      // this stays a widening: a help-wanted task that *is* assigned still counts,
+      // exactly as it did before the pool existed.
+      commons.push({ feature: { ...inScope, helpWanted: true } });
+    }
 
     const candidates = await prisma.task.findMany({
-      where: { feature: featureWhere },
+      where: {
+        // Merged work can never be pullable, and since t-90 the commons arm spans
+        // whole projects rather than one person's features — so without this the
+        // query drags every finished task in every accessible project back, joins
+        // its dependency rows, and throws them away. Result-preserving (the
+        // pullable filter already drops them) and it keeps `consideredCount`
+        // meaning "candidates", not "rows that happened to match".
+        status: { not: 'merged' },
+        OR: [
+          { feature: { ...inScope, ownerUserId: userId } }, // a feature you own
+          { assigneeUserId: userId, feature: inScope }, // assigned to you anywhere
+          { claimedByUserId: userId, feature: inScope }, // or held by you anywhere
+          ...commons,
+        ],
+      },
       select: {
         id: true,
         number: true,
@@ -132,14 +180,16 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
         status: true,
         kind: true,
         claimedByUserId: true,
-        feature: { select: { projectId: true, slug: true } },
+        assigneeUserId: true,
+        feature: { select: { projectId: true, slug: true, ownerUserId: true } },
         dependencies: { select: { dependsOn: { select: { status: true } } } },
       },
       orderBy: [{ feature: { createdAt: 'asc' } }, { createdAt: 'asc' }],
     });
 
     // Pullable = every dependency merged (effective `claimed`), in oldest-ready
-    // order. Among them, prefer a bug — the f-bug-handling §22-02 bias (a bug
+    // order. Among them the focus policy picks: own work before the commons, with
+    // the f-bug-handling §22-02 bug bias applying within the chosen tier (a bug
     // floats above feature-work of equal readiness, never overriding deps).
     const pullable = candidates.filter(
       (t) =>
@@ -148,7 +198,13 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
           t.dependencies.map((d) => d.dependsOn)
         ) === 'claimed'
     );
-    const pick = pickBiasedTask(pullable);
+    const pick = pickFocusedTask(
+      pullable,
+      (t) =>
+        t.feature.ownerUserId === userId ||
+        t.assigneeUserId === userId ||
+        t.claimedByUserId === userId
+    );
 
     return this.success({
       task: pick
