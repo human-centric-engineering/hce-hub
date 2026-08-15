@@ -98,6 +98,7 @@ export interface PlanFeature {
     blocked: number;
     openFixes: number;
     openSinceShip: number;
+    unstartedSinceShip: number;
   };
 }
 

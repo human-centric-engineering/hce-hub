@@ -60,14 +60,29 @@ export interface FeatureProgress {
   /** Open (unmerged) `bug`-kind tasks — the "· N open fixes" surface. */
   openFixes: number;
   /**
-   * Open (unmerged) non-`bug` tasks raised **after** the feature shipped — the
-   * "· N new" surface (§32 t-94). Always 0 for an unshipped feature, where such
-   * work is inside the ratio already.
+   * Open (unmerged) non-`bug` tasks raised **after** the feature shipped (§32 t-94).
+   * Always 0 for an unshipped feature, where such work is inside the ratio already.
    *
    * The counterpart `openFixes` has for bugs: `total`/`merged` exclude two groups,
-   * and each needs somewhere to be seen or the summary quietly under-reports.
+   * and each needs somewhere to be seen or the summary quietly under-reports. This
+   * is the **closure term** — the complete count, which `live`/`blocked` may overlap.
    */
   openSinceShip: number;
+  /**
+   * The subset of `openSinceShip` **nobody has started** — the "· N new" surface.
+   *
+   * The row renders this rather than `openSinceShip` because `live` and `blocked`
+   * already show the started ones, and a shipped feature's ratio has no remainder
+   * for them to be a breakdown *of*: `4/4 · 1 live · 1 new` reads as two outstanding
+   * items where there is one. (Pre-ship, `live` overlapping the ratio is fine —
+   * "3/5 · 1 live" reads as "one of the two remaining is being worked".) So the
+   * marker means *post-ship work no other marker is already showing*.
+   *
+   * The gap t-94 was filed for was exactly this subset: started post-ship work was
+   * never invisible, `live`/`blocked` had it. Unstarted work matched nothing — and
+   * since t-89 births an enhancement unassigned, unstarted is its normal state.
+   */
+  unstartedSinceShip: number;
 }
 
 /** The minimal task shape progress reads: effective status, kind, and when it was raised. */
@@ -99,6 +114,8 @@ export function computeFeatureProgress(
   const sinceShip = shippedAt
     ? tasks.filter((t) => t.createdAt.getTime() > shippedAt.getTime())
     : [];
+  // Post-ship work still outstanding — bugs excluded, they have `openFixes`.
+  const openPostShip = sinceShip.filter((t) => t.kind !== 'bug' && t.status !== 'merged');
   // COMPLETION (`total`/`merged`) is sealed at the boundary — that is the point.
   const completion = builtOut.filter((t) => t.kind !== 'bug');
   // ACTIVITY (`live`/`blocked`/`openFixes`) is NOT sealed, and spans every task.
@@ -114,6 +131,9 @@ export function computeFeatureProgress(
     live: activity.filter((t) => t.status === 'active').length,
     blocked: activity.filter((t) => t.status === 'blocked').length,
     openFixes: tasks.filter((t) => t.kind === 'bug' && t.status !== 'merged').length,
-    openSinceShip: sinceShip.filter((t) => t.kind !== 'bug' && t.status !== 'merged').length,
+    openSinceShip: openPostShip.length,
+    // `claimed` is precisely "unmerged and not started": the effective statuses are
+    // claimed | active | blocked | merged, and `live`/`blocked` cover the other two.
+    unstartedSinceShip: openPostShip.filter((t) => t.status === 'claimed').length,
   };
 }

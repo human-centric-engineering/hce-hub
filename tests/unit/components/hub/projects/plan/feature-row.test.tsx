@@ -28,7 +28,15 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   dependsOn: [],
   tasks: [],
   indicativeTasks: [],
-  progress: { merged: 0, total: 0, live: 0, blocked: 0, openFixes: 0, openSinceShip: 0 },
+  progress: {
+    merged: 0,
+    total: 0,
+    live: 0,
+    blocked: 0,
+    openFixes: 0,
+    openSinceShip: 0,
+    unstartedSinceShip: 0,
+  },
   ...over,
 });
 
@@ -89,7 +97,15 @@ describe('FeatureRow', () => {
             claimer: null,
           },
         ],
-        progress: { merged: 1, total: 1, live: 0, blocked: 0, openFixes, openSinceShip: 0 },
+        progress: {
+          merged: 1,
+          total: 1,
+          live: 0,
+          blocked: 0,
+          openFixes,
+          openSinceShip: 0,
+          unstartedSinceShip: 0,
+        },
       });
 
     it('surfaces multiple open bug fixes as "· N open fixes"', () => {
@@ -114,7 +130,8 @@ describe('FeatureRow', () => {
      * inside a collapsed, completed phase.
      */
     describe('post-ship work (§32 t-94)', () => {
-      const withNew = (openSinceShip: number) =>
+      /** A shipped feature whose ratio is sealed at 1/1, plus post-ship state. */
+      const shipped = (over: Partial<PlanFeature['progress']>) =>
         feature({
           status: 'shipped',
           tasks: [
@@ -128,39 +145,55 @@ describe('FeatureRow', () => {
               claimer: null,
             },
           ],
-          progress: { merged: 1, total: 1, live: 0, blocked: 0, openFixes: 0, openSinceShip },
+          progress: {
+            merged: 1,
+            total: 1,
+            live: 0,
+            blocked: 0,
+            openFixes: 0,
+            openSinceShip: 0,
+            unstartedSinceShip: 0,
+            ...over,
+          },
         });
 
-      it('surfaces post-ship work as "· N new" beside the sealed ratio', () => {
-        renderRow({ feature: withNew(1) });
+      it('surfaces unstarted post-ship work as "· N new" beside the sealed ratio', () => {
+        renderRow({ feature: shipped({ openSinceShip: 1, unstartedSinceShip: 1 }) });
         // The ratio stays honest AND the row stops hiding the extra work.
         expect(screen.getByText(/1\/1/)).toBeInTheDocument();
         expect(screen.getByText(/· 1 new/)).toBeInTheDocument();
       });
 
       it('shows nothing when there is no post-ship work', () => {
-        renderRow({ feature: withNew(0) });
+        renderRow({ feature: shipped({}) });
         expect(screen.queryByText(/new/)).not.toBeInTheDocument();
       });
 
-      it('reads both markers when a feature carries an open fix AND post-ship work', () => {
-        renderRow({
-          feature: feature({
-            status: 'shipped',
-            tasks: [
-              {
-                id: 't1',
-                number: 1,
-                title: 'built',
-                status: 'merged',
-                kind: 'feature_work',
-                prUrl: null,
-                claimer: null,
-              },
-            ],
-            progress: { merged: 1, total: 1, live: 0, blocked: 0, openFixes: 2, openSinceShip: 1 },
-          }),
-        });
+      /**
+       * Owner's call: once somebody starts that task `live` already shows it, so
+       * "1 live · 1 new" would read as two outstanding items where there is one.
+       * "new" means post-ship work **no other marker is showing**.
+       */
+      it('drops "new" once the post-ship task is started — `live` already shows it', () => {
+        renderRow({ feature: shipped({ live: 1, openSinceShip: 1, unstartedSinceShip: 0 }) });
+        expect(screen.getByText(/1 live/)).toBeInTheDocument();
+        expect(screen.queryByText(/new/)).not.toBeInTheDocument();
+      });
+
+      it('drops "new" for a dependency-blocked post-ship task, for the same reason', () => {
+        renderRow({ feature: shipped({ blocked: 1, openSinceShip: 1, unstartedSinceShip: 0 }) });
+        expect(screen.getByText(/1 blocked/)).toBeInTheDocument();
+        expect(screen.queryByText(/new/)).not.toBeInTheDocument();
+      });
+
+      it('shows both when one post-ship task is started and another is not', () => {
+        renderRow({ feature: shipped({ live: 1, openSinceShip: 2, unstartedSinceShip: 1 }) });
+        expect(screen.getByText(/1 live/)).toBeInTheDocument();
+        expect(screen.getByText(/1 new/)).toBeInTheDocument(); // disjoint — the other one
+      });
+
+      it('reads both markers when a feature carries an open fix AND unstarted post-ship work', () => {
+        renderRow({ feature: shipped({ openFixes: 2, openSinceShip: 1, unstartedSinceShip: 1 }) });
         expect(screen.getByText(/2 open fixes/)).toBeInTheDocument();
         expect(screen.getByText(/1 new/)).toBeInTheDocument();
       });
@@ -231,7 +264,15 @@ describe('FeatureRow', () => {
             claimer: null,
           },
         ],
-        progress: { merged: 1, total: 3, live: 1, blocked: 1, openFixes: 0, openSinceShip: 0 },
+        progress: {
+          merged: 1,
+          total: 3,
+          live: 1,
+          blocked: 1,
+          openFixes: 0,
+          openSinceShip: 0,
+          unstartedSinceShip: 0,
+        },
       }),
       onToggle,
     });
@@ -286,7 +327,15 @@ describe('FeatureRow', () => {
             claimer: null,
           },
         ],
-        progress: { merged: 0, total: 1, live: 0, blocked: 0, openFixes: 0, openSinceShip: 0 },
+        progress: {
+          merged: 0,
+          total: 1,
+          live: 0,
+          blocked: 0,
+          openFixes: 0,
+          openSinceShip: 0,
+          unstartedSinceShip: 0,
+        },
       }),
       expanded: true,
     });
@@ -311,7 +360,15 @@ describe('FeatureRow', () => {
             claimer: null,
           },
         ],
-        progress: { merged: 0, total: 1, live: 0, blocked: 0, openFixes: 0, openSinceShip: 0 },
+        progress: {
+          merged: 0,
+          total: 1,
+          live: 0,
+          blocked: 0,
+          openFixes: 0,
+          openSinceShip: 0,
+          unstartedSinceShip: 0,
+        },
       }),
       expanded: true,
     });

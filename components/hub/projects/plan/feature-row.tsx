@@ -78,7 +78,7 @@ export function FeatureRow({
   const hasSketch = isIndicative && feature.indicativeTasks.length > 0;
   const expandable = hasTasks || hasSketch;
   const status = featureStatus(feature.status);
-  const { merged, total, live, blocked, openFixes, openSinceShip } = feature.progress;
+  const { merged, total, live, blocked, openFixes, unstartedSinceShip } = feature.progress;
   const pct = total > 0 ? Math.round((merged / total) * 100) : 0;
   // The shareable feature page — human project slug + feature slug when authored.
   const featurePath = `/projects/${projectRef}/features/${feature.slug ?? feature.id}`;
@@ -205,10 +205,15 @@ export function FeatureRow({
                     · {openFixes} open {openFixes === 1 ? 'fix' : 'fixes'}
                   </span>
                 )}
-                {/* Work raised after the ship (§32 t-94). Without it the ratio reads a
-                    bare "N/N" while unmerged rows sit in the table below — and since
-                    t-89 an enhancement is born unassigned, so it matches neither
-                    `live` nor `blocked`.
+                {/* Post-ship work NO OTHER MARKER IS SHOWING (§32 t-94) — the unstarted
+                    subset, not every open post-ship task. `live`/`blocked` already
+                    carry the started ones, and a shipped feature's ratio has no
+                    remainder for them to be a breakdown *of*, so "4/4 · 1 live · 1 new"
+                    reads as two outstanding items where there is one. (Pre-ship the
+                    same overlap is fine: "3/5 · 1 live" reads as "one of the two
+                    remaining is being worked".) The gap this closes was always the
+                    unstarted case — started post-ship work was never invisible — and
+                    since t-89 births an enhancement unassigned, unstarted is normal.
 
                     NOT `--ink-mute`: that is what the enclosing span already sets, so
                     it rendered identically to the ratio — a marker indistinguishable
@@ -222,8 +227,11 @@ export function FeatureRow({
                     someone pulls it — so the marker matches the pill on its row below
                     in the common case. It does not once the task is started or
                     blocked; the tone tracks the usual state, not every state. */}
-                {openSinceShip > 0 && (
-                  <span style={{ color: 'var(--signal-claimed)' }}> · {openSinceShip} new</span>
+                {unstartedSinceShip > 0 && (
+                  <span style={{ color: 'var(--signal-claimed)' }}>
+                    {' '}
+                    · {unstartedSinceShip} new
+                  </span>
                 )}
               </span>
             </span>

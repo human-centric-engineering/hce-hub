@@ -104,6 +104,7 @@ export interface PlanFeatureView {
     blocked: number;
     openFixes: number;
     openSinceShip: number;
+    unstartedSinceShip: number;
   };
 }
 

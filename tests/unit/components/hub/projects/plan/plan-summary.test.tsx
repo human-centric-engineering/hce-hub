@@ -40,7 +40,15 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   dependsOn: [],
   tasks: [],
   indicativeTasks: [],
-  progress: { merged: 0, total: 0, live: 0, blocked: 0, openFixes: 0, openSinceShip: 0 },
+  progress: {
+    merged: 0,
+    total: 0,
+    live: 0,
+    blocked: 0,
+    openFixes: 0,
+    openSinceShip: 0,
+    unstartedSinceShip: 0,
+  },
   ...over,
 });
 
@@ -90,6 +98,7 @@ describe('PlanSummary', () => {
                 blocked: 0,
                 openFixes: 1,
                 openSinceShip: 1,
+                unstartedSinceShip: 0,
               },
             }),
           ]}
@@ -116,6 +125,7 @@ describe('PlanSummary', () => {
                 blocked: 0,
                 openFixes: 1,
                 openSinceShip: 1,
+                unstartedSinceShip: 0,
               },
             }),
           ]}

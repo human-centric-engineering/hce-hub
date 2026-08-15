@@ -98,6 +98,12 @@ interface Data {
    * exclude, and together they close the accounting:
    * `unmerged === (total − merged) + openFixes + openSinceShip`.
    *
+   * `unstartedSinceShip` is the subset of `openSinceShip` nobody has started, and is
+   * what the Plan row renders as "· N new" — because `live`/`blocked` already show
+   * the rest, and on a shipped feature (no remainder in the ratio) showing both
+   * reads as two outstanding items where there is one. Both are returned so the
+   * agent and the human hold the same numbers and can group them the same way.
+   *
    * Counting raw rows here used to make the agent and the human disagree about
    * whether a feature was done (§21 read 7/7 over MCP vs 5/5 on the Plan).
    */
@@ -108,6 +114,7 @@ interface Data {
     blocked: number;
     openFixes: number;
     openSinceShip: number;
+    unstartedSinceShip: number;
   };
   /** The high-level sketch (while indicative; replaced at plan time). */
   indicativeTasks: { order: number; text: string }[];
@@ -192,6 +199,7 @@ export class GetFeatureCapability extends BaseCapability<Args, Data> {
           blocked: progress.blocked,
           openFixes: progress.openFixes,
           openSinceShip: progress.openSinceShip,
+          unstartedSinceShip: progress.unstartedSinceShip,
         },
         indicativeTasks: d.indicativeTasks.map((t) => ({ order: t.order, text: t.text })),
       });

@@ -118,7 +118,15 @@ describe('get_feature', () => {
       phase: { id: 'ph1', name: 'Project flow' },
       dependsOn: [{ id: 'd1', slug: 'f-x', title: 'Prereq' }],
       waitingOn: [{ slug: 'f-dep', title: 'A dependency' }], // no id on a WaitingOnRef
-      tasks: { total: 2, merged: 1, live: 1, blocked: 0, openFixes: 0, openSinceShip: 0 },
+      tasks: {
+        total: 2,
+        merged: 1,
+        live: 1,
+        blocked: 0,
+        openFixes: 0,
+        openSinceShip: 0,
+        unstartedSinceShip: 0,
+      },
       indicativeTasks: [{ order: 0, text: 'sketch a thing' }],
     });
   });
@@ -158,6 +166,7 @@ describe('get_feature', () => {
       blocked: 0,
       openFixes: 1,
       openSinceShip: 0,
+      unstartedSinceShip: 0,
     });
   });
 
@@ -196,6 +205,7 @@ describe('get_feature', () => {
       blocked: 0,
       openFixes: 0,
       openSinceShip: 1,
+      unstartedSinceShip: 0,
     });
   });
 
@@ -237,6 +247,7 @@ describe('get_feature', () => {
       blocked: 1,
       openFixes: 0,
       openSinceShip: 1,
+      unstartedSinceShip: 0,
     });
   });
 

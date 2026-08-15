@@ -26,7 +26,15 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   dependsOn: [],
   tasks: [],
   indicativeTasks: [],
-  progress: { merged: 0, total: 0, live: 0, blocked: 0, openFixes: 0, openSinceShip: 0 },
+  progress: {
+    merged: 0,
+    total: 0,
+    live: 0,
+    blocked: 0,
+    openFixes: 0,
+    openSinceShip: 0,
+    unstartedSinceShip: 0,
+  },
   ...over,
 });
 
@@ -85,7 +93,15 @@ describe('PlanView rendering', () => {
                 claimer: null,
               },
             ],
-            progress: { merged: 0, total: 1, live: 0, blocked: 0, openFixes: 0, openSinceShip: 0 },
+            progress: {
+              merged: 0,
+              total: 1,
+              live: 0,
+              blocked: 0,
+              openFixes: 0,
+              openSinceShip: 0,
+              unstartedSinceShip: 0,
+            },
           }),
         ])}
       />
@@ -117,7 +133,15 @@ describe('PlanView rendering', () => {
                 claimer: null,
               },
             ],
-            progress: { merged: 1, total: 1, live: 0, blocked: 0, openFixes: 0, openSinceShip: 0 },
+            progress: {
+              merged: 1,
+              total: 1,
+              live: 0,
+              blocked: 0,
+              openFixes: 0,
+              openSinceShip: 0,
+              unstartedSinceShip: 0,
+            },
           }),
           feature({
             id: 'live',
@@ -134,7 +158,15 @@ describe('PlanView rendering', () => {
                 claimer: null,
               },
             ],
-            progress: { merged: 0, total: 1, live: 1, blocked: 0, openFixes: 0, openSinceShip: 0 },
+            progress: {
+              merged: 0,
+              total: 1,
+              live: 1,
+              blocked: 0,
+              openFixes: 0,
+              openSinceShip: 0,
+              unstartedSinceShip: 0,
+            },
           }),
         ])}
       />
@@ -163,7 +195,15 @@ describe('PlanView rendering', () => {
                 claimer: null,
               },
             ],
-            progress: { merged: 0, total: 1, live: 0, blocked: 0, openFixes: 0, openSinceShip: 0 },
+            progress: {
+              merged: 0,
+              total: 1,
+              live: 0,
+              blocked: 0,
+              openFixes: 0,
+              openSinceShip: 0,
+              unstartedSinceShip: 0,
+            },
           }),
           feature({
             id: 'second',
@@ -180,7 +220,15 @@ describe('PlanView rendering', () => {
                 claimer: null,
               },
             ],
-            progress: { merged: 0, total: 1, live: 1, blocked: 0, openFixes: 0, openSinceShip: 0 },
+            progress: {
+              merged: 0,
+              total: 1,
+              live: 1,
+              blocked: 0,
+              openFixes: 0,
+              openSinceShip: 0,
+              unstartedSinceShip: 0,
+            },
           }),
         ])}
       />
@@ -324,6 +372,7 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
                   blocked: 0,
                   openFixes: 0,
                   openSinceShip: 0,
+                  unstartedSinceShip: 0,
                 },
               }),
             ],

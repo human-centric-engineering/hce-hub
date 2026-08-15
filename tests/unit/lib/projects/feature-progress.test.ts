@@ -26,7 +26,15 @@ const t = (status: EffectiveStatus, kind: TaskKind = 'feature_work', createdAt: 
 describe('computeFeatureProgress', () => {
   it('counts feature-work across every completion metric', () => {
     const p = computeFeatureProgress([t('merged'), t('merged'), t('active'), t('blocked')]);
-    expect(p).toEqual({ total: 4, merged: 2, live: 1, blocked: 1, openFixes: 0, openSinceShip: 0 });
+    expect(p).toEqual({
+      total: 4,
+      merged: 2,
+      live: 1,
+      blocked: 1,
+      openFixes: 0,
+      openSinceShip: 0,
+      unstartedSinceShip: 0,
+    });
   });
 
   it('excludes bugs from completion and tallies open bugs as openFixes', () => {
@@ -58,6 +66,7 @@ describe('computeFeatureProgress', () => {
       blocked: 0,
       openFixes: 0,
       openSinceShip: 0,
+      unstartedSinceShip: 0,
     });
   });
 
@@ -88,10 +97,11 @@ describe('computeFeatureProgress', () => {
         [t('merged', 'feature_work', BEFORE), t('active', 'feature_work', AFTER)],
         SHIPPED
       );
-      // `live` and `openSinceShip` BOTH count it, and that is not double-reporting:
-      // they answer different questions ("someone is on it" vs "the ratio doesn't
-      // cover it"), and `live` has always overlapped the ratio the same way — an
-      // active pre-ship task is both `live` and part of the outstanding `total`.
+      // `live` and `openSinceShip` BOTH count it — deliberate, because they answer
+      // different questions ("someone is on it" vs "the ratio doesn't cover it").
+      // The DATA keeps the overlap so the closure identity holds; the ROW does not
+      // show both, because a shipped feature's ratio has no remainder for `live` to
+      // be a breakdown of, so `unstartedSinceShip` drops to 0 here.
       expect(p).toEqual({
         total: 1,
         merged: 1,
@@ -99,6 +109,7 @@ describe('computeFeatureProgress', () => {
         blocked: 0,
         openFixes: 0,
         openSinceShip: 1,
+        unstartedSinceShip: 0,
       });
     });
 
@@ -209,6 +220,68 @@ describe('computeFeatureProgress', () => {
       const p = computeFeatureProgress([t('claimed', 'bug', AFTER)], SHIPPED);
       expect(p.openFixes).toBe(1);
       expect(p.openSinceShip).toBe(0);
+    });
+
+    /**
+     * `openSinceShip` is the closure term (everything open past the boundary);
+     * `unstartedSinceShip` is the subset the ROW shows, because `live`/`blocked`
+     * already carry the started ones. Owner's call: "4/4 · 1 live · 1 new" reads as
+     * two outstanding items where there is one, so "new" means post-ship work no
+     * other marker is showing.
+     */
+    describe('started vs unstarted', () => {
+      it('counts an unstarted post-ship task in both — nothing else shows it', () => {
+        const p = computeFeatureProgress([t('claimed', 'enhancement', AFTER)], SHIPPED);
+        expect(p.openSinceShip).toBe(1);
+        expect(p.unstartedSinceShip).toBe(1);
+        expect(p.live).toBe(0);
+        expect(p.blocked).toBe(0);
+      });
+
+      it('drops a STARTED post-ship task from unstarted — `live` has it', () => {
+        const p = computeFeatureProgress([t('active', 'enhancement', AFTER)], SHIPPED);
+        expect(p.live).toBe(1);
+        expect(p.openSinceShip).toBe(1); // still closes the accounting
+        expect(p.unstartedSinceShip).toBe(0); // …but the row must not double-count it
+      });
+
+      it('drops a dependency-blocked post-ship task too — `blocked` has it', () => {
+        const p = computeFeatureProgress([t('blocked', 'enhancement', AFTER)], SHIPPED);
+        expect(p.blocked).toBe(1);
+        expect(p.openSinceShip).toBe(1);
+        expect(p.unstartedSinceShip).toBe(0);
+      });
+
+      /**
+       * The disjointness property the row depends on: what `unstartedSinceShip`
+       * shows and what `live`/`blocked` show never describe the same task, so the
+       * markers on one row can be read additively.
+       */
+      it('splits post-ship work so the row markers are disjoint', () => {
+        const p = computeFeatureProgress(
+          [
+            t('claimed', 'enhancement', AFTER),
+            t('active', 'enhancement', AFTER),
+            t('blocked', 'enhancement', AFTER),
+            t('merged', 'enhancement', AFTER), // done — in none of them
+          ],
+          SHIPPED
+        );
+        expect(p.openSinceShip).toBe(3);
+        expect(p.unstartedSinceShip).toBe(1);
+        // The row's post-ship markers add up to the closure term, without overlap.
+        expect(p.unstartedSinceShip + p.live + p.blocked).toBe(p.openSinceShip);
+      });
+
+      it('never exceeds the closure term it is a subset of', () => {
+        const p = computeFeatureProgress(
+          [t('claimed', 'enhancement', AFTER), t('claimed', 'feature_work', BEFORE)],
+          SHIPPED
+        );
+        expect(p.unstartedSinceShip).toBeLessThanOrEqual(p.openSinceShip);
+        // The pre-ship claimed task is in the ratio, not in either post-ship count.
+        expect(p.openSinceShip).toBe(1);
+      });
     });
 
     /**

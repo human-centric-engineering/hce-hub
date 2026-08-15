@@ -275,6 +275,7 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
       blocked: 0,
       openFixes: 0,
       openSinceShip: 0,
+      unstartedSinceShip: 0,
     });
   });
 
@@ -323,6 +324,7 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
       blocked: 0,
       openFixes: 1,
       openSinceShip: 0,
+      unstartedSinceShip: 0,
     });
   });
 
@@ -382,6 +384,7 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
       blocked: 1,
       openFixes: 0,
       openSinceShip: 0,
+      unstartedSinceShip: 0,
     });
   });
 
