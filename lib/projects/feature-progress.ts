@@ -20,6 +20,23 @@
  * feature read "3/4 merged". `openFixes` deliberately spans the whole set,
  * pre- and post-ship: an open fix is open whenever it was raised.
  *
+ * **Every exclusion needs a counterpart, or the ratio quietly under-reports**
+ * (§32 t-94). `total`/`merged` drop exactly two groups — bugs, and work raised
+ * after the ship — so each gets a counter of its own: `openFixes` and
+ * `openSinceShip`. That is not a style preference, it is what makes the accounting
+ * *closed*, and the closure is asserted directly:
+ *
+ * ```
+ * unmerged.length === (total - merged) + openFixes + openSinceShip
+ * ```
+ *
+ * The three terms are disjoint and exhaustive over the unmerged tasks, so no open
+ * task can be invisible — by construction rather than by vigilance. Found the hard
+ * way: `live`/`blocked` were unsealed to protect this invariant but key off
+ * `active`/`blocked`, so a post-ship enhancement that nobody had *started* matched
+ * no counter at all — and since t-89 enhancements are born unassigned, unstarted is
+ * their normal state, not an edge.
+ *
  * Pure + total (planning-retro B12): reads a task's effective status, kind and
  * creation date, no DB.
  */
@@ -42,6 +59,15 @@ export interface FeatureProgress {
   blocked: number;
   /** Open (unmerged) `bug`-kind tasks — the "· N open fixes" surface. */
   openFixes: number;
+  /**
+   * Open (unmerged) non-`bug` tasks raised **after** the feature shipped — the
+   * "· N new" surface (§32 t-94). Always 0 for an unshipped feature, where such
+   * work is inside the ratio already.
+   *
+   * The counterpart `openFixes` has for bugs: `total`/`merged` exclude two groups,
+   * and each needs somewhere to be seen or the summary quietly under-reports.
+   */
+  openSinceShip: number;
 }
 
 /** The minimal task shape progress reads: effective status, kind, and when it was raised. */
@@ -68,6 +94,11 @@ export function computeFeatureProgress(
   const builtOut = shippedAt
     ? tasks.filter((t) => t.createdAt.getTime() <= shippedAt.getTime())
     : tasks;
+  // The exact complement of `builtOut` — everything the completion ratio drops for
+  // being raised after the fact. Empty when unshipped, where nothing is post-ship.
+  const sinceShip = shippedAt
+    ? tasks.filter((t) => t.createdAt.getTime() > shippedAt.getTime())
+    : [];
   // COMPLETION (`total`/`merged`) is sealed at the boundary — that is the point.
   const completion = builtOut.filter((t) => t.kind !== 'bug');
   // ACTIVITY (`live`/`blocked`/`openFixes`) is NOT sealed, and spans every task.
@@ -83,5 +114,6 @@ export function computeFeatureProgress(
     live: activity.filter((t) => t.status === 'active').length,
     blocked: activity.filter((t) => t.status === 'blocked').length,
     openFixes: tasks.filter((t) => t.kind === 'bug' && t.status !== 'merged').length,
+    openSinceShip: sinceShip.filter((t) => t.kind !== 'bug' && t.status !== 'merged').length,
   };
 }

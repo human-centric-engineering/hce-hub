@@ -78,7 +78,7 @@ export function FeatureRow({
   const hasSketch = isIndicative && feature.indicativeTasks.length > 0;
   const expandable = hasTasks || hasSketch;
   const status = featureStatus(feature.status);
-  const { merged, total, live, blocked, openFixes } = feature.progress;
+  const { merged, total, live, blocked, openFixes, openSinceShip } = feature.progress;
   const pct = total > 0 ? Math.round((merged / total) * 100) : 0;
   // The shareable feature page — human project slug + feature slug when authored.
   const featurePath = `/projects/${projectRef}/features/${feature.slug ?? feature.id}`;
@@ -204,6 +204,14 @@ export function FeatureRow({
                     {' '}
                     · {openFixes} open {openFixes === 1 ? 'fix' : 'fixes'}
                   </span>
+                )}
+                {/* Work raised after the ship (§32 t-94). Without it the ratio reads a
+                    bare "N/N" while unmerged rows sit in the table below — and since
+                    t-89 an enhancement is born unassigned, so it matches neither
+                    `live` nor `blocked`. `--ink-mute`, a step under the bug's brick:
+                    an improvement is a classification, not a signal. */}
+                {openSinceShip > 0 && (
+                  <span style={{ color: 'var(--ink-mute)' }}> · {openSinceShip} new</span>
                 )}
               </span>
             </span>

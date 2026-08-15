@@ -118,7 +118,7 @@ describe('get_feature', () => {
       phase: { id: 'ph1', name: 'Project flow' },
       dependsOn: [{ id: 'd1', slug: 'f-x', title: 'Prereq' }],
       waitingOn: [{ slug: 'f-dep', title: 'A dependency' }], // no id on a WaitingOnRef
-      tasks: { total: 2, merged: 1, live: 1, blocked: 0, openFixes: 0 },
+      tasks: { total: 2, merged: 1, live: 1, blocked: 0, openFixes: 0, openSinceShip: 0 },
       indicativeTasks: [{ order: 0, text: 'sketch a thing' }],
     });
   });
@@ -151,7 +151,14 @@ describe('get_feature', () => {
       })
     );
     const r = await cap.execute({ featureRef: 'f-mcp', projectId: 'p1' }, ctx());
-    expect(r.data?.tasks).toEqual({ total: 2, merged: 2, live: 0, blocked: 0, openFixes: 1 });
+    expect(r.data?.tasks).toEqual({
+      total: 2,
+      merged: 2,
+      live: 0,
+      blocked: 0,
+      openFixes: 1,
+      openSinceShip: 0,
+    });
   });
 
   it('keeps post-ship work off the roll-up but still reports it as live', async () => {
@@ -182,7 +189,14 @@ describe('get_feature', () => {
     );
     const r = await cap.execute({ featureRef: 'f-mcp', projectId: 'p1' }, ctx());
     // Completion is sealed history: still 1/1, not 1/2.
-    expect(r.data?.tasks).toEqual({ total: 1, merged: 1, live: 1, blocked: 0, openFixes: 0 });
+    expect(r.data?.tasks).toEqual({
+      total: 1,
+      merged: 1,
+      live: 1,
+      blocked: 0,
+      openFixes: 0,
+      openSinceShip: 1,
+    });
   });
 
   it('reports a post-ship dependency-blocked task, which every other counter hides', async () => {
@@ -216,7 +230,14 @@ describe('get_feature', () => {
       })
     );
     const r = await cap.execute({ featureRef: 'f-mcp', projectId: 'p1' }, ctx());
-    expect(r.data?.tasks).toEqual({ total: 1, merged: 1, live: 0, blocked: 1, openFixes: 0 });
+    expect(r.data?.tasks).toEqual({
+      total: 1,
+      merged: 1,
+      live: 0,
+      blocked: 1,
+      openFixes: 0,
+      openSinceShip: 1,
+    });
   });
 
   it('reports the phase the feature is filed under, and null when unfiled', async () => {

@@ -28,7 +28,7 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
   dependsOn: [],
   tasks: [],
   indicativeTasks: [],
-  progress: { merged: 0, total: 0, live: 0, blocked: 0, openFixes: 0 },
+  progress: { merged: 0, total: 0, live: 0, blocked: 0, openFixes: 0, openSinceShip: 0 },
   ...over,
 });
 
@@ -89,7 +89,7 @@ describe('FeatureRow', () => {
             claimer: null,
           },
         ],
-        progress: { merged: 1, total: 1, live: 0, blocked: 0, openFixes },
+        progress: { merged: 1, total: 1, live: 0, blocked: 0, openFixes, openSinceShip: 0 },
       });
 
     it('surfaces multiple open bug fixes as "· N open fixes"', () => {
@@ -105,6 +105,65 @@ describe('FeatureRow', () => {
     it('shows no open-fixes label when there are none', () => {
       renderRow({ feature: withFixes(0) });
       expect(screen.queryByText(/open fix/)).not.toBeInTheDocument();
+    });
+
+    /**
+     * §32 t-94. The owner found this on the first real enhancement filed through the
+     * new flow: §20 rendered `4/4` with an unmerged fifth row in its own task table
+     * and nothing on the row to suggest it existed — buried under a collapsed feature
+     * inside a collapsed, completed phase.
+     */
+    describe('post-ship work (§32 t-94)', () => {
+      const withNew = (openSinceShip: number) =>
+        feature({
+          status: 'shipped',
+          tasks: [
+            {
+              id: 't1',
+              number: 1,
+              title: 'built',
+              status: 'merged',
+              kind: 'feature_work',
+              prUrl: null,
+              claimer: null,
+            },
+          ],
+          progress: { merged: 1, total: 1, live: 0, blocked: 0, openFixes: 0, openSinceShip },
+        });
+
+      it('surfaces post-ship work as "· N new" beside the sealed ratio', () => {
+        renderRow({ feature: withNew(1) });
+        // The ratio stays honest AND the row stops hiding the extra work.
+        expect(screen.getByText(/1\/1/)).toBeInTheDocument();
+        expect(screen.getByText(/· 1 new/)).toBeInTheDocument();
+      });
+
+      it('shows nothing when there is no post-ship work', () => {
+        renderRow({ feature: withNew(0) });
+        expect(screen.queryByText(/new/)).not.toBeInTheDocument();
+      });
+
+      it('reads both markers when a feature carries an open fix AND post-ship work', () => {
+        renderRow({
+          feature: feature({
+            status: 'shipped',
+            tasks: [
+              {
+                id: 't1',
+                number: 1,
+                title: 'built',
+                status: 'merged',
+                kind: 'feature_work',
+                prUrl: null,
+                claimer: null,
+              },
+            ],
+            progress: { merged: 1, total: 1, live: 0, blocked: 0, openFixes: 2, openSinceShip: 1 },
+          }),
+        });
+        expect(screen.getByText(/2 open fixes/)).toBeInTheDocument();
+        expect(screen.getByText(/1 new/)).toBeInTheDocument();
+      });
     });
   });
 
@@ -172,7 +231,7 @@ describe('FeatureRow', () => {
             claimer: null,
           },
         ],
-        progress: { merged: 1, total: 3, live: 1, blocked: 1, openFixes: 0 },
+        progress: { merged: 1, total: 3, live: 1, blocked: 1, openFixes: 0, openSinceShip: 0 },
       }),
       onToggle,
     });
@@ -227,7 +286,7 @@ describe('FeatureRow', () => {
             claimer: null,
           },
         ],
-        progress: { merged: 0, total: 1, live: 0, blocked: 0, openFixes: 0 },
+        progress: { merged: 0, total: 1, live: 0, blocked: 0, openFixes: 0, openSinceShip: 0 },
       }),
       expanded: true,
     });
@@ -252,7 +311,7 @@ describe('FeatureRow', () => {
             claimer: null,
           },
         ],
-        progress: { merged: 0, total: 1, live: 0, blocked: 0, openFixes: 0 },
+        progress: { merged: 0, total: 1, live: 0, blocked: 0, openFixes: 0, openSinceShip: 0 },
       }),
       expanded: true,
     });

@@ -274,6 +274,7 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
       live: 1,
       blocked: 0,
       openFixes: 0,
+      openSinceShip: 0,
     });
   });
 
@@ -321,6 +322,7 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
       live: 0, // the worked bug is not "live" feature-work
       blocked: 0,
       openFixes: 1,
+      openSinceShip: 0,
     });
   });
 
@@ -379,6 +381,7 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
       live: 1,
       blocked: 1,
       openFixes: 0,
+      openSinceShip: 0,
     });
   });
 

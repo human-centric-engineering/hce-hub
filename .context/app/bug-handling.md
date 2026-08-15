@@ -61,6 +61,24 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
   recomputing it from tasks — so the fix was the _progress count_, not the status
   derivation. Since §32 t-79 this exclusion is the **pre-ship** rule only: past
   `Feature.shippedAt` the date decides and no task counts, whatever its kind.
+  - **Every exclusion needs a counterpart** (§32 t-94). `total`/`merged` drop exactly
+    two groups — bugs, and work raised after the ship — so each gets a counter:
+    `openFixes` and **`openSinceShip`** ("· N new"). That is what makes the accounting
+    _closed_, and the closure is asserted directly:
+    `unmerged === (total − merged) + openFixes + openSinceShip`. The three terms are
+    disjoint and exhaustive over the unmerged tasks, so no open task can be invisible
+    **by construction** rather than by vigilance — a future kind, or a new exclusion,
+    breaks that test instead of quietly hiding a row.
+  - **How the gap was found:** `live`/`blocked` were unsealed precisely to protect the
+    §09 "a summary can never disagree with the tasks beneath it" invariant, but they
+    key off `active`/`blocked` — so a post-ship enhancement **nobody had started**
+    matched no counter at all, and §20 rendered `4/4` with an unmerged fifth row in its
+    own table. Since t-89 enhancements are born unassigned, unstarted is their _normal_
+    state. Two correct decisions (seal at ship, unclaimed intake) composed into a hole
+    neither owned.
+  - `live`/`blocked` are **descriptive overlays, not closure terms** — they may overlap
+    any term, which has always been true (an active pre-ship task is both `live` and
+    part of the outstanding `total`).
 - **Ship warning** (`lib/projects/capabilities/ship-feature.ts`) — the soft
   "unmerged tasks" heads-up counts feature-work only (`kind: { not: 'bug' }`), so it
   agrees with the progress bar.
@@ -97,7 +115,10 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
 ### Plan (t1)
 
 - Each feature row shows **"· N open fixes"** when a shipped/worked feature carries
-  open bugs (`components/hub/projects/plan/feature-row.tsx`).
+  open bugs, and **"· N new"** when it carries unmerged work raised after it shipped
+  (§32 t-94) — the two counters for the two groups the `N/N` ratio excludes
+  (`components/hub/projects/plan/feature-row.tsx`). "New" sits on `--ink-mute`, a step
+  under the bug's brick: an improvement is a classification, not a signal.
 - A `bug`-kind task in a feature's inset table gets a quiet **"bug"** tag
   (`components/hub/projects/plan/task-row.tsx`).
 

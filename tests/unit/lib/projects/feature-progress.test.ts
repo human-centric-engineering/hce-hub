@@ -26,7 +26,7 @@ const t = (status: EffectiveStatus, kind: TaskKind = 'feature_work', createdAt: 
 describe('computeFeatureProgress', () => {
   it('counts feature-work across every completion metric', () => {
     const p = computeFeatureProgress([t('merged'), t('merged'), t('active'), t('blocked')]);
-    expect(p).toEqual({ total: 4, merged: 2, live: 1, blocked: 1, openFixes: 0 });
+    expect(p).toEqual({ total: 4, merged: 2, live: 1, blocked: 1, openFixes: 0, openSinceShip: 0 });
   });
 
   it('excludes bugs from completion and tallies open bugs as openFixes', () => {
@@ -57,6 +57,7 @@ describe('computeFeatureProgress', () => {
       live: 0,
       blocked: 0,
       openFixes: 0,
+      openSinceShip: 0,
     });
   });
 
@@ -87,7 +88,18 @@ describe('computeFeatureProgress', () => {
         [t('merged', 'feature_work', BEFORE), t('active', 'feature_work', AFTER)],
         SHIPPED
       );
-      expect(p).toEqual({ total: 1, merged: 1, live: 1, blocked: 0, openFixes: 0 });
+      // `live` and `openSinceShip` BOTH count it, and that is not double-reporting:
+      // they answer different questions ("someone is on it" vs "the ratio doesn't
+      // cover it"), and `live` has always overlapped the ratio the same way — an
+      // active pre-ship task is both `live` and part of the outstanding `total`.
+      expect(p).toEqual({
+        total: 1,
+        merged: 1,
+        live: 1,
+        blocked: 0,
+        openFixes: 0,
+        openSinceShip: 1,
+      });
     });
 
     it('still counts a post-ship bug as an open fix', () => {
@@ -158,6 +170,87 @@ describe('computeFeatureProgress', () => {
       );
       expect(p.total).toBe(2);
       expect(p.merged).toBe(1); // reads 1/2 — honestly incomplete
+    });
+  });
+
+  /**
+   * §32 t-94. `total`/`merged` exclude exactly two groups — bugs, and work raised
+   * after the ship — so each needs a counter or the summary silently under-reports.
+   * The owner found this on the first real enhancement filed through the new flow:
+   * §20 read `4/4` with an unmerged fifth row sitting in its own task table.
+   */
+  describe('post-ship work is accounted for, not just excluded', () => {
+    it('surfaces an unstarted post-ship enhancement that no other counter catches', () => {
+      // THE case. `live` keys off `active` and `blocked` off `blocked`, so both
+      // miss a task nobody has started — and since t-89 an enhancement is BORN
+      // unassigned, so unstarted is its normal state, not an edge.
+      const p = computeFeatureProgress(
+        [t('merged', 'feature_work', BEFORE), t('claimed', 'enhancement', AFTER)],
+        SHIPPED
+      );
+      expect(p.live).toBe(0);
+      expect(p.blocked).toBe(0);
+      expect(p.openFixes).toBe(0);
+      expect(p.openSinceShip).toBe(1); // the only counter that sees it
+    });
+
+    it('is 0 for an unshipped feature — such work is inside the ratio already', () => {
+      const p = computeFeatureProgress([t('claimed', 'enhancement', AFTER)], null);
+      expect(p.openSinceShip).toBe(0);
+      expect(p.total).toBe(1); // counted, because nothing is "post" an unshipped feature
+    });
+
+    it('excludes merged post-ship work — done is not outstanding', () => {
+      const p = computeFeatureProgress([t('merged', 'enhancement', AFTER)], SHIPPED);
+      expect(p.openSinceShip).toBe(0);
+    });
+
+    it('excludes post-ship bugs — those are openFixes, never both', () => {
+      const p = computeFeatureProgress([t('claimed', 'bug', AFTER)], SHIPPED);
+      expect(p.openFixes).toBe(1);
+      expect(p.openSinceShip).toBe(0);
+    });
+
+    /**
+     * The property that makes the invariant hold **by construction rather than by
+     * vigilance**: the three outside-terms are disjoint and exhaustive over the
+     * unmerged tasks, so no open task can be invisible. A future kind, or a new
+     * exclusion from the ratio, breaks this test rather than quietly hiding a row.
+     *
+     * `live`/`blocked` are deliberately NOT in the identity — they are descriptive
+     * overlays that may overlap any term (an active pre-ship task is both `live`
+     * and part of the outstanding `total`), which has always been true.
+     */
+    it('accounts for every unmerged task exactly once, across an exhaustive matrix', () => {
+      const kinds: TaskKind[] = ['feature_work', 'bug', 'enhancement'];
+      const statuses: EffectiveStatus[] = ['claimed', 'active', 'blocked', 'merged'];
+      const dates = [BEFORE, AFTER];
+
+      // Every (kind × status × side-of-boundary) cell, as one feature's task list.
+      const tasks = kinds.flatMap((kind) =>
+        statuses.flatMap((status) => dates.map((createdAt) => t(status, kind, createdAt)))
+      );
+      expect(tasks).toHaveLength(24);
+
+      for (const shippedAt of [SHIPPED, null]) {
+        const p = computeFeatureProgress(tasks, shippedAt);
+        const unmerged = tasks.filter((x) => x.status !== 'merged').length;
+        expect(p.total - p.merged + p.openFixes + p.openSinceShip).toBe(unmerged);
+      }
+    });
+
+    it('holds the same identity on the live §20 shape that exposed the gap', () => {
+      const tasks = [
+        t('merged', 'feature_work', BEFORE),
+        t('merged', 'feature_work', BEFORE),
+        t('merged', 'feature_work', BEFORE),
+        t('merged', 'feature_work', BEFORE),
+        t('claimed', 'enhancement', AFTER), // t-93
+      ];
+      const p = computeFeatureProgress(tasks, SHIPPED);
+      expect(`${p.merged}/${p.total}`).toBe('4/4'); // the ratio stays honest…
+      expect(p.openSinceShip).toBe(1); // …and no longer hides the fifth row
+      expect(p.total - p.merged + p.openFixes + p.openSinceShip).toBe(1);
     });
   });
 });

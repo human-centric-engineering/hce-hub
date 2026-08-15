@@ -91,7 +91,14 @@ export interface PlanFeature {
   tasks: PlanTask[];
   /** The high-level sketch, shown while `indicative` (empty once planned). */
   indicativeTasks: PlanIndicativeTask[];
-  progress: { merged: number; total: number; live: number; blocked: number; openFixes: number };
+  progress: {
+    merged: number;
+    total: number;
+    live: number;
+    blocked: number;
+    openFixes: number;
+    openSinceShip: number;
+  };
 }
 
 /** A phase's lifecycle status (mirrors Prisma `PhaseStatus`, f-phases §22). */
