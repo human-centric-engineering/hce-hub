@@ -132,8 +132,14 @@ export function computeFeatureProgress(
     blocked: activity.filter((t) => t.status === 'blocked').length,
     openFixes: tasks.filter((t) => t.kind === 'bug' && t.status !== 'merged').length,
     openSinceShip: openPostShip.length,
-    // `claimed` is precisely "unmerged and not started": the effective statuses are
-    // claimed | active | blocked | merged, and `live`/`blocked` cover the other two.
-    unstartedSinceShip: openPostShip.filter((t) => t.status === 'claimed').length,
+    // Derived NEGATIVELY — "whatever `live`/`blocked` don't already show" — rather
+    // than positively as `status === 'claimed'`. The positive form encodes today's
+    // status set, so adding a value to `TaskStatus` (exactly the change t-79 made to
+    // `TaskKind`) would drop post-ship work in that state out of EVERY row marker:
+    // not live, not blocked, not new. That is the invisible row t-94 exists to
+    // prevent, reintroduced by a new enum value. Negated, the row's markers stay
+    // disjoint AND exhaustive for any future status, with no behaviour change today.
+    unstartedSinceShip: openPostShip.filter((t) => t.status !== 'active' && t.status !== 'blocked')
+      .length,
   };
 }

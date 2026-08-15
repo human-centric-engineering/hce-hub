@@ -9,7 +9,7 @@
  * `enhancement` rather than disguised as a bug to protect the progress bar.
  */
 import { describe, it, expect } from 'vitest';
-import type { TaskKind } from '@prisma/client';
+import { TaskStatus, type TaskKind } from '@prisma/client';
 import { computeFeatureProgress } from '@/lib/projects/feature-progress';
 import type { EffectiveStatus } from '@/lib/projects/task-status';
 
@@ -273,6 +273,44 @@ describe('computeFeatureProgress', () => {
         expect(p.unstartedSinceShip + p.live + p.blocked).toBe(p.openSinceShip);
       });
 
+      /**
+       * Disjoint AND exhaustive for every status the enum can hold — not just the
+       * ones that exist today. `unstartedSinceShip` is derived by negation for this
+       * reason: a status added later would otherwise fall out of every row marker
+       * (not live, not blocked, not new), reintroducing the invisible row t-94
+       * exists to prevent. Driven off `Object.values(TaskStatus)`, so it covers a
+       * new value without anyone editing this test.
+       */
+      it('leaves no post-ship status unrepresented on the row, for any status the enum holds', () => {
+        for (const status of [...Object.values(TaskStatus), 'blocked'] as EffectiveStatus[]) {
+          const p = computeFeatureProgress([t(status, 'enhancement', AFTER)], SHIPPED);
+          const shownOnRow = p.unstartedSinceShip + p.live + p.blocked;
+          // Merged work is done and shows nowhere; everything else must show once.
+          expect(shownOnRow).toBe(status === 'merged' ? 0 : 1);
+          expect(shownOnRow).toBe(p.openSinceShip);
+        }
+      });
+
+      /**
+       * The only test that can actually distinguish the negative derivation from
+       * `status === 'claimed'`: with today's statuses the two are equivalent, so the
+       * property is unobservable until a new value exists. This simulates one.
+       *
+       * A post-ship task in an unknown status must still be SHOWN. Under the positive
+       * form it lands in no marker at all — not live, not blocked, not new — which is
+       * exactly the invisible row t-94 exists to prevent, reintroduced by a future
+       * enum addition. The cast is the point: it stands in for the value someone adds
+       * to `TaskStatus` next.
+       */
+      it('still shows post-ship work in a status that does not exist yet', () => {
+        const future = 'in_review' as EffectiveStatus;
+        const p = computeFeatureProgress([t(future, 'enhancement', AFTER)], SHIPPED);
+        expect(p.live).toBe(0);
+        expect(p.blocked).toBe(0);
+        expect(p.unstartedSinceShip).toBe(1); // shown, not swallowed
+        expect(p.unstartedSinceShip + p.live + p.blocked).toBe(p.openSinceShip);
+      });
+
       it('never exceeds the closure term it is a subset of', () => {
         const p = computeFeatureProgress(
           [t('claimed', 'enhancement', AFTER), t('claimed', 'feature_work', BEFORE)],
@@ -296,7 +334,10 @@ describe('computeFeatureProgress', () => {
      */
     it('accounts for every unmerged task exactly once, across an exhaustive matrix', () => {
       const kinds: TaskKind[] = ['feature_work', 'bug', 'enhancement'];
-      const statuses: EffectiveStatus[] = ['claimed', 'active', 'blocked', 'merged'];
+      // Driven off the Prisma enum + the one derived overlay, NOT a hand-list, so a
+      // status added later is covered here without anyone remembering — the same
+      // seam that let `enhancement` ship unrendered in t-79.
+      const statuses: EffectiveStatus[] = [...Object.values(TaskStatus), 'blocked'];
       const dates = [BEFORE, AFTER];
 
       // Every (kind × status × side-of-boundary) cell, as one feature's task list.
