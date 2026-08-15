@@ -210,14 +210,18 @@ export function FeatureRow({
                     t-89 an enhancement is born unassigned, so it matches neither
                     `live` nor `blocked`.
 
-                    `--signal-claimed`, the tone of the "unassigned" pill such a task
-                    actually shows in the table below, so the row and its rows agree.
                     NOT `--ink-mute`: that is what the enclosing span already sets, so
                     it rendered identically to the ratio — a marker indistinguishable
                     from the number it qualifies. Every sibling marker carries its own
                     signal token; this one now does too. Quiet without being invisible:
                     slate-blue is a different family from the bug's brick, not a
-                    louder shade of it. */}
+                    louder shade of it.
+
+                    `--signal-claimed` because the typical post-ship task IS `claimed`
+                    — t-89 births an enhancement unassigned and it stays that way until
+                    someone pulls it — so the marker matches the pill on its row below
+                    in the common case. It does not once the task is started or
+                    blocked; the tone tracks the usual state, not every state. */}
                 {openSinceShip > 0 && (
                   <span style={{ color: 'var(--signal-claimed)' }}> · {openSinceShip} new</span>
                 )}
