@@ -28,6 +28,18 @@ export const assignTaskFunctionDefinition = {
   },
 };
 
+/**
+ * Code-owned half of the capability row — must track `AssignTaskCapability`, so the
+ * seed re-applies it to rows that already exist rather than writing it on
+ * `create` only. A stale `functionDefinition` is not an admin customisation:
+ * it is the schema every MCP client is shown (Sunrise #545).
+ */
+const ASSIGN_TASK_IMPL = {
+  executionType: 'internal',
+  executionHandler: 'AssignTaskCapability',
+  functionDefinition: assignTaskFunctionDefinition,
+};
+
 const unit: SeedUnit = {
   name: 'app/021-assign-task',
   async run({ prisma, logger }) {
@@ -35,16 +47,14 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'assign_task' },
-      update: { isSystem: true, functionDefinition: assignTaskFunctionDefinition },
+      update: { isSystem: true, ...ASSIGN_TASK_IMPL },
       create: {
         slug: 'assign_task',
         name: 'Assign Task',
         description:
           'Assign or reassign a task to a project member (take it, or hand it over). Membership-scoped; audited.',
         category: 'coordination',
-        executionType: 'internal',
-        executionHandler: 'AssignTaskCapability',
-        functionDefinition: assignTaskFunctionDefinition,
+        ...ASSIGN_TASK_IMPL,
         isActive: true,
         isSystem: true,
       },

@@ -23,6 +23,18 @@ export const startTaskFunctionDefinition = {
   },
 };
 
+/**
+ * Code-owned half of the capability row — must track `StartTaskCapability`, so the
+ * seed re-applies it to rows that already exist rather than writing it on
+ * `create` only. A stale `functionDefinition` is not an admin customisation:
+ * it is the schema every MCP client is shown (Sunrise #545).
+ */
+const START_TASK_IMPL = {
+  executionType: 'internal',
+  executionHandler: 'StartTaskCapability',
+  functionDefinition: startTaskFunctionDefinition,
+};
+
 const unit: SeedUnit = {
   name: 'app/014-start-task',
   async run({ prisma, logger }) {
@@ -30,16 +42,14 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'start_task' },
-      update: { isSystem: true, functionDefinition: startTaskFunctionDefinition },
+      update: { isSystem: true, ...START_TASK_IMPL },
       create: {
         slug: 'start_task',
         name: 'Start Task',
         description:
           'Begin work on a task: claimed → active, crediting the caller as the active worker. Any member; audited.',
         category: 'coordination',
-        executionType: 'internal',
-        executionHandler: 'StartTaskCapability',
-        functionDefinition: startTaskFunctionDefinition,
+        ...START_TASK_IMPL,
         isActive: true,
         isSystem: true,
       },

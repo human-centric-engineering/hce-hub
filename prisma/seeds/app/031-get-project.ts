@@ -22,6 +22,18 @@ export const getProjectFunctionDefinition = {
   },
 };
 
+/**
+ * Code-owned half of the capability row — must track `GetProjectCapability`, so the
+ * seed re-applies it to rows that already exist rather than writing it on
+ * `create` only. A stale `functionDefinition` is not an admin customisation:
+ * it is the schema every MCP client is shown (Sunrise #545).
+ */
+const GET_PROJECT_IMPL = {
+  executionType: 'internal',
+  executionHandler: 'GetProjectCapability',
+  functionDefinition: getProjectFunctionDefinition,
+};
+
 const unit: SeedUnit = {
   name: 'app/031-get-project',
   async run({ prisma, logger }) {
@@ -29,16 +41,14 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'get_project' },
-      update: { isSystem: true, functionDefinition: getProjectFunctionDefinition },
+      update: { isSystem: true, ...GET_PROJECT_IMPL },
       create: {
         slug: 'get_project',
         name: 'Get Project',
         description:
           "Read one project's header + structure counts (phases, features, tasks, open ideas) over MCP. Membership-scoped.",
         category: 'coordination',
-        executionType: 'internal',
-        executionHandler: 'GetProjectCapability',
-        functionDefinition: getProjectFunctionDefinition,
+        ...GET_PROJECT_IMPL,
         isActive: true,
         isSystem: true,
       },

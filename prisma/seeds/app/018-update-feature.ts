@@ -59,6 +59,18 @@ export const updateFeatureFunctionDefinition = {
   },
 };
 
+/**
+ * Code-owned half of the capability row — must track `UpdateFeatureCapability`, so the
+ * seed re-applies it to rows that already exist rather than writing it on
+ * `create` only. A stale `functionDefinition` is not an admin customisation:
+ * it is the schema every MCP client is shown (Sunrise #545).
+ */
+const UPDATE_FEATURE_IMPL = {
+  executionType: 'internal',
+  executionHandler: 'UpdateFeatureCapability',
+  functionDefinition: updateFeatureFunctionDefinition,
+};
+
 const unit: SeedUnit = {
   name: 'app/018-update-feature',
   async run({ prisma, logger }) {
@@ -66,16 +78,14 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'update_feature' },
-      update: { isSystem: true, functionDefinition: updateFeatureFunctionDefinition },
+      update: { isSystem: true, ...UPDATE_FEATURE_IMPL },
       create: {
         slug: 'update_feature',
         name: 'Update Feature',
         description:
           "Edit an existing feature's fields, dependency edges, and ownership. Owner-tier; cycle-guarded; audited.",
         category: 'coordination',
-        executionType: 'internal',
-        executionHandler: 'UpdateFeatureCapability',
-        functionDefinition: updateFeatureFunctionDefinition,
+        ...UPDATE_FEATURE_IMPL,
         isActive: true,
         isSystem: true,
       },

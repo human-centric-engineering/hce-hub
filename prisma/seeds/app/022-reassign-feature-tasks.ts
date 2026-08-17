@@ -31,6 +31,18 @@ export const reassignFeatureTasksFunctionDefinition = {
   },
 };
 
+/**
+ * Code-owned half of the capability row — must track `ReassignFeatureTasksCapability`, so the
+ * seed re-applies it to rows that already exist rather than writing it on
+ * `create` only. A stale `functionDefinition` is not an admin customisation:
+ * it is the schema every MCP client is shown (Sunrise #545).
+ */
+const REASSIGN_FEATURE_TASKS_IMPL = {
+  executionType: 'internal',
+  executionHandler: 'ReassignFeatureTasksCapability',
+  functionDefinition: reassignFeatureTasksFunctionDefinition,
+};
+
 const unit: SeedUnit = {
   name: 'app/022-reassign-feature-tasks',
   async run({ prisma, logger }) {
@@ -38,16 +50,14 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'reassign_feature_tasks' },
-      update: { isSystem: true, functionDefinition: reassignFeatureTasksFunctionDefinition },
+      update: { isSystem: true, ...REASSIGN_FEATURE_TASKS_IMPL },
       create: {
         slug: 'reassign_feature_tasks',
         name: 'Reassign Feature Tasks',
         description:
           "Reassign a feature's remaining (unmerged) tasks to a project member (hand a teammate's outstanding work over). Membership-scoped; audited.",
         category: 'coordination',
-        executionType: 'internal',
-        executionHandler: 'ReassignFeatureTasksCapability',
-        functionDefinition: reassignFeatureTasksFunctionDefinition,
+        ...REASSIGN_FEATURE_TASKS_IMPL,
         isActive: true,
         isSystem: true,
       },
