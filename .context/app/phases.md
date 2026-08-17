@@ -128,7 +128,13 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
     (`→ <phase>`), so a feature owner isn't blind to work happening on their feature
     under another phase's banner.
   - A phase holding **only** borrowed work (no features of its own) renders fine —
-    that is the natural shape of a band created to collect committed work.
+    that is the natural shape of a band created to collect committed work. Its header
+    reads `0 features · N borrowed`, so a band that is collapsed by default
+    (`complete` / `parked`) still says something is inside it.
+  - **A task's phase is settable over MCP only.** `create_task { phaseId }` and
+    `update_task { phaseId }` write it; there is **no UI control** — `PhasePicker`
+    (below) files a _feature_, and has no task equivalent. So the commitment can be
+    read on the Plan but not made there.
 - **`ManagePhasesDialog`** ("Manage phases", top-right of the Plan) — create,
   rename, set status / park, and **drag-to-reorder** (`@dnd-kit`, keyboard-
   accessible: focus the grip, Space, arrows, Space). Reorder is **optimistic** —
