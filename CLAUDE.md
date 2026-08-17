@@ -4,7 +4,7 @@
 >
 > This repository is **HCE Hub**, HCE Venture Studio's AI-native internal ops
 > platform, built **on** the Sunrise platform (`human-centric-engineering/sunrise`),
-> forked at Sunrise v0.6.0 and currently synced to **v0.8.0**. You are
+> forked at Sunrise v0.6.0 and currently synced to **v0.9.0**. You are
 > **building on Sunrise, not developing
 > Sunrise itself.**
 >
