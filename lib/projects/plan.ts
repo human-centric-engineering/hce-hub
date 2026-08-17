@@ -97,7 +97,15 @@ export interface PlanFeatureView {
    * `bug`-kind tasks are excluded from these completion counts and tallied
    * separately as `openFixes` (f-bug-handling §22-02).
    */
-  progress: { merged: number; total: number; live: number; blocked: number; openFixes: number };
+  progress: {
+    merged: number;
+    total: number;
+    live: number;
+    blocked: number;
+    openFixes: number;
+    openSinceShip: number;
+    unstartedSinceShip: number;
+  };
 }
 
 /**

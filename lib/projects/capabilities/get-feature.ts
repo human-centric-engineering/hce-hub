@@ -87,14 +87,35 @@ interface Data {
    * tallied as `openFixes`; past the feature's ship boundary nothing counts
    * toward completion whatever its kind, so `total`/`merged` are settled history.
    * `live` and `blocked` are current activity and deliberately span post-ship
-   * work — dropping `blocked` would hide a dependency-blocked post-ship task
-   * entirely (off `total`, not `active`, not a `bug`), so an agent would read
-   * "nothing outstanding" while the Plan renders a blocked row.
+   * work. That span used to be *load-bearing* — `blocked` was the only counter
+   * catching a dependency-blocked post-ship task. Since §32 t-94 it isn't:
+   * `openSinceShip` covers every unmerged post-ship non-bug, started or not, so
+   * `live`/`blocked` are now purely descriptive overlays that may overlap it.
+   * Keep them spanning post-ship work because "someone is on it" is real
+   * information — not because dropping them would hide anything.
+   *
+   * `openFixes` + `openSinceShip` are the two counterparts to what `total`/`merged`
+   * exclude, and together they close the accounting:
+   * `unmerged === (total − merged) + openFixes + openSinceShip`.
+   *
+   * `unstartedSinceShip` is the subset of `openSinceShip` nobody has started, and is
+   * what the Plan row renders as "· N new" — because `live`/`blocked` already show
+   * the rest, and on a shipped feature (no remainder in the ratio) showing both
+   * reads as two outstanding items where there is one. Both are returned so the
+   * agent and the human hold the same numbers and can group them the same way.
    *
    * Counting raw rows here used to make the agent and the human disagree about
    * whether a feature was done (§21 read 7/7 over MCP vs 5/5 on the Plan).
    */
-  tasks: { total: number; merged: number; live: number; blocked: number; openFixes: number };
+  tasks: {
+    total: number;
+    merged: number;
+    live: number;
+    blocked: number;
+    openFixes: number;
+    openSinceShip: number;
+    unstartedSinceShip: number;
+  };
   /** The high-level sketch (while indicative; replaced at plan time). */
   indicativeTasks: { order: number; text: string }[];
 }
@@ -106,7 +127,7 @@ export class GetFeatureCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'get_feature',
     description:
-      "Read one feature's spec — its description, definition of done, effective status, planning stage (indicative sketch vs planned), the phase it is filed under, dependency graph (dependsOn / waitingOn), a task roll-up (total/merged count completion only: bugs and work raised after the feature shipped are excluded, and surface as live/blocked/openFixes instead — the same numbers the Plan shows), and any indicative-task sketch. Use it after list_phases to understand a feature before working it. featureRef is the feature's slug (e.g. 'f-mcp') or id. Membership-scoped: a feature you can't see (or in another project) is not_found.",
+      "Read one feature's spec — its description, definition of done, effective status, planning stage (indicative sketch vs planned), the phase it is filed under, dependency graph (dependsOn / waitingOn), a task roll-up, and any indicative-task sketch. The roll-up: total/merged count completion only — bugs, and any work raised after the feature shipped, are excluded from it. Every open task falls into exactly ONE of (total − merged), openFixes, or openSinceShip. live/blocked are descriptive overlays and DO overlap those terms, so never add them in. unstartedSinceShip is the not-yet-started subset of openSinceShip, and is the number the Plan row shows as '· N new'. Use it after list_phases to understand a feature before working it. featureRef is the feature's slug (e.g. 'f-mcp') or id. Membership-scoped: a feature you can't see (or in another project) is not_found.",
     parameters: {
       type: 'object',
       properties: {
@@ -177,6 +198,8 @@ export class GetFeatureCapability extends BaseCapability<Args, Data> {
           live: progress.live,
           blocked: progress.blocked,
           openFixes: progress.openFixes,
+          openSinceShip: progress.openSinceShip,
+          unstartedSinceShip: progress.unstartedSinceShip,
         },
         indicativeTasks: d.indicativeTasks.map((t) => ({ order: t.order, text: t.text })),
       });
