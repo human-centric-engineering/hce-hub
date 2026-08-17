@@ -7,6 +7,7 @@
  * (effective status already reconciles an erased claimant back to the pool, so a
  * null here means genuinely unclaimed).
  */
+import { ArrowRight } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
@@ -50,6 +51,22 @@ export function TaskRow({ task, ordinal }: { task: PlanTask; ordinal: number }) 
       <span className="flex min-w-0 items-center gap-1.5" style={{ color: 'var(--ink-soft)' }}>
         <KindTag kind={task.kind} />
         <span className="truncate">{task.title}</span>
+        {/* The reciprocal of the borrowed row in that phase's band (§32 t-95): this
+            task lives here, but another phase committed to doing it. Without it a
+            feature owner is blind to work happening on their feature under someone
+            else's banner. Per-task rather than a count on the summary line — those
+            markers have to stay disjoint (§32 t-94), and "which phase" is the part
+            worth knowing. */}
+        {task.committedPhaseName && (
+          <span
+            className="inline-flex shrink-0 items-center gap-0.5 font-mono text-[10px] whitespace-nowrap"
+            style={{ color: 'var(--ink-faint)' }}
+            title={`Committed to the ${task.committedPhaseName} phase — it also appears in that band`}
+          >
+            <ArrowRight className="h-3 w-3" aria-hidden />
+            {task.committedPhaseName}
+          </span>
+        )}
       </span>
 
       {task.claimer ? (

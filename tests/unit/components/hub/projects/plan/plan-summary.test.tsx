@@ -23,6 +23,7 @@ const task = (
   kind,
   prUrl: null,
   claimer: null,
+  committedPhaseName: null,
 });
 
 const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({

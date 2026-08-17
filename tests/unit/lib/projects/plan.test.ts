@@ -591,3 +591,190 @@ describe('getProjectPlan — phase grouping (f-phases §22 t2)', () => {
     expect(plan.phases[0].features.map((f) => f.id)).toEqual(['ship', 'plan']);
   });
 });
+
+/**
+ * §32 t-95. `Task.phaseId` — "the phase that chose to do this work" — shipped in
+ * t-80 with the model, the migration and the MCP verbs, and **no read surface**.
+ * A task committed to a phase other than its feature's now renders inline in that
+ * band, while staying put in its origin feature's own table.
+ */
+describe('getProjectPlan — tasks borrowed into a phase band (§32 t-95)', () => {
+  const phase = (over: Record<string, unknown> = {}) => ({
+    id: 'ph1',
+    name: 'Phase',
+    status: 'upcoming',
+    ordinal: 0,
+    description: null,
+    ...over,
+  });
+  const task = (over: Record<string, unknown> = {}) => ({
+    id: 't1',
+    number: 93,
+    title: 'A borrowed task',
+    status: 'claimed',
+    kind: 'enhancement',
+    createdAt: new Date('2026-08-09T00:00:00Z'),
+    phaseId: null,
+    prUrl: null,
+    claimedByUserId: null,
+    assigneeUserId: null,
+    dependencies: [],
+    ...over,
+  });
+  /** Two phases: work lives in `old`, and `now` borrows it. */
+  const twoPhases = () =>
+    phaseFindMany.mockResolvedValue([
+      phase({ id: 'old', name: 'Foundations', status: 'complete', ordinal: 0 }),
+      phase({ id: 'now', name: 'Project flow', status: 'active', ordinal: 1 }),
+    ]);
+  const bandRows = (plan: Awaited<ReturnType<typeof getProjectPlan>>, id: string) =>
+    plan.phases.find((b) => b.id === id)!.rows;
+
+  it('renders a committed task in the BORROWING band, not only its own', async () => {
+    // The live shape: t-93 sits on a shipped feature in a completed phase, and is
+    // committed to the active one. Before this it appeared only under the old band.
+    twoPhases();
+    featureFindMany.mockResolvedValue([
+      row({ id: 'origin', status: 'shipped', phaseId: 'old', tasks: [task({ phaseId: 'now' })] }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+
+    const borrowed = bandRows(plan, 'now').filter((r) => r.kind === 'task');
+    expect(borrowed).toHaveLength(1);
+    expect(borrowed[0].kind === 'task' && borrowed[0].task.number).toBe(93);
+    // …and the origin band still holds its feature, unchanged.
+    expect(bandRows(plan, 'old').map((r) => r.kind)).toEqual(['feature']);
+  });
+
+  it('leaves the task in its origin feature’s table too — it renders at BOTH ends', async () => {
+    twoPhases();
+    featureFindMany.mockResolvedValue([
+      row({ id: 'origin', status: 'shipped', phaseId: 'old', tasks: [task({ phaseId: 'now' })] }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+
+    const feature = plan.phases.find((b) => b.id === 'old')!.features[0];
+    expect(feature.tasks.map((t) => t.id)).toEqual(['t1']); // still in place
+    expect(feature.tasks[0].committedPhaseName).toBe('Project flow'); // and says where it went
+  });
+
+  it('carries the origin breadcrumb — feature ref + the phase it came from', async () => {
+    twoPhases();
+    featureFindMany.mockResolvedValue([
+      row({
+        id: 'origin',
+        slug: 'f-status-model',
+        title: 'Readiness-derived status',
+        status: 'shipped',
+        phaseId: 'old',
+        tasks: [task({ phaseId: 'now' })],
+      }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+
+    const row0 = bandRows(plan, 'now')[0];
+    expect(row0.kind).toBe('task');
+    if (row0.kind !== 'task') throw new Error('unreachable');
+    expect(row0.task.feature).toEqual({
+      id: 'origin',
+      slug: 'f-status-model',
+      title: 'Readiness-derived status',
+    });
+    expect(row0.task.originPhaseName).toBe('Foundations');
+  });
+
+  it('does NOT borrow a task committed to its own feature’s phase — that is just inheritance', async () => {
+    twoPhases();
+    featureFindMany.mockResolvedValue([
+      // phaseId equal to the feature's: the commitment agrees, nothing to show twice.
+      row({ id: 'origin', status: 'shipped', phaseId: 'now', tasks: [task({ phaseId: 'now' })] }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(bandRows(plan, 'now').filter((r) => r.kind === 'task')).toEqual([]);
+    expect(
+      plan.phases.find((b) => b.id === 'now')!.features[0].tasks[0].committedPhaseName
+    ).toBeNull();
+  });
+
+  it('does NOT borrow an uncommitted task (phaseId null = inherit, today’s behaviour)', async () => {
+    twoPhases();
+    featureFindMany.mockResolvedValue([
+      row({ id: 'origin', status: 'shipped', phaseId: 'old', tasks: [task({ phaseId: null })] }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(bandRows(plan, 'now')).toEqual([]);
+    expect(bandRows(plan, 'old').every((r) => r.kind === 'feature')).toBe(true);
+  });
+
+  /**
+   * The load-bearing ordering requirement (owner): a borrowed task can be the thing
+   * BLOCKING a feature new to the phase, so parking borrowed rows at the end would
+   * sort it below the very feature it blocks. Placement must not encode "borrowed".
+   */
+  it('places a borrowed task INLINE by readiness, never in a trailing sub-band', async () => {
+    twoPhases();
+    featureFindMany.mockResolvedValue([
+      row({ id: 'origin', status: 'shipped', phaseId: 'old', tasks: [task({ phaseId: 'now' })] }),
+      // A blocked feature in the borrowing band — it must sort BELOW the ready
+      // borrowed task, which is exactly what a trailing sub-band would invert.
+      row({ id: 'blockedHere', status: 'blocked', phaseId: 'now' }),
+      row({ id: 'shippedHere', status: 'shipped', phaseId: 'now' }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+
+    const kinds = bandRows(plan, 'now').map((r) =>
+      r.kind === 'task' ? `task:${r.task.id}` : `feature:${r.feature.id}`
+    );
+    // shipped(0) → the claimed borrowed task(2) → blocked(3). Not last.
+    expect(kinds).toEqual(['feature:shippedHere', 'task:t1', 'feature:blockedHere']);
+  });
+
+  it('places a borrowed task before a feature of EQUAL readiness — a tie is the blocking case', async () => {
+    twoPhases();
+    featureFindMany.mockResolvedValue([
+      row({ id: 'origin', status: 'shipped', phaseId: 'old', tasks: [task({ phaseId: 'now' })] }),
+      row({ id: 'planningHere', status: 'planning', phaseId: 'now' }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(bandRows(plan, 'now')[0].kind).toBe('task');
+  });
+
+  it('keeps `features` free of borrowed tasks — a borrow is not membership', async () => {
+    // The band's feature count, the plan summary and the auto-expand pick all read
+    // `features`; a borrowed task must not inflate any of them.
+    twoPhases();
+    featureFindMany.mockResolvedValue([
+      row({ id: 'origin', status: 'shipped', phaseId: 'old', tasks: [task({ phaseId: 'now' })] }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(plan.phases.find((b) => b.id === 'now')!.features).toEqual([]);
+    expect(bandRows(plan, 'now')).toHaveLength(1); // …but it still renders
+  });
+
+  it('rows and features cannot drift — every feature appears exactly once in rows', async () => {
+    twoPhases();
+    featureFindMany.mockResolvedValue([
+      row({ id: 'origin', status: 'shipped', phaseId: 'old', tasks: [task({ phaseId: 'now' })] }),
+      row({ id: 'a', status: 'planning', phaseId: 'now' }),
+      row({ id: 'b', status: 'in_flight', phaseId: 'now' }),
+      row({ id: 'unfiled', status: 'planning', phaseId: null }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    for (const band of plan.phases) {
+      const inRows = band.rows.flatMap((r) => (r.kind === 'feature' ? [r.feature.id] : []));
+      expect(inRows).toEqual(band.features.map((f) => f.id));
+    }
+  });
+
+  it('ignores a commitment to a phase that no longer exists — the row is never lost', async () => {
+    // Mirrors the existing feature-level rule: a dangling phaseId degrades, it
+    // never drops the task from its own feature's table.
+    twoPhases();
+    featureFindMany.mockResolvedValue([
+      row({ id: 'origin', status: 'shipped', phaseId: 'old', tasks: [task({ phaseId: 'ghost' })] }),
+    ]);
+    const plan = await getProjectPlan('u1', 'p1');
+    expect(plan.phases.every((b) => b.rows.every((r) => r.kind === 'feature'))).toBe(true);
+    expect(plan.phases.find((b) => b.id === 'old')!.features[0].tasks).toHaveLength(1);
+  });
+});

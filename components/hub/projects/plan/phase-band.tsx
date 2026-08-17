@@ -14,6 +14,7 @@
 import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { FeatureRow } from '@/components/hub/projects/plan/feature-row';
+import { BorrowedTaskRow } from '@/components/hub/projects/plan/borrowed-task-row';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
 import { phaseStatus } from '@/components/hub/projects/plan/presentation';
 import type { PlanPhaseBand } from '@/components/hub/projects/plan/types';
@@ -52,19 +53,34 @@ export function PhaseBand({
   const collapsedByDefault = isParked || band.status === 'complete';
   const [open, setOpen] = useState(forceOpen || !collapsedByDefault);
 
-  const rows = band.features.map((feature) => (
-    <FeatureRow
-      key={feature.id}
-      feature={feature}
-      projectId={projectId}
-      projectRef={projectRef}
-      ordinal={ordinalFor(feature.id, feature.number)}
-      expanded={!!expanded[feature.id]}
-      onToggle={() => onToggle(feature.id)}
-      phases={assignablePhases}
-      currentPhaseId={band.id}
-    />
-  ));
+  // `band.rows` — features INTERLEAVED with any tasks borrowed into this phase, in
+  // readiness order (§32 t-95). Ordering is the server's; this only renders it.
+  //
+  // The `??` is not defensive noise: this DTO is hand-mirrored and reaches the
+  // client through an unchecked `parseApiResponse` cast, so `rows` being required
+  // by the type proves nothing at runtime. During a deploy rollout a response from
+  // the older server carries `features` and no `rows`, and a bare `.map` would
+  // white-screen the whole Plan over a presentational addition. Degrade to exactly
+  // the pre-t-95 rendering instead.
+  const bandRows =
+    band.rows ?? band.features.map((feature) => ({ kind: 'feature' as const, feature }));
+  const rows = bandRows.map((row) =>
+    row.kind === 'task' ? (
+      <BorrowedTaskRow key={`t:${row.task.id}`} task={row.task} projectRef={projectRef} />
+    ) : (
+      <FeatureRow
+        key={row.feature.id}
+        feature={row.feature}
+        projectId={projectId}
+        projectRef={projectRef}
+        ordinal={ordinalFor(row.feature.id, row.feature.number)}
+        expanded={!!expanded[row.feature.id]}
+        onToggle={() => onToggle(row.feature.id)}
+        phases={assignablePhases}
+        currentPhaseId={band.id}
+      />
+    )
+  );
 
   // No phases in the project → the residual band is the whole plan, no chrome.
   if (!showHeader) {

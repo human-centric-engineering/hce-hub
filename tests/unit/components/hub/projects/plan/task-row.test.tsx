@@ -16,6 +16,7 @@ const task = (over: Partial<PlanTask> = {}): PlanTask => ({
   kind: 'feature_work',
   prUrl: null,
   claimer: null,
+  committedPhaseName: null,
   ...over,
 });
 
@@ -44,6 +45,23 @@ describe('TaskRow', () => {
   it('marks an enhancement-kind task with its own tag (§32 t-88)', () => {
     render(<TaskRow task={task({ kind: 'enhancement' })} ordinal={1} />);
     expect(screen.getByTitle(/An enhancement — new work/)).toBeInTheDocument();
+  });
+
+  /**
+   * The reciprocal of the borrowed row in that phase's band (§32 t-95): the task
+   * stays in its own feature's table, and says which phase committed to doing it —
+   * otherwise a feature owner is blind to work happening on their feature under
+   * someone else's banner.
+   */
+  it('marks a task another phase committed to, naming that phase (§32 t-95)', () => {
+    render(<TaskRow task={task({ committedPhaseName: 'Project flow' })} ordinal={1} />);
+    expect(screen.getByText('Project flow')).toBeInTheDocument();
+    expect(screen.getByTitle(/Committed to the Project flow phase/)).toBeInTheDocument();
+  });
+
+  it('shows no phase mark on a task that simply inherits its feature’s phase', () => {
+    render(<TaskRow task={task({ committedPhaseName: null })} ordinal={1} />);
+    expect(screen.queryByTitle(/Committed to the/)).not.toBeInTheDocument();
   });
 
   it('shows no kind tag on a feature-work task — the unmarked default', () => {

@@ -15,7 +15,7 @@
  * "unassigned / former member" — carried f-data-model t-3 finding), never
  * dereferenced.
  */
-import type { FeaturePlanningStage, PhaseStatus, TaskKind } from '@prisma/client';
+import type { FeaturePlanningStage, FeatureStatus, PhaseStatus, TaskKind } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { getAccessibleProject } from '@/lib/projects/access';
 import {
@@ -57,6 +57,17 @@ export interface PlanTaskView {
    * merged. `null` when unassigned or the resolved user was erased.
    */
   claimer: UserRef | null;
+  /**
+   * The phase that **borrowed** this task, when it isn't its feature's own (§32
+   * t-95) — the reciprocal of the borrowed row rendered in that phase's band.
+   * `null` for the overwhelming majority, which simply inherit.
+   *
+   * Shown on the task's row here so a feature owner isn't blind to work happening
+   * on their feature under another phase's banner. Deliberately per-task rather
+   * than a count on the feature's summary line: that line's markers have to stay
+   * disjoint (§32 t-94), and "which phase" is the useful part anyway.
+   */
+  committedPhaseName: string | null;
 }
 
 /** An indicative-task sketch bullet on a not-yet-planned feature (§18). */
@@ -109,6 +120,42 @@ export interface PlanFeatureView {
 }
 
 /**
+ * A task **borrowed** into a phase band — one whose `Task.phaseId` names a phase
+ * other than its feature's, i.e. work this phase *chose* to do on someone else's
+ * feature (§32 t-95).
+ *
+ * It renders at both ends: here, inline in the borrowing band, and unchanged in its
+ * origin feature's own task table. Carries the origin refs so the row can say where
+ * it came from — `f-status-model · Foundations (V1) ↩`, the active-fixes strip's
+ * breadcrumb pattern.
+ */
+export interface PlanBorrowedTask {
+  id: string;
+  number: number | null;
+  title: string;
+  status: EffectiveStatus;
+  kind: TaskKind;
+  prUrl: string | null;
+  /** The holder (assignee, else claimant); `null` when nobody holds it. */
+  claimer: UserRef | null;
+  /** The feature this task actually belongs to — the breadcrumb target. */
+  feature: { id: string; slug: string | null; title: string };
+  /** The name of the feature's own phase, for the "↩ from" half; `null` if unfiled. */
+  originPhaseName: string | null;
+}
+
+/**
+ * One rendered row of a phase band: a feature, or a task borrowed into it.
+ *
+ * A discriminated union rather than two lists, because the ordering **between**
+ * them is the point — a borrowed task must sit *inline*, never in a trailing
+ * sub-band, or `planOrder` would place it below the very feature it blocks
+ * (§32 t-95, owner). Ordering stays the server's job (see `plan-view.tsx`).
+ */
+export type PlanBandRow =
+  { kind: 'feature'; feature: PlanFeatureView } | { kind: 'task'; task: PlanBorrowedTask };
+
+/**
  * A phase band on the Plan — a group of features filed under one phase (f-phases
  * §22 t2). Features inside keep their project-wide `planOrder()`. The residual
  * band (`id: null`) collects features not yet filed under any phase.
@@ -128,7 +175,19 @@ export interface PlanPhaseBand {
   description: string | null;
   /** Display position; `null` for the residual band. */
   ordinal: number | null;
+  /**
+   * The features filed under this phase, in `planOrder()`. Unchanged by §32 t-95 —
+   * this is still "which features live here", and it is what the summary, the
+   * auto-expand pick, the §N fallback and the band's feature count all read.
+   */
   features: PlanFeatureView[];
+  /**
+   * What the band **renders**, in order: the same features, interleaved with any
+   * tasks borrowed into this phase. A superset of `features`; the two can't drift
+   * (asserted in `plan.test.ts`). Split from `features` deliberately — a borrowed
+   * task is not a member of this phase's feature set, and must not be counted as one.
+   */
+  rows: PlanBandRow[];
 }
 
 /**
@@ -195,6 +254,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
           status: true,
           kind: true,
           createdAt: true, // placed against the feature's shippedAt (§32 t-79)
+          phaseId: true, // the phase that CHOSE this work, when it isn't the feature's (§32 t-95)
           prUrl: true,
           claimedByUserId: true,
           assigneeUserId: true,
@@ -222,6 +282,13 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
     features.map((f) => [f.id, { slug: f.slug, title: f.title, status: f.status }])
   );
 
+  // Phase names, for the origin half of a borrowed row's breadcrumb.
+  const phaseNameById = new Map((await phasesPromise).map((p) => [p.id, p.name]));
+  // Tasks this project has committed to a phase OTHER than their feature's (§32
+  // t-95), grouped by the phase that borrowed them. Built from the tasks already
+  // loaded above — no second query, no N+1.
+  const borrowedByPhase = new Map<string, PlanBorrowedTask[]>();
+
   const views: PlanFeatureView[] = features.map((f) => {
     // Progress needs each task's `createdAt` (to place it against the ship
     // boundary) alongside the *derived* status the rows render. Accumulated here
@@ -236,6 +303,30 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
       progressInput.push({ status, kind: t.kind, createdAt: t.createdAt });
       // Show the assignee while open, the doer once merged (f-task-assignment §22 t2).
       const holderId = taskHolderId(status, t.claimedByUserId, t.assigneeUserId);
+      const claimer = holderId ? (users.get(holderId) ?? null) : null;
+      // A commitment to a phase OTHER than the feature's is a *borrow*: the task
+      // also renders in that band. Equal ids mean the commitment agrees with the
+      // inheritance, so there is nothing to show twice.
+      // `!= null` (nullish), not `!== null`: an absent phaseId must read as "inherit"
+      // exactly like an explicit null, or a missing field would masquerade as a
+      // commitment and silently duplicate the row into a band.
+      const borrowedBy = t.phaseId != null && t.phaseId !== f.phaseId ? t.phaseId : null;
+      if (borrowedBy !== null) {
+        const borrowed: PlanBorrowedTask = {
+          id: t.id,
+          number: t.number,
+          title: t.title,
+          status,
+          kind: t.kind,
+          prUrl: t.prUrl,
+          claimer,
+          feature: { id: f.id, slug: f.slug, title: f.title },
+          originPhaseName: f.phaseId ? (phaseNameById.get(f.phaseId) ?? null) : null,
+        };
+        const arr = borrowedByPhase.get(borrowedBy);
+        if (arr) arr.push(borrowed);
+        else borrowedByPhase.set(borrowedBy, [borrowed]);
+      }
       return {
         id: t.id,
         number: t.number,
@@ -243,7 +334,8 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
         status,
         kind: t.kind,
         prUrl: t.prUrl,
-        claimer: holderId ? (users.get(holderId) ?? null) : null,
+        claimer,
+        committedPhaseName: borrowedBy ? (phaseNameById.get(borrowedBy) ?? null) : null,
       };
     });
 
@@ -300,15 +392,23 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
   // `planOrder` returns the same ids it was given → every lookup resolves.
   const orderedViews = ordered.map((o) => viewById.get(o.id)!);
 
-  // Await the phases dispatched up-front, and map each feature's membership —
-  // the two inputs the grouping needs (ordinal-ordered, tie → createdAt).
+  // Map each feature's membership + its STORED status — the grouping needs the
+  // latter to place a borrowed task among features by readiness, and the stored
+  // value is what `planOrder` banded on (the derived one is presentation).
   const phases = await phasesPromise;
   const phaseIdByFeature = new Map(features.map((f) => [f.id, f.phaseId]));
+  const statusByFeature = new Map(features.map((f) => [f.id, f.status]));
 
   return {
     projectId,
     projectSlug: project.slug,
-    phases: groupIntoPhaseBands(orderedViews, phaseIdByFeature, phases),
+    phases: groupIntoPhaseBands(
+      orderedViews,
+      phaseIdByFeature,
+      phases,
+      borrowedByPhase,
+      statusByFeature
+    ),
   };
 }
 
@@ -330,10 +430,67 @@ type PhaseRow = {
   description: string | null;
 };
 
+/**
+ * Readiness rank shared by feature rows and borrowed task rows, so the two can be
+ * interleaved on one scale (§32 t-95). Mirrors `plan-order.ts`'s `STATUS_BAND`
+ * — done first, then in-flight, then ready, then blocked — because that is the
+ * order the band's features are already in.
+ */
+const FEATURE_RANK: Record<FeatureStatus, number> = {
+  shipped: 0,
+  in_flight: 1,
+  planning: 2,
+  blocked: 3,
+};
+const TASK_RANK: Record<EffectiveStatus, number> = {
+  merged: 0,
+  active: 1,
+  claimed: 2,
+  blocked: 3,
+};
+
+/**
+ * Interleave a band's borrowed tasks among its features, in readiness order.
+ *
+ * **Never a trailing sub-band.** That is the load-bearing requirement (owner,
+ * §32 t-95): a borrowed enhancement can be the thing *blocking* a feature new to
+ * this phase, and parking borrowed rows at the end would sort it below the very
+ * feature it blocks. Placement must not encode "borrowed" — the kind tag and the
+ * origin breadcrumb do that.
+ *
+ * Tasks are placed **before** features of equal rank: a task pulled into a phase is
+ * a prerequisite far more often than not, and a tie is exactly the case where the
+ * blocking reading matters. Within each group the incoming order is preserved (the
+ * sort is stable and features arrive in `planOrder`), so this reorders nothing that
+ * was already ordered.
+ */
+function interleaveBandRows(
+  features: PlanFeatureView[],
+  borrowed: PlanBorrowedTask[],
+  statusByFeature: Map<string, FeatureStatus>
+): PlanBandRow[] {
+  if (borrowed.length === 0) return features.map((feature) => ({ kind: 'feature', feature }));
+  const ranked: { rank: number; row: PlanBandRow }[] = [
+    ...borrowed.map((task) => ({
+      rank: TASK_RANK[task.status],
+      row: { kind: 'task', task } as const,
+    })),
+    ...features.map((feature) => ({
+      // A feature missing from the map cannot happen (same query), but rank it as
+      // ready rather than throwing — a read degrades, it never breaks the page.
+      rank: FEATURE_RANK[statusByFeature.get(feature.id) ?? 'planning'],
+      row: { kind: 'feature', feature } as const,
+    })),
+  ];
+  return ranked.sort((a, b) => a.rank - b.rank).map((r) => r.row);
+}
+
 function groupIntoPhaseBands(
   orderedViews: PlanFeatureView[],
   phaseIdByFeature: Map<string, string | null>,
-  phases: PhaseRow[]
+  phases: PhaseRow[],
+  borrowedByPhase: Map<string, PlanBorrowedTask[]>,
+  statusByFeature: Map<string, FeatureStatus>
 ): PlanPhaseBand[] {
   const known = new Set(phases.map((p) => p.id));
   const byPhase = new Map<string, PlanFeatureView[]>();
@@ -352,14 +509,18 @@ function groupIntoPhaseBands(
   // Real phases in ordinal order (the `phases` query is already sorted), then the
   // residual catch-all last. No parked-to-bottom reshuffle — the plan mirrors the
   // dialog's order, and `parked`/`complete` are hidden via the band's collapse.
-  const bands: PlanPhaseBand[] = phases.map((p) => ({
-    id: p.id,
-    name: p.name,
-    status: p.status,
-    ordinal: p.ordinal,
-    description: p.description,
-    features: byPhase.get(p.id) ?? [],
-  }));
+  const bands: PlanPhaseBand[] = phases.map((p) => {
+    const features = byPhase.get(p.id) ?? [];
+    return {
+      id: p.id,
+      name: p.name,
+      status: p.status,
+      ordinal: p.ordinal,
+      description: p.description,
+      features,
+      rows: interleaveBandRows(features, borrowedByPhase.get(p.id) ?? [], statusByFeature),
+    };
+  });
   if (residual.length > 0) {
     bands.push({
       id: null,
@@ -368,6 +529,9 @@ function groupIntoPhaseBands(
       ordinal: null,
       description: null,
       features: residual,
+      // The residual band has no phase id, so nothing can be committed *to* it —
+      // a task's `phaseId` always names a real phase, and null means "inherit".
+      rows: residual.map((feature) => ({ kind: 'feature', feature })),
     });
   }
   return bands;
