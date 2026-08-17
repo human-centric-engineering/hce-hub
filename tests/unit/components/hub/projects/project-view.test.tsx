@@ -41,9 +41,17 @@ const planFixture: ProjectPlanDTO = {
           },
         },
       ],
+      // A band renders from `rows` (§32 t-95); with nothing borrowed in, that is
+      // exactly its features.
+      rows: [],
     },
   ],
 };
+// Keep `rows` in step with `features` without repeating the literal.
+planFixture.phases[0].rows = planFixture.phases[0].features.map((feature) => ({
+  kind: 'feature',
+  feature,
+}));
 
 const boardFixture: ProjectBoardDTO = {
   projectId: 'p1',

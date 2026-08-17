@@ -66,6 +66,8 @@ export interface PlanTask {
   prUrl: string | null;
   /** `null` when unclaimed or the claimant was erased. */
   claimer: UserRef | null;
+  /** The phase that borrowed this task, when it isn't its feature's own (§32 t-95). */
+  committedPhaseName: string | null;
 }
 
 /** A feature row in the Plan view. */
@@ -106,6 +108,29 @@ export interface PlanFeature {
 export type PhaseStatus = 'upcoming' | 'active' | 'complete' | 'parked';
 
 /**
+ * A task borrowed into a phase band — `Task.phaseId` names a phase other than its
+ * feature's, so this phase *chose* to do work on someone else's feature (§32 t-95).
+ * Rendered inline in the borrowing band, and unchanged in its origin feature's table.
+ */
+export interface PlanBorrowedTask {
+  id: string;
+  number: number | null;
+  title: string;
+  status: TaskEffectiveStatus;
+  kind: TaskKind;
+  prUrl: string | null;
+  claimer: UserRef | null;
+  /** Where the task really lives — the breadcrumb target. */
+  feature: { id: string; slug: string | null; title: string };
+  /** The origin feature's own phase name, for the "↩" half; `null` if unfiled. */
+  originPhaseName: string | null;
+}
+
+/** One rendered row of a band: a feature, or a task borrowed into the phase. */
+export type PlanBandRow =
+  { kind: 'feature'; feature: PlanFeature } | { kind: 'task'; task: PlanBorrowedTask };
+
+/**
  * A phase band on the Plan — features filed under one phase, keeping their
  * `planOrder()` (f-phases §22 t2). `id: null` is the residual "no phase" band.
  */
@@ -115,7 +140,10 @@ export interface PlanPhaseBand {
   /** `null` for the residual band; `parked`/`complete` bands collapse by default. */
   status: PhaseStatus | null;
   ordinal: number | null;
+  /** Features filed under this phase — the count, the summary, the auto-expand pick. */
   features: PlanFeature[];
+  /** What the band renders, in readiness order: those features plus borrowed tasks. */
+  rows: PlanBandRow[];
 }
 
 /**

@@ -95,6 +95,7 @@ describe('FeatureRow', () => {
             kind: 'feature_work',
             prUrl: null,
             claimer: null,
+            committedPhaseName: null,
           },
         ],
         progress: {
@@ -143,6 +144,7 @@ describe('FeatureRow', () => {
               kind: 'feature_work',
               prUrl: null,
               claimer: null,
+              committedPhaseName: null,
             },
           ],
           progress: {
@@ -262,6 +264,7 @@ describe('FeatureRow', () => {
             kind: 'feature_work',
             prUrl: null,
             claimer: null,
+            committedPhaseName: null,
           },
         ],
         progress: {
@@ -325,6 +328,7 @@ describe('FeatureRow', () => {
             kind: 'feature_work',
             prUrl: null,
             claimer: null,
+            committedPhaseName: null,
           },
         ],
         progress: {
@@ -358,6 +362,7 @@ describe('FeatureRow', () => {
             kind: 'feature_work',
             prUrl: null,
             claimer: null,
+            committedPhaseName: null,
           },
         ],
         progress: {

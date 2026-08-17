@@ -21,6 +21,11 @@ tasks, each projected to the refs an agent needs to identify and name one:
 - **`phaseId`** (f-work-kinds §32 t-80) — the phase that _chose_ this work, when that
   differs from its feature's phase; `null` = inherit. A commitment marker, never a
   second home: it does not propagate upward, so a task can't move its feature.
+  Since **§32 t-95** it finally _renders_: such a task appears inline in the borrowing
+  phase's band on the Plan, while staying in its own feature's task table (see
+  [phases](./phases.md#ui-t2-render--t3-management-componentshubprojectsplan)). Until
+  t-95 this field was written by three verbs and read by none — write surface ahead of
+  read surface, the same gap §32 was created to close for `TaskKind`.
 - **Narrowing.** `featureId` → one feature's tasks; `kind: 'bug'` → the open-bugs read
   (the concrete need that motivated the feature), `kind: 'enhancement'` → the open
   improvements; `status` → one effective status.

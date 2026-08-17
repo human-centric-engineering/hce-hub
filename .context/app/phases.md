@@ -107,6 +107,28 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
   feature count). `parked` and `complete` bands collapse by default; active /
   upcoming and the residual band start open — plus any band holding the view's
   auto-expanded (active-work) feature.
+  - **A band renders `rows`, not `features`** (f-work-kinds §32 t-95). `rows` is an
+    ordered discriminated union — the band's features **interleaved** with any tasks
+    _borrowed_ into the phase (`Task.phaseId` naming a phase other than their
+    feature's). `features` is unchanged and still means "which features live here":
+    the band's count, the plan summary, the auto-expand pick and the `§N` fallback all
+    read it, because **a borrow is not membership**. A test pins that the two can't
+    drift.
+  - **Inline, never a trailing sub-band.** The load-bearing ordering rule (owner):
+    a borrowed task can be the thing _blocking_ a feature new to the phase, so
+    parking borrowed rows at the end would sort it below the very feature it blocks.
+    Both row types rank on one readiness scale mirroring `plan-order.ts`'s
+    `STATUS_BAND` (done → in-flight → ready → blocked); a task sorts **before** a
+    feature of equal rank, since a tie is exactly where the blocking reading matters.
+    Stable, and features arrive in `planOrder`, so nothing already ordered moves.
+  - **`BorrowedTaskRow`** — narrower and dashed, with the kind tag and an origin
+    breadcrumb (`↩ f-status-model · Foundations`) linking back to the feature the
+    work belongs to. It signals "from elsewhere" through _appearance_, never
+    placement. The reciprocal mark rides the task's own row in its feature's table
+    (`→ <phase>`), so a feature owner isn't blind to work happening on their feature
+    under another phase's banner.
+  - A phase holding **only** borrowed work (no features of its own) renders fine —
+    that is the natural shape of a band created to collect committed work.
 - **`ManagePhasesDialog`** ("Manage phases", top-right of the Plan) — create,
   rename, set status / park, and **drag-to-reorder** (`@dnd-kit`, keyboard-
   accessible: focus the grip, Space, arrows, Space). Reorder is **optimistic** —

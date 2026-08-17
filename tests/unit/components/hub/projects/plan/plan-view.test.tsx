@@ -8,6 +8,7 @@ import { PlanView } from '@/components/hub/projects/plan/plan-view';
 import type {
   PlanFeature,
   PlanPhaseBand,
+  PlanBandRow,
   ProjectPlanDTO,
 } from '@/components/hub/projects/plan/types';
 
@@ -40,17 +41,31 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
 
 // Wrap features in a single residual band — mirrors the server's no-phases output
 // (an empty residual is dropped), so these render exactly like the flat plan.
+/**
+ * A band as a fixture writes it — `rows` optional, since most tests only care
+ * about features. Defaulted below to exactly those features, which is what the
+ * server produces for a band with nothing borrowed into it (§32 t-95).
+ */
+type BandInput = Omit<PlanPhaseBand, 'rows'> & { rows?: PlanBandRow[] };
+
+const withRows = (b: BandInput): PlanPhaseBand => ({
+  ...b,
+  rows: b.rows ?? b.features.map((feature) => ({ kind: 'feature', feature })),
+});
+
 const plan = (features: PlanFeature[], projectSlug: string | null = null): ProjectPlanDTO => ({
   projectId: 'p1',
   projectSlug,
-  phases: features.length ? [{ id: null, name: null, status: null, ordinal: null, features }] : [],
+  phases: features.length
+    ? [withRows({ id: null, name: null, status: null, ordinal: null, features })]
+    : [],
 });
 
 // Build a plan from explicit phase bands (for the grouping/collapse tests).
-const banded = (phases: PlanPhaseBand[]): ProjectPlanDTO => ({
+const banded = (phases: BandInput[]): ProjectPlanDTO => ({
   projectId: 'p1',
   projectSlug: null,
-  phases,
+  phases: phases.map(withRows),
 });
 
 describe('PlanView rendering', () => {
@@ -91,6 +106,7 @@ describe('PlanView rendering', () => {
                 kind: 'feature_work',
                 prUrl: null,
                 claimer: null,
+                committedPhaseName: null,
               },
             ],
             progress: {
@@ -131,6 +147,7 @@ describe('PlanView rendering', () => {
                 kind: 'feature_work',
                 prUrl: null,
                 claimer: null,
+                committedPhaseName: null,
               },
             ],
             progress: {
@@ -156,6 +173,7 @@ describe('PlanView rendering', () => {
                 kind: 'feature_work',
                 prUrl: null,
                 claimer: null,
+                committedPhaseName: null,
               },
             ],
             progress: {
@@ -193,6 +211,7 @@ describe('PlanView rendering', () => {
                 kind: 'feature_work',
                 prUrl: null,
                 claimer: null,
+                committedPhaseName: null,
               },
             ],
             progress: {
@@ -218,6 +237,7 @@ describe('PlanView rendering', () => {
                 kind: 'feature_work',
                 prUrl: null,
                 claimer: null,
+                committedPhaseName: null,
               },
             ],
             progress: {
@@ -363,6 +383,7 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
                     kind: 'feature_work',
                     prUrl: null,
                     claimer: null,
+                    committedPhaseName: null,
                   },
                 ],
                 progress: {
@@ -401,5 +422,175 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
     expect(screen.queryByText('Parked idea')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Idea park/ }));
     expect(screen.getByText('Parked idea')).toBeInTheDocument();
+  });
+});
+
+/**
+ * §32 t-95 — a band renders `rows` (features interleaved with borrowed tasks), not
+ * `features`. These pin the wiring; the ORDERING those rows arrive in is the
+ * server's and is asserted in `lib/projects/plan.test.ts`.
+ */
+describe('PlanView borrowed task rows (§32 t-95)', () => {
+  const borrowed = {
+    kind: 'task' as const,
+    task: {
+      id: 't93',
+      number: 93,
+      title: 'Borrowed into this phase',
+      status: 'claimed' as const,
+      kind: 'enhancement' as const,
+      prUrl: null,
+      claimer: null,
+      feature: { id: 'f20', slug: 'f-status-model', title: 'Origin feature' },
+      originPhaseName: 'Foundations',
+    },
+  };
+
+  it('renders a borrowed task row in the band, in the position the server gave it', () => {
+    const a = feature({ id: 'a', title: 'Native feature' });
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'now',
+            name: 'Project flow',
+            status: 'active',
+            ordinal: 0,
+            features: [a],
+            // Server order: the borrowed task ahead of the feature.
+            rows: [borrowed, { kind: 'feature', feature: a }],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText('Borrowed into this phase')).toBeInTheDocument();
+    expect(screen.getByText('Native feature')).toBeInTheDocument();
+    expect(screen.getByText('t-93')).toBeInTheDocument();
+    // The breadcrumb says where the work actually lives.
+    expect(screen.getByRole('link', { name: 'f-status-model' })).toBeInTheDocument();
+  });
+
+  it('counts only features in the band header — a borrow is not membership', () => {
+    const a = feature({ id: 'a', title: 'Native feature' });
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'now',
+            name: 'Project flow',
+            status: 'active',
+            ordinal: 0,
+            features: [a],
+            rows: [borrowed, { kind: 'feature', feature: a }],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByRole('button', { name: /Project flow/ })).toHaveTextContent('1 feature');
+  });
+
+  /**
+   * A phase can hold borrowed work and no features of its own — a band created to
+   * collect committed work is exactly that shape. It must still render, and its
+   * "0 features" header must not read as "nothing here".
+   */
+  it('renders a band whose only content is borrowed — zero features of its own', () => {
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'now',
+            name: 'Project flow',
+            status: 'active',
+            ordinal: 0,
+            features: [],
+            rows: [borrowed],
+          },
+          // Another band supplies the project's features; without one anywhere the
+          // view shows its project-level empty state instead.
+          {
+            id: 'old',
+            name: 'Foundations',
+            status: 'active',
+            ordinal: 1,
+            features: [feature({ id: 'a', title: 'Native feature' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText('Borrowed into this phase')).toBeInTheDocument();
+    // "0 features" alone would read as "nothing here" — and if such a band were
+    // `complete`/`parked` it would also be collapsed, leaving the borrowed work both
+    // unlabelled and hidden. The count stays feature-only (a borrow isn't
+    // membership); the borrowed total rides alongside it.
+    const header = screen.getByRole('button', { name: /Project flow/ });
+    expect(header).toHaveTextContent('0 features');
+    expect(header).toHaveTextContent('1 borrowed');
+  });
+
+  it('shows no borrowed hint on a band with none', () => {
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'now',
+            name: 'Project flow',
+            status: 'active',
+            ordinal: 0,
+            features: [feature({ id: 'a', title: 'Native feature' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByRole('button', { name: /Project flow/ })).not.toHaveTextContent('borrowed');
+  });
+
+  /**
+   * The DTO is hand-mirrored and arrives through an unchecked `parseApiResponse`
+   * cast, so `rows` being required by the type proves nothing at runtime. Mid-deploy
+   * a response from the older server carries `features` and no `rows` — that must
+   * degrade to the pre-t-95 rendering, not white-screen the Plan over a
+   * presentational addition.
+   */
+  it('falls back to rendering features when a payload predates `rows`', () => {
+    const a = feature({ id: 'a', title: 'Native feature' });
+    const legacyBand = {
+      id: 'now',
+      name: 'Project flow',
+      status: 'active',
+      ordinal: 0,
+      features: [a],
+      // rows: absent, exactly as an older server would send it
+    } as unknown as PlanPhaseBand;
+
+    render(<PlanView plan={{ projectId: 'p1', projectSlug: null, phases: [legacyBand] }} />);
+    expect(screen.getByText('Native feature')).toBeInTheDocument();
+  });
+
+  it('hides a borrowed row with its band when that band is collapsed', () => {
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'done',
+            name: 'Foundations',
+            status: 'complete', // collapses by default
+            ordinal: 0,
+            features: [],
+            rows: [borrowed],
+          },
+          {
+            id: 'now',
+            name: 'Project flow',
+            status: 'active',
+            ordinal: 1,
+            features: [feature({ id: 'a', title: 'Native feature' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.queryByText('Borrowed into this phase')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Foundations/ }));
+    expect(screen.getByText('Borrowed into this phase')).toBeInTheDocument();
   });
 });
