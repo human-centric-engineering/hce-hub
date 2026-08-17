@@ -21,6 +21,18 @@ export const flagHelpWantedFunctionDefinition = {
   },
 };
 
+/**
+ * Code-owned half of the capability row — must track `FlagHelpWantedCapability`, so the
+ * seed re-applies it to rows that already exist rather than writing it on
+ * `create` only. A stale `functionDefinition` is not an admin customisation:
+ * it is the schema every MCP client is shown (Sunrise #545).
+ */
+const FLAG_HELP_WANTED_IMPL = {
+  executionType: 'internal',
+  executionHandler: 'FlagHelpWantedCapability',
+  functionDefinition: flagHelpWantedFunctionDefinition,
+};
+
 const unit: SeedUnit = {
   name: 'app/004-flag-help-wanted',
   async run({ prisma, logger }) {
@@ -28,15 +40,13 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'flag_help_wanted' },
-      update: { isSystem: true, functionDefinition: flagHelpWantedFunctionDefinition },
+      update: { isSystem: true, ...FLAG_HELP_WANTED_IMPL },
       create: {
         slug: 'flag_help_wanted',
         name: 'Flag Help Wanted',
         description: 'Toggle the help-wanted flag on a feature. Owner/lead only; audited.',
         category: 'coordination',
-        executionType: 'internal',
-        executionHandler: 'FlagHelpWantedCapability',
-        functionDefinition: flagHelpWantedFunctionDefinition,
+        ...FLAG_HELP_WANTED_IMPL,
         isIdempotent: true, // setting to the current value is a no-op
         isActive: true,
         isSystem: true,

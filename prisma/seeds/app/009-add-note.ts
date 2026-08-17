@@ -26,6 +26,18 @@ export const addNoteFunctionDefinition = {
   },
 };
 
+/**
+ * Code-owned half of the capability row — must track `AddNoteCapability`, so the
+ * seed re-applies it to rows that already exist rather than writing it on
+ * `create` only. A stale `functionDefinition` is not an admin customisation:
+ * it is the schema every MCP client is shown (Sunrise #545).
+ */
+const ADD_NOTE_IMPL = {
+  executionType: 'internal',
+  executionHandler: 'AddNoteCapability',
+  functionDefinition: addNoteFunctionDefinition,
+};
+
 const unit: SeedUnit = {
   name: 'app/009-add-note',
   async run({ prisma, logger }) {
@@ -33,16 +45,14 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'add_note' },
-      update: { isSystem: true, functionDefinition: addNoteFunctionDefinition },
+      update: { isSystem: true, ...ADD_NOTE_IMPL },
       create: {
         slug: 'add_note',
         name: 'Add Note',
         description:
           'Add a freeform note to the project journal (feature- or project-scoped). Any member; audited.',
         category: 'coordination',
-        executionType: 'internal',
-        executionHandler: 'AddNoteCapability',
-        functionDefinition: addNoteFunctionDefinition,
+        ...ADD_NOTE_IMPL,
         isActive: true,
         isSystem: true,
       },

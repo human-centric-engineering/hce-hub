@@ -30,6 +30,18 @@ export const recordDecisionFunctionDefinition = {
   },
 };
 
+/**
+ * Code-owned half of the capability row — must track `RecordDecisionCapability`, so the
+ * seed re-applies it to rows that already exist rather than writing it on
+ * `create` only. A stale `functionDefinition` is not an admin customisation:
+ * it is the schema every MCP client is shown (Sunrise #545).
+ */
+const RECORD_DECISION_IMPL = {
+  executionType: 'internal',
+  executionHandler: 'RecordDecisionCapability',
+  functionDefinition: recordDecisionFunctionDefinition,
+};
+
 const unit: SeedUnit = {
   name: 'app/008-record-decision',
   async run({ prisma, logger }) {
@@ -37,16 +49,14 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'record_decision' },
-      update: { isSystem: true, functionDefinition: recordDecisionFunctionDefinition },
+      update: { isSystem: true, ...RECORD_DECISION_IMPL },
       create: {
         slug: 'record_decision',
         name: 'Record Decision',
         description:
           'Record a decision + rationale into the project journal (feature- or project-scoped). Any member; audited.',
         category: 'coordination',
-        executionType: 'internal',
-        executionHandler: 'RecordDecisionCapability',
-        functionDefinition: recordDecisionFunctionDefinition,
+        ...RECORD_DECISION_IMPL,
         isActive: true,
         isSystem: true,
       },

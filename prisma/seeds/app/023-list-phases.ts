@@ -19,6 +19,18 @@ export const listPhasesFunctionDefinition = {
   },
 };
 
+/**
+ * Code-owned half of the capability row — must track `ListPhasesCapability`, so the
+ * seed re-applies it to rows that already exist rather than writing it on
+ * `create` only. A stale `functionDefinition` is not an admin customisation:
+ * it is the schema every MCP client is shown (Sunrise #545).
+ */
+const LIST_PHASES_IMPL = {
+  executionType: 'internal',
+  executionHandler: 'ListPhasesCapability',
+  functionDefinition: listPhasesFunctionDefinition,
+};
+
 const unit: SeedUnit = {
   name: 'app/023-list-phases',
   async run({ prisma, logger }) {
@@ -26,16 +38,14 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'list_phases' },
-      update: { isSystem: true, functionDefinition: listPhasesFunctionDefinition },
+      update: { isSystem: true, ...LIST_PHASES_IMPL },
       create: {
         slug: 'list_phases',
         name: 'List Phases',
         description:
           "Read a project's phases and the features filed under each (ids, slugs, status). Membership-scoped.",
         category: 'coordination',
-        executionType: 'internal',
-        executionHandler: 'ListPhasesCapability',
-        functionDefinition: listPhasesFunctionDefinition,
+        ...LIST_PHASES_IMPL,
         isActive: true,
         isSystem: true,
       },

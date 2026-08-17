@@ -101,6 +101,31 @@ landing.
 
 ## Changelog
 
+- **2026-08-17** — **Sunrise v0.9.0 merge** (carries v0.8.1). **No rows retired and no rows
+  added** — the first sync with a net-zero ledger. None of the six open asks landed
+  ([#530](https://github.com/human-centric-engineering/sunrise/issues/530) ×2,
+  [#586](https://github.com/human-centric-engineering/sunrise/issues/586),
+  [#595](https://github.com/human-centric-engineering/sunrise/issues/595),
+  [#609](https://github.com/human-centric-engineering/sunrise/issues/609),
+  [#620](https://github.com/human-centric-engineering/sunrise/issues/620)), and upstream touched
+  exactly one file this ledger carries — `lib/env.ts`, where row 23's `MCP_SESSION_MODE` and
+  upstream's new `ESCALATION_WEBHOOK_ALLOW_PRIVATE` auto-merged side by side. Six conflicts, none
+  of them a new carried edit: `package.json` / `package-lock.json` (identity + `@dnd-kit`),
+  `.context/environment/reference.md` (row 23's table row kept alongside the new escalation var),
+  and three form/callback tests where both sides had **added an import** — the row-18 seam reads
+  and upstream's new `createMockRouter` helper, so keeping both was the whole resolution. The
+  0.9.0 open-redirect fix lands in `isRootRelativePath()` / `safeCallbackUrl()`, not in
+  `login-form.tsx`, so the dissolved rows 12–13 stayed dissolved.
+  **One fork-side adaptation, deliberately not a row:** upstream's #545 ships
+  `capability-code-owned-fields.test.ts`, which parses a fork's own seeds by design and requires
+  the `update` branch to re-apply `functionDefinition`, `executionType` **and**
+  `executionHandler`. All 28 Hub capability seeds re-applied only the first (our #108 fix), so all
+  28 failed. Widened to upstream's `<SLUG>_IMPL` constant idiom — that is the fork conforming to a
+  platform invariant, which is the opposite of a divergence. Note #545 does **not** shorten the
+  three-step MCP seed ritual: the propagation bug it fixes is the one we had already fixed on our
+  side in #108, so `deploy → db:seed → reconnect` is unchanged; what is new is the test that
+  enforces it, and which found the two columns our fix had missed.
+
 - **2026-08-17** — MCP spec verification (no code change): **row 23 amended** and a new
   upstream ask ([sunrise#620](https://github.com/human-centric-engineering/sunrise/issues/620)).
   MCP revision `2026-07-28` removed protocol-level sessions and the `initialize` handshake

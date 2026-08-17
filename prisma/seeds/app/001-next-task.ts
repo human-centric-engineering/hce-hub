@@ -56,6 +56,18 @@ export const nextTaskFunctionDefinition = {
   },
 };
 
+/**
+ * Code-owned half of the capability row — must track `NextTaskCapability`, so the
+ * seed re-applies it to rows that already exist rather than writing it on
+ * `create` only. A stale `functionDefinition` is not an admin customisation:
+ * it is the schema every MCP client is shown (Sunrise #545).
+ */
+const NEXT_TASK_IMPL = {
+  executionType: 'internal',
+  executionHandler: 'NextTaskCapability',
+  functionDefinition: nextTaskFunctionDefinition,
+};
+
 const unit: SeedUnit = {
   name: 'app/001-next-task',
   async run({ prisma, logger }) {
@@ -63,16 +75,14 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'next_task' },
-      update: { isSystem: true, functionDefinition: nextTaskFunctionDefinition },
+      update: { isSystem: true, ...NEXT_TASK_IMPL },
       create: {
         slug: 'next_task',
         name: 'Next Task',
         description:
           "Recommend the caller's highest-priority pullable task — dependencies all merged, from their own work first and the unclaimed pool otherwise (plus help-wanted features when asked). Membership-scoped; a recommendation, not an assignment.",
         category: 'coordination',
-        executionType: 'internal',
-        executionHandler: 'NextTaskCapability',
-        functionDefinition: nextTaskFunctionDefinition,
+        ...NEXT_TASK_IMPL,
         isIdempotent: true, // pure read — the engine can skip the dispatch cache
         isActive: true,
         isSystem: true,

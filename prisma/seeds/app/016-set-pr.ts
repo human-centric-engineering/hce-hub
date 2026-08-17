@@ -24,6 +24,18 @@ export const setPrFunctionDefinition = {
   },
 };
 
+/**
+ * Code-owned half of the capability row — must track `SetPrCapability`, so the
+ * seed re-applies it to rows that already exist rather than writing it on
+ * `create` only. A stale `functionDefinition` is not an admin customisation:
+ * it is the schema every MCP client is shown (Sunrise #545).
+ */
+const SET_PR_IMPL = {
+  executionType: 'internal',
+  executionHandler: 'SetPrCapability',
+  functionDefinition: setPrFunctionDefinition,
+};
+
 const unit: SeedUnit = {
   name: 'app/016-set-pr',
   async run({ prisma, logger }) {
@@ -31,16 +43,14 @@ const unit: SeedUnit = {
 
     const capability = await prisma.aiCapability.upsert({
       where: { slug: 'set_pr' },
-      update: { isSystem: true, functionDefinition: setPrFunctionDefinition },
+      update: { isSystem: true, ...SET_PR_IMPL },
       create: {
         slug: 'set_pr',
         name: 'Set PR',
         description:
           "Link a task to its pull request: set or replace the task's PR URL. Any member; no status change; audited.",
         category: 'coordination',
-        executionType: 'internal',
-        executionHandler: 'SetPrCapability',
-        functionDefinition: setPrFunctionDefinition,
+        ...SET_PR_IMPL,
         isActive: true,
         isSystem: true,
       },
