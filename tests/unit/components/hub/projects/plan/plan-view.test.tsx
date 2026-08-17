@@ -519,7 +519,30 @@ describe('PlanView borrowed task rows (§32 t-95)', () => {
       />
     );
     expect(screen.getByText('Borrowed into this phase')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Project flow/ })).toHaveTextContent('0 features');
+    // "0 features" alone would read as "nothing here" — and if such a band were
+    // `complete`/`parked` it would also be collapsed, leaving the borrowed work both
+    // unlabelled and hidden. The count stays feature-only (a borrow isn't
+    // membership); the borrowed total rides alongside it.
+    const header = screen.getByRole('button', { name: /Project flow/ });
+    expect(header).toHaveTextContent('0 features');
+    expect(header).toHaveTextContent('1 borrowed');
+  });
+
+  it('shows no borrowed hint on a band with none', () => {
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'now',
+            name: 'Project flow',
+            status: 'active',
+            ordinal: 0,
+            features: [feature({ id: 'a', title: 'Native feature' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByRole('button', { name: /Project flow/ })).not.toHaveTextContent('borrowed');
   });
 
   /**

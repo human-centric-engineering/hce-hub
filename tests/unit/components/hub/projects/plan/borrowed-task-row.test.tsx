@@ -86,6 +86,33 @@ describe('BorrowedTaskRow', () => {
     expect(open).toHaveBeenCalledWith('t93');
   });
 
+  /**
+   * The row swallows Enter/Space to open the sheet — but only when the ROW has
+   * focus. Without the target check it cancels navigation on the links INSIDE it,
+   * making the origin breadcrumb (this row's entire reason to exist) unreachable by
+   * keyboard while the mouse path works fine. Caught in review, not by the tests
+   * above, because every one of them clicks.
+   */
+  it('does not hijack Enter pressed on the breadcrumb link inside it', () => {
+    const open = vi.fn();
+    render(
+      <TaskSheetControlsProvider value={{ open, close: vi.fn() }}>
+        <BorrowedTaskRow task={task()} projectRef="hce-hub" />
+      </TaskSheetControlsProvider>
+    );
+    const link = screen.getByRole('link', { name: 'f-status-model' });
+    const evt = fireEvent.keyDown(link, { key: 'Enter', bubbles: true });
+    expect(open).not.toHaveBeenCalled(); // the sheet must not steal it
+    expect(evt).toBe(true); // …and the anchor's own navigation is not cancelled
+  });
+
+  it('names the origin in its accessible label, since aria-label hides the contents', () => {
+    renderRow();
+    expect(
+      screen.getByRole('button', { name: /Open task t-93, borrowed from f-status-model/ })
+    ).toBeInTheDocument();
+  });
+
   it('does not open the sheet when the PR link is clicked (stops propagation)', () => {
     const open = vi.fn();
     render(

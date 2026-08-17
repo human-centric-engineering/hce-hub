@@ -90,6 +90,11 @@ export function PhaseBand({
   const tone = band.status ? phaseStatus(band.status) : null;
   const heading = band.name ?? 'No phase';
   const count = band.features.length;
+  // Borrowed rows are NOT features (a borrow isn't membership), so they can't join
+  // the feature count — but a band whose only content is borrowed would then read
+  // "0 features", and if it is `complete`/`parked` it is collapsed too: unlabelled
+  // AND hidden. Count them separately so the header says something is in there.
+  const borrowedCount = bandRows.filter((r) => r.kind === 'task').length;
 
   return (
     <section className={isParked ? 'opacity-80' : undefined}>
@@ -113,6 +118,7 @@ export function PhaseBand({
         }
         <span className="text-muted-foreground text-xs">
           {count} {count === 1 ? 'feature' : 'features'}
+          {borrowedCount > 0 && ` · ${borrowedCount} borrowed`}
         </span>
       </button>
       {open && <div className="mt-3 space-y-3">{rows}</div>}

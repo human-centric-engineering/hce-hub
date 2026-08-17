@@ -19,6 +19,7 @@
  *
  * Clicking opens the same deep-linkable task sheet as any other task row.
  */
+import Link from 'next/link';
 import { CornerDownLeft } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
@@ -48,12 +49,22 @@ export function BorrowedTaskRow({
       tabIndex={0}
       onClick={() => open(task.id)}
       onKeyDown={(e) => {
+        // Only when the ROW itself has focus. Without the target check this
+        // `preventDefault` swallows Enter on the links *inside* the row — tab to the
+        // origin breadcrumb, press Enter, and navigation is cancelled while the sheet
+        // opens instead. The mouse path is guarded by `stopPropagation` on each link;
+        // keyboard needs this, or the row's whole reason to exist is unreachable
+        // without a pointer.
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           open(task.id);
         }
       }}
-      aria-label={`Open task ${task.number != null ? `t-${task.number}` : task.title}`}
+      // Names the origin too: `aria-label` overrides the row's contents, so without
+      // it the breadcrumb — the one thing distinguishing a borrowed row — is never
+      // announced.
+      aria-label={`Open task ${task.number != null ? `t-${task.number}` : task.title}, borrowed from ${featureRef}`}
       className="focus-visible:ring-ring ml-6 flex cursor-pointer items-center gap-3 rounded-lg border border-dashed px-4 py-2.5 text-[13px] transition-colors hover:bg-[var(--bg-tint)] focus-visible:ring-2 focus-visible:outline-none"
       style={{ borderColor: 'var(--line-soft)' }}
     >
@@ -73,13 +84,15 @@ export function BorrowedTaskRow({
           style={{ color: 'var(--ink-faint)' }}
         >
           <CornerDownLeft className="h-3 w-3 shrink-0" aria-hidden />
-          <a
+          {/* `next/link`, matching FeatureRow — a raw <a> would full-page-load and
+              discard the Plan's band/feature expand state and the task-sheet context. */}
+          <Link
             href={featurePath}
             onClick={(e) => e.stopPropagation()}
             className="truncate underline-offset-2 hover:underline"
           >
             {featureRef}
-          </a>
+          </Link>
           {task.originPhaseName && <span className="truncate">· {task.originPhaseName}</span>}
         </span>
       </span>

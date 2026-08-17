@@ -36,6 +36,12 @@ export function TaskRow({ task, ordinal }: { task: PlanTask; ordinal: number }) 
       tabIndex={0}
       onClick={() => open(task.id)}
       onKeyDown={(e) => {
+        // Only when the ROW itself has focus — otherwise this `preventDefault`
+        // swallows Enter on the PR link inside it, cancelling navigation and opening
+        // the sheet instead. The click path already guards with `stopPropagation`;
+        // keyboard had no equivalent. (Surfaced by t-95's review on the sibling
+        // borrowed row, which inherited this shape.)
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           open(task.id);

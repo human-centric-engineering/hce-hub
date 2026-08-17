@@ -96,6 +96,22 @@ describe('TaskRow', () => {
     expect(open).toHaveBeenCalledWith('task-kbd');
   });
 
+  it('does not hijack Enter pressed on the PR link inside the row', () => {
+    // The row swallows Enter/Space to open the sheet; without a target check it
+    // cancelled the PR link's own navigation too. The click path was already
+    // guarded — keyboard was not. (Surfaced by t-95's review on the sibling
+    // borrowed row, which inherited this shape.)
+    const open = vi.fn();
+    render(
+      <TaskSheetControlsProvider value={{ open, close: vi.fn() }}>
+        <TaskRow task={task({ prUrl: 'https://github.com/x/y/pull/5' })} ordinal={1} />
+      </TaskSheetControlsProvider>
+    );
+    const evt = fireEvent.keyDown(screen.getByRole('link'), { key: 'Enter', bubbles: true });
+    expect(open).not.toHaveBeenCalled();
+    expect(evt).toBe(true);
+  });
+
   it('clicking the PR link does not open the sheet (stops propagation)', () => {
     const open = vi.fn();
     render(
