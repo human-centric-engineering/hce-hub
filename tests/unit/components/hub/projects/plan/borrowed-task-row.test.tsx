@@ -71,6 +71,42 @@ describe('BorrowedTaskRow', () => {
     expect(open).toHaveBeenCalledWith('t93');
   });
 
+  it('opens the sheet on keyboard activation (Enter / Space), like every other row', () => {
+    const open = vi.fn();
+    render(
+      <TaskSheetControlsProvider value={{ open, close: vi.fn() }}>
+        <BorrowedTaskRow task={task()} projectRef="hce-hub" />
+      </TaskSheetControlsProvider>
+    );
+    const row = screen.getByRole('button', { name: /Open task t-93/ });
+    fireEvent.keyDown(row, { key: 'Enter' });
+    fireEvent.keyDown(row, { key: ' ' });
+    fireEvent.keyDown(row, { key: 'a' }); // a non-activating key does nothing
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledWith('t93');
+  });
+
+  it('does not open the sheet when the PR link is clicked (stops propagation)', () => {
+    const open = vi.fn();
+    render(
+      <TaskSheetControlsProvider value={{ open, close: vi.fn() }}>
+        <BorrowedTaskRow
+          task={task({ prUrl: 'https://github.com/o/r/pull/156' })}
+          projectRef="hce-hub"
+        />
+      </TaskSheetControlsProvider>
+    );
+    fireEvent.click(screen.getByRole('link', { name: '#156' }));
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('renders the holder avatar image when they have one', () => {
+    renderRow({
+      claimer: { id: 'u1', name: 'Ada Lovelace', email: 'a@x.io', image: 'https://x/a.png' },
+    });
+    expect(screen.getByText('Ada')).toBeInTheDocument();
+  });
+
   it('does not open the sheet when the breadcrumb link is clicked (stops propagation)', () => {
     // Otherwise navigating to the feature would also open the sheet behind it.
     const open = vi.fn();
