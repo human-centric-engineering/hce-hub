@@ -42,6 +42,20 @@ export interface FeatureDetailTaskDTO {
   assignee: UserRef | null;
 }
 
+/**
+ * A phase move drawn as a boundary inside the task list (§33 t-100). The phase
+ * names are snapshots taken when the move happened, so a later rename never
+ * rewrites what a past boundary says; `null` on a side means "unfiled".
+ */
+export interface FeatureTaskPhaseBoundaryDTO {
+  /** The task this boundary is drawn ABOVE; `null` ⇒ draw below the last task. */
+  beforeTaskId: string | null;
+  fromPhaseName: string | null;
+  toPhaseName: string | null;
+  /** ISO instant of the move. */
+  movedAt: string;
+}
+
 /** An indicative-task sketch bullet. */
 export interface FeatureDetailIndicativeTaskDTO {
   id: string;
@@ -79,5 +93,11 @@ export interface FeatureDetailDTO {
   members: UserRef[];
   dependsOn: FeatureDetailRefDTO[];
   tasks: FeatureDetailTaskDTO[];
+  /**
+   * Where this feature changed phase mid-flight — **empty unless it moved**, so
+   * the common case renders exactly as before. `tasks` arrives ordered so each
+   * boundary's bands are contiguous.
+   */
+  taskPhaseBoundaries: FeatureTaskPhaseBoundaryDTO[];
   indicativeTasks: FeatureDetailIndicativeTaskDTO[];
 }

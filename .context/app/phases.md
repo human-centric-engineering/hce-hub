@@ -139,6 +139,18 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
     `update_task { phaseId }` write it; there is **no UI control** — `PhasePicker`
     (below) files a _feature_, and has no task equivalent. So the commitment can be
     read on the Plan but not made there.
+- **A feature that moved mid-flight shows the boundary in its own task list**
+  (f-phase-history §33 t-100, `feature-view/feature-task-list.tsx`) — a rule naming
+  the phase on each side and the date, between the work completed under each. The
+  split keys off **when each task merged**, read from its `task_merged` event
+  (`Task` has no merged-at column), because a feature is normally planned in full
+  and re-homed later — so a creation-time split would draw nothing in exactly the
+  case it exists for. Tasks are grouped into bands rather than split by one divider,
+  since merge order and `t-N` order genuinely diverge; within a band the `t-N` order
+  is untouched, and a feature that never moved renders exactly as before. Unmerged
+  tasks sit in the final band — they will be done under the phase the feature is in
+  now. Moves recorded before §33 shipped do not exist, so features re-homed earlier
+  show no boundary.
 - **`ManagePhasesDialog`** ("Manage phases", top-right of the Plan) — create,
   rename, set status / park, and **drag-to-reorder** (`@dnd-kit`, keyboard-
   accessible: focus the grip, Space, arrows, Space). Reorder is **optimistic** —

@@ -66,6 +66,7 @@ export {
   type FeatureDetailIndicativeTask,
   type FeatureDetailRef,
   type FeatureReference,
+  type FeatureTaskPhaseBoundary,
 } from '@/lib/projects/feature-detail';
 export { planOrder, type PlanOrderInput } from '@/lib/projects/plan-order';
 
