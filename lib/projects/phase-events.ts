@@ -8,10 +8,10 @@
  * previous value — and a phase's own evolution (renamed, re-scoped, parked) went
  * unrecorded entirely. These emitters make every such change **append**.
  *
- * **Why this module exists.** The six phase-write paths do not share a home:
- * three live in `phases-service.ts`, while `update_feature`, `create_task` and
- * `update_task` each set `data.phase` inline in their own transaction and never
- * touch the service. Hand-copying the scope rule and the metadata shape across
+ * **Why this module exists.** The seven phase-write paths do not share a home:
+ * three live in `phases-service.ts`, while `create_feature`, `create_task`,
+ * `update_feature` and `update_task` each set `data.phase` inline in their own
+ * transaction and never touch the service. Hand-copying the scope rule and the metadata shape across
  * four files is exactly how the two drift; the §32 t-80 note on
  * `phaseBelongsToProject` records the same lesson from the same surface.
  *
@@ -132,9 +132,14 @@ export interface PhaseUpdatedInput {
   projectId: string;
   actorUserId: string;
   phaseId: string;
-  /** Which of name / description / status actually changed (`updated` from the service). */
+  /** Which of name / description / status actually CHANGED — not merely supplied. */
   fields: string[];
-  /** The resulting name, when the name changed — so a rename reads as a rename. */
+  /**
+   * The phase's name **after** the edit — always passed, not only on a rename.
+   * A `phase_updated` event carries no feature or task ref for the Log to chip,
+   * so without it a status- or intent-only edit renders as "set the phase to
+   * complete" with nothing to say *which* phase.
+   */
   name?: string;
   /** The resulting status, when the status changed. */
   status?: string;

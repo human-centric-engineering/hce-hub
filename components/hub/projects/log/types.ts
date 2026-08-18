@@ -61,6 +61,8 @@ export interface ProjectEventDTO {
   actorAgentId: string | null;
   feature: EventFeatureRefDTO | null;
   task: EventTaskRefDTO | null;
+  /** The phase this event concerns (raw id), or `null` — §33 t-98. */
+  phaseId: string | null;
   title: string | null;
   body: string | null;
   metadata: unknown;

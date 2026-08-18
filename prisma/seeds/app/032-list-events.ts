@@ -9,7 +9,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const listEventsFunctionDefinition = {
   name: 'list_events',
   description:
-    "Read a project's journal (newest first, capped) — decisions, notes, and lifecycle events (claim / plan / ship / merge / phase change), each with its kind, actor, feature/task ref, authored title + body, and timestamp. Use it to catch up on what happened, or scope with featureId / taskId for one feature's activity or a task's timeline, or phaseId for one phase's history: when it was created, renamed or re-statused, and which features and tasks moved into it. Membership-scoped: a project you can't see is not_found.",
+    "Read a project's journal (newest first, capped) — decisions, notes, and lifecycle events (claim / plan / ship / merge / phase change), each with its kind, actor, feature/task/phase ref, authored title + body, and timestamp. Use it to catch up on what happened, or scope with featureId / taskId for one feature's activity or a task's timeline, or phaseId for one phase's history: when it was created, renamed or re-statused, and which features and tasks moved into it. Membership-scoped: a project you can't see is not_found.",
   parameters: {
     type: 'object',
     properties: {

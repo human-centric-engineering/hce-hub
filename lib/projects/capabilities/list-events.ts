@@ -55,6 +55,8 @@ interface EventRef {
   actorAgentId: string | null;
   feature: { id: string; slug: string | null; title: string } | null;
   task: { id: string; number: number | null } | null;
+  /** The phase this event concerns (raw id), or `null`. */
+  phaseId: string | null;
   /** Authored-kind heading (decision / note); `null` for auto-events. */
   title: string | null;
   /** Authored-kind markdown body; `null` for auto-events. */
@@ -75,7 +77,7 @@ export class ListEventsCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'list_events',
     description:
-      "Read a project's journal (newest first, capped) — decisions, notes, and lifecycle events (claim / plan / ship / merge / phase change), each with its kind, actor, feature/task ref, authored title + body, and timestamp. Use it to catch up on what happened, or scope with featureId / taskId for one feature's activity or a task's timeline, or phaseId for one phase's history: when it was created, renamed or re-statused, and which features and tasks moved into it. Membership-scoped: a project you can't see is not_found.",
+      "Read a project's journal (newest first, capped) — decisions, notes, and lifecycle events (claim / plan / ship / merge / phase change), each with its kind, actor, feature/task/phase ref, authored title + body, and timestamp. Use it to catch up on what happened, or scope with featureId / taskId for one feature's activity or a task's timeline, or phaseId for one phase's history: when it was created, renamed or re-statused, and which features and tasks moved into it. Membership-scoped: a project you can't see is not_found.",
     parameters: {
       type: 'object',
       properties: {
@@ -141,6 +143,7 @@ export class ListEventsCapability extends BaseCapability<Args, Data> {
           actorAgentId: e.actorAgentId,
           feature: e.feature,
           task: e.task,
+          phaseId: e.phaseId,
           title: e.title,
           body: e.body,
           metadata: e.metadata,

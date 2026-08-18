@@ -39,6 +39,7 @@ function eventOf(kind: string, metadata: unknown = null): ProjectEventDTO {
     actorAgentId: null,
     feature: null,
     task: null,
+    phaseId: null,
     title: null,
     body: null,
     metadata,
@@ -123,19 +124,34 @@ describe('describeEvent — phase kinds', () => {
     expect(
       describeEvent(eventOf('phase_updated', { fields: ['name'], name: 'Project flow' }))
     ).toBe('renamed the phase Project flow');
-    expect(describeEvent(eventOf('phase_updated', { fields: ['status'], status: 'active' }))).toBe(
-      'set the phase to active'
-    );
-    expect(describeEvent(eventOf('phase_updated', { fields: ['description'] }))).toBe(
-      'edited the phase intent'
-    );
+    // The name is snapshotted on EVERY phase_updated, not just renames — these
+    // events carry no feature/task ref, so it is all that says WHICH phase.
+    expect(
+      describeEvent(
+        eventOf('phase_updated', { fields: ['status'], status: 'active', name: 'Foundations' })
+      )
+    ).toBe('set Foundations to active');
+    expect(
+      describeEvent(eventOf('phase_updated', { fields: ['description'], name: 'Foundations' }))
+    ).toBe('edited the intent of Foundations');
   });
 
   it('does not claim one specific change when several landed together', () => {
     // Naming just the rename would misreport an edit that also re-statused it.
     expect(
       describeEvent(eventOf('phase_updated', { fields: ['name', 'status'], name: 'Renamed' }))
-    ).toBe('updated the phase');
+    ).toBe('updated the phase Renamed');
+  });
+
+  it('still says something sensible for an event written before names were snapshotted', () => {
+    // Events already in the stream from an earlier build carry no `name`. They must
+    // degrade to the generic phrasing, never to "set  to active" or "undefined".
+    expect(describeEvent(eventOf('phase_updated', { fields: ['status'], status: 'active' }))).toBe(
+      'set the phase to active'
+    );
+    expect(describeEvent(eventOf('phase_updated', { fields: ['description'] }))).toBe(
+      'edited the intent of the phase'
+    );
   });
 
   it('names a created phase, and copes with a nameless one', () => {

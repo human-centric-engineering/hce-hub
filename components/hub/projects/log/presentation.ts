@@ -71,17 +71,21 @@ export function describeEvent(event: ProjectEventDTO): string {
       // than in three more enum values (the `task_assigned` precedent above).
       // Only a single-field edit gets a specific verb; a combined edit reads as
       // "updated", because naming one of two changes would be misleading.
+      // The name is snapshotted on EVERY phase_updated, not just renames — these
+      // events carry no feature/task ref, so it is the only thing identifying which
+      // phase changed. `phaseSuffix` degrades to '' for events written before that.
+      const named = phaseSuffix(meta.name);
       const fields = Array.isArray(meta.fields) ? meta.fields : [];
       if (fields.length === 1) {
-        if (fields[0] === 'name') return `renamed the phase${phaseSuffix(meta.name)}`;
+        if (fields[0] === 'name') return `renamed the phase${named}`;
         if (fields[0] === 'status') {
           return typeof meta.status === 'string'
-            ? `set the phase to ${meta.status}`
-            : 'changed the phase status';
+            ? `set${named || ' the phase'} to ${meta.status}`
+            : `changed the status of${named || ' the phase'}`;
         }
-        if (fields[0] === 'description') return 'edited the phase intent';
+        if (fields[0] === 'description') return `edited the intent of${named || ' the phase'}`;
       }
-      return 'updated the phase';
+      return `updated the phase${named}`;
     }
     case 'phase_membership_changed': {
       // The subject rides in metadata for the same reason. Phase NAMES are

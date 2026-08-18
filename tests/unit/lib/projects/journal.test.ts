@@ -147,6 +147,30 @@ describe('getProjectEvents enrichment', () => {
     });
   });
 
+  it('returns the phase scope pointer, not just filters on it (§33 t-98)', async () => {
+    // The pointer is the point of the feature; a filterable-but-unreturned column
+    // would be the same write-ahead-of-read gap §33 exists to close. Deliberately a
+    // raw id, not a resolved ref — a phase event already carries its name in
+    // metadata, snapshotted at write time.
+    eventFindMany.mockResolvedValue([
+      {
+        id: 'e1',
+        kind: 'phase_updated',
+        actorUserId: null,
+        actorAgentId: null,
+        featureId: null,
+        taskId: null,
+        phaseId: 'ph1',
+        title: null,
+        body: null,
+        metadata: { fields: ['status'], name: 'Foundations', status: 'active' },
+        createdAt: new Date('2026-08-18T00:00:00.000Z'),
+      },
+    ]);
+    const [event] = await getProjectEvents(USER, PROJECT);
+    expect(event.phaseId).toBe('ph1');
+  });
+
   it('nulls a deleted feature/task and an erased actor (retained history)', async () => {
     eventFindMany.mockResolvedValue([
       {

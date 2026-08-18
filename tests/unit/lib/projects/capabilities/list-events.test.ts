@@ -68,6 +68,12 @@ describe('list_events', () => {
     });
   });
 
+  it('returns the phase pointer on each event, not only the filter', async () => {
+    getEvents.mockResolvedValue([{ ...event(), phaseId: 'ph1' }]);
+    const r = await cap.execute({ projectId: 'p1' }, ctx());
+    expect(r.data?.events[0].phaseId).toBe('ph1');
+  });
+
   it('advertises phaseId to the model, not just to the handler', async () => {
     // The published schema is what an MCP client is shown; a param the handler
     // accepts but the schema omits is unreachable over MCP (§21 t-91).

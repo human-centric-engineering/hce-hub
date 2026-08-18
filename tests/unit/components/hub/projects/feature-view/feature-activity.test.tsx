@@ -15,6 +15,7 @@ const planned: ProjectEventDTO = {
   actorAgentId: null,
   feature: { id: 'f1', slug: 'f-mcp', title: 'MCP' },
   task: null,
+  phaseId: null,
   title: null,
   body: null,
   metadata: null,

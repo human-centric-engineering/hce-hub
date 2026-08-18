@@ -182,6 +182,8 @@ describe('updatePhase', () => {
   beforeEach(() => {
     phaseFindUnique.mockResolvedValue({
       projectId: 'p1',
+      name: 'Foundations',
+      description: null,
       status: 'upcoming',
       startedAt: null,
       completedAt: null,
@@ -233,6 +235,8 @@ describe('updatePhase', () => {
   it('does not re-stamp startedAt when already active', async () => {
     phaseFindUnique.mockResolvedValue({
       projectId: 'p1',
+      name: 'Foundations',
+      description: null,
       status: 'active',
       startedAt: new Date('2026-01-01'),
       completedAt: null,
@@ -254,6 +258,8 @@ describe('updatePhase', () => {
     const started = new Date('2026-02-01');
     phaseFindUnique.mockResolvedValue({
       projectId: 'p1',
+      name: 'Foundations',
+      description: null,
       status: 'active',
       startedAt: started,
       completedAt: null,
@@ -267,6 +273,8 @@ describe('updatePhase', () => {
   it('clears completedAt when a completed phase is reopened (no stale "done")', async () => {
     phaseFindUnique.mockResolvedValue({
       projectId: 'p1',
+      name: 'Foundations',
+      description: null,
       status: 'complete',
       startedAt: new Date('2026-02-01'),
       completedAt: new Date('2026-03-01'),
@@ -281,6 +289,8 @@ describe('updatePhase', () => {
   it('drops completedAt when a completed phase is parked', async () => {
     phaseFindUnique.mockResolvedValue({
       projectId: 'p1',
+      name: 'Foundations',
+      description: null,
       status: 'complete',
       startedAt: new Date('2026-02-01'),
       completedAt: new Date('2026-03-01'),
@@ -405,6 +415,8 @@ describe('phase journalling (f-phase-history §33 t-98)', () => {
   it('appends phase_updated naming the fields that actually changed', async () => {
     phaseFindUnique.mockResolvedValue({
       projectId: 'p1',
+      name: 'Foundations',
+      description: null,
       status: 'upcoming',
       startedAt: null,
       completedAt: null,
@@ -419,6 +431,76 @@ describe('phase journalling (f-phase-history §33 t-98)', () => {
       name: 'Project flow',
       status: 'active',
     });
+  });
+
+  it('records only what CHANGED, not what was merely supplied', async () => {
+    // An idempotent `update_phase({status:'active'})` on an already-active phase is
+    // a legitimate call (a retry, a "make sure it's active" step). Journalling it
+    // would put a change in the history that never happened — the same rule the
+    // membership emitter applies to a no-op re-file.
+    phaseFindUnique.mockResolvedValue({
+      projectId: 'p1',
+      name: 'Foundations',
+      description: 'Why this exists',
+      status: 'active',
+      startedAt: new Date('2026-01-01'),
+      completedAt: null,
+    });
+    txPhaseUpdate.mockResolvedValue({});
+    const r = await updatePhase(USER, 'ph1', { status: 'active', name: 'Foundations' });
+    // The patch is still applied and still REPORTED as supplied (API contract)…
+    expect(r.updated).toEqual(['name', 'status']);
+    expect(txPhaseUpdate).toHaveBeenCalled();
+    // …but nothing actually changed, so the journal stays silent.
+    expect(txEventCreate).not.toHaveBeenCalled();
+  });
+
+  it('records a partial change when only one supplied field actually differs', async () => {
+    phaseFindUnique.mockResolvedValue({
+      projectId: 'p1',
+      name: 'Foundations',
+      description: null,
+      status: 'upcoming',
+      startedAt: null,
+      completedAt: null,
+    });
+    txPhaseUpdate.mockResolvedValue({});
+    await updatePhase(USER, 'ph1', { name: 'Foundations', status: 'active' });
+    expect(txEventCreate.mock.calls[0][0].data.metadata).toMatchObject({ fields: ['status'] });
+  });
+
+  it('always snapshots the phase name, even on a status-only edit', async () => {
+    // A phase_updated event has no feature/task ref to chip, so without the name
+    // the Log reads "set the phase to complete" with no way to tell which phase.
+    phaseFindUnique.mockResolvedValue({
+      projectId: 'p1',
+      name: 'Foundations',
+      description: null,
+      status: 'upcoming',
+      startedAt: null,
+      completedAt: null,
+    });
+    txPhaseUpdate.mockResolvedValue({});
+    await updatePhase(USER, 'ph1', { status: 'complete' });
+    expect(txEventCreate.mock.calls[0][0].data.metadata).toEqual({
+      fields: ['status'],
+      name: 'Foundations',
+      status: 'complete',
+    });
+  });
+
+  it('treats clearing an already-null description as no change', async () => {
+    phaseFindUnique.mockResolvedValue({
+      projectId: 'p1',
+      name: 'Foundations',
+      description: null,
+      status: 'upcoming',
+      startedAt: null,
+      completedAt: null,
+    });
+    txPhaseUpdate.mockResolvedValue({});
+    await updatePhase(USER, 'ph1', { description: null });
+    expect(txEventCreate).not.toHaveBeenCalled();
   });
 
   it('records the phase a feature actually came from, read inside the transaction', async () => {

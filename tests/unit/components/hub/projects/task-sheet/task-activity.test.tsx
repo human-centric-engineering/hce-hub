@@ -15,6 +15,7 @@ const claimed: ProjectEventDTO = {
   actorAgentId: null,
   feature: null,
   task: { id: 't1', number: 5 },
+  phaseId: null,
   title: null,
   body: null,
   metadata: null,

@@ -170,7 +170,17 @@ export async function updatePhase(
 ): Promise<UpdatePhaseResult> {
   const phase = await prisma.phase.findUnique({
     where: { id: phaseId },
-    select: { projectId: true, status: true, startedAt: true, completedAt: true },
+    // `name` / `description` are read for the journal, not for the patch: the
+    // entry snapshots the phase's name (§33 t-98) and records only the fields
+    // whose value actually CHANGED.
+    select: {
+      projectId: true,
+      name: true,
+      description: true,
+      status: true,
+      startedAt: true,
+      completedAt: true,
+    },
   });
   if (!phase) throw new NotFoundError(`Phase ${phaseId} not found`);
   // Scope to the route's project when asked (no cross-project id-swap).
@@ -182,17 +192,30 @@ export async function updatePhase(
   if (basis === null) throw new NotFoundError(`Phase ${phaseId} not found`); // non-member ≡ absent
 
   const data: Prisma.PhaseUpdateInput = {};
+  // Two lists, deliberately. `updated` is what the CALLER SUPPLIED — it drives the
+  // result and the "nothing to update" 400, and stays the API contract it always
+  // was. `changed` is what actually DIFFERS from the stored row, and is the only
+  // thing the journal is allowed to claim: `update_phase({status:'active'})` on an
+  // already-active phase is a legitimate idempotent call (a retry, a "make sure"
+  // step), and recording "set the phase to active" for it would put a change in the
+  // history that never happened. That is the same rule `recordPhaseMembershipChange`
+  // applies to a no-op re-file — this history is meant to be trustworthy.
   const updated: string[] = [];
+  const changed: string[] = [];
   if (input.name !== undefined) {
     data.name = input.name;
     updated.push('name');
+    if (input.name !== phase.name) changed.push('name');
   }
   if (input.description !== undefined) {
     data.description = input.description;
     updated.push('description');
+    // Normalise the empty patch: clearing an already-null description is no change.
+    if ((input.description ?? null) !== phase.description) changed.push('description');
   }
   if (input.status !== undefined) {
     data.status = input.status;
+    if (input.status !== phase.status) changed.push('status');
     // Keep the lifecycle timestamps coherent with the resulting status:
     //   completedAt set ⟺ status is complete (reopening clears it, no stale "done"),
     //   startedAt persists once the phase has begun (stamped on the first
@@ -215,12 +238,16 @@ export async function updatePhase(
   // One transaction so the journal entry commits iff the edit did (§33 t-98).
   await executeTransaction(async (tx) => {
     await tx.phase.update({ where: { id: phaseId }, data });
+    // `changed`, not `updated` — and the name is ALWAYS snapshotted, even on a
+    // status- or description-only edit: the entry has no feature/task ref to chip,
+    // so without it the Log reads "set the phase to complete" with no way to tell
+    // which of the project's phases that was. Emits nothing when `changed` is empty.
     await recordPhaseUpdated(tx, {
       projectId: phase.projectId,
       actorUserId: userId,
       phaseId,
-      fields: updated,
-      ...(input.name !== undefined ? { name: input.name } : {}),
+      fields: changed,
+      name: input.name ?? phase.name,
       ...(input.status !== undefined ? { status: input.status } : {}),
     });
   });
@@ -342,11 +369,13 @@ export async function assignFeatureToPhase(
 
   // One transaction so the journal entry commits iff the move did (§33 t-98).
   await executeTransaction(async (tx) => {
-    // The phase being REPLACED is read inside the transaction, not from the
-    // earlier access resolve: `fromPhaseId` must be the value this write actually
-    // overwrote, and an access read taken before the transaction can be stale by
-    // the time it commits. This is history — a plausible previous value is worse
-    // than none.
+    // The phase being REPLACED is read inside the transaction rather than from the
+    // earlier access resolve, so `fromPhaseId` is as close to the overwritten value
+    // as this isolation level allows. Honest limit, identical to `update_feature`'s:
+    // at the Read Committed default two concurrent assigns can both read the same
+    // `from`, so one entry may name a phase already superseded. Both destinations
+    // and the final state stay correct, and raising the isolation for a journal
+    // field would repeat the regression t-87's review caught.
     const before = await tx.feature.findUnique({
       where: { id: featureId },
       select: { phase: { select: { id: true, name: true } } },

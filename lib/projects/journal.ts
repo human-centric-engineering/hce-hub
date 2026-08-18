@@ -49,6 +49,13 @@ export interface ProjectEventView {
   feature: EventFeatureRef | null;
   /** The task this event concerns, or `null` (feature/project-level or deleted). */
   task: EventTaskRef | null;
+  /**
+   * The phase this event concerns, or `null` (§33 t-98). A raw id, not a resolved
+   * ref: unlike features and tasks, a phase event already carries its name in
+   * `metadata` (snapshotted at write time), so resolving one here would add a
+   * fourth batched lookup only to return today's name for a historic entry.
+   */
+  phaseId: string | null;
   /** Authored-kind heading (decision / note); `null` for auto-events. */
   title: string | null;
   /** Authored-kind markdown body; `null` for auto-events. */
@@ -132,6 +139,7 @@ export async function getProjectEvents(
     actorAgentId: e.actorAgentId,
     feature: e.featureId ? (featureMap.get(e.featureId) ?? null) : null,
     task: e.taskId ? (taskMap.get(e.taskId) ?? null) : null,
+    phaseId: e.phaseId,
     title: e.title,
     body: e.body,
     metadata: e.metadata,
