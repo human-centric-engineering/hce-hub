@@ -18,7 +18,7 @@
  * the §09 Plan / §10 Board), and every nullable `user` ref resolves to
  * `UserRef | null` ("unassigned / former member"), never dereferenced.
  */
-import type { FeaturePlanningStage, Prisma, TaskKind } from '@prisma/client';
+import type { FeaturePlanningStage, Prisma, TaskKind, TaskStatus } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { NotFoundError } from '@/lib/api/errors';
 import { getAccessibleProjectByRef } from '@/lib/projects/access';
@@ -213,7 +213,8 @@ async function loadFeaturePhaseMoves(projectId: string, featureId: string): Prom
  * **The merge instant lives only on the event.** `Task` has no merged-at column
  * — `complete_task` flips `status` and the timestamp survives solely as the
  * `task_merged` event's `createdAt`. That is why this reads the journal rather
- * than the rows.
+ * than the rows, and why a *merged* task with no event is read as imported
+ * history rather than as unfinished work.
  *
  * **Bands, not one divider.** Merge order and `t-N` order genuinely diverge
  * (f-work-kinds merged t-89 nine hours before t-88), so a single marker inserted
@@ -222,7 +223,7 @@ async function loadFeaturePhaseMoves(projectId: string, featureId: string): Prom
  * the original number order is untouched, and a feature that never moved has one
  * band and so renders byte-identically to before.
  */
-async function placeTasksInPhaseBands<T extends { id: string }>(
+async function placeTasksInPhaseBands<T extends { id: string; status: TaskStatus }>(
   projectId: string,
   featureId: string,
   tasks: T[],
@@ -244,12 +245,19 @@ async function placeTasksInPhaseBands<T extends { id: string }>(
   const bands = new Map(
     tasks.map((t) => {
       const at = mergedAt.get(t.id);
-      // Not merged ⇒ not done ⇒ it will be done under the phase the feature is
-      // in NOW, which is the last band. Placed deliberately, never dropped.
-      if (!at) return [t.id, moves.length] as const;
-      let band = 0;
-      while (band < moves.length && moves[band].at < at) band += 1;
-      return [t.id, band] as const;
+      if (at) {
+        let band = 0;
+        while (band < moves.length && moves[band].at < at) band += 1;
+        return [t.id, band] as const;
+      }
+      // No merge event. Two opposite cases, and conflating them is wrong on the
+      // majority of rows — 34 of the dev DB's 47 merged tasks have no event:
+      //  - ALREADY merged ⇒ imported history (`completeTask` is the sole emitter
+      //    and every live merge, webhook included, goes through it), so it
+      //    predates any move we could have recorded → the FIRST band.
+      //  - not merged ⇒ not done ⇒ it will be done under the phase the feature
+      //    is in now → the LAST band.
+      return [t.id, t.status === 'merged' ? 0 : moves.length] as const;
     })
   );
   const bandOf = (id: string): number => bands.get(id) ?? 0;

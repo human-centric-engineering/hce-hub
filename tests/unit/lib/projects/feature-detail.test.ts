@@ -364,6 +364,36 @@ describe('getFeatureDetail — phase boundaries (§33 t-100)', () => {
     ]);
   });
 
+  it('places a merged task with no event in the FIRST band — imported history', async () => {
+    // 34 of the dev DB's 47 merged tasks have no `task_merged` event: they came
+    // in through the f-selfhost-cutover import, not through `complete_task`.
+    // `completeTask` is the sole emitter and every live merge (webhook included)
+    // routes through it, so no event + already merged ⇒ merged before anything
+    // we recorded ⇒ before every recorded move. Binning those as "not done yet"
+    // would put the boundary above the whole list and claim the work happened
+    // after a move it long predates.
+    featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1), taskRow('t2', 2)] }));
+    withEvents(
+      [move('2026-08-10T12:00:00.000Z', 'Project flow', 'Ideas Park')],
+      [merged('t2', '2026-08-11T09:00:00.000Z')] // t1 merged, but no event
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries[0]?.beforeTaskId).toBe('t2');
+  });
+
+  it('separates an eventless MERGED task from an eventless UNMERGED one', async () => {
+    // Same missing datum, opposite meanings — the first band vs the last.
+    featureFindFirst.mockResolvedValue(
+      featureRow({
+        tasks: [taskRow('t1', 1), { ...taskRow('t2', 2), status: 'active' }],
+      })
+    );
+    withEvents([move('2026-08-10T12:00:00.000Z', 'A', 'B')], []); // no merge events at all
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.tasks.map((t) => t.id)).toEqual(['t1', 't2']);
+    expect(detail.taskPhaseBoundaries[0]?.beforeTaskId).toBe('t2');
+  });
+
   it('places an unmerged task in the FINAL band — after the move, never dropped', async () => {
     featureFindFirst.mockResolvedValue(
       featureRow({

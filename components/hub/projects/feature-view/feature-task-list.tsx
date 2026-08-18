@@ -130,26 +130,30 @@ export function FeatureTaskList({
 }) {
   if (tasks.length > 0) {
     // Several moves can share an anchor (two moves with no completed work
-    // between them), so this is a list per task, not one marker per task.
-    const above = new Map<string, FeatureTaskPhaseBoundaryDTO[]>();
-    const trailing: FeatureTaskPhaseBoundaryDTO[] = [];
-    for (const b of phaseBoundaries) {
-      if (b.beforeTaskId === null) trailing.push(b);
-      else above.set(b.beforeTaskId, [...(above.get(b.beforeTaskId) ?? []), b]);
-    }
+    // between them), so this is a list per task, not one marker per task. The
+    // React key is the position in the server-ordered list, not the move's
+    // timestamp + destination — two moves CAN share both of those.
+    type Keyed = { boundary: FeatureTaskPhaseBoundaryDTO; key: number };
+    const above = new Map<string, Keyed[]>();
+    const trailing: Keyed[] = [];
+    phaseBoundaries.forEach((boundary, key) => {
+      const entry = { boundary, key };
+      if (boundary.beforeTaskId === null) trailing.push(entry);
+      else above.set(boundary.beforeTaskId, [...(above.get(boundary.beforeTaskId) ?? []), entry]);
+    });
 
     return (
       <div className="flex flex-col gap-2">
         {tasks.map((t) => (
           <Fragment key={t.id}>
             {(above.get(t.id) ?? []).map((b) => (
-              <PhaseBoundary key={`${b.movedAt}-${b.toPhaseName}`} boundary={b} />
+              <PhaseBoundary key={b.key} boundary={b.boundary} />
             ))}
             <TaskItem task={t} />
           </Fragment>
         ))}
         {trailing.map((b) => (
-          <PhaseBoundary key={`${b.movedAt}-${b.toPhaseName}`} boundary={b} />
+          <PhaseBoundary key={b.key} boundary={b.boundary} />
         ))}
       </div>
     );
