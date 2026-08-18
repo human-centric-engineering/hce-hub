@@ -160,7 +160,11 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
   not "the band directly above is non-empty" — an empty band _between_ two others
   is the stacked-move case (A→B→C with nothing under B) and both rules must stay
   or B vanishes. Moves made before §33 shipped were never recorded, so a feature
-  re-homed earlier shows no boundary.
+  re-homed earlier shows no boundary. **The boundary does not read
+  `Task.phaseId`** — a commitment is a different axis from "where was the feature
+  when this landed", and the feature page carries no reciprocal `→ <phase>` mark
+  (unlike the Plan's task row), so a committed task is placed by merge time and
+  its commitment is invisible on this surface.
 - **`ManagePhasesDialog`** ("Manage phases", top-right of the Plan) — create,
   rename, set status / park, and **drag-to-reorder** (`@dnd-kit`, keyboard-
   accessible: focus the grip, Space, arrows, Space). Reorder is **optimistic** —

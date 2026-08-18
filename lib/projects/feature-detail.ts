@@ -126,7 +126,12 @@ export interface FeatureDetail {
    */
   members: UserRef[];
   dependsOn: FeatureDetailRef[];
-  /** Real tasks (populated once planned). */
+  /**
+   * Real tasks (populated once planned), in `t-N` order — except on a feature
+   * that changed phase mid-flight, where they are grouped by phase band first
+   * and `t-N`-ordered within each (§33 t-100). Read `taskPhaseBoundaries` to
+   * interpret the grouping; ignoring it leaves the reordering unexplained.
+   */
   tasks: FeatureDetailTask[];
   /**
    * Where the feature changed phase mid-flight (§33 t-100). **Empty for a
@@ -215,6 +220,18 @@ async function loadFeaturePhaseMoves(projectId: string, featureId: string): Prom
  * `task_merged` event's `createdAt`. That is why this reads the journal rather
  * than the rows, and why a *merged* task with no event is read as imported
  * history rather than as unfinished work.
+ *
+ * **What this does NOT read: `Task.phaseId`.** That column is a *commitment*
+ * marker — the phase that chose to do the work (§32 t-80/t-95) — and it is a
+ * different axis from "where was the feature when this landed". The Plan already
+ * renders a committed task as a borrowed row in its committed band, with a
+ * reciprocal `→ <phase>` mark on the task's own row; the feature page has no such
+ * mark (it never receives `phaseId`), so on this surface a committed task is
+ * placed by merge time like any other and its commitment is simply invisible.
+ * That blindness predates this task — it is a gap in t-95's reciprocal mark, not
+ * something the boundary introduced — but the boundary does make it easier to
+ * misread. Filed as its own work rather than widened into here, because which
+ * fact should win is an owner decision, not a rendering detail.
  *
  * **The asymmetry is deliberate.** A rule with nothing *above* it is dropped (it
  * segments no work); a rule with nothing *below* it is kept, because "all of this
@@ -342,6 +359,9 @@ export async function getFeatureDetail(
         },
         tasks: {
           // Numerical order — tasks are built sequentially (f-status-model §20).
+          // Since §33 t-100 this is the order WITHIN a phase band, not necessarily
+          // the order of the array returned: a feature that moved phase mid-flight
+          // has its rows grouped by band first (see `placeTasksInPhaseBands`).
           orderBy: [{ number: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
           select: {
             id: true,
