@@ -21,6 +21,13 @@ export interface PhaseView {
   description: string | null;
   status: PhaseStatus;
   ordinal: number;
+  /**
+   * When the phase began and finished — derived in `phases-service` since
+   * f-phases §22, read by nothing until f-phase-history §33 t-99. ISO strings so
+   * every consumer (UI, MCP) gets the same wire shape.
+   */
+  startedAt: string | null;
+  completedAt: string | null;
   /** Features currently filed under this phase. */
   featureCount: number;
 }
@@ -43,6 +50,8 @@ export async function listProjectPhases(userId: string, projectId: string): Prom
       description: true,
       status: true,
       ordinal: true,
+      startedAt: true,
+      completedAt: true,
       _count: { select: { features: true } },
     },
   });
@@ -53,6 +62,8 @@ export async function listProjectPhases(userId: string, projectId: string): Prom
     description: p.description,
     status: p.status,
     ordinal: p.ordinal,
+    startedAt: p.startedAt?.toISOString() ?? null,
+    completedAt: p.completedAt?.toISOString() ?? null,
     featureCount: p._count.features,
   }));
 }

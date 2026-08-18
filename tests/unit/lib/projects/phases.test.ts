@@ -49,6 +49,8 @@ describe('listProjectPhases', () => {
         description: 'release band',
         status: 'active',
         ordinal: 0,
+        startedAt: new Date('2026-08-01T00:00:00.000Z'),
+        completedAt: null,
         _count: { features: 3 },
       },
       {
@@ -57,6 +59,8 @@ describe('listProjectPhases', () => {
         description: null,
         status: 'parked',
         ordinal: 1,
+        startedAt: null,
+        completedAt: null,
         _count: { features: 0 },
       },
     ]);
@@ -68,6 +72,9 @@ describe('listProjectPhases', () => {
         description: 'release band',
         status: 'active',
         ordinal: 0,
+        // Serialised to ISO at the boundary so the client mirrors it without a Date.
+        startedAt: '2026-08-01T00:00:00.000Z',
+        completedAt: null,
         featureCount: 3,
       },
       {
@@ -76,6 +83,8 @@ describe('listProjectPhases', () => {
         description: null,
         status: 'parked',
         ordinal: 1,
+        startedAt: null,
+        completedAt: null,
         featureCount: 0,
       },
     ]);

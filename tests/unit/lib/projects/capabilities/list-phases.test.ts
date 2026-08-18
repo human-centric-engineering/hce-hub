@@ -119,6 +119,8 @@ describe('list_phases', () => {
                 status: 'active',
                 ordinal: 0,
                 description: 'sensitive planning prose that must not be persisted',
+                startedAt: null,
+                completedAt: null,
                 features: [],
               },
             ],

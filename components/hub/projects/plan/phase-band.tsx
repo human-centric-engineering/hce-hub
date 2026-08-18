@@ -16,7 +16,7 @@ import { ChevronRight } from 'lucide-react';
 import { FeatureRow } from '@/components/hub/projects/plan/feature-row';
 import { BorrowedTaskRow } from '@/components/hub/projects/plan/borrowed-task-row';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
-import { phaseStatus } from '@/components/hub/projects/plan/presentation';
+import { phaseStatus, shortDate } from '@/components/hub/projects/plan/presentation';
 import type { PlanPhaseBand } from '@/components/hub/projects/plan/types';
 
 export function PhaseBand({
@@ -96,6 +96,18 @@ export function PhaseBand({
   // AND hidden. Count them separately so the header says something is in there.
   const borrowedCount = bandRows.filter((r) => r.kind === 'task').length;
 
+  // The phase's own lifecycle, shown only where it says something: a started date
+  // once it has begun, and a finished date only when it actually finished. A
+  // `complete` phase shows the span; an `upcoming` one shows nothing rather than
+  // an empty placeholder. Derived coherently since f-phases §22 and rendered
+  // nowhere until now (§33 t-99).
+  const lifecycle = [
+    band.startedAt ? `started ${shortDate(band.startedAt)}` : null,
+    band.completedAt ? `finished ${shortDate(band.completedAt)}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
     <section className={isParked ? 'opacity-80' : undefined}>
       <button
@@ -119,8 +131,21 @@ export function PhaseBand({
         <span className="text-muted-foreground text-xs">
           {count} {count === 1 ? 'feature' : 'features'}
           {borrowedCount > 0 && ` · ${borrowedCount} borrowed`}
+          {lifecycle && ` · ${lifecycle}`}
         </span>
       </button>
+      {/*
+        The authored intent — why this grouping exists and what would make it
+        complete. Rendered under the header rather than in it: it is prose, and
+        the header is a row of labels. Only when open, so a collapsed band stays
+        one line, and clamped to two lines because a band is a summary — the full
+        text belongs on a phase page (idea #9).
+      */}
+      {open && band.description && (
+        <p className="text-muted-foreground mt-1 line-clamp-2 px-2 pl-8 text-xs leading-relaxed">
+          {band.description}
+        </p>
+      )}
       {open && <div className="mt-3 space-y-3">{rows}</div>}
     </section>
   );

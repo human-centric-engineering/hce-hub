@@ -54,6 +54,9 @@ interface PhaseRef {
   ordinal: number | null;
   /** The phase's authored intent — why this grouping exists (§32 t-80); `null` for the residual band. */
   description: string | null;
+  /** When the phase began / finished (ISO); `null` when not yet, or the residual band. */
+  startedAt: string | null;
+  completedAt: string | null;
   features: FeatureRef[];
 }
 
@@ -73,7 +76,7 @@ export class ListPhasesCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'list_phases',
     description:
-      "Read a project's structure — its phases (with ids, names, status, and the authored description saying why the grouping exists) and the features filed under each (with ids, slugs, numbers, status), plus a residual bucket (phase id null) for features not filed under any phase. Use it to discover the phase id to file a feature into, a phase's intent before committing work to it, or a feature's id to act on. Membership-scoped: a project you can't see is not_found.",
+      "Read a project's structure — its phases (with ids, names, status, lifecycle dates, and the authored description saying why the grouping exists) and the features filed under each (with ids, slugs, numbers, status), plus a residual bucket (phase id null) for features not filed under any phase. Use it to discover the phase id to file a feature into, a phase's intent before committing work to it, or a feature's id to act on. Membership-scoped: a project you can't see is not_found.",
     parameters: {
       type: 'object',
       properties: {
@@ -113,6 +116,8 @@ export class ListPhasesCapability extends BaseCapability<Args, Data> {
           status: band.status,
           ordinal: band.ordinal,
           description: band.description,
+          startedAt: band.startedAt,
+          completedAt: band.completedAt,
           features: band.features.map((f) => ({
             id: f.id,
             number: f.number,

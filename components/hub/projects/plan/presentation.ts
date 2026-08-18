@@ -80,3 +80,23 @@ export function prLabel(url: string): string {
   const seg = url.split('/').filter(Boolean).pop() ?? url;
   return /^\d+$/.test(seg) ? `#${seg}` : seg;
 }
+
+/**
+ * A phase lifecycle date, rendered short ("3 Aug", "3 Aug 2025").
+ *
+ * Deliberately absolute, not relative: `timeAgo` suits the Log, where an event is
+ * a moment you are catching up on, but a phase's start and finish are milestones
+ * you compare — "started 3 Aug, finished 18 Aug" reads as a span in a way
+ * "2w · 3d" does not. The year appears only when it differs from the current one,
+ * so the common case stays compact. Deterministic given `now` so it is testable
+ * without faking the clock.
+ */
+export function shortDate(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  });
+}

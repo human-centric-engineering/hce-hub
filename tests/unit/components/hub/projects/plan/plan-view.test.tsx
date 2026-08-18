@@ -46,9 +46,18 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
  * about features. Defaulted below to exactly those features, which is what the
  * server produces for a band with nothing borrowed into it (§32 t-95).
  */
-type BandInput = Omit<PlanPhaseBand, 'rows'> & { rows?: PlanBandRow[] };
+type BandInput = Omit<PlanPhaseBand, 'rows' | 'description' | 'startedAt' | 'completedAt'> & {
+  rows?: PlanBandRow[];
+  /** §33 t-99 — optional here too: most tests care about grouping, not the header. */
+  description?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+};
 
 const withRows = (b: BandInput): PlanPhaseBand => ({
+  description: null,
+  startedAt: null,
+  completedAt: null,
   ...b,
   rows: b.rows ?? b.features.map((feature) => ({ kind: 'feature', feature })),
 });

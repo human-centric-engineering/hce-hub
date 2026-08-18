@@ -140,6 +140,16 @@ export interface PlanPhaseBand {
   /** `null` for the residual band; `parked`/`complete` bands collapse by default. */
   status: PhaseStatus | null;
   ordinal: number | null;
+  /**
+   * The phase's authored intent — why this grouping exists, and what would make
+   * it complete. Written since f-phases §22 and carried by the payload all along;
+   * this mirror simply never declared it, so nothing could render it (§33 t-99).
+   * `null` for the residual band, which nobody authored.
+   */
+  description: string | null;
+  /** When the phase began / finished (ISO); `null` when not yet, or residual. */
+  startedAt: string | null;
+  completedAt: string | null;
   /** Features filed under this phase — the count, the summary, the auto-expand pick. */
   features: PlanFeature[];
   /** What the band renders, in readiness order: those features plus borrowed tasks. */
