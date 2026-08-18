@@ -357,6 +357,23 @@ describe('updatePhase', () => {
     expect(data.startedAt).toBeUndefined(); // left exactly as the concurrent write left it
   });
 
+  it('runs a STATUS edit at Serializable, and a plain edit at the default (§33 t-103 review)', async () => {
+    // In-transaction derivation narrowed the lost-update window but did not close
+    // it: READ COMMITTED plus a non-locking re-read still lets B read null, block on
+    // A's row lock, then stamp over A. SSI aborts one of the pair instead.
+    //
+    // Conditional on purpose — the §21 t-87 review caught the unconditional version
+    // of this on `update_task`: a plain rename has no such hazard and would start
+    // returning P2034 where it used to just wait on the lock.
+    await updatePhase(USER, 'ph1', { status: 'complete' });
+    expect(executeTransaction).toHaveBeenLastCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
+
+    await updatePhase(USER, 'ph1', { name: 'Renamed' });
+    expect(executeTransaction).toHaveBeenLastCalledWith(expect.any(Function), undefined);
+  });
+
   it('clears completedAt when a completed phase is reopened (no stale "done")', async () => {
     setPhaseRow({
       projectId: 'p1',

@@ -516,6 +516,55 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
     expect(screen.getByText('First work')).toBeInTheDocument();
   });
 
+  it('does not re-open a band the reader collapsed when a refresh moves auto-expand into it', () => {
+    // The open-on-focus effect is keyed on `focused` (the deep-link) and NOT on the
+    // wider `forceOpen`, which is also true for "this band holds the auto-expanded
+    // feature". `ManagePhasesDialog` calls `router.refresh()` after every write, so
+    // the Plan re-renders without remounting — and a refresh that gives a feature an
+    // `active` task flips that band's `forceOpen` false → true. Keyed on `forceOpen`,
+    // that would re-open a band the reader had just clicked shut. Following a link is
+    // a request to see a band; a background refresh is not.
+    const band = (over: Partial<PlanFeature>) =>
+      banded([
+        {
+          id: 'one',
+          name: 'Foundations',
+          status: 'active', // open by default, so it can be collapsed by hand
+          ordinal: 0,
+          features: [feature({ id: 'a', title: 'Work in the band', ...over })],
+        },
+      ]);
+
+    const { rerender } = render(<PlanView plan={band({ status: 'shipped' })} />);
+    expect(screen.getByText('Work in the band')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Foundations/ }));
+    expect(screen.queryByText('Work in the band')).not.toBeInTheDocument();
+
+    // A refresh lands: the feature now has an active task, so it becomes the
+    // auto-expand pick and this band's `forceOpen` turns true.
+    rerender(
+      <PlanView
+        plan={band({
+          status: 'in_flight',
+          tasks: [
+            {
+              id: 't1',
+              number: 1,
+              title: 'Live',
+              status: 'active',
+              kind: 'feature_work',
+              prUrl: null,
+              claimer: null,
+              committedPhaseName: null,
+            },
+          ],
+        })}
+      />
+    );
+    expect(screen.queryByText('Work in the band')).not.toBeInTheDocument();
+  });
+
   it('offsets the scroll anchor past the sticky topbar', () => {
     // `scrollIntoView({block:'start'})` aligns the band with the viewport top,
     // which the shell's sticky 52px topbar then covers — you land inside the

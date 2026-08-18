@@ -63,11 +63,18 @@ export function PhaseBand({
   // same-route searchParam change re-renders without remounting; it was latent only
   // because the sole link producer today sits on a different route.
   //
-  // Opens, never closes: `forceOpen` going false means some OTHER band became the
+  // Keyed on `focused` (the deep-link) and NOT on `forceOpen`, which is the wider
+  // "…or this band holds the auto-expanded feature". `ManagePhasesDialog` calls
+  // `router.refresh()` after every write, re-rendering the Plan without remounting,
+  // so a refresh that moves the auto-expanded feature into this band would flip
+  // `forceOpen` false → true and re-open a band the reader had just clicked shut.
+  // Following a link is a request to see that band; a background refresh is not.
+  //
+  // Opens, never closes: `focused` going false means some OTHER band became the
   // target, which is no reason to slam this one shut on someone who opened it.
   useEffect(() => {
-    if (forceOpen) setOpen(true);
-  }, [forceOpen]);
+    if (focused) setOpen(true);
+  }, [focused]);
 
   // Bring the deep-linked band into view. Optional call because jsdom does not
   // implement scrollIntoView, and a link that scrolls is a nicety — it must never

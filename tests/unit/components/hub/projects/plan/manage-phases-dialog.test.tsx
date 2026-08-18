@@ -176,7 +176,9 @@ describe('ManagePhasesDialog', () => {
     // gets the new closure and short-circuits. This test therefore pins the
     // BEHAVIOUR (one write, one audit row) rather than any guard — it is a
     // regression net for a future change to batching or to the flush path, and it
-    // deliberately passes against today's code with nothing added.
+    // deliberately passes against today's code with nothing added. Measured with a
+    // real focusout: the field alone saves once, and adding the close in the same
+    // tick still saves once — in either order.
     const fetchMock = okFetch();
     vi.stubGlobal('fetch', fetchMock);
     render(<ManagePhasesDialog projectId="p1" phases={phases} />);
@@ -185,9 +187,19 @@ describe('ManagePhasesDialog', () => {
     const intent = screen.getByLabelText('Phase intent: Foundations');
     fireEvent.change(intent, { target: { value: 'Typed once, dismissed by click' } });
 
-    // One act() = one batch, which is what "the same tick" means here.
+    // One act() = one batch, which is what "the same tick" means here. Escape
+    // stands in for the pointerdown-dismissal: both reach the same `flushPending`,
+    // and the reverse order (close first, then focusout) measures identically.
+    //
+    // `focusout`, NOT `blur` — React binds onBlur to the native focusout event, so
+    // a raw `new FocusEvent('blur')` is ignored by its delegated listener and the
+    // save path is never entered at all. The first version of this test dispatched
+    // `blur` and measured 0 saves while asserting 1, so it passed for the wrong
+    // reason and would have passed against a genuinely double-writing
+    // implementation. RTL's `fireEvent.blur` dispatches focusout for exactly this
+    // reason; going around it is what lost the coverage.
     act(() => {
-      intent.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+      intent.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
       intent.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
 
