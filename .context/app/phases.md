@@ -139,6 +139,32 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
     `update_task { phaseId }` write it; there is **no UI control** — `PhasePicker`
     (below) files a _feature_, and has no task equivalent. So the commitment can be
     read on the Plan but not made there.
+- **A feature that moved mid-flight shows the boundary in its own task list**
+  (f-phase-history §33 t-100, `feature-view/feature-task-list.tsx`) — a rule naming
+  the phase on each side and the date, between the work completed under each. The
+  split keys off **when each task merged**, read from its `task_merged` event
+  (`Task` has no merged-at column), because a feature is normally planned in full
+  and re-homed later — so a creation-time split would draw nothing in exactly the
+  case it exists for. Tasks are grouped into bands rather than split by one divider,
+  since merge order and `t-N` order genuinely diverge; within a band the `t-N` order
+  is untouched, and a feature that never moved renders exactly as before. A task
+  with no merge event is read by its `status`: **merged** ⇒ imported history
+  (`completeTask` is the sole emitter and every live merge routes through it, so
+  no event means it predates anything recorded) ⇒ the _first_ band; **unmerged**
+  ⇒ not done ⇒ the _last_ band, since it will be done under the phase the feature
+  is in now. That distinction is load-bearing, not tidiness — most of the
+  imported §1–§21 tasks have no event. A rule with **nothing above it** is dropped
+  (it would segment no work — a feature re-homed before any of its work landed);
+  a rule with nothing _below_ it is kept, because "all of this was done, then it
+  moved" is a real statement. The drop tests "any task at or above this band",
+  not "the band directly above is non-empty" — an empty band _between_ two others
+  is the stacked-move case (A→B→C with nothing under B) and both rules must stay
+  or B vanishes. Moves made before §33 shipped were never recorded, so a feature
+  re-homed earlier shows no boundary. **The boundary does not read
+  `Task.phaseId`** — a commitment is a different axis from "where was the feature
+  when this landed", and the feature page carries no reciprocal `→ <phase>` mark
+  (unlike the Plan's task row), so a committed task is placed by merge time and
+  its commitment is invisible on this surface.
 - **`ManagePhasesDialog`** ("Manage phases", top-right of the Plan) — create,
   rename, set status / park, and **drag-to-reorder** (`@dnd-kit`, keyboard-
   accessible: focus the grip, Space, arrows, Space). Reorder is **optimistic** —

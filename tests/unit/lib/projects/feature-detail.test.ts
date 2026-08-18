@@ -6,11 +6,15 @@
  * effective task status, null owner/claimer/assignee (never a deref), and the
  * indicative sketch.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 
 vi.mock('@/lib/projects/access', () => ({ getAccessibleProjectByRef: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
-  prisma: { feature: { findFirst: vi.fn() }, projectMember: { findMany: vi.fn() } },
+  prisma: {
+    feature: { findFirst: vi.fn() },
+    projectMember: { findMany: vi.fn() },
+    projectEvent: { findMany: vi.fn() },
+  },
 }));
 vi.mock('@/lib/projects/user-refs', () => ({ fetchUsers: vi.fn() }));
 
@@ -23,6 +27,10 @@ const { getFeatureDetail } = await import('@/lib/projects/feature-detail');
 const access = getAccessibleProjectByRef as ReturnType<typeof vi.fn>;
 const featureFindFirst = prisma.feature.findFirst as ReturnType<typeof vi.fn>;
 const memberFindMany = prisma.projectMember.findMany as ReturnType<typeof vi.fn>;
+type EventQuery = { where: { kind: string } };
+const eventFindMany = prisma.projectEvent.findMany as unknown as Mock<
+  (args: EventQuery) => Promise<unknown[]>
+>;
 const users = fetchUsers as ReturnType<typeof vi.fn>;
 
 const USER = 'user-1';
@@ -50,6 +58,7 @@ beforeEach(() => {
   access.mockResolvedValue({ id: 'p1', slug: 'hce-hub', name: 'HCE Hub' });
   memberFindMany.mockResolvedValue([]);
   users.mockResolvedValue(new Map());
+  eventFindMany.mockResolvedValue([]);
 });
 
 describe('getFeatureDetail funnel', () => {
@@ -279,5 +288,295 @@ describe('getFeatureDetail — readiness-derived feature status (f-status-model 
     featureFindFirst.mockResolvedValue(featureRow({ number: 12 }));
     const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
     expect(detail.number).toBe(12);
+  });
+});
+
+/**
+ * §33 t-100 — phase boundaries inside the task list.
+ *
+ * The split keys off when each task **merged**, read from the `task_merged`
+ * event because `Task` has no merged-at column, and NOT off `createdAt`: a
+ * feature is normally planned in full and re-homed later, so a creation-time
+ * split would draw nothing in the exact case this exists for.
+ */
+describe('getFeatureDetail — phase boundaries (§33 t-100)', () => {
+  const taskRow = (id: string, number: number) => ({
+    id,
+    number,
+    title: `task ${number}`,
+    status: 'merged',
+    kind: 'feature_work',
+    doneWhen: null,
+    prUrl: null,
+    claimedByUserId: null,
+    assigneeUserId: null,
+    dependencies: [],
+  });
+
+  const move = (at: string, from: string | null, to: string | null) => ({
+    createdAt: new Date(at),
+    metadata: { subject: 'feature', fromPhaseName: from, toPhaseName: to },
+  });
+
+  const merged = (taskId: string, at: string) => ({ taskId, createdAt: new Date(at) });
+
+  /** Dispatch the two event reads by the `kind` each one asks for. */
+  const withEvents = (moves: unknown[], merges: unknown[]) => {
+    eventFindMany.mockImplementation((args: EventQuery) =>
+      Promise.resolve(args.where.kind === 'phase_membership_changed' ? moves : merges)
+    );
+  };
+
+  it('returns no boundaries, in the original order, for a feature that never moved', async () => {
+    featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1), taskRow('t2', 2)] }));
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries).toEqual([]);
+    expect(detail.tasks.map((t) => t.id)).toEqual(['t1', 't2']);
+    // The merge-time read costs nothing when there is nothing to place.
+    expect(eventFindMany).toHaveBeenCalledTimes(1);
+    expect(eventFindMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ kind: 'task_merged' }) })
+    );
+  });
+
+  it('reads no events at all for a feature with no real tasks', async () => {
+    featureFindFirst.mockResolvedValue(
+      featureRow({ planningStage: 'indicative', tasks: [], indicativeTasks: [] })
+    );
+    await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(eventFindMany).not.toHaveBeenCalled();
+  });
+
+  it('splits on MERGE time, not creation time, and names the phase on each side', async () => {
+    featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1), taskRow('t2', 2)] }));
+    withEvents(
+      [move('2026-08-10T12:00:00.000Z', 'Project flow', 'Sunrise Management')],
+      [merged('t1', '2026-08-09T09:00:00.000Z'), merged('t2', '2026-08-11T09:00:00.000Z')]
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries).toEqual([
+      {
+        beforeTaskId: 't2',
+        fromPhaseName: 'Project flow',
+        toPhaseName: 'Sunrise Management',
+        movedAt: '2026-08-10T12:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('places a merged task with no event in the FIRST band — imported history', async () => {
+    // 34 of the dev DB's 47 merged tasks have no `task_merged` event: they came
+    // in through the f-selfhost-cutover import, not through `complete_task`.
+    // `completeTask` is the sole emitter and every live merge (webhook included)
+    // routes through it, so no event + already merged ⇒ merged before anything
+    // we recorded ⇒ before every recorded move. Binning those as "not done yet"
+    // would put the boundary above the whole list and claim the work happened
+    // after a move it long predates.
+    featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1), taskRow('t2', 2)] }));
+    withEvents(
+      [move('2026-08-10T12:00:00.000Z', 'Project flow', 'Ideas Park')],
+      [merged('t2', '2026-08-11T09:00:00.000Z')] // t1 merged, but no event
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries[0]?.beforeTaskId).toBe('t2');
+  });
+
+  it('separates an eventless MERGED task from an eventless UNMERGED one', async () => {
+    // Same missing datum, opposite meanings — the first band vs the last.
+    featureFindFirst.mockResolvedValue(
+      featureRow({
+        tasks: [taskRow('t1', 1), { ...taskRow('t2', 2), status: 'active' }],
+      })
+    );
+    withEvents([move('2026-08-10T12:00:00.000Z', 'A', 'B')], []); // no merge events at all
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.tasks.map((t) => t.id)).toEqual(['t1', 't2']);
+    expect(detail.taskPhaseBoundaries[0]?.beforeTaskId).toBe('t2');
+  });
+
+  it('places an unmerged task in the FINAL band — after the move, never dropped', async () => {
+    featureFindFirst.mockResolvedValue(
+      featureRow({
+        tasks: [taskRow('t1', 1), { ...taskRow('t2', 2), status: 'active' }],
+      })
+    );
+    withEvents(
+      [move('2026-08-10T12:00:00.000Z', 'Project flow', 'Sunrise Management')],
+      [merged('t1', '2026-08-09T09:00:00.000Z')] // t2 never merged
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.tasks.map((t) => t.id)).toEqual(['t1', 't2']);
+    expect(detail.taskPhaseBoundaries[0]?.beforeTaskId).toBe('t2');
+  });
+
+  it('regroups rows when merge order disagrees with t-N order', async () => {
+    // Not hypothetical: f-work-kinds merged t-89 nine hours BEFORE t-88. A single
+    // divider dropped into a number-ordered list would put t-88 on the wrong side.
+    featureFindFirst.mockResolvedValue(
+      featureRow({ tasks: [taskRow('t88', 88), taskRow('t89', 89), taskRow('t90', 90)] })
+    );
+    withEvents(
+      [move('2026-08-14T18:00:00.000Z', 'Project flow', 'Sunrise Management')],
+      [
+        merged('t89', '2026-08-14T14:28:00.000Z'),
+        merged('t88', '2026-08-14T23:12:00.000Z'),
+        merged('t90', '2026-08-15T08:43:00.000Z'),
+      ]
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.tasks.map((t) => t.id)).toEqual(['t89', 't88', 't90']);
+    expect(detail.taskPhaseBoundaries[0]?.beforeTaskId).toBe('t88');
+  });
+
+  it('keeps t-N order WITHIN a band (the sort is stable)', async () => {
+    featureFindFirst.mockResolvedValue(
+      featureRow({ tasks: [taskRow('t1', 1), taskRow('t2', 2), taskRow('t3', 3)] })
+    );
+    withEvents(
+      [move('2026-08-10T12:00:00.000Z', 'A', 'B')],
+      [
+        // t2 and t3 both land after the move, t2 merging last of the three.
+        merged('t1', '2026-08-09T09:00:00.000Z'),
+        merged('t3', '2026-08-11T09:00:00.000Z'),
+        merged('t2', '2026-08-12T09:00:00.000Z'),
+      ]
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.tasks.map((t) => t.id)).toEqual(['t1', 't2', 't3']);
+  });
+
+  it('ignores a TASK commitment marker — only the feature moving draws a boundary', async () => {
+    // `phase_membership_changed` also records a single task being committed to a
+    // phase (§32 t-80), and those events carry this feature's id so the Log can
+    // chip them. Without the subject filter, one committed task would draw a
+    // boundary across the whole feature.
+    featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1), taskRow('t2', 2)] }));
+    withEvents(
+      [
+        {
+          createdAt: new Date('2026-08-10T12:00:00.000Z'),
+          metadata: { subject: 'task', fromPhaseName: 'A', toPhaseName: 'B' },
+        },
+      ],
+      [merged('t1', '2026-08-09T09:00:00.000Z'), merged('t2', '2026-08-11T09:00:00.000Z')]
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries).toEqual([]);
+    expect(detail.tasks.map((t) => t.id)).toEqual(['t1', 't2']);
+  });
+
+  it('ignores malformed metadata rather than fabricating a move (JSON guard)', async () => {
+    featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1)] }));
+    withEvents(
+      [
+        { createdAt: new Date('2026-08-10T12:00:00.000Z'), metadata: null },
+        { createdAt: new Date('2026-08-10T12:00:00.000Z'), metadata: 'not an object' },
+        { createdAt: new Date('2026-08-10T12:00:00.000Z'), metadata: [{ subject: 'feature' }] },
+        { createdAt: new Date('2026-08-10T12:00:00.000Z'), metadata: {} },
+      ],
+      []
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries).toEqual([]);
+  });
+
+  it('carries a null phase name through for an unfiled side', async () => {
+    featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1)] }));
+    withEvents([move('2026-08-10T12:00:00.000Z', null, 'Project flow')], []);
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries[0]).toMatchObject({
+      fromPhaseName: null,
+      toPhaseName: 'Project flow',
+    });
+  });
+
+  it('anchors a boundary to null when every task was already merged before the move', async () => {
+    featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1)] }));
+    withEvents(
+      [move('2026-08-20T12:00:00.000Z', 'Project flow', 'Ideas Park')],
+      [merged('t1', '2026-08-09T09:00:00.000Z')]
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries[0]?.beforeTaskId).toBeNull();
+  });
+
+  it('stacks two boundaries on one anchor when no work completed between the moves', async () => {
+    featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1), taskRow('t2', 2)] }));
+    withEvents(
+      [move('2026-08-10T12:00:00.000Z', 'A', 'B'), move('2026-08-10T18:00:00.000Z', 'B', 'C')],
+      [merged('t1', '2026-08-09T09:00:00.000Z'), merged('t2', '2026-08-11T09:00:00.000Z')]
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    // Neither move is swallowed: both land above t2, in order.
+    expect(detail.taskPhaseBoundaries.map((b) => [b.fromPhaseName, b.toPhaseName])).toEqual([
+      ['A', 'B'],
+      ['B', 'C'],
+    ]);
+    expect(detail.taskPhaseBoundaries.every((b) => b.beforeTaskId === 't2')).toBe(true);
+  });
+
+  it('drops a boundary with nothing above it — a rule that segments no work', async () => {
+    // A feature re-homed before any of its work landed. Every task is in the
+    // final band, so the rule would float at the very top pointing at an empty
+    // band — the same dangling-rule symptom the imported-history fix removed,
+    // reached from the opposite input. The move stays in the Log.
+    featureFindFirst.mockResolvedValue(
+      featureRow({
+        tasks: [
+          { ...taskRow('t1', 1), status: 'claimed' },
+          { ...taskRow('t2', 2), status: 'claimed' },
+        ],
+      })
+    );
+    withEvents([move('2026-08-10T12:00:00.000Z', 'Project flow', 'Ideas Park')], []);
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries).toEqual([]);
+    expect(detail.tasks.map((t) => t.id)).toEqual(['t1', 't2']);
+  });
+
+  it('KEEPS an empty band between two others — dropping it would erase a phase', async () => {
+    // The asymmetry that makes the rule "any task at or above this band" rather
+    // than "the band directly above is non-empty": A→B→C with no work completed
+    // under B. Both rules must render or B vanishes from the feature's history.
+    featureFindFirst.mockResolvedValue(
+      featureRow({
+        tasks: [taskRow('t1', 1), { ...taskRow('t2', 2), status: 'claimed' }],
+      })
+    );
+    withEvents(
+      [move('2026-08-10T12:00:00.000Z', 'A', 'B'), move('2026-08-11T12:00:00.000Z', 'B', 'C')],
+      [merged('t1', '2026-08-09T09:00:00.000Z')]
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries.map((b) => [b.fromPhaseName, b.toPhaseName])).toEqual([
+      ['A', 'B'],
+      ['B', 'C'],
+    ]);
+  });
+
+  it('keeps a trailing rule — "all of this was done, then it moved" is real', async () => {
+    // The mirror case, and deliberately NOT dropped: the band above it holds
+    // real completed work, so the statement is about something.
+    featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1)] }));
+    withEvents(
+      [move('2026-08-20T12:00:00.000Z', 'Project flow', 'Ideas Park')],
+      [merged('t1', '2026-08-09T09:00:00.000Z')]
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries).toHaveLength(1);
+    expect(detail.taskPhaseBoundaries[0]?.beforeTaskId).toBeNull();
+  });
+
+  it('scopes both event reads to the resolved project AND this feature', async () => {
+    featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1)] }));
+    withEvents([move('2026-08-10T12:00:00.000Z', 'A', 'B')], []);
+    await getFeatureDetail(USER, 'hce-hub', 'f-mcp');
+    for (const kind of ['phase_membership_changed', 'task_merged']) {
+      expect(eventFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ projectId: 'p1', featureId: 'f1', kind }),
+        })
+      );
+    }
   });
 });

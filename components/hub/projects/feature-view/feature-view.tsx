@@ -219,7 +219,11 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
               />
             )}
           </div>
-          <FeatureTaskList tasks={feature.tasks} indicativeTasks={feature.indicativeTasks} />
+          <FeatureTaskList
+            tasks={feature.tasks}
+            indicativeTasks={feature.indicativeTasks}
+            phaseBoundaries={feature.taskPhaseBoundaries}
+          />
         </section>
 
         <FeatureActivity projectId={feature.projectId} featureId={feature.id} />

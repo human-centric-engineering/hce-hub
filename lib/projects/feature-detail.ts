@@ -18,7 +18,7 @@
  * the §09 Plan / §10 Board), and every nullable `user` ref resolves to
  * `UserRef | null` ("unassigned / former member"), never dereferenced.
  */
-import type { FeaturePlanningStage, Prisma, TaskKind } from '@prisma/client';
+import type { FeaturePlanningStage, Prisma, TaskKind, TaskStatus } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { NotFoundError } from '@/lib/api/errors';
 import { getAccessibleProjectByRef } from '@/lib/projects/access';
@@ -72,6 +72,22 @@ export interface FeatureDetailIndicativeTask {
   text: string;
 }
 
+/**
+ * A phase move drawn as a boundary inside the feature's task list (§33 t-100).
+ *
+ * Phase names are the **snapshots** taken at write time by
+ * `lib/projects/phase-events.ts`, so a later rename never rewrites what a past
+ * boundary says. `null` on either side means the feature was unfiled then.
+ */
+export interface FeatureTaskPhaseBoundary {
+  /** The task this boundary is drawn ABOVE; `null` ⇒ draw below the last task. */
+  beforeTaskId: string | null;
+  fromPhaseName: string | null;
+  toPhaseName: string | null;
+  /** When the move happened, ISO — the payload carries no `Date`s. */
+  movedAt: string;
+}
+
 /** The feature page's full payload for one feature. */
 export interface FeatureDetail {
   id: string;
@@ -110,8 +126,20 @@ export interface FeatureDetail {
    */
   members: UserRef[];
   dependsOn: FeatureDetailRef[];
-  /** Real tasks (populated once planned). */
+  /**
+   * Real tasks (populated once planned), in `t-N` order — except on a feature
+   * that changed phase mid-flight, where they are grouped by phase band first
+   * and `t-N`-ordered within each (§33 t-100). Read `taskPhaseBoundaries` to
+   * interpret the grouping; ignoring it leaves the reordering unexplained.
+   */
   tasks: FeatureDetailTask[];
+  /**
+   * Where the feature changed phase mid-flight (§33 t-100). **Empty for a
+   * feature that never moved**, which is the overwhelming common case — the
+   * list then renders exactly as it did before. `tasks` is ordered so each
+   * boundary's bands are contiguous.
+   */
+  taskPhaseBoundaries: FeatureTaskPhaseBoundary[];
   /** The high-level sketch (populated while indicative; replaced at plan time). */
   indicativeTasks: FeatureDetailIndicativeTask[];
 }
@@ -135,6 +163,155 @@ function toReferences(json: Prisma.JsonValue | null): FeatureReference[] {
     }
   }
   return refs;
+}
+
+/** One recorded move of THIS feature between phases, oldest first. */
+interface PhaseMove {
+  at: Date;
+  fromPhaseName: string | null;
+  toPhaseName: string | null;
+}
+
+/**
+ * Read a `phase_membership_changed` event as a feature move, or `null`.
+ *
+ * `metadata` is an opaque `JsonValue` on read, so every field is guarded rather
+ * than asserted (the `toReferences` rule). The `subject` check is load-bearing,
+ * not defensive: the same kind records a **task's** commitment marker (§32 t-80)
+ * and those events carry this feature's id too, so that they can be chipped in
+ * the Log — without the filter, committing one task to a phase would draw a
+ * boundary across the whole feature.
+ */
+function toPhaseMove(metadata: Prisma.JsonValue | null, at: Date): PhaseMove | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const m = metadata as Record<string, unknown>;
+  if (m.subject !== 'feature') return null;
+  return {
+    at,
+    fromPhaseName: typeof m.fromPhaseName === 'string' ? m.fromPhaseName : null,
+    toPhaseName: typeof m.toPhaseName === 'string' ? m.toPhaseName : null,
+  };
+}
+
+/** This feature's phase moves, oldest first. */
+async function loadFeaturePhaseMoves(projectId: string, featureId: string): Promise<PhaseMove[]> {
+  const rows = await prisma.projectEvent.findMany({
+    where: { projectId, featureId, kind: 'phase_membership_changed' },
+    orderBy: { createdAt: 'asc' },
+    select: { metadata: true, createdAt: true },
+  });
+  return rows
+    .map((r) => toPhaseMove(r.metadata, r.createdAt))
+    .filter((m): m is PhaseMove => m !== null);
+}
+
+/**
+ * Group a feature's tasks into the phases they were **completed under**, and
+ * return the boundaries to draw between those bands (§33 t-100).
+ *
+ * **Completion time, not creation time.** A feature is normally planned in full
+ * and then re-homed mid-build, so every task predates the move and a
+ * creation-time split would draw nothing at all in precisely the case this
+ * exists for. §33's own three tasks were created within the same second, which
+ * is the check that settled it.
+ *
+ * **The merge instant lives only on the event.** `Task` has no merged-at column
+ * — `complete_task` flips `status` and the timestamp survives solely as the
+ * `task_merged` event's `createdAt`. That is why this reads the journal rather
+ * than the rows, and why a *merged* task with no event is read as imported
+ * history rather than as unfinished work.
+ *
+ * **What this does NOT read: `Task.phaseId`.** That column is a *commitment*
+ * marker — the phase that chose to do the work (§32 t-80/t-95) — and it is a
+ * different axis from "where was the feature when this landed". The Plan already
+ * renders a committed task as a borrowed row in its committed band, with a
+ * reciprocal `→ <phase>` mark on the task's own row; the feature page has no such
+ * mark (it never receives `phaseId`), so on this surface a committed task is
+ * placed by merge time like any other and its commitment is simply invisible.
+ * That blindness predates this task — it is a gap in t-95's reciprocal mark, not
+ * something the boundary introduced — but the boundary does make it easier to
+ * misread. Filed as its own work rather than widened into here, because which
+ * fact should win is an owner decision, not a rendering detail.
+ *
+ * **The asymmetry is deliberate.** A rule with nothing *above* it is dropped (it
+ * segments no work); a rule with nothing *below* it is kept, because "all of this
+ * was done, then it moved" is a real statement about real work.
+ *
+ * **Bands, not one divider.** Merge order and `t-N` order genuinely diverge
+ * (f-work-kinds merged t-89 nine hours before t-88), so a single marker inserted
+ * into a number-ordered list would put tasks on the wrong side of it. Tasks are
+ * therefore partitioned by band and the bands laid out in order; within a band
+ * the original number order is untouched, and a feature that never moved has one
+ * band and so renders byte-identically to before.
+ */
+async function placeTasksInPhaseBands<T extends { id: string; status: TaskStatus }>(
+  projectId: string,
+  featureId: string,
+  tasks: T[],
+  moves: PhaseMove[]
+): Promise<{ tasks: T[]; boundaries: FeatureTaskPhaseBoundary[] }> {
+  if (moves.length === 0) return { tasks, boundaries: [] };
+
+  const mergeEvents = await prisma.projectEvent.findMany({
+    where: { projectId, featureId, kind: 'task_merged', taskId: { in: tasks.map((t) => t.id) } },
+    orderBy: { createdAt: 'asc' },
+    select: { taskId: true, createdAt: true },
+  });
+  const mergedAt = new Map<string, Date>();
+  for (const e of mergeEvents) {
+    // Oldest wins — the merge that first ended the work, not a later re-record.
+    if (e.taskId && !mergedAt.has(e.taskId)) mergedAt.set(e.taskId, e.createdAt);
+  }
+
+  const bands = new Map(
+    tasks.map((t) => {
+      const at = mergedAt.get(t.id);
+      if (at) {
+        let band = 0;
+        while (band < moves.length && moves[band].at < at) band += 1;
+        return [t.id, band] as const;
+      }
+      // No merge event. Two opposite cases, and conflating them is wrong on the
+      // majority of rows — 34 of the dev DB's 47 merged tasks have no event:
+      //  - ALREADY merged ⇒ imported history (`completeTask` is the sole emitter
+      //    and every live merge, webhook included, goes through it), so it
+      //    predates any move we could have recorded → the FIRST band.
+      //  - not merged ⇒ not done ⇒ it will be done under the phase the feature
+      //    is in now → the LAST band.
+      return [t.id, t.status === 'merged' ? 0 : moves.length] as const;
+    })
+  );
+  const bandOf = (id: string): number => bands.get(id) ?? 0;
+
+  // Stable (guaranteed since ES2019), so within a band the rows keep the number
+  // order the query established.
+  const ordered = [...tasks].sort((a, b) => bandOf(a.id) - bandOf(b.id));
+
+  const boundaries: FeatureTaskPhaseBoundary[] = [];
+  moves.forEach((move, i) => {
+    // A rule with NOTHING above it separates nothing from everything — it points
+    // at a band of work that does not exist. Drop it; the move is still on the
+    // feature's timeline and in the project Log. This is the mirror of the
+    // imported-history bug: same dangling-rule-at-the-top symptom, opposite
+    // input (there the band was mis-assigned, here it is genuinely empty).
+    //
+    // The test is "any task at or above this band", NOT "the band directly
+    // above is non-empty". An empty band BETWEEN two others is the stacked-move
+    // case (A→B→C with no work under B), and dropping that rule would silently
+    // erase B from the history. Only LEADING boundaries qualify.
+    if (!ordered.some((t) => bandOf(t.id) <= i)) return;
+    boundaries.push({
+      // The first row landing in ANY later band — so two moves with no completed
+      // work between them stack two markers above the same row instead of one
+      // silently swallowing the other.
+      beforeTaskId: ordered.find((t) => bandOf(t.id) > i)?.id ?? null,
+      fromPhaseName: move.fromPhaseName,
+      toPhaseName: move.toPhaseName,
+      movedAt: move.at.toISOString(),
+    });
+  });
+
+  return { tasks: ordered, boundaries };
 }
 
 /**
@@ -182,6 +359,9 @@ export async function getFeatureDetail(
         },
         tasks: {
           // Numerical order — tasks are built sequentially (f-status-model §20).
+          // Since §33 t-100 this is the order WITHIN a phase band, not necessarily
+          // the order of the array returned: a feature that moved phase mid-flight
+          // has its rows grouped by band first (see `placeTasksInPhaseBands`).
           orderBy: [{ number: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
           select: {
             id: true,
@@ -221,7 +401,19 @@ export async function getFeatureDetail(
     ]),
     ...memberRows.map((m) => m.userId),
   ];
-  const users = await fetchUsers(userIds);
+  // The phase moves ride alongside that lookup: a tiny, usually-empty read, and
+  // skipped entirely for a feature with no real tasks to place them among.
+  const [users, phaseMoves] = await Promise.all([
+    fetchUsers(userIds),
+    feature.tasks.length > 0 ? loadFeaturePhaseMoves(project.id, feature.id) : [],
+  ]);
+  // Only a feature that actually moved pays for the second (merge-time) read.
+  const { tasks: orderedTasks, boundaries: taskPhaseBoundaries } = await placeTasksInPhaseBands(
+    project.id,
+    feature.id,
+    feature.tasks,
+    phaseMoves
+  );
 
   // Readiness-derived status from the dependencies' stored statuses.
   const { status: effectiveStatus, waitingOn } = computeFeatureStatus(
@@ -253,7 +445,7 @@ export async function getFeatureDetail(
       slug: d.dependsOn.slug,
       title: d.dependsOn.title,
     })),
-    tasks: feature.tasks.map((t) => ({
+    tasks: orderedTasks.map((t) => ({
       id: t.id,
       number: t.number,
       title: t.title,
@@ -268,6 +460,7 @@ export async function getFeatureDetail(
       claimer: t.claimedByUserId ? (users.get(t.claimedByUserId) ?? null) : null,
       assignee: t.assigneeUserId ? (users.get(t.assigneeUserId) ?? null) : null,
     })),
+    taskPhaseBoundaries,
     indicativeTasks: feature.indicativeTasks,
   };
 }
