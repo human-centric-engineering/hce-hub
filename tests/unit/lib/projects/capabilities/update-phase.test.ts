@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
+import { Prisma } from '@prisma/client';
 
 vi.mock('@/lib/projects/phases-service', () => ({ updatePhase: vi.fn() }));
 
@@ -60,6 +61,22 @@ describe('update_phase', () => {
       { name: 'x', description: undefined, status: undefined },
       'proj-scoped'
     );
+  });
+
+  it('maps an exhausted write conflict to concurrent_modification, not an opaque throw', async () => {
+    // A status edit runs at Serializable (§33 t-103), so SSI can abort it and
+    // `withWriteConflictRetry` can run out of attempts. Unmapped, that reaches an
+    // agent as a generic failure with no instruction — and the retry that would
+    // succeed never happens. Mirrors `update_task` / `update_feature`.
+    update.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('write conflict', {
+        code: 'P2034',
+        clientVersion: 'test',
+      })
+    );
+    const r = await cap.execute({ phaseId: 'ph1', status: 'complete' }, ctx());
+    expect(r.error?.code).toBe('concurrent_modification');
+    expect(r.error?.message).toMatch(/re-read it and retry/i);
   });
 
   it('maps a non-member (service NotFoundError) to not_found', async () => {

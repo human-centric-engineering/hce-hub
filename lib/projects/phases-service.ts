@@ -236,6 +236,19 @@ export async function updatePhase(
         // rename committing in between would make this one journal a rename that never
         // happened (B sets the name A just set, sees A's old value, and calls it a
         // change). The journal must not assert a change the write did not make.
+        //
+        // **How far that holds — an accepted limit, not a guarantee.** Only a STATUS
+        // edit runs at Serializable (see below). A name- or description-only edit
+        // stays at READ COMMITTED, where this is still a plain non-locking SELECT:
+        // two clients writing the SAME description can have B read the old value,
+        // block on A's row lock, then write an identical value and journal a phantom
+        // `phase_updated`. Narrowed, not closed.
+        //
+        // Left open deliberately. The status path loses a rendered MILESTONE, which
+        // is worth paying P2034 for; this path costs one duplicate journal line for a
+        // write that did land, and closing it would make every plain rename abortable
+        // — the exact over-application the §21 t-87 review rejected. Recorded so it is
+        // a choice on the record rather than a discovery later.
         const before = await tx.phase.findUnique({
           where: { id: phaseId },
           // `startedAt`/`completedAt` are here for the same reason as the other three,
