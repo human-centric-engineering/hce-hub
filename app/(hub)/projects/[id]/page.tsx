@@ -107,10 +107,13 @@ export default async function ProjectViewPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; phase?: string }>;
 }) {
   const { id } = await params;
-  const { view } = await searchParams;
+  // `phase` is the deep-link (§33 t-99): open the Plan with that band expanded and
+  // scrolled to. Only meaningful on the Plan, which is also the default tab, so a
+  // bare `?phase=` link needs no `?view=`.
+  const { view, phase } = await searchParams;
   // Plan is the default; the rest are explicit. The Log and Connect tabs are
   // client-fetched (filterable / self-service), so they need no server payload here.
   const activeTab: ProjectTab =
@@ -137,6 +140,13 @@ export default async function ProjectViewPage({
   ]);
 
   return (
-    <ProjectView project={project} activeTab={activeTab} plan={plan} board={board} ideas={ideas} />
+    <ProjectView
+      project={project}
+      activeTab={activeTab}
+      plan={plan}
+      board={board}
+      ideas={ideas}
+      focusPhaseId={phase ?? null}
+    />
   );
 }

@@ -11,7 +11,7 @@
  * the header is suppressed (`showHeader={false}`) so it reads exactly like the
  * pre-phases flat list — phases are an overlay, not a tax on projects without them.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { FeatureRow } from '@/components/hub/projects/plan/feature-row';
 import { BorrowedTaskRow } from '@/components/hub/projects/plan/borrowed-task-row';
@@ -28,6 +28,7 @@ export function PhaseBand({
   onToggle,
   ordinalFor,
   forceOpen = false,
+  focused = false,
   assignablePhases,
 }: {
   band: PlanPhaseBand;
@@ -42,6 +43,8 @@ export function PhaseBand({
   ordinalFor: (featureId: string, featureNumber: number | null) => number;
   /** Open regardless of status — this band holds the view's auto-expanded feature. */
   forceOpen?: boolean;
+  /** This band is the `?phase=` deep-link target: anchor it and scroll to it. */
+  focused?: boolean;
   /** The project's phases, for each row's assign picker (f-phases §22 t3). */
   assignablePhases: { id: string; name: string }[];
 }) {
@@ -52,6 +55,14 @@ export function PhaseBand({
   // any band holding the auto-expanded feature (forceOpen), so the view opens on it.
   const collapsedByDefault = isParked || band.status === 'complete';
   const [open, setOpen] = useState(forceOpen || !collapsedByDefault);
+
+  // Bring the deep-linked band into view. Optional call because jsdom does not
+  // implement scrollIntoView, and a link that scrolls is a nicety — it must never
+  // be the reason the Plan fails to render.
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (focused) ref.current?.scrollIntoView?.({ block: 'start' });
+  }, [focused]);
 
   // `band.rows` — features INTERLEAVED with any tasks borrowed into this phase, in
   // readiness order (§32 t-95). Ordering is the server's; this only renders it.
@@ -109,7 +120,11 @@ export function PhaseBand({
     .join(' · ');
 
   return (
-    <section className={isParked ? 'opacity-80' : undefined}>
+    <section
+      ref={ref}
+      id={band.id ? `phase-${band.id}` : undefined}
+      className={isParked ? 'opacity-80' : undefined}
+    >
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

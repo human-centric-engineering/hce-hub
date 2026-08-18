@@ -14,6 +14,7 @@ const detail = (over: Partial<FeatureDetailDTO> = {}): FeatureDetailDTO => ({
   projectId: 'p1',
   projectSlug: 'hce-hub',
   projectName: 'HCE Hub',
+  phase: null,
   number: 3,
   slug: 'f-mcp',
   title: 'MCP server',
@@ -41,6 +42,31 @@ beforeEach(() => {
   );
 });
 afterEach(() => vi.unstubAllGlobals());
+
+describe('FeatureView — phase chip (§33 t-99)', () => {
+  it('links the phase back to the Plan with that band deep-linked', () => {
+    render(<FeatureView feature={detail({ phase: { id: 'ph1', name: 'Project flow' } })} />);
+    const chip = screen.getByRole('link', { name: 'Project flow' });
+    expect(chip).toHaveAttribute('href', '/projects/hce-hub?phase=ph1');
+  });
+
+  it('renders no chip for an unfiled feature, rather than an empty one', () => {
+    render(<FeatureView feature={detail({ phase: null })} />);
+    expect(screen.queryByRole('link', { name: /Project flow/ })).not.toBeInTheDocument();
+  });
+
+  it('falls back to the project id when the slug is absent', () => {
+    render(
+      <FeatureView
+        feature={detail({ projectSlug: null, phase: { id: 'ph1', name: 'Project flow' } })}
+      />
+    );
+    expect(screen.getByRole('link', { name: 'Project flow' })).toHaveAttribute(
+      'href',
+      '/projects/p1?phase=ph1'
+    );
+  });
+});
 
 describe('FeatureView', () => {
   it('renders the header, description, done-when, and the owner name', () => {

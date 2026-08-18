@@ -101,6 +101,20 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
           )}
           <StatusPill tone={status.tone} label={status.label} />
           <StageChip stage={feature.planningStage} />
+          {/*
+            Which band this feature sits in — filed since §22, shown nowhere until
+            now. Links back to the Plan with that band open (§33 t-99), so the
+            phase reads as a place you can go rather than a label.
+          */}
+          {feature.phase && (
+            <Link
+              href={`/projects/${feature.projectSlug ?? feature.projectId}?phase=${encodeURIComponent(feature.phase.id)}`}
+              className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium hover:underline"
+              style={{ backgroundColor: 'var(--surface-sunk)', color: 'var(--ink-mute)' }}
+            >
+              {feature.phase.name}
+            </Link>
+          )}
           {feature.helpWanted && (
             <span
               className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium"

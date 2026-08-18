@@ -443,6 +443,52 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
     expect(screen.getByText('Unfiled work')).toBeInTheDocument();
   });
 
+  it('opens and anchors the band a ?phase= link names, even if it would collapse', () => {
+    // A deep-link is a deliberate request to look at that band, so it outranks
+    // collapse-by-default — otherwise following the link lands you on a closed row.
+    render(
+      <PlanView
+        focusPhaseId="done"
+        plan={banded([
+          {
+            id: 'done',
+            name: 'Foundations',
+            status: 'complete', // collapses by default
+            ordinal: 0,
+            features: [feature({ id: 'a', title: 'Shipped work', status: 'shipped' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText('Shipped work')).toBeInTheDocument();
+  });
+
+  it('leaves other bands at their default when one is deep-linked', () => {
+    render(
+      <PlanView
+        focusPhaseId="one"
+        plan={banded([
+          {
+            id: 'one',
+            name: 'Targeted',
+            status: 'complete',
+            ordinal: 0,
+            features: [feature({ id: 'a', title: 'In the linked band', status: 'shipped' })],
+          },
+          {
+            id: 'two',
+            name: 'Untouched',
+            status: 'complete',
+            ordinal: 1,
+            features: [feature({ id: 'b', title: 'In the other band', status: 'shipped' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText('In the linked band')).toBeInTheDocument();
+    expect(screen.queryByText('In the other band')).not.toBeInTheDocument();
+  });
+
   it('forces a collapse-by-default band open when it holds the auto-expanded feature', () => {
     // A complete phase collapses by default, but if it contains the feature the
     // view opens on (an active task), the band must open so that work is visible.
