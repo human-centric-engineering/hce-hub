@@ -353,6 +353,14 @@ function PhaseRow({
   // Report an uncommitted draft to the dialog so closing it commits rather than
   // discards it. Registered as `saveDescription` itself, so the close path runs
   // the same guard as blur and cannot duplicate a write.
+  //
+  // That last clause was challenged by review (§33 t-102) on the grounds that a
+  // pointerdown-dismissal fires `flushPending` and `onBlur` from one render's
+  // closure, so both would see a stale `descriptionDirty`. Measured, and it does
+  // NOT: React flushes each discrete event's updates before the next handler runs,
+  // and its delegated listener reads the CURRENT props off the fiber — so the
+  // second call gets the new closure and short-circuits. No synchronous ref guard
+  // is needed; the test below pins the behaviour rather than the mechanism.
   const pendingSave = descriptionDirty ? saveDescription : null;
   useEffect(() => {
     registerPending(phase.id, pendingSave);

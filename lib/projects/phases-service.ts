@@ -174,7 +174,12 @@ export async function updatePhase(
 ): Promise<UpdatePhaseResult> {
   const phase = await prisma.phase.findUnique({
     where: { id: phaseId },
-    select: { projectId: true, status: true, startedAt: true, completedAt: true },
+    // Deliberately NARROW: only what resolving and authorising the phase needs.
+    // The lifecycle timestamps and the previous status are read INSIDE the
+    // transaction (§33 t-103) — selecting them here too is what let a pre-lock
+    // value be written back over a concurrent commit, so they are gone rather
+    // than merely unused.
+    select: { projectId: true },
   });
   if (!phase) throw new NotFoundError(`Phase ${phaseId} not found`);
   // Scope to the route's project when asked (no cross-project id-swap).
@@ -200,18 +205,6 @@ export async function updatePhase(
   }
   if (input.status !== undefined) {
     data.status = input.status;
-    // Keep the lifecycle timestamps coherent with the resulting status:
-    //   completedAt set ⟺ status is complete (reopening clears it, no stale "done"),
-    //   startedAt persists once the phase has begun (stamped on the first
-    //   active/complete, never un-stamped) — so it's never complete-with-null-start.
-    const now = new Date();
-    if (input.status === 'complete') {
-      data.completedAt = phase.completedAt ?? now;
-      if (phase.startedAt === null) data.startedAt = now;
-    } else {
-      if (phase.completedAt !== null) data.completedAt = null; // reopened → drop the done stamp
-      if (input.status === 'active' && phase.startedAt === null) data.startedAt = now;
-    }
     updated.push('status');
   }
 
@@ -229,7 +222,17 @@ export async function updatePhase(
     // change). The journal must not assert a change the write did not make.
     const before = await tx.phase.findUnique({
       where: { id: phaseId },
-      select: { name: true, description: true, status: true },
+      // `startedAt`/`completedAt` are here for the same reason as the other three,
+      // and it took a second review pass to notice: t-98 moved the JOURNAL's
+      // comparison in-transaction but left the lifecycle derivation on the
+      // pre-transaction read. See `lifecycle` below.
+      select: {
+        name: true,
+        description: true,
+        status: true,
+        startedAt: true,
+        completedAt: true,
+      },
     });
     // What actually DIFFERS — the only thing the journal is allowed to claim.
     // `update_phase({status:'active'})` on an already-active phase is a legitimate
@@ -246,7 +249,31 @@ export async function updatePhase(
       changed.push('description');
     if (input.status !== undefined && input.status !== before?.status) changed.push('status');
 
-    await tx.phase.update({ where: { id: phaseId }, data });
+    // Keep the lifecycle timestamps coherent with the resulting status:
+    //   completedAt set ⟺ status is complete (reopening clears it, no stale "done"),
+    //   startedAt persists once the phase has begun (stamped on the first
+    //   active/complete, never un-stamped) — so it's never complete-with-null-start.
+    //
+    // Derived from the IN-TRANSACTION `before`, never the outer read (§33 t-103).
+    // Two concurrent `PATCH {status:'complete'}` on one phase: A commits, stamping
+    // `completedAt = T1`; B read null before A committed, so from the outer read it
+    // would write `completedAt = T2` — MOVING a milestone that t-99 now renders —
+    // while B's `changed` diff correctly sees the status already `complete` and
+    // journals nothing. An overwrite with no record, which is the exact failure
+    // this feature exists to close.
+    const lifecycle: Prisma.PhaseUpdateInput = {};
+    if (input.status !== undefined && before) {
+      const now = new Date();
+      if (input.status === 'complete') {
+        lifecycle.completedAt = before.completedAt ?? now;
+        if (before.startedAt === null) lifecycle.startedAt = now;
+      } else {
+        if (before.completedAt !== null) lifecycle.completedAt = null; // reopened → drop the stamp
+        if (input.status === 'active' && before.startedAt === null) lifecycle.startedAt = now;
+      }
+    }
+
+    await tx.phase.update({ where: { id: phaseId }, data: { ...data, ...lifecycle } });
 
     // The name is ALWAYS snapshotted, even on a status- or description-only edit:
     // the entry has no feature/task ref to chip, so without it the Log reads "set

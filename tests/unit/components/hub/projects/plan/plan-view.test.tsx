@@ -463,6 +463,59 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
     expect(screen.getByText('Shipped work')).toBeInTheDocument();
   });
 
+  it('opens a newly deep-linked band on an ALREADY-MOUNTED Plan (§33 t-101)', () => {
+    // `useState` only seeds, and React reconciles bands by `band.id`, so a
+    // same-route `?phase=` change (Back/Forward, or any future Plan→Plan link)
+    // re-rendered without remounting: the scroll effect fired and the band stayed
+    // shut. Latent only because today's sole link producer is on another route.
+    const twoCollapsedBands = banded([
+      {
+        id: 'one',
+        name: 'First',
+        status: 'complete', // both collapse by default
+        ordinal: 0,
+        features: [feature({ id: 'a', title: 'First work', status: 'shipped' })],
+      },
+      {
+        id: 'two',
+        name: 'Second',
+        status: 'complete',
+        ordinal: 1,
+        features: [feature({ id: 'b', title: 'Second work', status: 'shipped' })],
+      },
+    ]);
+    const { rerender } = render(<PlanView focusPhaseId="one" plan={twoCollapsedBands} />);
+    expect(screen.getByText('First work')).toBeInTheDocument();
+    expect(screen.queryByText('Second work')).not.toBeInTheDocument();
+
+    rerender(<PlanView focusPhaseId="two" plan={twoCollapsedBands} />);
+    expect(screen.getByText('Second work')).toBeInTheDocument();
+  });
+
+  it('leaves an already-open band open when the deep-link moves elsewhere', () => {
+    // The effect opens and never closes: `forceOpen` going false means some OTHER
+    // band became the target, which is no reason to shut this one on someone.
+    const twoCollapsedBands = banded([
+      {
+        id: 'one',
+        name: 'First',
+        status: 'complete',
+        ordinal: 0,
+        features: [feature({ id: 'a', title: 'First work', status: 'shipped' })],
+      },
+      {
+        id: 'two',
+        name: 'Second',
+        status: 'complete',
+        ordinal: 1,
+        features: [feature({ id: 'b', title: 'Second work', status: 'shipped' })],
+      },
+    ]);
+    const { rerender } = render(<PlanView focusPhaseId="one" plan={twoCollapsedBands} />);
+    rerender(<PlanView focusPhaseId="two" plan={twoCollapsedBands} />);
+    expect(screen.getByText('First work')).toBeInTheDocument();
+  });
+
   it('offsets the scroll anchor past the sticky topbar', () => {
     // `scrollIntoView({block:'start'})` aligns the band with the viewport top,
     // which the shell's sticky 52px topbar then covers — you land inside the

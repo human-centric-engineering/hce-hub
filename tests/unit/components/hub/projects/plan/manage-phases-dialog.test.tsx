@@ -5,7 +5,7 @@
  * pointer limits); its PATCH path is the same `call` the rename input exercises.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const refresh = vi.hoisted(() => vi.fn());
@@ -161,6 +161,37 @@ describe('ManagePhasesDialog', () => {
     fireEvent.keyDown(intent, { key: 'Escape' });
     // Still one: the row clears its pending entry the moment the draft matches
     // what was sent, so closing cannot duplicate the write (or its journal entry).
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends ONE PATCH when the blur and the close land in the same tick (§33 t-102)', async () => {
+    // The test above awaits between blur and close. This one does not — both land
+    // in a single batch, which is what a real pointerdown-dismissal gives you
+    // (Radix closes on `pointerdown`, and the same pointerdown blurs the field).
+    //
+    // Review predicted two PATCHes here, on the grounds that both calls would run
+    // from one render's closure and see a stale `descriptionDirty`. They do not:
+    // React flushes each discrete event's updates before the next handler runs, and
+    // its delegated listener reads current props off the fiber, so the second call
+    // gets the new closure and short-circuits. This test therefore pins the
+    // BEHAVIOUR (one write, one audit row) rather than any guard — it is a
+    // regression net for a future change to batching or to the flush path, and it
+    // deliberately passes against today's code with nothing added.
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ManagePhasesDialog projectId="p1" phases={phases} />);
+    open();
+
+    const intent = screen.getByLabelText('Phase intent: Foundations');
+    fireEvent.change(intent, { target: { value: 'Typed once, dismissed by click' } });
+
+    // One act() = one batch, which is what "the same tick" means here.
+    act(() => {
+      intent.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+      intent.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
