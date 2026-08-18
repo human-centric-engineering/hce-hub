@@ -216,6 +216,10 @@ async function loadFeaturePhaseMoves(projectId: string, featureId: string): Prom
  * than the rows, and why a *merged* task with no event is read as imported
  * history rather than as unfinished work.
  *
+ * **The asymmetry is deliberate.** A rule with nothing *above* it is dropped (it
+ * segments no work); a rule with nothing *below* it is kept, because "all of this
+ * was done, then it moved" is a real statement about real work.
+ *
  * **Bands, not one divider.** Merge order and `t-N` order genuinely diverge
  * (f-work-kinds merged t-89 nine hours before t-88), so a single marker inserted
  * into a number-ordered list would put tasks on the wrong side of it. Tasks are
@@ -266,15 +270,29 @@ async function placeTasksInPhaseBands<T extends { id: string; status: TaskStatus
   // order the query established.
   const ordered = [...tasks].sort((a, b) => bandOf(a.id) - bandOf(b.id));
 
-  const boundaries = moves.map((move, i) => ({
-    // The first row landing in ANY later band — so two moves with no completed
-    // work between them stack two markers above the same row instead of one
-    // silently swallowing the other.
-    beforeTaskId: ordered.find((t) => bandOf(t.id) > i)?.id ?? null,
-    fromPhaseName: move.fromPhaseName,
-    toPhaseName: move.toPhaseName,
-    movedAt: move.at.toISOString(),
-  }));
+  const boundaries: FeatureTaskPhaseBoundary[] = [];
+  moves.forEach((move, i) => {
+    // A rule with NOTHING above it separates nothing from everything — it points
+    // at a band of work that does not exist. Drop it; the move is still on the
+    // feature's timeline and in the project Log. This is the mirror of the
+    // imported-history bug: same dangling-rule-at-the-top symptom, opposite
+    // input (there the band was mis-assigned, here it is genuinely empty).
+    //
+    // The test is "any task at or above this band", NOT "the band directly
+    // above is non-empty". An empty band BETWEEN two others is the stacked-move
+    // case (A→B→C with no work under B), and dropping that rule would silently
+    // erase B from the history. Only LEADING boundaries qualify.
+    if (!ordered.some((t) => bandOf(t.id) <= i)) return;
+    boundaries.push({
+      // The first row landing in ANY later band — so two moves with no completed
+      // work between them stack two markers above the same row instead of one
+      // silently swallowing the other.
+      beforeTaskId: ordered.find((t) => bandOf(t.id) > i)?.id ?? null,
+      fromPhaseName: move.fromPhaseName,
+      toPhaseName: move.toPhaseName,
+      movedAt: move.at.toISOString(),
+    });
+  });
 
   return { tasks: ordered, boundaries };
 }

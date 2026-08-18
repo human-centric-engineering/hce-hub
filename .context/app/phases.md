@@ -153,8 +153,14 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
   no event means it predates anything recorded) ⇒ the _first_ band; **unmerged**
   ⇒ not done ⇒ the _last_ band, since it will be done under the phase the feature
   is in now. That distinction is load-bearing, not tidiness — most of the
-  imported §1–§21 tasks have no event. Moves made before §33 shipped were never
-  recorded, so a feature re-homed earlier shows no boundary.
+  imported §1–§21 tasks have no event. A rule with **nothing above it** is dropped
+  (it would segment no work — a feature re-homed before any of its work landed);
+  a rule with nothing _below_ it is kept, because "all of this was done, then it
+  moved" is a real statement. The drop tests "any task at or above this band",
+  not "the band directly above is non-empty" — an empty band _between_ two others
+  is the stacked-move case (A→B→C with nothing under B) and both rules must stay
+  or B vanishes. Moves made before §33 shipped were never recorded, so a feature
+  re-homed earlier shows no boundary.
 - **`ManagePhasesDialog`** ("Manage phases", top-right of the Plan) — create,
   rename, set status / park, and **drag-to-reorder** (`@dnd-kit`, keyboard-
   accessible: focus the grip, Space, arrows, Space). Reorder is **optimistic** —

@@ -515,6 +515,58 @@ describe('getFeatureDetail — phase boundaries (§33 t-100)', () => {
     expect(detail.taskPhaseBoundaries.every((b) => b.beforeTaskId === 't2')).toBe(true);
   });
 
+  it('drops a boundary with nothing above it — a rule that segments no work', async () => {
+    // A feature re-homed before any of its work landed. Every task is in the
+    // final band, so the rule would float at the very top pointing at an empty
+    // band — the same dangling-rule symptom the imported-history fix removed,
+    // reached from the opposite input. The move stays in the Log.
+    featureFindFirst.mockResolvedValue(
+      featureRow({
+        tasks: [
+          { ...taskRow('t1', 1), status: 'claimed' },
+          { ...taskRow('t2', 2), status: 'claimed' },
+        ],
+      })
+    );
+    withEvents([move('2026-08-10T12:00:00.000Z', 'Project flow', 'Ideas Park')], []);
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries).toEqual([]);
+    expect(detail.tasks.map((t) => t.id)).toEqual(['t1', 't2']);
+  });
+
+  it('KEEPS an empty band between two others — dropping it would erase a phase', async () => {
+    // The asymmetry that makes the rule "any task at or above this band" rather
+    // than "the band directly above is non-empty": A→B→C with no work completed
+    // under B. Both rules must render or B vanishes from the feature's history.
+    featureFindFirst.mockResolvedValue(
+      featureRow({
+        tasks: [taskRow('t1', 1), { ...taskRow('t2', 2), status: 'claimed' }],
+      })
+    );
+    withEvents(
+      [move('2026-08-10T12:00:00.000Z', 'A', 'B'), move('2026-08-11T12:00:00.000Z', 'B', 'C')],
+      [merged('t1', '2026-08-09T09:00:00.000Z')]
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries.map((b) => [b.fromPhaseName, b.toPhaseName])).toEqual([
+      ['A', 'B'],
+      ['B', 'C'],
+    ]);
+  });
+
+  it('keeps a trailing rule — "all of this was done, then it moved" is real', async () => {
+    // The mirror case, and deliberately NOT dropped: the band above it holds
+    // real completed work, so the statement is about something.
+    featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1)] }));
+    withEvents(
+      [move('2026-08-20T12:00:00.000Z', 'Project flow', 'Ideas Park')],
+      [merged('t1', '2026-08-09T09:00:00.000Z')]
+    );
+    const detail = await getFeatureDetail(USER, 'p1', 'f-mcp');
+    expect(detail.taskPhaseBoundaries).toHaveLength(1);
+    expect(detail.taskPhaseBoundaries[0]?.beforeTaskId).toBeNull();
+  });
+
   it('scopes both event reads to the resolved project AND this feature', async () => {
     featureFindFirst.mockResolvedValue(featureRow({ tasks: [taskRow('t1', 1)] }));
     withEvents([move('2026-08-10T12:00:00.000Z', 'A', 'B')], []);
