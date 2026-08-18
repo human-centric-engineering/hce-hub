@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { Prisma, TaskKind } from '@prisma/client';
 
 vi.mock('@/lib/projects/access', () => ({ resolveFeatureAccess: vi.fn() }));
-vi.mock('@/lib/projects/phases-service', () => ({ phaseBelongsToProject: vi.fn() }));
+vi.mock('@/lib/projects/phases-service', () => ({ findProjectPhase: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
   prisma: { task: { findUnique: vi.fn(), findMany: vi.fn() } },
 }));
@@ -25,14 +25,14 @@ vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
 
 const { resolveFeatureAccess } = await import('@/lib/projects/access');
-const { phaseBelongsToProject } = await import('@/lib/projects/phases-service');
+const { findProjectPhase } = await import('@/lib/projects/phases-service');
 const { prisma } = await import('@/lib/db/client');
 const { executeTransaction } = await import('@/lib/db/utils');
 const { logAdminAction } = await import('@/lib/orchestration/audit/admin-audit-logger');
 const { UpdateTaskCapability } = await import('@/lib/projects/capabilities/update-task');
 
 const resolveFeature = resolveFeatureAccess as ReturnType<typeof vi.fn>;
-const phaseInProject = phaseBelongsToProject as ReturnType<typeof vi.fn>;
+const phaseInProject = findProjectPhase as ReturnType<typeof vi.fn>;
 const taskFindUnique = prisma.task.findUnique as ReturnType<typeof vi.fn>;
 const taskFindMany = prisma.task.findMany as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
@@ -54,6 +54,10 @@ const ctx = (userId: string | null = USER, scope?: Record<string, string>) => ({
 const grantedOwner = { ok: true, feature: { projectId: 'p1', ownerUserId: USER, basis: 'member' } };
 
 const txTaskUpdate = vi.fn();
+// The phase being replaced is read inside the transaction (§33 t-98), so the
+// fake tx has to answer it; default = the task was not committed to any phase.
+const txTaskFindUnique = vi.fn();
+const txEventCreate = vi.fn();
 const txDepFindMany = vi.fn();
 const txDepDeleteMany = vi.fn();
 const txDepCreateMany = vi.fn();
@@ -63,7 +67,9 @@ beforeEach(() => {
   taskFindUnique.mockResolvedValue({ id: 't1', featureId: 'f1', feature: { projectId: 'p1' } });
   taskFindMany.mockResolvedValue([]);
   resolveFeature.mockResolvedValue(grantedOwner);
-  phaseInProject.mockResolvedValue(true);
+  phaseInProject.mockResolvedValue({ id: 'ph1', name: 'Phase One' });
+  txTaskFindUnique.mockResolvedValue({ phase: null });
+  txEventCreate.mockResolvedValue({ id: 'evt-1' });
 
   txTaskUpdate.mockResolvedValue({});
   txDepFindMany.mockResolvedValue([]);
@@ -73,7 +79,8 @@ beforeEach(() => {
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
-      task: { update: txTaskUpdate },
+      task: { update: txTaskUpdate, findUnique: txTaskFindUnique },
+      projectEvent: { create: txEventCreate },
       taskDependency: {
         findMany: txDepFindMany,
         deleteMany: txDepDeleteMany,
@@ -193,6 +200,30 @@ describe('update_task patch semantics', () => {
     });
   });
 
+  it('journals the commitment as a task-subject membership change (§33 t-98)', async () => {
+    // Inline path — `update_task` sets `data.phase` itself, so this emitter is
+    // wired here and nowhere else.
+    txTaskFindUnique.mockResolvedValue({ phase: null });
+    await cap.execute({ taskId: 't1', phaseId: 'ph1' }, ctx());
+    expect(txEventCreate).toHaveBeenCalledTimes(1);
+    const data = txEventCreate.mock.calls[0][0].data;
+    expect(data.kind).toBe('phase_membership_changed');
+    expect(data.phaseId).toBe('ph1');
+    expect(data.taskId).toBe('t1');
+    expect(data.metadata).toMatchObject({
+      subject: 'task',
+      fromPhaseId: null,
+      toPhaseId: 'ph1',
+      toPhaseName: 'Phase One',
+    });
+  });
+
+  it('does not read the previous phase — or journal — on an edit that leaves it alone', async () => {
+    await cap.execute({ taskId: 't1', title: 'New title' }, ctx());
+    expect(txTaskFindUnique).not.toHaveBeenCalled();
+    expect(txEventCreate).not.toHaveBeenCalled();
+  });
+
   it('clears the commitment with a null phaseId so the task inherits its feature again', async () => {
     const r = await cap.execute({ taskId: 't1', phaseId: null }, ctx());
     expect(r.data?.updated).toEqual(['phase']);
@@ -204,7 +235,7 @@ describe('update_task patch semantics', () => {
   });
 
   it('rejects a phase from another project, writing nothing', async () => {
-    phaseInProject.mockResolvedValue(false);
+    phaseInProject.mockResolvedValue(null);
     const r = await cap.execute({ taskId: 't1', phaseId: 'other-project-phase' }, ctx());
     expect(r.error?.code).toBe('invalid_phase');
     expect(runTx).not.toHaveBeenCalled();

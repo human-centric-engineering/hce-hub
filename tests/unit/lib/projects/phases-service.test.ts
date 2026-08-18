@@ -39,10 +39,8 @@ const { createPhase, updatePhase, reorderPhases, assignFeatureToPhase } =
 const canAccess = canAccessProject as ReturnType<typeof vi.fn>;
 const resolveFeature = resolveFeatureAccess as ReturnType<typeof vi.fn>;
 const phaseFindUnique = prisma.phase.findUnique as ReturnType<typeof vi.fn>;
-const phaseUpdate = prisma.phase.update as ReturnType<typeof vi.fn>;
 const phaseFindMany = prisma.phase.findMany as ReturnType<typeof vi.fn>;
 const phaseFindFirst = prisma.phase.findFirst as ReturnType<typeof vi.fn>;
-const featureUpdate = prisma.feature.update as ReturnType<typeof vi.fn>;
 const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 
@@ -53,8 +51,17 @@ const txAggregate = vi.fn();
 const txCreate = vi.fn();
 const txPhaseUpdate = vi.fn();
 const txIdeaUpdateMany = vi.fn();
+// §33 t-98 journals inside the same transaction as the write, and `updatePhase`
+// / `assignFeatureToPhase` became transactional for that reason — so the fake tx
+// now has to answer the feature reads and the event write too.
+const txEventCreate = vi.fn();
+const txFeatureUpdate = vi.fn();
+const txFeatureFindUnique = vi.fn();
 function mockTx() {
   txIdeaUpdateMany.mockResolvedValue({ count: 1 });
+  txEventCreate.mockResolvedValue({ id: 'evt-1' });
+  txFeatureUpdate.mockResolvedValue({});
+  txFeatureFindUnique.mockResolvedValue({ phase: null }); // unfiled unless a test says so
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
@@ -65,6 +72,8 @@ function mockTx() {
         findMany: phaseFindMany,
       },
       idea: { updateMany: txIdeaUpdateMany },
+      feature: { update: txFeatureUpdate, findUnique: txFeatureFindUnique },
+      projectEvent: { create: txEventCreate },
     })
   );
 }
@@ -177,7 +186,7 @@ describe('updatePhase', () => {
       startedAt: null,
       completedAt: null,
     });
-    phaseUpdate.mockResolvedValue({});
+    txPhaseUpdate.mockResolvedValue({});
   });
 
   it('throws NotFoundError for an unknown phase', async () => {
@@ -188,18 +197,18 @@ describe('updatePhase', () => {
   it('throws NotFoundError for a non-member (phase in a hidden project)', async () => {
     canAccess.mockResolvedValue({ basis: null });
     await expect(updatePhase(USER, 'ph1', { name: 'x' })).rejects.toBeInstanceOf(NotFoundError);
-    expect(phaseUpdate).not.toHaveBeenCalled();
+    expect(txPhaseUpdate).not.toHaveBeenCalled();
   });
 
   it('throws ValidationError when no field is supplied', async () => {
     await expect(updatePhase(USER, 'ph1', {})).rejects.toBeInstanceOf(ValidationError);
-    expect(phaseUpdate).not.toHaveBeenCalled();
+    expect(txPhaseUpdate).not.toHaveBeenCalled();
   });
 
   it('patches only supplied fields and reports them', async () => {
     const r = await updatePhase(USER, 'ph1', { name: 'Renamed', description: 'why' });
     expect(r).toEqual({ phaseId: 'ph1', updated: ['name', 'description'] });
-    expect(phaseUpdate).toHaveBeenCalledWith({
+    expect(txPhaseUpdate).toHaveBeenCalledWith({
       where: { id: 'ph1' },
       data: { name: 'Renamed', description: 'why' },
     });
@@ -208,7 +217,7 @@ describe('updatePhase', () => {
 
   it('clears the description with null', async () => {
     await updatePhase(USER, 'ph1', { description: null });
-    expect(phaseUpdate).toHaveBeenCalledWith({
+    expect(txPhaseUpdate).toHaveBeenCalledWith({
       where: { id: 'ph1' },
       data: { description: null },
     });
@@ -216,7 +225,7 @@ describe('updatePhase', () => {
 
   it('stamps startedAt the first time status becomes active', async () => {
     await updatePhase(USER, 'ph1', { status: 'active' });
-    const data = phaseUpdate.mock.calls[0][0].data;
+    const data = txPhaseUpdate.mock.calls[0][0].data;
     expect(data.status).toBe('active');
     expect(data.startedAt).toBeInstanceOf(Date);
   });
@@ -229,14 +238,14 @@ describe('updatePhase', () => {
       completedAt: null,
     });
     await updatePhase(USER, 'ph1', { status: 'active' });
-    const data = phaseUpdate.mock.calls[0][0].data;
+    const data = txPhaseUpdate.mock.calls[0][0].data;
     expect(data.startedAt).toBeUndefined(); // not re-written
   });
 
   it('stamps completedAt (and a missing startedAt) when status becomes complete', async () => {
     // upcoming (never active) → complete must not leave an impossible null-start.
     await updatePhase(USER, 'ph1', { status: 'complete' });
-    const data = phaseUpdate.mock.calls[0][0].data;
+    const data = txPhaseUpdate.mock.calls[0][0].data;
     expect(data.completedAt).toBeInstanceOf(Date);
     expect(data.startedAt).toBeInstanceOf(Date); // back-fills the start it skipped
   });
@@ -250,7 +259,7 @@ describe('updatePhase', () => {
       completedAt: null,
     });
     await updatePhase(USER, 'ph1', { status: 'complete' });
-    const data = phaseUpdate.mock.calls[0][0].data;
+    const data = txPhaseUpdate.mock.calls[0][0].data;
     expect(data.completedAt).toBeInstanceOf(Date);
     expect(data.startedAt).toBeUndefined(); // kept, not overwritten
   });
@@ -263,7 +272,7 @@ describe('updatePhase', () => {
       completedAt: new Date('2026-03-01'),
     });
     await updatePhase(USER, 'ph1', { status: 'active' });
-    const data = phaseUpdate.mock.calls[0][0].data;
+    const data = txPhaseUpdate.mock.calls[0][0].data;
     expect(data.status).toBe('active');
     expect(data.completedAt).toBeNull(); // reopened → done stamp dropped
     expect(data.startedAt).toBeUndefined(); // already started, kept
@@ -277,7 +286,7 @@ describe('updatePhase', () => {
       completedAt: new Date('2026-03-01'),
     });
     await updatePhase(USER, 'ph1', { status: 'parked' });
-    const data = phaseUpdate.mock.calls[0][0].data;
+    const data = txPhaseUpdate.mock.calls[0][0].data;
     expect(data.completedAt).toBeNull();
   });
 
@@ -291,7 +300,7 @@ describe('updatePhase', () => {
     await expect(updatePhase(USER, 'ph1', { name: 'x' }, 'p1')).rejects.toBeInstanceOf(
       NotFoundError
     );
-    expect(phaseUpdate).not.toHaveBeenCalled();
+    expect(txPhaseUpdate).not.toHaveBeenCalled();
   });
 });
 
@@ -332,7 +341,7 @@ describe('assignFeatureToPhase (f-phases §22 t3)', () => {
 
   beforeEach(() => {
     resolveFeature.mockResolvedValue(granted());
-    featureUpdate.mockResolvedValue({});
+    txFeatureUpdate.mockResolvedValue({});
   });
 
   it('is member-tier — resolves at the member tier, not owner', async () => {
@@ -345,7 +354,7 @@ describe('assignFeatureToPhase (f-phases §22 t3)', () => {
     phaseFindFirst.mockResolvedValue({ id: 'ph1' });
     const r = await assignFeatureToPhase(USER, 'f1', 'ph1');
     expect(r).toEqual({ featureId: 'f1', phaseId: 'ph1' });
-    expect(featureUpdate).toHaveBeenCalledWith({
+    expect(txFeatureUpdate).toHaveBeenCalledWith({
       where: { id: 'f1' },
       data: { phase: { connect: { id: 'ph1' } } },
     });
@@ -355,7 +364,7 @@ describe('assignFeatureToPhase (f-phases §22 t3)', () => {
     const r = await assignFeatureToPhase(USER, 'f1', null);
     expect(r.phaseId).toBeNull();
     expect(phaseFindFirst).not.toHaveBeenCalled();
-    expect(featureUpdate).toHaveBeenCalledWith({
+    expect(txFeatureUpdate).toHaveBeenCalledWith({
       where: { id: 'f1' },
       data: { phase: { disconnect: true } },
     });
@@ -364,7 +373,7 @@ describe('assignFeatureToPhase (f-phases §22 t3)', () => {
   it('rejects a phase from another project (ValidationError, no write)', async () => {
     phaseFindFirst.mockResolvedValue(null);
     await expect(assignFeatureToPhase(USER, 'f1', 'other')).rejects.toBeInstanceOf(ValidationError);
-    expect(featureUpdate).not.toHaveBeenCalled();
+    expect(txFeatureUpdate).not.toHaveBeenCalled();
   });
 
   it('maps a non-member (funnel not_found) to NotFoundError', async () => {
@@ -377,6 +386,72 @@ describe('assignFeatureToPhase (f-phases §22 t3)', () => {
     await expect(assignFeatureToPhase(USER, 'f1', null, 'p1')).rejects.toBeInstanceOf(
       NotFoundError
     );
-    expect(featureUpdate).not.toHaveBeenCalled();
+    expect(txFeatureUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('phase journalling (f-phase-history §33 t-98)', () => {
+  it('appends phase_created in the same transaction as the phase', async () => {
+    txAggregate.mockResolvedValue({ _max: { ordinal: null } });
+    txCreate.mockResolvedValue({ id: 'ph-new', ordinal: 0 });
+    await createPhase(USER, 'p1', { name: 'Foundations' });
+    expect(txEventCreate).toHaveBeenCalledTimes(1);
+    const data = txEventCreate.mock.calls[0][0].data;
+    expect(data.kind).toBe('phase_created');
+    expect(data.phaseId).toBe('ph-new');
+    expect(data.actorUserId).toBe(USER);
+  });
+
+  it('appends phase_updated naming the fields that actually changed', async () => {
+    phaseFindUnique.mockResolvedValue({
+      projectId: 'p1',
+      status: 'upcoming',
+      startedAt: null,
+      completedAt: null,
+    });
+    txPhaseUpdate.mockResolvedValue({});
+    await updatePhase(USER, 'ph1', { name: 'Project flow', status: 'active' });
+    const data = txEventCreate.mock.calls[0][0].data;
+    expect(data.kind).toBe('phase_updated');
+    expect(data.phaseId).toBe('ph1');
+    expect(data.metadata).toEqual({
+      fields: ['name', 'status'],
+      name: 'Project flow',
+      status: 'active',
+    });
+  });
+
+  it('records the phase a feature actually came from, read inside the transaction', async () => {
+    // The `from` value must be the one this write overwrote — so it is read from
+    // the tx handle, not carried in from the earlier access resolve.
+    phaseFindFirst.mockResolvedValue({ id: 'ph2', name: 'Project flow' });
+    txFeatureFindUnique.mockResolvedValue({ phase: { id: 'ph1', name: 'Foundations' } });
+    await assignFeatureToPhase(USER, 'f1', 'ph2');
+    const data = txEventCreate.mock.calls[0][0].data;
+    expect(data.kind).toBe('phase_membership_changed');
+    expect(data.phaseId).toBe('ph2'); // hangs on the destination
+    expect(data.metadata).toMatchObject({
+      subject: 'feature',
+      fromPhaseId: 'ph1',
+      fromPhaseName: 'Foundations',
+      toPhaseId: 'ph2',
+    });
+  });
+
+  it('records nothing when a feature is re-filed under the phase it is already in', async () => {
+    phaseFindFirst.mockResolvedValue({ id: 'ph1', name: 'Foundations' });
+    txFeatureFindUnique.mockResolvedValue({ phase: { id: 'ph1', name: 'Foundations' } });
+    await assignFeatureToPhase(USER, 'f1', 'ph1');
+    expect(txFeatureUpdate).toHaveBeenCalled(); // the write is still idempotently applied
+    expect(txEventCreate).not.toHaveBeenCalled(); // …but nothing happened to record
+  });
+
+  it('does NOT journal a reorder — ordering is presentation, not history', async () => {
+    // One drag would otherwise emit an event per phase and bury the real changes.
+    phaseFindMany.mockResolvedValue([{ id: 'ph1' }, { id: 'ph2' }]);
+    txPhaseUpdate.mockResolvedValue({});
+    await reorderPhases(USER, 'p1', ['ph2', 'ph1']);
+    expect(txPhaseUpdate).toHaveBeenCalledTimes(2);
+    expect(txEventCreate).not.toHaveBeenCalled();
   });
 });

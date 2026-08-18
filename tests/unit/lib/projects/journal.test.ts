@@ -49,10 +49,11 @@ describe('getProjectEvents access + scoping', () => {
     expect(eventFindMany).not.toHaveBeenCalled();
   });
 
-  it('scopes the query to the project and applies taskId / featureId / kinds filters', async () => {
+  it('scopes the query to the project and applies taskId / featureId / phaseId / kinds filters', async () => {
     await getProjectEvents(USER, PROJECT, {
       taskId: 't1',
       featureId: 'f1',
+      phaseId: 'ph1',
       kinds: ['decision', 'note'],
     });
     expect(eventFindMany).toHaveBeenCalledWith(
@@ -61,10 +62,22 @@ describe('getProjectEvents access + scoping', () => {
           projectId: PROJECT,
           taskId: 't1',
           featureId: 'f1',
+          phaseId: 'ph1',
           kind: { in: ['decision', 'note'] },
         },
         orderBy: { createdAt: 'desc' },
         take: 100,
+      })
+    );
+  });
+
+  it('scopes to one phase, alongside the project (§33 t-98)', async () => {
+    await getProjectEvents(USER, PROJECT, { phaseId: 'ph1' });
+    expect(eventFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // `projectId` rides alongside, which is the whole isolation argument: a
+        // phase id from another project matches nothing rather than leaking.
+        where: { projectId: PROJECT, phaseId: 'ph1' },
       })
     );
   });
