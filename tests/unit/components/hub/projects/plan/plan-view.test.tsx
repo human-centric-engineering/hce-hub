@@ -463,6 +463,29 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
     expect(screen.getByText('Shipped work')).toBeInTheDocument();
   });
 
+  it('offsets the scroll anchor past the sticky topbar', () => {
+    // `scrollIntoView({block:'start'})` aligns the band with the viewport top,
+    // which the shell's sticky 52px topbar then covers — you land inside the
+    // band's features with its header and intent hidden, i.e. missing the very
+    // context the link exists to show. Verified in the browser; the class is what
+    // fixes it, so pin it rather than leave it to be tidied away later.
+    const { container } = render(
+      <PlanView
+        focusPhaseId="one"
+        plan={banded([
+          {
+            id: 'one',
+            name: 'Targeted',
+            status: 'active',
+            ordinal: 0,
+            features: [feature({ id: 'a', title: 'Work' })],
+          },
+        ])}
+      />
+    );
+    expect(container.querySelector('#phase-one')).toHaveClass('scroll-mt-[68px]');
+  });
+
   it('leaves other bands at their default when one is deep-linked', () => {
     render(
       <PlanView

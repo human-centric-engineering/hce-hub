@@ -59,6 +59,12 @@ export function PhaseBand({
   // Bring the deep-linked band into view. Optional call because jsdom does not
   // implement scrollIntoView, and a link that scrolls is a nicety — it must never
   // be the reason the Plan fails to render.
+  //
+  // `block: 'start'` aligns the section with the viewport top, which the app
+  // shell's `sticky top-0` topbar (`components/hub/topbar.tsx`, `h-[52px]`) then
+  // covers — landing you inside the band's features with its header and intent
+  // hidden, which is precisely the context the link exists to show. `scroll-mt`
+  // below is what offsets it; the two must be read together.
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     if (focused) ref.current?.scrollIntoView?.({ block: 'start' });
@@ -125,7 +131,10 @@ export function PhaseBand({
     <section
       ref={ref}
       id={band.id ? `phase-${band.id}` : undefined}
-      className={isParked ? 'opacity-80' : undefined}
+      // 52px of sticky topbar + 16px of breathing room. Applied always rather than
+      // only when focused: it costs nothing when nothing scrolls here, and a
+      // conditional would silently stop working for any future in-page anchor.
+      className={`scroll-mt-[68px] ${isParked ? 'opacity-80' : ''}`.trim()}
     >
       <button
         type="button"
