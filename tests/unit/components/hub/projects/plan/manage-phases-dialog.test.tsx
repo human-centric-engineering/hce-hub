@@ -18,8 +18,15 @@ import {
 } from '@/components/hub/projects/plan/manage-phases-dialog';
 
 const phases: ManagedPhase[] = [
-  { id: 'ph1', name: 'Foundations', status: 'complete', ordinal: 0, featureCount: 3 },
-  { id: 'ph2', name: 'UI Spine', status: 'active', ordinal: 1, featureCount: 4 },
+  {
+    id: 'ph1',
+    name: 'Foundations',
+    description: null,
+    status: 'complete',
+    ordinal: 0,
+    featureCount: 3,
+  },
+  { id: 'ph2', name: 'UI Spine', description: null, status: 'active', ordinal: 1, featureCount: 4 },
 ];
 
 const okFetch = () => vi.fn().mockResolvedValue({ ok: true, status: 200 });
@@ -76,6 +83,113 @@ describe('ManagePhasesDialog', () => {
     );
   });
 
+  it('saves a phase intent (PATCH) on blur (§33 t-99)', async () => {
+    // The route has accepted `description` since §22 t3 — only the UI was missing.
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ManagePhasesDialog projectId="p1" phases={phases} />);
+    open();
+
+    const intent = screen.getByLabelText('Phase intent: Foundations');
+    fireEvent.change(intent, { target: { value: 'The base everything stands on.' } });
+    fireEvent.blur(intent);
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/p1/phases/ph1',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ description: 'The base everything stands on.' }),
+      })
+    );
+  });
+
+  it('clears an intent with null rather than an empty string', async () => {
+    // Empty is a legitimate edit here (unlike the name), and the route takes null
+    // to clear — sending '' would store a blank string that renders as a gap.
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const described: ManagedPhase[] = [{ ...phases[0], description: 'Was set' }];
+    render(<ManagePhasesDialog projectId="p1" phases={described} />);
+    open();
+
+    const intent = screen.getByLabelText('Phase intent: Foundations');
+    fireEvent.change(intent, { target: { value: '   ' } });
+    fireEvent.blur(intent);
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/p1/phases/ph1',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ description: null }) })
+    );
+  });
+
+  it('saves a typed intent when the dialog is dismissed with Escape (§33 t-99 review)', async () => {
+    // A Textarea saves on blur, but closing the dialog unmounts the content
+    // without delivering one — so before the flush-on-close this silently threw
+    // away a paragraph of typed intent, with no error and no indication.
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ManagePhasesDialog projectId="p1" phases={phases} />);
+    open();
+
+    const intent = screen.getByLabelText('Phase intent: Foundations');
+    fireEvent.change(intent, { target: { value: 'The base everything stands on.' } });
+    fireEvent.keyDown(intent, { key: 'Escape' });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/p1/phases/ph1',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ description: 'The base everything stands on.' }),
+      })
+    );
+  });
+
+  it('does not re-send an intent that was already saved on blur when the dialog closes', async () => {
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ManagePhasesDialog projectId="p1" phases={phases} />);
+    open();
+
+    const intent = screen.getByLabelText('Phase intent: Foundations');
+    fireEvent.change(intent, { target: { value: 'Saved once' } });
+    fireEvent.blur(intent);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.keyDown(intent, { key: 'Escape' });
+    // Still one: the row clears its pending entry the moment the draft matches
+    // what was sent, so closing cannot duplicate the write (or its journal entry).
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not PATCH an intent that differs only by surrounding whitespace', () => {
+    // Nothing trims on the write path, so an MCP-authored description can arrive
+    // with a trailing newline. Comparing it against a trimmed local value made
+    // merely tabbing through the field "dirty" — and since §33 t-98 journals every
+    // phase change, that phantom PATCH wrote a phase_updated event nobody made.
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const described: ManagedPhase[] = [{ ...phases[0], description: 'Line one\nLine two\n' }];
+    render(<ManagePhasesDialog projectId="p1" phases={described} />);
+    open();
+
+    fireEvent.blur(screen.getByLabelText('Phase intent: Foundations'));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not PATCH an unchanged intent', () => {
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const described: ManagedPhase[] = [{ ...phases[0], description: 'Unchanged' }];
+    render(<ManagePhasesDialog projectId="p1" phases={described} />);
+    open();
+
+    fireEvent.blur(screen.getByLabelText('Phase intent: Foundations'));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('does not PATCH on blur when the name is unchanged', () => {
     const fetchMock = okFetch();
     vi.stubGlobal('fetch', fetchMock);
@@ -89,7 +203,14 @@ describe('ManagePhasesDialog', () => {
     const fetchMock = okFetch();
     vi.stubGlobal('fetch', fetchMock);
     const one: ManagedPhase[] = [
-      { id: 'ph1', name: 'Alpha', status: 'active', ordinal: 0, featureCount: 0 },
+      {
+        id: 'ph1',
+        name: 'Alpha',
+        description: null,
+        status: 'active',
+        ordinal: 0,
+        featureCount: 0,
+      },
     ];
     const { rerender } = render(<ManagePhasesDialog projectId="p1" phases={one} />);
     open();

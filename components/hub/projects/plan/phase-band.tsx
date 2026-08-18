@@ -11,12 +11,12 @@
  * the header is suppressed (`showHeader={false}`) so it reads exactly like the
  * pre-phases flat list — phases are an overlay, not a tax on projects without them.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { FeatureRow } from '@/components/hub/projects/plan/feature-row';
 import { BorrowedTaskRow } from '@/components/hub/projects/plan/borrowed-task-row';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
-import { phaseStatus } from '@/components/hub/projects/plan/presentation';
+import { phaseStatus, shortDate } from '@/components/hub/projects/plan/presentation';
 import type { PlanPhaseBand } from '@/components/hub/projects/plan/types';
 
 export function PhaseBand({
@@ -28,6 +28,7 @@ export function PhaseBand({
   onToggle,
   ordinalFor,
   forceOpen = false,
+  focused = false,
   assignablePhases,
 }: {
   band: PlanPhaseBand;
@@ -42,6 +43,8 @@ export function PhaseBand({
   ordinalFor: (featureId: string, featureNumber: number | null) => number;
   /** Open regardless of status — this band holds the view's auto-expanded feature. */
   forceOpen?: boolean;
+  /** This band is the `?phase=` deep-link target: anchor it and scroll to it. */
+  focused?: boolean;
   /** The project's phases, for each row's assign picker (f-phases §22 t3). */
   assignablePhases: { id: string; name: string }[];
 }) {
@@ -52,6 +55,20 @@ export function PhaseBand({
   // any band holding the auto-expanded feature (forceOpen), so the view opens on it.
   const collapsedByDefault = isParked || band.status === 'complete';
   const [open, setOpen] = useState(forceOpen || !collapsedByDefault);
+
+  // Bring the deep-linked band into view. Optional call because jsdom does not
+  // implement scrollIntoView, and a link that scrolls is a nicety — it must never
+  // be the reason the Plan fails to render.
+  //
+  // `block: 'start'` aligns the section with the viewport top, which the app
+  // shell's `sticky top-0` topbar (`components/hub/topbar.tsx`, `h-[52px]`) then
+  // covers — landing you inside the band's features with its header and intent
+  // hidden, which is precisely the context the link exists to show. `scroll-mt`
+  // below is what offsets it; the two must be read together.
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (focused) ref.current?.scrollIntoView?.({ block: 'start' });
+  }, [focused]);
 
   // `band.rows` — features INTERLEAVED with any tasks borrowed into this phase, in
   // readiness order (§32 t-95). Ordering is the server's; this only renders it.
@@ -96,8 +113,29 @@ export function PhaseBand({
   // AND hidden. Count them separately so the header says something is in there.
   const borrowedCount = bandRows.filter((r) => r.kind === 'task').length;
 
+  // The phase's own lifecycle, shown only where it says something: a started date
+  // once it has begun, and a finished date only when it actually finished. A
+  // `complete` phase shows the span; an `upcoming` one shows nothing rather than
+  // an empty placeholder. Derived coherently since f-phases §22 and rendered
+  // nowhere until now (§33 t-99).
+  const lifecycle =
+    band.startedAt && band.completedAt
+      ? `${shortDate(band.startedAt)} → ${shortDate(band.completedAt)}`
+      : band.startedAt
+        ? `started ${shortDate(band.startedAt)}`
+        : band.completedAt
+          ? `finished ${shortDate(band.completedAt)}`
+          : '';
+
   return (
-    <section className={isParked ? 'opacity-80' : undefined}>
+    <section
+      ref={ref}
+      id={band.id ? `phase-${band.id}` : undefined}
+      // 52px of sticky topbar + 16px of breathing room. Applied always rather than
+      // only when focused: it costs nothing when nothing scrolls here, and a
+      // conditional would silently stop working for any future in-page anchor.
+      className={`scroll-mt-[68px] ${isParked ? 'opacity-80' : ''}`.trim()}
+    >
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -119,8 +157,21 @@ export function PhaseBand({
         <span className="text-muted-foreground text-xs">
           {count} {count === 1 ? 'feature' : 'features'}
           {borrowedCount > 0 && ` · ${borrowedCount} borrowed`}
+          {lifecycle && ` · ${lifecycle}`}
         </span>
       </button>
+      {/*
+        The authored intent — why this grouping exists and what would make it
+        complete. Rendered under the header rather than in it: it is prose, and
+        the header is a row of labels. Only when open, so a collapsed band stays
+        one line, and clamped to two lines because a band is a summary — the full
+        text belongs on a phase page (idea #9).
+      */}
+      {open && band.description && (
+        <p className="text-muted-foreground mt-1 line-clamp-2 px-2 pl-8 text-xs leading-relaxed">
+          {band.description}
+        </p>
+      )}
       {open && <div className="mt-3 space-y-3">{rows}</div>}
     </section>
   );

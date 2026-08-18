@@ -173,6 +173,15 @@ export interface PlanPhaseBand {
    * rendered and projected; `null` for the residual band, which nobody authored.
    */
   description: string | null;
+  /**
+   * When the phase began and finished — derived coherently in `phases-service`
+   * since f-phases §22 (`completedAt` set ⟺ complete; `startedAt` stamped on the
+   * first active/complete and never un-stamped) and, until f-phase-history §33
+   * t-99, selected by no read at all. ISO strings so the client DTO can mirror
+   * them without a Date across the boundary.
+   */
+  startedAt: string | null;
+  completedAt: string | null;
   /** Display position; `null` for the residual band. */
   ordinal: number | null;
   /**
@@ -219,7 +228,15 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
   const phasesPromise = prisma.phase.findMany({
     where: { projectId },
     orderBy: [{ ordinal: 'asc' }, { createdAt: 'asc' }],
-    select: { id: true, name: true, status: true, ordinal: true, description: true },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      ordinal: true,
+      description: true,
+      startedAt: true,
+      completedAt: true,
+    },
   });
 
   const features = await prisma.feature.findMany({
@@ -428,6 +445,8 @@ type PhaseRow = {
   status: PhaseStatus;
   ordinal: number;
   description: string | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
 };
 
 /**
@@ -517,6 +536,8 @@ function groupIntoPhaseBands(
       status: p.status,
       ordinal: p.ordinal,
       description: p.description,
+      startedAt: p.startedAt?.toISOString() ?? null,
+      completedAt: p.completedAt?.toISOString() ?? null,
       features,
       rows: interleaveBandRows(features, borrowedByPhase.get(p.id) ?? [], statusByFeature),
     };
@@ -528,6 +549,9 @@ function groupIntoPhaseBands(
       status: null,
       ordinal: null,
       description: null,
+      // The residual band is not a phase, so it has no lifecycle of its own.
+      startedAt: null,
+      completedAt: null,
       features: residual,
       // The residual band has no phase id, so nothing can be committed *to* it —
       // a task's `phaseId` always names a real phase, and null means "inherit".

@@ -9,6 +9,7 @@ import {
   phaseStatus,
   firstName,
   prLabel,
+  shortDate,
 } from '@/components/hub/projects/plan/presentation';
 
 describe('featureStatus / taskStatus', () => {
@@ -57,5 +58,30 @@ describe('prLabel', () => {
 
   it('tolerates a trailing slash', () => {
     expect(prLabel('https://github.com/o/r/pull/44/')).toBe('#44');
+  });
+});
+
+describe('shortDate (f-phase-history §33 t-99)', () => {
+  it('formats UTC, locale-free — the same string on the server and in any browser', () => {
+    // toLocaleDateString would emit "Aug 1" on a Vercel en-US server and "1 Aug"
+    // in an en-GB browser: a hydration mismatch on every band with a start date.
+    expect(shortDate('2026-08-01T00:00:00.000Z')).toBe('1 Aug 2026');
+  });
+
+  it('does not shift a UTC-stamped date into the viewer timezone', () => {
+    // The timestamps are stamped at UTC. Formatted in local time, midnight-UTC
+    // renders as the PREVIOUS day for anyone west of Greenwich — silently wrong.
+    expect(shortDate('2026-08-01T00:00:00.000Z')).toContain('1 Aug');
+    expect(shortDate('2026-08-01T23:59:59.000Z')).toContain('1 Aug');
+  });
+
+  it('always carries the year, so it cannot differ across a year boundary', () => {
+    // A "hide the year when it matches now" rule would itself be non-deterministic
+    // between a server and a client evaluating "now" either side of midnight.
+    expect(shortDate('2025-12-31T00:00:00.000Z')).toBe('31 Dec 2025');
+  });
+
+  it('returns empty for an unparseable value rather than "Invalid Date"', () => {
+    expect(shortDate('not-a-date')).toBe('');
   });
 });

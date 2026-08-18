@@ -6,6 +6,7 @@
  * and rows can't drift. Tones are applied via inline `var(--signal-<tone>)` (a
  * dynamic token name can't be a static Tailwind class).
  */
+import { utcShortDate } from '@/components/hub/projects/presentation';
 import type {
   FeatureStatus,
   TaskEffectiveStatus,
@@ -79,4 +80,22 @@ export function firstName(name: string): string {
 export function prLabel(url: string): string {
   const seg = url.split('/').filter(Boolean).pop() ?? url;
   return /^\d+$/.test(seg) ? `#${seg}` : seg;
+}
+
+/**
+ * A phase lifecycle date for the band header.
+ *
+ * Delegates to the shared `utcShortDate` — locale-free and UTC, so it survives
+ * SSR without a hydration mismatch and cannot shift a UTC-stamped date to the
+ * previous day for a viewer west of Greenwich. See that function for why
+ * `toLocaleDateString` is the wrong tool here; `ideas/idea-row.tsx` had already
+ * reached the same conclusion before this task re-derived it the hard way.
+ *
+ * Deliberately absolute, not relative: `timeAgo` suits the Log, where an event
+ * is a moment you are catching up on, but a phase's start and finish are
+ * milestones you compare — "1 Aug 2026 → 18 Aug 2026" reads as a span in a way
+ * "2w · 3d" does not.
+ */
+export function shortDate(iso: string): string {
+  return utcShortDate(iso);
 }

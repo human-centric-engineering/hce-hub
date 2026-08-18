@@ -17,7 +17,14 @@ import {
 } from '@/components/hub/projects/plan/manage-phases-dialog';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
 
-export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
+export function PlanView({
+  plan,
+  focusPhaseId = null,
+}: {
+  plan: ProjectPlanDTO;
+  /** `?phase=` — the band to open and scroll to (§33 t-99). */
+  focusPhaseId?: string | null;
+}) {
   // The plan-ordered flat list (bands are a partition of it) — for the summary,
   // the default-expand pick, and the stable §N fallback.
   const allFeatures = plan.phases.flatMap((b) => b.features);
@@ -31,6 +38,7 @@ export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
             {
               id: b.id,
               name: b.name,
+              description: b.description,
               status: b.status,
               ordinal: b.ordinal,
               featureCount: b.features.length,
@@ -92,7 +100,13 @@ export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
             ordinalFor={ordinalFor}
             // Open the band that holds the auto-expanded feature even if it would
             // otherwise collapse by default, so the view really "opens on" it.
-            forceOpen={autoExpandId != null && band.features.some((f) => f.id === autoExpandId)}
+            // ...or the band a `?phase=` link named, which is a deliberate request
+            // to look at it and so outranks its collapse-by-default status.
+            forceOpen={
+              (autoExpandId != null && band.features.some((f) => f.id === autoExpandId)) ||
+              (focusPhaseId != null && band.id === focusPhaseId)
+            }
+            focused={focusPhaseId != null && band.id === focusPhaseId}
             assignablePhases={assignablePhases}
           />
         ))}

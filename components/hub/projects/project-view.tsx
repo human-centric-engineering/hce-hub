@@ -49,6 +49,7 @@ export function ProjectView({
   plan,
   board,
   ideas,
+  focusPhaseId = null,
 }: {
   project: ProjectViewDTO;
   activeTab: ProjectTab;
@@ -58,6 +59,8 @@ export function ProjectView({
   board?: ProjectBoardDTO | null;
   /** The Ideas inbox payload — supplied only on the Ideas tab; `null` if its fetch failed. */
   ideas?: IdeaInboxDTO | null;
+  /** `?phase=` — open the Plan on this band and scroll to it (§33 t-99). */
+  focusPhaseId?: string | null;
 }) {
   const platform = getHostPlatform(project.hostPlatform)?.label ?? project.hostPlatform;
 
@@ -106,7 +109,7 @@ export function ProjectView({
         <div className="py-8">
           {activeTab === 'plan' ? (
             plan ? (
-              <PlanView plan={plan} />
+              <PlanView plan={plan} focusPhaseId={focusPhaseId} />
             ) : (
               <p className="text-muted-foreground py-16 text-center text-sm">
                 Couldn&rsquo;t load the plan just now — try refreshing.

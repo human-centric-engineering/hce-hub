@@ -55,6 +55,12 @@ export interface FeatureDetailDTO {
   projectId: string;
   /** The parent project's slug (`hce-hub`) for the back-link; `null` → falls back to `projectId`. */
   projectSlug: string | null;
+  /**
+   * The phase this feature is filed under; `null` when unfiled. Returned by the
+   * API since f-work-kinds §32 t-80 — this mirror simply never declared it, so
+   * the feature page showed no phase at all (§33 t-99).
+   */
+  phase: { id: string; name: string } | null;
   projectName: string;
   /** Project-wide stable ordinal, rendered `§N`; `null` until assigned. */
   number: number | null;

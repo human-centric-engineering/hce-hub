@@ -12,7 +12,7 @@
  * keyboard: focus the handle, Space, arrows, Space) PUTs the whole new id order to
  * `…/phases/order`, which rewrites ordinals 0..n-1 (collision-free by design).
  */
-import { useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { GripVertical } from 'lucide-react';
 import {
@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { FieldHelp } from '@/components/ui/field-help';
 import {
   Select,
@@ -56,6 +57,8 @@ import type { PhaseStatus } from '@/components/hub/projects/plan/types';
 export interface ManagedPhase {
   id: string;
   name: string;
+  /** The authored intent — why the phase exists, and what would complete it. */
+  description: string | null;
   status: PhaseStatus;
   ordinal: number;
   featureCount: number;
@@ -145,6 +148,10 @@ export function ManagePhasesDialog({
   const rename = (id: string, name: string) => void call(`${base}/${id}`, 'PATCH', { name });
   const setStatus = (id: string, status: PhaseStatus) =>
     void call(`${base}/${id}`, 'PATCH', { status });
+  // The PATCH route has accepted `description` since f-phases §22 t3 — only the UI
+  // was missing, so this is client-only. Empty clears it (the route takes null).
+  const setDescription = (id: string, description: string) =>
+    void call(`${base}/${id}`, 'PATCH', { description: description.trim() || null });
 
   // dnd-kit drag glue — the reorder computation lives in the unit-tested
   // `reorderedIds`; this handler only fires on a real pointer/keyboard drag, which
@@ -159,8 +166,30 @@ export function ManagePhasesDialog({
   };
   /* v8 ignore stop */
 
+  // Pending intent edits, keyed by phase id. A Textarea saves on blur, but closing
+  // the dialog — Escape, the X, or a click outside — unmounts the content without
+  // delivering one, so a paragraph of typed intent would vanish with no error and
+  // no indication. The name Input survives that because Enter also commits it and
+  // it is short; a multi-line intent has neither defence. Rows register a flush
+  // here and the dialog runs them on close, which covers every dismissal path in
+  // one place rather than guessing at each one.
+  const pendingEdits = useRef(new Map<string, () => void>());
+  const flushPending = () => {
+    for (const flush of pendingEdits.current.values()) flush();
+    pendingEdits.current.clear();
+  };
+  /** A row reports its uncommitted edit, or clears it once saved. Stable identity. */
+  const registerPending = useCallback((id: string, flush: (() => void) | null) => {
+    if (flush) pendingEdits.current.set(id, flush);
+    else pendingEdits.current.delete(id);
+  }, []);
+
   return (
-    <Dialog>
+    <Dialog
+      onOpenChange={(next) => {
+        if (!next) flushPending();
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <GripVertical className="mr-1.5 h-4 w-4" /> Manage phases
@@ -171,8 +200,21 @@ export function ManagePhasesDialog({
           <DialogTitle>Manage phases</DialogTitle>
           <DialogDescription className="flex items-center gap-1">
             <span>
-              Create, rename, drag to reorder, or set the status of this project&rsquo;s phases.
+              Create, rename, describe, drag to reorder, or set the status of this project&rsquo;s
+              phases.
             </span>
+            <FieldHelp title="Phase intent" ariaLabel="What to write in a phase description">
+              <p>
+                A phase description says <strong>what the phase is for</strong>, and{' '}
+                <strong>what would make it complete</strong>. It shows under the phase in the plan,
+                so the grouping explains itself.
+              </p>
+              <p>
+                Deliberately not a checklist: a phase can be an epic, a release band or an idea
+                park, and a completion contract is nonsense for a park &mdash; a park never
+                completes, it drains.
+              </p>
+            </FieldHelp>
             <FieldHelp title="Phase status" ariaLabel="What the phase statuses mean">
               <p>
                 <strong>upcoming</strong> / <strong>active</strong> — on the live roadmap; shown
@@ -203,6 +245,8 @@ export function ManagePhasesDialog({
                   disabled={working}
                   onRename={rename}
                   onStatus={setStatus}
+                  onDescribe={setDescription}
+                  registerPending={registerPending}
                 />
               ))}
             </SortableContext>
@@ -241,11 +285,16 @@ function PhaseRow({
   disabled,
   onRename,
   onStatus,
+  onDescribe,
+  registerPending,
 }: {
   phase: ManagedPhase;
   disabled: boolean;
   onRename: (id: string, name: string) => void;
   onStatus: (id: string, status: PhaseStatus) => void;
+  onDescribe: (id: string, description: string) => void;
+  /** Report an uncommitted intent so the dialog can save it on close. */
+  registerPending: (id: string, flush: (() => void) | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: phase.id,
@@ -268,51 +317,112 @@ function PhaseRow({
     if (dirty) onRename(phase.id, name.trim());
   };
 
+  // Same adopt-the-server-value discipline as the name, for the same reason: a
+  // stale local value must not clobber another client's edit on the next blur.
+  // Unlike the name, an EMPTY description is legitimate (it clears the intent),
+  // so `dirty` compares against the stored value rather than requiring content.
+  const [description, setDescription] = useState(phase.description ?? '');
+  // What this row last SENT, which is not what the server has yet: the refreshed
+  // prop arrives a round-trip later, and in that window a blur-save followed by an
+  // immediate close would otherwise send the identical value a second time. Reset
+  // when the stored value changes, so the server's copy governs again.
+  //
+  // State, not a ref, because `descriptionDirty` is derived from it during render —
+  // a ref read there would not re-render when it changed, which is exactly what the
+  // `react-hooks/refs` rule is protecting against.
+  const [lastSent, setLastSent] = useState<string | null>(null);
+  useEffect(() => {
+    setDescription(phase.description ?? '');
+    setLastSent(null);
+  }, [phase.description]);
+
+  // Trimmed on BOTH sides. Nothing trims on the write path (the route's schema is
+  // `.nullish()`, not `.trim()`), so an MCP-authored description can arrive with a
+  // trailing newline — and comparing it against a trimmed local value made merely
+  // tabbing through the field "dirty". Since §33 t-98 journals every phase change,
+  // that phantom PATCH also wrote a `phase_updated` event nobody made.
+  const committed = (lastSent ?? phase.description ?? '').trim();
+  const descriptionDirty = description.trim() !== committed;
+
+  const saveDescription = () => {
+    if (!descriptionDirty) return;
+    setLastSent(description);
+    onDescribe(phase.id, description);
+  };
+
+  // Report an uncommitted draft to the dialog so closing it commits rather than
+  // discards it. Registered as `saveDescription` itself, so the close path runs
+  // the same guard as blur and cannot duplicate a write.
+  const pendingSave = descriptionDirty ? saveDescription : null;
+  useEffect(() => {
+    registerPending(phase.id, pendingSave);
+    return () => registerPending(phase.id, null);
+  }, [phase.id, pendingSave, registerPending]);
+
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-2">
-      <button
-        type="button"
-        aria-label={`Reorder ${phase.name}`}
+    <div ref={setNodeRef} style={style} className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          aria-label={`Reorder ${phase.name}`}
+          disabled={disabled}
+          className="text-muted-foreground hover:text-foreground shrink-0 cursor-grab touch-none disabled:opacity-30"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={saveName}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveName();
+          }}
+          maxLength={200}
+          disabled={disabled}
+          aria-label={`Phase name: ${phase.name}`}
+          className="flex-1"
+        />
+        <span className="text-muted-foreground w-14 shrink-0 text-right text-xs tabular-nums">
+          {phase.featureCount} feat
+        </span>
+        <Select
+          value={phase.status}
+          onValueChange={(v) => {
+            if (isPhaseStatus(v)) onStatus(phase.id, v);
+          }}
+          disabled={disabled}
+        >
+          <SelectTrigger className="w-32 shrink-0" aria-label={`Status: ${phase.status}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {/*
+        Indented to the name input so the intent reads as belonging to this phase
+        rather than as a sibling control. Saves on blur, like the name — there is
+        no explicit save in this dialog, and adding one only for this field would
+        make the two edits behave differently for no reason.
+      */}
+      <Textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        onBlur={saveDescription}
+        rows={2}
+        maxLength={2000}
         disabled={disabled}
-        className="text-muted-foreground hover:text-foreground shrink-0 cursor-grab touch-none disabled:opacity-30"
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-      <Input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onBlur={saveName}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') saveName();
-        }}
-        maxLength={200}
-        disabled={disabled}
-        aria-label={`Phase name: ${phase.name}`}
-        className="flex-1"
+        placeholder="What is this phase for, and what would make it complete?"
+        aria-label={`Phase intent: ${phase.name}`}
+        className="ml-6 w-[calc(100%-1.5rem)] resize-y text-xs"
       />
-      <span className="text-muted-foreground w-14 shrink-0 text-right text-xs tabular-nums">
-        {phase.featureCount} feat
-      </span>
-      <Select
-        value={phase.status}
-        onValueChange={(v) => {
-          if (isPhaseStatus(v)) onStatus(phase.id, v);
-        }}
-        disabled={disabled}
-      >
-        <SelectTrigger className="w-32 shrink-0" aria-label={`Status: ${phase.status}`}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {STATUSES.map((s) => (
-            <SelectItem key={s} value={s}>
-              {s}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
     </div>
   );
 }

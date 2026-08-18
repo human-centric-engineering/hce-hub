@@ -46,9 +46,18 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
  * about features. Defaulted below to exactly those features, which is what the
  * server produces for a band with nothing borrowed into it (§32 t-95).
  */
-type BandInput = Omit<PlanPhaseBand, 'rows'> & { rows?: PlanBandRow[] };
+type BandInput = Omit<PlanPhaseBand, 'rows' | 'description' | 'startedAt' | 'completedAt'> & {
+  rows?: PlanBandRow[];
+  /** §33 t-99 — optional here too: most tests care about grouping, not the header. */
+  description?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+};
 
 const withRows = (b: BandInput): PlanPhaseBand => ({
+  description: null,
+  startedAt: null,
+  completedAt: null,
   ...b,
   rows: b.rows ?? b.features.map((feature) => ({ kind: 'feature', feature })),
 });
@@ -356,6 +365,151 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
     expect(screen.queryByText('Shipped work')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Foundations/ }));
     expect(screen.getByText('Shipped work')).toBeInTheDocument();
+  });
+
+  it("renders a phase's authored intent under its header (§33 t-99)", () => {
+    // Written since f-phases §22 and carried by the payload all along; the client
+    // mirror simply never declared it, so nothing could draw it.
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'flow',
+            name: 'Project flow',
+            status: 'active',
+            ordinal: 0,
+            description:
+              'The machinery for managing development. Done when a 2nd person can use it.',
+            features: [feature({ id: 'a', title: 'Some work' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText(/Done when a 2nd person can use it/)).toBeInTheDocument();
+  });
+
+  it('hides the intent while the band is collapsed, so a closed band stays one line', () => {
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'done',
+            name: 'Foundations',
+            status: 'complete', // collapses by default
+            ordinal: 0,
+            description: 'The base everything stands on.',
+            features: [feature({ id: 'a', title: 'Shipped work', status: 'shipped' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.queryByText(/The base everything stands on/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Foundations/ }));
+    expect(screen.getByText(/The base everything stands on/)).toBeInTheDocument();
+  });
+
+  it('shows each lifecycle date only when it says something', () => {
+    // A started phase shows a start; only a finished one shows a finish. An
+    // upcoming phase shows neither, rather than an empty placeholder.
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'running',
+            name: 'In progress',
+            status: 'active',
+            ordinal: 0,
+            startedAt: '2026-08-01T00:00:00.000Z',
+            completedAt: null,
+            features: [feature({ id: 'a', title: 'Work' })],
+          },
+          {
+            id: 'later',
+            name: 'Not yet',
+            status: 'upcoming',
+            ordinal: 1,
+            features: [feature({ id: 'b', title: 'Future work' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByRole('button', { name: /In progress/ })).toHaveTextContent(/started/);
+    expect(screen.getByRole('button', { name: /In progress/ })).not.toHaveTextContent(/finished/);
+    expect(screen.getByRole('button', { name: /Not yet/ })).not.toHaveTextContent(/started/);
+  });
+
+  it('renders no intent for the residual "No phase" band — nobody authored one', () => {
+    render(<PlanView plan={plan([feature({ id: 'a', title: 'Unfiled work' })])} />);
+    expect(screen.getByText('Unfiled work')).toBeInTheDocument();
+  });
+
+  it('opens and anchors the band a ?phase= link names, even if it would collapse', () => {
+    // A deep-link is a deliberate request to look at that band, so it outranks
+    // collapse-by-default — otherwise following the link lands you on a closed row.
+    render(
+      <PlanView
+        focusPhaseId="done"
+        plan={banded([
+          {
+            id: 'done',
+            name: 'Foundations',
+            status: 'complete', // collapses by default
+            ordinal: 0,
+            features: [feature({ id: 'a', title: 'Shipped work', status: 'shipped' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText('Shipped work')).toBeInTheDocument();
+  });
+
+  it('offsets the scroll anchor past the sticky topbar', () => {
+    // `scrollIntoView({block:'start'})` aligns the band with the viewport top,
+    // which the shell's sticky 52px topbar then covers — you land inside the
+    // band's features with its header and intent hidden, i.e. missing the very
+    // context the link exists to show. Verified in the browser; the class is what
+    // fixes it, so pin it rather than leave it to be tidied away later.
+    const { container } = render(
+      <PlanView
+        focusPhaseId="one"
+        plan={banded([
+          {
+            id: 'one',
+            name: 'Targeted',
+            status: 'active',
+            ordinal: 0,
+            features: [feature({ id: 'a', title: 'Work' })],
+          },
+        ])}
+      />
+    );
+    expect(container.querySelector('#phase-one')).toHaveClass('scroll-mt-[68px]');
+  });
+
+  it('leaves other bands at their default when one is deep-linked', () => {
+    render(
+      <PlanView
+        focusPhaseId="one"
+        plan={banded([
+          {
+            id: 'one',
+            name: 'Targeted',
+            status: 'complete',
+            ordinal: 0,
+            features: [feature({ id: 'a', title: 'In the linked band', status: 'shipped' })],
+          },
+          {
+            id: 'two',
+            name: 'Untouched',
+            status: 'complete',
+            ordinal: 1,
+            features: [feature({ id: 'b', title: 'In the other band', status: 'shipped' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText('In the linked band')).toBeInTheDocument();
+    expect(screen.queryByText('In the other band')).not.toBeInTheDocument();
   });
 
   it('forces a collapse-by-default band open when it holds the auto-expanded feature', () => {
