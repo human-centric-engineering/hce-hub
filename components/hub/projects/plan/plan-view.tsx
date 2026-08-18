@@ -31,6 +31,7 @@ export function PlanView({ plan }: { plan: ProjectPlanDTO }) {
             {
               id: b.id,
               name: b.name,
+              description: b.description,
               status: b.status,
               ordinal: b.ordinal,
               featureCount: b.features.length,

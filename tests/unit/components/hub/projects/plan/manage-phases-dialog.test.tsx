@@ -18,8 +18,15 @@ import {
 } from '@/components/hub/projects/plan/manage-phases-dialog';
 
 const phases: ManagedPhase[] = [
-  { id: 'ph1', name: 'Foundations', status: 'complete', ordinal: 0, featureCount: 3 },
-  { id: 'ph2', name: 'UI Spine', status: 'active', ordinal: 1, featureCount: 4 },
+  {
+    id: 'ph1',
+    name: 'Foundations',
+    description: null,
+    status: 'complete',
+    ordinal: 0,
+    featureCount: 3,
+  },
+  { id: 'ph2', name: 'UI Spine', description: null, status: 'active', ordinal: 1, featureCount: 4 },
 ];
 
 const okFetch = () => vi.fn().mockResolvedValue({ ok: true, status: 200 });
@@ -76,6 +83,58 @@ describe('ManagePhasesDialog', () => {
     );
   });
 
+  it('saves a phase intent (PATCH) on blur (§33 t-99)', async () => {
+    // The route has accepted `description` since §22 t3 — only the UI was missing.
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ManagePhasesDialog projectId="p1" phases={phases} />);
+    open();
+
+    const intent = screen.getByLabelText('Phase intent: Foundations');
+    fireEvent.change(intent, { target: { value: 'The base everything stands on.' } });
+    fireEvent.blur(intent);
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/p1/phases/ph1',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ description: 'The base everything stands on.' }),
+      })
+    );
+  });
+
+  it('clears an intent with null rather than an empty string', async () => {
+    // Empty is a legitimate edit here (unlike the name), and the route takes null
+    // to clear — sending '' would store a blank string that renders as a gap.
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const described: ManagedPhase[] = [{ ...phases[0], description: 'Was set' }];
+    render(<ManagePhasesDialog projectId="p1" phases={described} />);
+    open();
+
+    const intent = screen.getByLabelText('Phase intent: Foundations');
+    fireEvent.change(intent, { target: { value: '   ' } });
+    fireEvent.blur(intent);
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/p1/phases/ph1',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ description: null }) })
+    );
+  });
+
+  it('does not PATCH an unchanged intent', () => {
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const described: ManagedPhase[] = [{ ...phases[0], description: 'Unchanged' }];
+    render(<ManagePhasesDialog projectId="p1" phases={described} />);
+    open();
+
+    fireEvent.blur(screen.getByLabelText('Phase intent: Foundations'));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('does not PATCH on blur when the name is unchanged', () => {
     const fetchMock = okFetch();
     vi.stubGlobal('fetch', fetchMock);
@@ -89,7 +148,14 @@ describe('ManagePhasesDialog', () => {
     const fetchMock = okFetch();
     vi.stubGlobal('fetch', fetchMock);
     const one: ManagedPhase[] = [
-      { id: 'ph1', name: 'Alpha', status: 'active', ordinal: 0, featureCount: 0 },
+      {
+        id: 'ph1',
+        name: 'Alpha',
+        description: null,
+        status: 'active',
+        ordinal: 0,
+        featureCount: 0,
+      },
     ];
     const { rerender } = render(<ManagePhasesDialog projectId="p1" phases={one} />);
     open();

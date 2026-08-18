@@ -367,6 +367,82 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
     expect(screen.getByText('Shipped work')).toBeInTheDocument();
   });
 
+  it("renders a phase's authored intent under its header (§33 t-99)", () => {
+    // Written since f-phases §22 and carried by the payload all along; the client
+    // mirror simply never declared it, so nothing could draw it.
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'flow',
+            name: 'Project flow',
+            status: 'active',
+            ordinal: 0,
+            description:
+              'The machinery for managing development. Done when a 2nd person can use it.',
+            features: [feature({ id: 'a', title: 'Some work' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText(/Done when a 2nd person can use it/)).toBeInTheDocument();
+  });
+
+  it('hides the intent while the band is collapsed, so a closed band stays one line', () => {
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'done',
+            name: 'Foundations',
+            status: 'complete', // collapses by default
+            ordinal: 0,
+            description: 'The base everything stands on.',
+            features: [feature({ id: 'a', title: 'Shipped work', status: 'shipped' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.queryByText(/The base everything stands on/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Foundations/ }));
+    expect(screen.getByText(/The base everything stands on/)).toBeInTheDocument();
+  });
+
+  it('shows each lifecycle date only when it says something', () => {
+    // A started phase shows a start; only a finished one shows a finish. An
+    // upcoming phase shows neither, rather than an empty placeholder.
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'running',
+            name: 'In progress',
+            status: 'active',
+            ordinal: 0,
+            startedAt: '2026-08-01T00:00:00.000Z',
+            completedAt: null,
+            features: [feature({ id: 'a', title: 'Work' })],
+          },
+          {
+            id: 'later',
+            name: 'Not yet',
+            status: 'upcoming',
+            ordinal: 1,
+            features: [feature({ id: 'b', title: 'Future work' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByRole('button', { name: /In progress/ })).toHaveTextContent(/started/);
+    expect(screen.getByRole('button', { name: /In progress/ })).not.toHaveTextContent(/finished/);
+    expect(screen.getByRole('button', { name: /Not yet/ })).not.toHaveTextContent(/started/);
+  });
+
+  it('renders no intent for the residual "No phase" band — nobody authored one', () => {
+    render(<PlanView plan={plan([feature({ id: 'a', title: 'Unfiled work' })])} />);
+    expect(screen.getByText('Unfiled work')).toBeInTheDocument();
+  });
+
   it('forces a collapse-by-default band open when it holds the auto-expanded feature', () => {
     // A complete phase collapses by default, but if it contains the feature the
     // view opens on (an active task), the band must open so that work is visible.
