@@ -62,20 +62,26 @@ describe('prLabel', () => {
 });
 
 describe('shortDate (f-phase-history §33 t-99)', () => {
-  const now = new Date('2026-08-18T00:00:00.000Z');
-
-  it('omits the year for a date in the current year, so the common case stays compact', () => {
-    expect(shortDate('2026-08-03T00:00:00.000Z', now)).not.toMatch(/2026/);
-    expect(shortDate('2026-08-03T00:00:00.000Z', now)).toMatch(/Aug/);
+  it('formats UTC, locale-free — the same string on the server and in any browser', () => {
+    // toLocaleDateString would emit "Aug 1" on a Vercel en-US server and "1 Aug"
+    // in an en-GB browser: a hydration mismatch on every band with a start date.
+    expect(shortDate('2026-08-01T00:00:00.000Z')).toBe('1 Aug 2026');
   });
 
-  it('includes the year once it differs, so an old phase is not mistaken for a recent one', () => {
-    expect(shortDate('2025-08-03T00:00:00.000Z', now)).toMatch(/2025/);
+  it('does not shift a UTC-stamped date into the viewer timezone', () => {
+    // The timestamps are stamped at UTC. Formatted in local time, midnight-UTC
+    // renders as the PREVIOUS day for anyone west of Greenwich — silently wrong.
+    expect(shortDate('2026-08-01T00:00:00.000Z')).toContain('1 Aug');
+    expect(shortDate('2026-08-01T23:59:59.000Z')).toContain('1 Aug');
+  });
+
+  it('always carries the year, so it cannot differ across a year boundary', () => {
+    // A "hide the year when it matches now" rule would itself be non-deterministic
+    // between a server and a client evaluating "now" either side of midnight.
+    expect(shortDate('2025-12-31T00:00:00.000Z')).toBe('31 Dec 2025');
   });
 
   it('returns empty for an unparseable value rather than "Invalid Date"', () => {
-    // `startedAt` crosses the boundary as an unchecked string; a malformed one
-    // must degrade to nothing, not render as literal "Invalid Date" in the band.
-    expect(shortDate('not-a-date', now)).toBe('');
+    expect(shortDate('not-a-date')).toBe('');
   });
 });

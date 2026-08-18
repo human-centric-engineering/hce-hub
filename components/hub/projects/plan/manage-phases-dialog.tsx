@@ -12,7 +12,7 @@
  * keyboard: focus the handle, Space, arrows, Space) PUTs the whole new id order to
  * `…/phases/order`, which rewrites ordinals 0..n-1 (collision-free by design).
  */
-import { useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { GripVertical } from 'lucide-react';
 import {
@@ -166,8 +166,30 @@ export function ManagePhasesDialog({
   };
   /* v8 ignore stop */
 
+  // Pending intent edits, keyed by phase id. A Textarea saves on blur, but closing
+  // the dialog — Escape, the X, or a click outside — unmounts the content without
+  // delivering one, so a paragraph of typed intent would vanish with no error and
+  // no indication. The name Input survives that because Enter also commits it and
+  // it is short; a multi-line intent has neither defence. Rows register a flush
+  // here and the dialog runs them on close, which covers every dismissal path in
+  // one place rather than guessing at each one.
+  const pendingEdits = useRef(new Map<string, () => void>());
+  const flushPending = () => {
+    for (const flush of pendingEdits.current.values()) flush();
+    pendingEdits.current.clear();
+  };
+  /** A row reports its uncommitted edit, or clears it once saved. Stable identity. */
+  const registerPending = useCallback((id: string, flush: (() => void) | null) => {
+    if (flush) pendingEdits.current.set(id, flush);
+    else pendingEdits.current.delete(id);
+  }, []);
+
   return (
-    <Dialog>
+    <Dialog
+      onOpenChange={(next) => {
+        if (!next) flushPending();
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <GripVertical className="mr-1.5 h-4 w-4" /> Manage phases
@@ -224,6 +246,7 @@ export function ManagePhasesDialog({
                   onRename={rename}
                   onStatus={setStatus}
                   onDescribe={setDescription}
+                  registerPending={registerPending}
                 />
               ))}
             </SortableContext>
@@ -263,12 +286,15 @@ function PhaseRow({
   onRename,
   onStatus,
   onDescribe,
+  registerPending,
 }: {
   phase: ManagedPhase;
   disabled: boolean;
   onRename: (id: string, name: string) => void;
   onStatus: (id: string, status: PhaseStatus) => void;
   onDescribe: (id: string, description: string) => void;
+  /** Report an uncommitted intent so the dialog can save it on close. */
+  registerPending: (id: string, flush: (() => void) | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: phase.id,
@@ -296,10 +322,42 @@ function PhaseRow({
   // Unlike the name, an EMPTY description is legitimate (it clears the intent),
   // so `dirty` compares against the stored value rather than requiring content.
   const [description, setDescription] = useState(phase.description ?? '');
-  useEffect(() => setDescription(phase.description ?? ''), [phase.description]);
+  // What this row last SENT, which is not what the server has yet: the refreshed
+  // prop arrives a round-trip later, and in that window a blur-save followed by an
+  // immediate close would otherwise send the identical value a second time. Reset
+  // when the stored value changes, so the server's copy governs again.
+  //
+  // State, not a ref, because `descriptionDirty` is derived from it during render —
+  // a ref read there would not re-render when it changed, which is exactly what the
+  // `react-hooks/refs` rule is protecting against.
+  const [lastSent, setLastSent] = useState<string | null>(null);
+  useEffect(() => {
+    setDescription(phase.description ?? '');
+    setLastSent(null);
+  }, [phase.description]);
+
+  // Trimmed on BOTH sides. Nothing trims on the write path (the route's schema is
+  // `.nullish()`, not `.trim()`), so an MCP-authored description can arrive with a
+  // trailing newline — and comparing it against a trimmed local value made merely
+  // tabbing through the field "dirty". Since §33 t-98 journals every phase change,
+  // that phantom PATCH also wrote a `phase_updated` event nobody made.
+  const committed = (lastSent ?? phase.description ?? '').trim();
+  const descriptionDirty = description.trim() !== committed;
+
   const saveDescription = () => {
-    if (description.trim() !== (phase.description ?? '')) onDescribe(phase.id, description);
+    if (!descriptionDirty) return;
+    setLastSent(description);
+    onDescribe(phase.id, description);
   };
+
+  // Report an uncommitted draft to the dialog so closing it commits rather than
+  // discards it. Registered as `saveDescription` itself, so the close path runs
+  // the same guard as blur and cannot duplicate a write.
+  const pendingSave = descriptionDirty ? saveDescription : null;
+  useEffect(() => {
+    registerPending(phase.id, pendingSave);
+    return () => registerPending(phase.id, null);
+  }, [phase.id, pendingSave, registerPending]);
 
   return (
     <div ref={setNodeRef} style={style} className="space-y-1.5">

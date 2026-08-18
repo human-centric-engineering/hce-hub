@@ -112,12 +112,14 @@ export function PhaseBand({
   // `complete` phase shows the span; an `upcoming` one shows nothing rather than
   // an empty placeholder. Derived coherently since f-phases §22 and rendered
   // nowhere until now (§33 t-99).
-  const lifecycle = [
-    band.startedAt ? `started ${shortDate(band.startedAt)}` : null,
-    band.completedAt ? `finished ${shortDate(band.completedAt)}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const lifecycle =
+    band.startedAt && band.completedAt
+      ? `${shortDate(band.startedAt)} → ${shortDate(band.completedAt)}`
+      : band.startedAt
+        ? `started ${shortDate(band.startedAt)}`
+        : band.completedAt
+          ? `finished ${shortDate(band.completedAt)}`
+          : '';
 
   return (
     <section

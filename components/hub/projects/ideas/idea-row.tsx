@@ -17,15 +17,8 @@ import { Pencil, Archive, RotateCcw, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { IDEA_TEXT_MAX } from '@/lib/projects/idea-constants';
+import { utcShortDate } from '@/components/hub/projects/presentation';
 import type { IdeaView } from '@/components/hub/projects/ideas/types';
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** ISO → "11 Aug 2026" — a locale-free, SSR-stable format (no hydration drift). */
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-}
 
 export function IdeaRow({ projectId, idea }: { projectId: string; idea: IdeaView }) {
   const router = useRouter();
@@ -148,8 +141,8 @@ export function IdeaRow({ projectId, idea }: { projectId: string; idea: IdeaView
               {idea.text}
             </p>
             <p className="mt-1.5 text-xs" style={{ color: 'var(--ink-faint)' }}>
-              captured by {idea.createdBy?.name ?? 'former member'} · {formatDate(idea.createdAt)}
-              {dropped && idea.triagedAt ? ` · dropped ${formatDate(idea.triagedAt)}` : ''}
+              captured by {idea.createdBy?.name ?? 'former member'} · {utcShortDate(idea.createdAt)}
+              {dropped && idea.triagedAt ? ` · dropped ${utcShortDate(idea.triagedAt)}` : ''}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
