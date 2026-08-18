@@ -18,10 +18,14 @@
  *
  * Phase edits are audit-logged (`logAdminAction`) **and**, since f-phase-history
  * §33 t-98, journaled as `ProjectEvent`s so a change appends instead of
- * overwriting. The emitters live in `lib/projects/phase-events.ts` because three
- * further phase-write paths (`create_feature`, `create_task`, `update_task` and
- * `update_feature`) never come through this file. `reorderPhases` is the one
- * write that stays unjournalled: ordering is presentation, not history.
+ * overwriting. The emitters live in `lib/projects/phase-events.ts` because four
+ * further phase-write paths — `create_feature`, `create_task`, `update_feature`
+ * and `update_task` — never come through this file.
+ *
+ * Eight phase-write paths exist in total; **seven are journalled**. This file
+ * holds four of the eight (`createPhase`, `updatePhase`, `assignFeatureToPhase`,
+ * `reorderPhases`), of which `reorderPhases` is the single deliberate omission:
+ * ordering is presentation, not history.
  */
 import type { PhaseStatus, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
@@ -170,17 +174,7 @@ export async function updatePhase(
 ): Promise<UpdatePhaseResult> {
   const phase = await prisma.phase.findUnique({
     where: { id: phaseId },
-    // `name` / `description` are read for the journal, not for the patch: the
-    // entry snapshots the phase's name (§33 t-98) and records only the fields
-    // whose value actually CHANGED.
-    select: {
-      projectId: true,
-      name: true,
-      description: true,
-      status: true,
-      startedAt: true,
-      completedAt: true,
-    },
+    select: { projectId: true, status: true, startedAt: true, completedAt: true },
   });
   if (!phase) throw new NotFoundError(`Phase ${phaseId} not found`);
   // Scope to the route's project when asked (no cross-project id-swap).
@@ -192,30 +186,20 @@ export async function updatePhase(
   if (basis === null) throw new NotFoundError(`Phase ${phaseId} not found`); // non-member ≡ absent
 
   const data: Prisma.PhaseUpdateInput = {};
-  // Two lists, deliberately. `updated` is what the CALLER SUPPLIED — it drives the
-  // result and the "nothing to update" 400, and stays the API contract it always
-  // was. `changed` is what actually DIFFERS from the stored row, and is the only
-  // thing the journal is allowed to claim: `update_phase({status:'active'})` on an
-  // already-active phase is a legitimate idempotent call (a retry, a "make sure"
-  // step), and recording "set the phase to active" for it would put a change in the
-  // history that never happened. That is the same rule `recordPhaseMembershipChange`
-  // applies to a no-op re-file — this history is meant to be trustworthy.
+  // `updated` is what the CALLER SUPPLIED: it drives the result and the "nothing to
+  // update" 400, and is the API contract this verb always had. What actually
+  // CHANGED is computed inside the transaction below — see there for why.
   const updated: string[] = [];
-  const changed: string[] = [];
   if (input.name !== undefined) {
     data.name = input.name;
     updated.push('name');
-    if (input.name !== phase.name) changed.push('name');
   }
   if (input.description !== undefined) {
     data.description = input.description;
     updated.push('description');
-    // Normalise the empty patch: clearing an already-null description is no change.
-    if ((input.description ?? null) !== phase.description) changed.push('description');
   }
   if (input.status !== undefined) {
     data.status = input.status;
-    if (input.status !== phase.status) changed.push('status');
     // Keep the lifecycle timestamps coherent with the resulting status:
     //   completedAt set ⟺ status is complete (reopening clears it, no stale "done"),
     //   startedAt persists once the phase has begun (stamped on the first
@@ -237,18 +221,46 @@ export async function updatePhase(
 
   // One transaction so the journal entry commits iff the edit did (§33 t-98).
   await executeTransaction(async (tx) => {
+    // The values the journal compares against are re-read INSIDE the transaction,
+    // for the same reason the three sibling paths read the previous phase in-tx:
+    // the pre-transaction read above is taken before any lock, so a concurrent
+    // rename committing in between would make this one journal a rename that never
+    // happened (B sets the name A just set, sees A's old value, and calls it a
+    // change). The journal must not assert a change the write did not make.
+    const before = await tx.phase.findUnique({
+      where: { id: phaseId },
+      select: { name: true, description: true, status: true },
+    });
+    // What actually DIFFERS — the only thing the journal is allowed to claim.
+    // `update_phase({status:'active'})` on an already-active phase is a legitimate
+    // idempotent call (a retry, a "make sure" step); recording "set the phase to
+    // active" for it would put a change in the history that never happened. Same
+    // rule `recordPhaseMembershipChange` applies to a no-op re-file.
+    const changed: string[] = [];
+    if (input.name !== undefined && input.name !== before?.name) changed.push('name');
+    // Normalise the empty patch: clearing an already-null description is no change.
+    if (
+      input.description !== undefined &&
+      (input.description ?? null) !== (before?.description ?? null)
+    )
+      changed.push('description');
+    if (input.status !== undefined && input.status !== before?.status) changed.push('status');
+
     await tx.phase.update({ where: { id: phaseId }, data });
-    // `changed`, not `updated` — and the name is ALWAYS snapshotted, even on a
-    // status- or description-only edit: the entry has no feature/task ref to chip,
-    // so without it the Log reads "set the phase to complete" with no way to tell
-    // which of the project's phases that was. Emits nothing when `changed` is empty.
+
+    // The name is ALWAYS snapshotted, even on a status- or description-only edit:
+    // the entry has no feature/task ref to chip, so without it the Log reads "set
+    // the phase to complete" with no way to tell which of the project's phases that
+    // was. `status` rides along only when it CHANGED — metadata asserting a status
+    // an edit never touched would be the same lie `fields` exists to prevent.
+    // Emits nothing when `changed` is empty.
     await recordPhaseUpdated(tx, {
       projectId: phase.projectId,
       actorUserId: userId,
       phaseId,
       fields: changed,
-      name: input.name ?? phase.name,
-      ...(input.status !== undefined ? { status: input.status } : {}),
+      name: input.name ?? before?.name,
+      ...(changed.includes('status') ? { status: input.status } : {}),
     });
   });
 

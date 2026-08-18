@@ -46,10 +46,35 @@ const audit = logAdminAction as ReturnType<typeof vi.fn>;
 
 const USER = 'user-1';
 
+/**
+ * Point BOTH phase reads at the same row — the pre-transaction one (access, 404,
+ * lifecycle timestamps) and the in-transaction one §33 t-98 added to decide what
+ * actually changed. Same row ⇒ nobody wrote in between, which is the normal case;
+ * a test simulates a concurrent writer by overriding `txPhaseFindUnique` after.
+ */
+function setPhaseRow(row: {
+  projectId: string;
+  name: string;
+  description: string | null;
+  status: string;
+  startedAt: Date | null;
+  completedAt: Date | null;
+}) {
+  phaseFindUnique.mockResolvedValue(row);
+  txPhaseFindUnique.mockResolvedValue({
+    name: row.name,
+    description: row.description,
+    status: row.status,
+  });
+}
+
 // The tx handle drives create (aggregate + create) and reorder (per-phase update).
 const txAggregate = vi.fn();
 const txCreate = vi.fn();
 const txPhaseUpdate = vi.fn();
+// §33 t-98 re-reads the row INSIDE the transaction to decide what actually
+// changed, so the fake tx answers it with the same values as the pre-tx read.
+const txPhaseFindUnique = vi.fn();
 const txIdeaUpdateMany = vi.fn();
 // §33 t-98 journals inside the same transaction as the write, and `updatePhase`
 // / `assignFeatureToPhase` became transactional for that reason — so the fake tx
@@ -69,6 +94,7 @@ function mockTx() {
         aggregate: txAggregate,
         create: txCreate,
         update: txPhaseUpdate,
+        findUnique: txPhaseFindUnique,
         findMany: phaseFindMany,
       },
       idea: { updateMany: txIdeaUpdateMany },
@@ -180,7 +206,7 @@ describe('createPhase', () => {
 
 describe('updatePhase', () => {
   beforeEach(() => {
-    phaseFindUnique.mockResolvedValue({
+    setPhaseRow({
       projectId: 'p1',
       name: 'Foundations',
       description: null,
@@ -233,7 +259,7 @@ describe('updatePhase', () => {
   });
 
   it('does not re-stamp startedAt when already active', async () => {
-    phaseFindUnique.mockResolvedValue({
+    setPhaseRow({
       projectId: 'p1',
       name: 'Foundations',
       description: null,
@@ -256,7 +282,7 @@ describe('updatePhase', () => {
 
   it('preserves an existing startedAt when completing an already-started phase', async () => {
     const started = new Date('2026-02-01');
-    phaseFindUnique.mockResolvedValue({
+    setPhaseRow({
       projectId: 'p1',
       name: 'Foundations',
       description: null,
@@ -271,7 +297,7 @@ describe('updatePhase', () => {
   });
 
   it('clears completedAt when a completed phase is reopened (no stale "done")', async () => {
-    phaseFindUnique.mockResolvedValue({
+    setPhaseRow({
       projectId: 'p1',
       name: 'Foundations',
       description: null,
@@ -287,7 +313,7 @@ describe('updatePhase', () => {
   });
 
   it('drops completedAt when a completed phase is parked', async () => {
-    phaseFindUnique.mockResolvedValue({
+    setPhaseRow({
       projectId: 'p1',
       name: 'Foundations',
       description: null,
@@ -301,8 +327,10 @@ describe('updatePhase', () => {
   });
 
   it('rejects a cross-project id-swap when expectedProjectId is given (404, no write)', async () => {
-    phaseFindUnique.mockResolvedValue({
+    setPhaseRow({
       projectId: 'other',
+      name: 'Foundations',
+      description: null,
       status: 'upcoming',
       startedAt: null,
       completedAt: null,
@@ -413,7 +441,7 @@ describe('phase journalling (f-phase-history §33 t-98)', () => {
   });
 
   it('appends phase_updated naming the fields that actually changed', async () => {
-    phaseFindUnique.mockResolvedValue({
+    setPhaseRow({
       projectId: 'p1',
       name: 'Foundations',
       description: null,
@@ -438,7 +466,7 @@ describe('phase journalling (f-phase-history §33 t-98)', () => {
     // a legitimate call (a retry, a "make sure it's active" step). Journalling it
     // would put a change in the history that never happened — the same rule the
     // membership emitter applies to a no-op re-file.
-    phaseFindUnique.mockResolvedValue({
+    setPhaseRow({
       projectId: 'p1',
       name: 'Foundations',
       description: 'Why this exists',
@@ -456,7 +484,7 @@ describe('phase journalling (f-phase-history §33 t-98)', () => {
   });
 
   it('records a partial change when only one supplied field actually differs', async () => {
-    phaseFindUnique.mockResolvedValue({
+    setPhaseRow({
       projectId: 'p1',
       name: 'Foundations',
       description: null,
@@ -472,7 +500,7 @@ describe('phase journalling (f-phase-history §33 t-98)', () => {
   it('always snapshots the phase name, even on a status-only edit', async () => {
     // A phase_updated event has no feature/task ref to chip, so without the name
     // the Log reads "set the phase to complete" with no way to tell which phase.
-    phaseFindUnique.mockResolvedValue({
+    setPhaseRow({
       projectId: 'p1',
       name: 'Foundations',
       description: null,
@@ -490,7 +518,7 @@ describe('phase journalling (f-phase-history §33 t-98)', () => {
   });
 
   it('treats clearing an already-null description as no change', async () => {
-    phaseFindUnique.mockResolvedValue({
+    setPhaseRow({
       projectId: 'p1',
       name: 'Foundations',
       description: null,
@@ -526,6 +554,47 @@ describe('phase journalling (f-phase-history §33 t-98)', () => {
     await assignFeatureToPhase(USER, 'f1', 'ph1');
     expect(txFeatureUpdate).toHaveBeenCalled(); // the write is still idempotently applied
     expect(txEventCreate).not.toHaveBeenCalled(); // …but nothing happened to record
+  });
+
+  it('compares against the row as it is INSIDE the transaction, not before it', async () => {
+    // Concurrency: A renames Foundations → Sunrise Mgmt and commits; B's
+    // update_phase({name:'Sunrise Mgmt'}) had already read "Foundations" before
+    // the transaction. Comparing against that pre-transaction snapshot would make
+    // B journal a rename that never happened.
+    setPhaseRow({
+      projectId: 'p1',
+      name: 'Foundations',
+      description: null,
+      status: 'active',
+      startedAt: null,
+      completedAt: null,
+    });
+    txPhaseFindUnique.mockResolvedValue({
+      name: 'Sunrise Mgmt', // A's rename landed first, AFTER the pre-tx read
+      description: null,
+      status: 'active',
+    });
+    txPhaseUpdate.mockResolvedValue({});
+    await updatePhase(USER, 'ph1', { name: 'Sunrise Mgmt' });
+    expect(txEventCreate).not.toHaveBeenCalled();
+  });
+
+  it('omits status from metadata when the edit did not change it', async () => {
+    // Asserting a status the edit never touched is the same lie `fields` prevents.
+    setPhaseRow({
+      projectId: 'p1',
+      name: 'Foundations',
+      description: null,
+      status: 'active',
+      startedAt: null,
+      completedAt: null,
+    });
+    txPhaseUpdate.mockResolvedValue({});
+    await updatePhase(USER, 'ph1', { description: 'why this exists', status: 'active' });
+    expect(txEventCreate.mock.calls[0][0].data.metadata).toEqual({
+      fields: ['description'],
+      name: 'Foundations',
+    });
   });
 
   it('does NOT journal a reorder — ordering is presentation, not history', async () => {

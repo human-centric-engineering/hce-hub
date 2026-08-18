@@ -8,12 +8,15 @@
  * previous value — and a phase's own evolution (renamed, re-scoped, parked) went
  * unrecorded entirely. These emitters make every such change **append**.
  *
- * **Why this module exists.** The seven phase-write paths do not share a home:
- * three live in `phases-service.ts`, while `create_feature`, `create_task`,
- * `update_feature` and `update_task` each set `data.phase` inline in their own
- * transaction and never touch the service. Hand-copying the scope rule and the metadata shape across
- * four files is exactly how the two drift; the §32 t-80 note on
- * `phaseBelongsToProject` records the same lesson from the same surface.
+ * **Why this module exists.** The journalled phase-write paths do not share a
+ * home. There are eight phase writes in all and seven are journalled: four live
+ * in `phases-service.ts` (`createPhase`, `updatePhase`, `assignFeatureToPhase`
+ * and the deliberately-unjournalled `reorderPhases`), while `create_feature`,
+ * `create_task`, `update_feature` and `update_task` each set `data.phase` inline
+ * in their own transaction and never touch the service. Hand-copying the scope
+ * rule and the metadata shape across five files is exactly how the two drift;
+ * the §32 t-80 note on `findProjectPhase` records the same lesson from the same
+ * surface.
  *
  * **Three kinds, not five.** `phase_updated` names the changed fields in
  * `metadata.fields`, and ONE membership kind covers feature-moves and task-moves
@@ -141,7 +144,11 @@ export interface PhaseUpdatedInput {
    * complete" with nothing to say *which* phase.
    */
   name?: string;
-  /** The resulting status, when the status changed. */
+  /**
+   * The resulting status — passed only when the status actually CHANGED, never
+   * merely because it was supplied. Metadata asserting a status an edit did not
+   * touch is the same lie `fields` exists to prevent.
+   */
   status?: string;
 }
 
