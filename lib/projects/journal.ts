@@ -3,14 +3,15 @@
  *
  * The membership-scoped read behind every "log" surface — the task-sheet
  * activity timeline (`?taskId=`), a feature's activity (`?featureId=`), and the
- * project **Log** tab (decisions / work-completed / all). One filtered query
+ * project **Log** tab (decisions / work-completed / all), and a phase's history
+ * (`?phaseId=`, §33 t-98). One filtered query
  * over the single `ProjectEvent` stream (self-hosting §1): every view is a
  * `where` + `kind` filter, not its own table.
  *
  * Membership is the [[f-access]] funnel's `getAccessibleProject` (a non-member or
  * unknown project → 404, never 403). The `projectId` scope is applied to the
- * query, so a `taskId` / `featureId` filter from another project simply matches
- * nothing (an event always carries its own project) — no cross-project leak, and
+ * query, so a `taskId` / `featureId` / `phaseId` filter from another project
+ * simply matches nothing (an event always carries its own project) — no cross-project leak, and
  * nothing to re-verify. Actors, feature refs, and task refs are resolved in
  * three **batched** lookups (never per-row); a hard-deleted feature/task or an
  * erased actor resolves to `null` (the history is retained — the ref just drops).
@@ -48,6 +49,13 @@ export interface ProjectEventView {
   feature: EventFeatureRef | null;
   /** The task this event concerns, or `null` (feature/project-level or deleted). */
   task: EventTaskRef | null;
+  /**
+   * The phase this event concerns, or `null` (§33 t-98). A raw id, not a resolved
+   * ref: unlike features and tasks, a phase event already carries its name in
+   * `metadata` (snapshotted at write time), so resolving one here would add a
+   * fourth batched lookup only to return today's name for a historic entry.
+   */
+  phaseId: string | null;
   /** Authored-kind heading (decision / note); `null` for auto-events. */
   title: string | null;
   /** Authored-kind markdown body; `null` for auto-events. */
@@ -63,6 +71,13 @@ export interface GetProjectEventsOptions {
   taskId?: string;
   /** Scope to one feature's events (feature-level activity). */
   featureId?: string;
+  /**
+   * Scope to one phase's history (f-phase-history §33 t-98) — its own lifecycle
+   * plus the features and tasks that arrived in it. Same isolation argument as
+   * the other two scopes: `projectId` is applied alongside, so a phase id from
+   * another project simply matches nothing.
+   */
+  phaseId?: string;
   /** Restrict to these kinds (e.g. `['decision']`, `['feature_shipped','task_merged']`). */
   kinds?: ProjectEventKind[];
 }
@@ -85,6 +100,7 @@ export async function getProjectEvents(
       projectId, // scopes every filter below to the confirmed project
       ...(options.taskId ? { taskId: options.taskId } : {}),
       ...(options.featureId ? { featureId: options.featureId } : {}),
+      ...(options.phaseId ? { phaseId: options.phaseId } : {}),
       ...(options.kinds && options.kinds.length > 0 ? { kind: { in: options.kinds } } : {}),
     },
     orderBy: { createdAt: 'desc' },
@@ -123,6 +139,7 @@ export async function getProjectEvents(
     actorAgentId: e.actorAgentId,
     feature: e.featureId ? (featureMap.get(e.featureId) ?? null) : null,
     task: e.taskId ? (taskMap.get(e.taskId) ?? null) : null,
+    phaseId: e.phaseId,
     title: e.title,
     body: e.body,
     metadata: e.metadata,

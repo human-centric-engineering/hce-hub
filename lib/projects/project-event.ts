@@ -16,8 +16,8 @@
  * that are themselves the whole write — `record_decision` — can pass the base
  * `prisma` client, which satisfies the same type.)
  *
- * Scope is `projectId` (always) + optional `featureId` / `taskId` — the soft
- * pointers the read layer filters on. `createdAt` is accepted so §19's import
+ * Scope is `projectId` (always) + optional `featureId` / `taskId` / `phaseId` —
+ * the soft pointers the read layer filters on. `createdAt` is accepted so §19's import
  * seed can backdate history (it overrides the `@default(now())`).
  */
 import type { Prisma, PrismaClient, ProjectEventKind } from '@prisma/client';
@@ -29,7 +29,7 @@ import type { Prisma, PrismaClient, ProjectEventKind } from '@prisma/client';
  * these methods, so it is also assignable: an authored verb that is itself the
  * whole write (`record_decision`) can pass `prisma` directly.
  */
-type ProjectEventClient = Omit<
+export type ProjectEventClient = Omit<
   PrismaClient,
   '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'
 >;
@@ -41,6 +41,15 @@ export interface RecordProjectEventInput {
   featureId?: string | null;
   /** Scope: the task this event concerns (null ⇒ feature- or project-level). */
   taskId?: string | null;
+  /**
+   * Scope: the phase this event concerns (f-phase-history §33 t-98). On a
+   * membership change this is the phase whose membership changed in the way
+   * worth recording — the **destination** on a move or a file, the **origin** on
+   * an unfile — while `metadata` carries both ends. Callers should go through
+   * `lib/projects/phase-events.ts` rather than setting this by hand, so that rule
+   * has exactly one implementation.
+   */
+  phaseId?: string | null;
   /** The human actor (SET NULL on erasure). Null for agent- or system-authored. */
   actorUserId?: string | null;
   /** The agent actor (a Sunrise AiAgent id); no FK. Arrives with f-sidekick §12. */
@@ -68,6 +77,7 @@ export async function recordProjectEvent(
       projectId: input.projectId,
       featureId: input.featureId ?? null,
       taskId: input.taskId ?? null,
+      phaseId: input.phaseId ?? null,
       kind: input.kind,
       actorUserId: input.actorUserId ?? null,
       actorAgentId: input.actorAgentId ?? null,

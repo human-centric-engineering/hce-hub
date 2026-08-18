@@ -41,6 +41,7 @@ describe('GET /api/v1/projects/:id/events', () => {
     expect(eventsMock).toHaveBeenCalledWith(expect.any(String), PID, {
       taskId: undefined,
       featureId: undefined,
+      phaseId: undefined,
       kinds: undefined,
     });
     const json = await res.json();
@@ -54,6 +55,19 @@ describe('GET /api/v1/projects/:id/events', () => {
     expect(eventsMock).toHaveBeenCalledWith(expect.any(String), PID, {
       taskId: 't1',
       featureId: 'f1',
+      phaseId: undefined,
+      kinds: undefined,
+    });
+  });
+
+  it('passes a phaseId filter through (§33 t-98)', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
+    eventsMock.mockResolvedValue([]);
+    await eventsGet(req('?phaseId=ph1'), params());
+    expect(eventsMock).toHaveBeenCalledWith(expect.any(String), PID, {
+      taskId: undefined,
+      featureId: undefined,
+      phaseId: 'ph1',
       kinds: undefined,
     });
   });
@@ -65,6 +79,7 @@ describe('GET /api/v1/projects/:id/events', () => {
     expect(eventsMock).toHaveBeenCalledWith(expect.any(String), PID, {
       taskId: undefined,
       featureId: undefined,
+      phaseId: undefined,
       kinds: ['decision', 'feature_shipped'],
     });
   });

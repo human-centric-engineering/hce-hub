@@ -6,24 +6,41 @@
 
 import type { UserRef } from '@/components/hub/projects/types';
 
-/** The journal event kinds (mirrors the Prisma `ProjectEventKind` enum). */
-export type ProjectEventKindDTO =
-  | 'feature_created'
-  | 'feature_claimed'
-  | 'feature_planned'
-  | 'feature_shipped'
-  | 'feature_blocked'
-  | 'feature_unblocked'
-  | 'task_created'
-  | 'task_claimed'
-  | 'task_pr_linked'
-  | 'task_merged'
-  | 'bug_reported'
-  | 'task_assigned'
-  | 'help_wanted'
-  | 'member_added'
-  | 'decision'
-  | 'note';
+/**
+ * The journal event kinds — a **hand-mirror** of the Prisma `ProjectEventKind`
+ * enum, kept as a value (not a bare union) so a test can enumerate it.
+ *
+ * This mirror is load-bearing and silent when wrong: the DTO reaches the client
+ * through an unchecked cast and `describeEvent` closes with a `default:`, so a
+ * kind added upstream and forgotten here renders as "updated the project" while
+ * every test stays green. `log-presentation-parity.test.ts` pins this array
+ * against `Object.values(ProjectEventKind)` and pins `describeEvent` against
+ * this array, so the drift fails loudly instead. Do not inline this back into a
+ * union type — that is what made the gap invisible (f-phase-history §33 t-98).
+ */
+export const PROJECT_EVENT_KINDS = [
+  'feature_created',
+  'feature_claimed',
+  'feature_planned',
+  'feature_shipped',
+  'feature_blocked',
+  'feature_unblocked',
+  'task_created',
+  'task_claimed',
+  'task_pr_linked',
+  'task_merged',
+  'bug_reported',
+  'task_assigned',
+  'help_wanted',
+  'member_added',
+  'phase_created',
+  'phase_updated',
+  'phase_membership_changed',
+  'decision',
+  'note',
+] as const;
+
+export type ProjectEventKindDTO = (typeof PROJECT_EVENT_KINDS)[number];
 
 export interface EventFeatureRefDTO {
   id: string;
@@ -44,6 +61,8 @@ export interface ProjectEventDTO {
   actorAgentId: string | null;
   feature: EventFeatureRefDTO | null;
   task: EventTaskRefDTO | null;
+  /** The phase this event concerns (raw id), or `null` — §33 t-98. */
+  phaseId: string | null;
   title: string | null;
   body: string | null;
   metadata: unknown;

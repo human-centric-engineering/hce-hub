@@ -51,10 +51,14 @@ could build the phases but not fill them. The comprehensive `update_feature` ver
 keeps its **owner-tier** `phaseId` for editing a feature you own; the dedicated
 member-tier assign path is for organising the roadmap.
 
-Phase edits are structural, note-style changes: **audit-logged** (`logAdminAction`)
-but they emit **no `ProjectEvent`** — there is no phase `ProjectEventKind`, and
-inventing one would be an enum migration this pure-activation feature avoids
-(mirrors `update_feature`).
+Phase edits are **audit-logged** (`logAdminAction`) **and journalled**. f-phases
+shipped them as audit-only — there was no phase `ProjectEventKind`, and inventing
+one would have been an enum migration this pure-activation feature avoided — but
+that made a phase change _overwrite_ history rather than append to it.
+f-phase-history §33 t-98 closed that: three `phase_*` kinds
+and a `phaseId` soft scope pointer on `ProjectEvent`, emitted from every
+phase-write path via `lib/projects/phase-events.ts`. **`reorderPhases` is the one
+exception** — ordering is presentation, not history.
 
 ## Surfaces
 

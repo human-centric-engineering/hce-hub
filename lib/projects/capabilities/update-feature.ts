@@ -32,7 +32,8 @@ import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess, canAccessProject } from '@/lib/projects/access';
 import { assertAcyclic, DependencyCycleError } from '@/lib/projects/dependency-graph';
-import { phaseBelongsToProject } from '@/lib/projects/phases-service';
+import { findProjectPhase } from '@/lib/projects/phases-service';
+import { recordPhaseMembershipChange } from '@/lib/projects/phase-events';
 import { isWriteConflict, withWriteConflictRetry } from '@/lib/projects/write-conflict';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { redactedString } from '@/lib/security/redact';
@@ -245,13 +246,16 @@ export class UpdateFeatureCapability extends BaseCapability<Args, Data> {
 
     // Phase assignment — file under a phase (must be in this project) or unfile.
     // A relation FK, so Prisma's update input takes the nested connect/disconnect.
+    let phaseTarget: { id: string; name: string } | null = null;
     if (args.phaseId !== undefined) {
       if (args.phaseId === null) {
         data.phase = { disconnect: true };
       } else {
-        // Shared guard (§32 t-80) — one implementation across update_feature,
-        // assignFeatureToPhase and the two task verbs.
-        if (!(await phaseBelongsToProject(args.phaseId, projectId))) {
+        // Shared guard (§32 t-80) — one implementation across create_feature,
+        // update_feature, assignFeatureToPhase and the two task verbs. Returns the
+        // row so §33 t-98 can snapshot the phase NAME into the journal entry.
+        phaseTarget = await findProjectPhase(args.phaseId, projectId);
+        if (!phaseTarget) {
           return this.error('That phase was not found in this project.', 'invalid_phase');
         }
         data.phase = { connect: { id: args.phaseId } };
@@ -308,8 +312,34 @@ export class UpdateFeatureCapability extends BaseCapability<Args, Data> {
               // rejected edge set never leaves a partial write behind.
               assertAcyclic(edges);
             }
+            // Read the phase being REPLACED before the write, on the phase path
+            // only (§33 t-98). Honest limit: at this transaction's Read Committed
+            // isolation two concurrent moves of the same feature can each record
+            // the phase they saw, so one entry's `fromPhaseId` may name a value
+            // already superseded. Both destinations and the final state stay
+            // correct. Escalating to Serializable for a journal field would repeat
+            // the regression t-87's review caught — plain edits paying write-
+            // conflict retries for a guarantee only the graph path needs.
+            const beforePhase =
+              args.phaseId !== undefined
+                ? await tx.feature.findUnique({
+                    where: { id: args.featureId },
+                    select: { phase: { select: { id: true, name: true } } },
+                  })
+                : null;
             if (Object.keys(data).length > 0) {
               await tx.feature.update({ where: { id: args.featureId }, data });
+            }
+            if (args.phaseId !== undefined) {
+              // A no-op re-file records nothing — the guard lives in phase-events.
+              await recordPhaseMembershipChange(tx, {
+                projectId,
+                actorUserId: userId,
+                subject: 'feature',
+                featureId: args.featureId,
+                from: beforePhase?.phase ?? null,
+                to: phaseTarget,
+              });
             }
             if (depsToSet !== null) {
               // Replace the outgoing edge set (idempotent via the @@unique constraint).

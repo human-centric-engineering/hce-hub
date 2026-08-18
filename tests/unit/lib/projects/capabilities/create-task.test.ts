@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { TaskKind } from '@prisma/client';
 
 vi.mock('@/lib/projects/access', () => ({ resolveFeatureAccess: vi.fn() }));
-vi.mock('@/lib/projects/phases-service', () => ({ phaseBelongsToProject: vi.fn() }));
+vi.mock('@/lib/projects/phases-service', () => ({ findProjectPhase: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
   prisma: { task: { findMany: vi.fn() }, idea: { findFirst: vi.fn() } },
 }));
@@ -21,7 +21,7 @@ vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction:
 vi.mock('@/lib/projects/project-event', () => ({ recordProjectEvent: vi.fn() }));
 
 const { resolveFeatureAccess } = await import('@/lib/projects/access');
-const { phaseBelongsToProject } = await import('@/lib/projects/phases-service');
+const { findProjectPhase } = await import('@/lib/projects/phases-service');
 const { prisma } = await import('@/lib/db/client');
 const { executeTransaction } = await import('@/lib/db/utils');
 const { logAdminAction } = await import('@/lib/orchestration/audit/admin-audit-logger');
@@ -35,7 +35,7 @@ const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
 
-const phaseInProject = phaseBelongsToProject as ReturnType<typeof vi.fn>;
+const phaseInProject = findProjectPhase as ReturnType<typeof vi.fn>;
 
 const cap = new CreateTaskCapability();
 const USER = 'user-1';
@@ -76,7 +76,7 @@ beforeEach(() => {
   // the test passes for the wrong reason (it did — the phase tests below only
   // passed in a whole-file run, and failed under `-t`). Global default keeps
   // every block honest under `.only`, reordering, or a switch to resetAllMocks.
-  phaseInProject.mockResolvedValue(true);
+  phaseInProject.mockResolvedValue({ id: 'ph1', name: 'Phase One' });
 });
 
 describe('create_task guards', () => {
@@ -103,7 +103,7 @@ describe('create_task guards', () => {
 describe('create_task dependency integrity', () => {
   beforeEach(() => {
     resolveFeature.mockResolvedValue(granted);
-    phaseInProject.mockResolvedValue(true);
+    phaseInProject.mockResolvedValue({ id: 'ph1', name: 'Phase One' });
   });
 
   it('rejects deps that are not all present in the same project', async () => {
@@ -189,6 +189,11 @@ describe('create_task happy path (no deps)', () => {
     expect(txTaskCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ phaseId: 'ph1' }) })
     );
+    // §33 t-98: the creation event carries the SCOPE POINTER so the phase's own
+    // history shows the task was born committed to it — and no second membership
+    // event is emitted, because a birth is not a move.
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit.mock.calls[0][1]).toMatchObject({ kind: 'task_created', phaseId: 'ph1' });
   });
 
   it('defaults to inheriting the feature phase (null) when none is given', async () => {
@@ -214,7 +219,7 @@ describe('create_task happy path (no deps)', () => {
   });
 
   it('rejects a phase from another project without creating the task', async () => {
-    phaseInProject.mockResolvedValue(false);
+    phaseInProject.mockResolvedValue(null);
     const r = await cap.execute({ featureId: 'f1', title: 'Ship it', phaseId: 'elsewhere' }, ctx());
     expect(r.error?.code).toBe('invalid_phase');
     expect(txTaskCreate).not.toHaveBeenCalled();

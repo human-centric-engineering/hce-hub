@@ -110,7 +110,8 @@ describe('create_feature validation', () => {
     expect(r.error?.code).toBe('invalid_phase');
     expect(phaseFindFirst).toHaveBeenCalledWith({
       where: { id: 'ph-other', projectId: 'p1' },
-      select: { id: true },
+      // `name` too since §33 t-98 — the journal snapshots the phase's name.
+      select: { id: true, name: true },
     });
     expect(runTx).not.toHaveBeenCalled();
   });
@@ -178,6 +179,11 @@ describe('create_feature happy path', () => {
       expect.anything(),
       expect.objectContaining({ metadata: expect.objectContaining({ phaseId: 'ph1' }) })
     );
+    // §33 t-98: it also sets the SCOPE POINTER, so the phase's own history shows
+    // the feature was born here — and does NOT emit a second membership event,
+    // because a birth is not a move.
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit.mock.calls[0][1]).toMatchObject({ kind: 'feature_created', phaseId: 'ph1' });
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({ metadata: expect.objectContaining({ phaseId: 'ph1' }) })
     );

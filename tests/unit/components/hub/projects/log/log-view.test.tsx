@@ -15,6 +15,7 @@ const decision: ProjectEventDTO = {
   actorAgentId: null,
   feature: { id: 'f1', slug: 'f-journal', title: 'Journal' },
   task: null,
+  phaseId: null,
   title: 'One journal',
   body: 'One stream.',
   metadata: null,

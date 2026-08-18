@@ -455,6 +455,16 @@ enum ProjectEventKind {
   task_assigned
   // Membership.
   member_added
+  // Phase lifecycle + membership (f-phase-history §33 t-98). Three kinds, not
+  // five: `phase_updated` names the changed fields in `metadata.fields`, and one
+  // membership kind covers feature-moves and task-moves via `metadata.subject` —
+  // the `task_assigned` precedent (one kind, two moves, read the metadata) rather
+  // than spending an enum value on every variant. `reorderPhases` emits none:
+  // ordering is presentation, not history, and one drag would emit an event per
+  // phase.
+  phase_created
+  phase_updated
+  phase_membership_changed
   // Authored narrative — record_decision / add_note (f-journal §17 t-2).
   decision
   note
@@ -465,6 +475,7 @@ model ProjectEvent {
   projectId    String
   featureId    String? // soft scope pointer — no FK (history outlives the feature)
   taskId       String? // soft scope pointer — no FK (history outlives the task)
+  phaseId      String? // soft scope pointer — no FK (history outlives the phase)
   kind         ProjectEventKind
   actorUserId  String? // hand-FK → "user" · ON DELETE SET NULL (retain the event, drop the actor)
   actorAgentId String? // Sunrise AiAgent id (agent actor); no FK — cross-tier
@@ -478,6 +489,7 @@ model ProjectEvent {
   @@index([projectId, createdAt])
   @@index([featureId])
   @@index([taskId])
+  @@index([phaseId])
   @@map("app_project_event")
 }
 

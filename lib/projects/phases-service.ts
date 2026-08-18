@@ -16,10 +16,16 @@
  * wants phase management restricted to the lead, tighten the `need` here in one
  * place.
  *
- * Phase edits are **structural, note-style** changes: audit-logged
- * (`logAdminAction`) but NOT journaled as a `ProjectEvent` — there is no phase
- * `ProjectEventKind` and inventing one would be an enum migration this pure-
- * activation feature deliberately avoids (mirrors `update_feature`).
+ * Phase edits are audit-logged (`logAdminAction`) **and**, since f-phase-history
+ * §33 t-98, journaled as `ProjectEvent`s so a change appends instead of
+ * overwriting. The emitters live in `lib/projects/phase-events.ts` because four
+ * further phase-write paths — `create_feature`, `create_task`, `update_feature`
+ * and `update_task` — never come through this file.
+ *
+ * Eight phase-write paths exist in total; **seven are journalled**. This file
+ * holds four of the eight (`createPhase`, `updatePhase`, `assignFeatureToPhase`,
+ * `reorderPhases`), of which `reorderPhases` is the single deliberate omission:
+ * ordering is presentation, not history.
  */
 import type { PhaseStatus, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
@@ -28,6 +34,11 @@ import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { canAccessProject, resolveFeatureAccess } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { resolveIdeaOnPromotion } from '@/lib/projects/idea-promotion';
+import {
+  recordPhaseCreated,
+  recordPhaseMembershipChange,
+  recordPhaseUpdated,
+} from '@/lib/projects/phase-events';
 
 /** The mutable fields of a phase (its lifecycle timestamps are derived, not set). */
 export interface CreatePhaseInput {
@@ -119,6 +130,14 @@ export async function createPhase(
         refId: phase.id,
       });
     }
+    // Journal inside the same transaction — the event exists iff the phase does.
+    await recordPhaseCreated(tx, {
+      projectId,
+      actorUserId: userId,
+      phaseId: phase.id,
+      name: input.name,
+      status,
+    });
     return phase;
   });
 
@@ -167,6 +186,9 @@ export async function updatePhase(
   if (basis === null) throw new NotFoundError(`Phase ${phaseId} not found`); // non-member ≡ absent
 
   const data: Prisma.PhaseUpdateInput = {};
+  // `updated` is what the CALLER SUPPLIED: it drives the result and the "nothing to
+  // update" 400, and is the API contract this verb always had. What actually
+  // CHANGED is computed inside the transaction below — see there for why.
   const updated: string[] = [];
   if (input.name !== undefined) {
     data.name = input.name;
@@ -197,7 +219,50 @@ export async function updatePhase(
     throw new ValidationError('No fields to update were provided.');
   }
 
-  await prisma.phase.update({ where: { id: phaseId }, data });
+  // One transaction so the journal entry commits iff the edit did (§33 t-98).
+  await executeTransaction(async (tx) => {
+    // The values the journal compares against are re-read INSIDE the transaction,
+    // for the same reason the three sibling paths read the previous phase in-tx:
+    // the pre-transaction read above is taken before any lock, so a concurrent
+    // rename committing in between would make this one journal a rename that never
+    // happened (B sets the name A just set, sees A's old value, and calls it a
+    // change). The journal must not assert a change the write did not make.
+    const before = await tx.phase.findUnique({
+      where: { id: phaseId },
+      select: { name: true, description: true, status: true },
+    });
+    // What actually DIFFERS — the only thing the journal is allowed to claim.
+    // `update_phase({status:'active'})` on an already-active phase is a legitimate
+    // idempotent call (a retry, a "make sure" step); recording "set the phase to
+    // active" for it would put a change in the history that never happened. Same
+    // rule `recordPhaseMembershipChange` applies to a no-op re-file.
+    const changed: string[] = [];
+    if (input.name !== undefined && input.name !== before?.name) changed.push('name');
+    // Normalise the empty patch: clearing an already-null description is no change.
+    if (
+      input.description !== undefined &&
+      (input.description ?? null) !== (before?.description ?? null)
+    )
+      changed.push('description');
+    if (input.status !== undefined && input.status !== before?.status) changed.push('status');
+
+    await tx.phase.update({ where: { id: phaseId }, data });
+
+    // The name is ALWAYS snapshotted, even on a status- or description-only edit:
+    // the entry has no feature/task ref to chip, so without it the Log reads "set
+    // the phase to complete" with no way to tell which of the project's phases that
+    // was. `status` rides along only when it CHANGED — metadata asserting a status
+    // an edit never touched would be the same lie `fields` exists to prevent.
+    // Emits nothing when `changed` is empty.
+    await recordPhaseUpdated(tx, {
+      projectId: phase.projectId,
+      actorUserId: userId,
+      phaseId,
+      fields: changed,
+      name: input.name ?? before?.name,
+      ...(changed.includes('status') ? { status: input.status } : {}),
+    });
+  });
 
   logAdminAction({
     userId,
@@ -260,24 +325,29 @@ export async function reorderPhases(
 }
 
 /**
- * Is `phaseId` a phase in `projectId`?
+ * Resolve `phaseId` **within** `projectId` — the one same-project guard every
+ * phase-assignment path shares: `assignFeatureToPhase` (below), `create_feature`,
+ * `update_feature`, and — since f-work-kinds §32 t-80 — `create_task` /
+ * `update_task`. Extracted because the query had already been hand-copied twice
+ * before that task would have made it four times, and a hand-copied rule is one
+ * that drifts (the stale-enum-copy failure f-phases spent two review rounds on).
  *
- * The one same-project guard every phase-assignment path shares:
- * `assignFeatureToPhase` (below), `update_feature`, and — since f-work-kinds §32
- * t-80 — `create_task` / `update_task`. Extracted because the query had already
- * been hand-copied twice before this task would have made it four times, and a
- * hand-copied rule is one that drifts (the stale-enum-copy failure this feature
- * spent two review rounds on).
- *
- * Returns a boolean rather than throwing so each caller can raise its own idiom —
- * `ValidationError` in the service, a capability `invalid_phase` error over MCP.
+ * Returns the phase (`null` when it is absent or belongs elsewhere) rather than
+ * throwing, so each caller keeps its own idiom — `ValidationError` in the
+ * service, a capability `invalid_phase` error over MCP. It returns the row and
+ * not a boolean because since §33 t-98 every one of those callers also journals
+ * the move, and the journal snapshots the phase's **name** as it was at the time
+ * (see `phase-events.ts`); a boolean would have meant a second read on every
+ * assignment purely to fetch it.
  */
-export async function phaseBelongsToProject(phaseId: string, projectId: string): Promise<boolean> {
-  const phase = await prisma.phase.findFirst({
+export async function findProjectPhase(
+  phaseId: string,
+  projectId: string
+): Promise<{ id: string; name: string } | null> {
+  return prisma.phase.findFirst({
     where: { id: phaseId, projectId },
-    select: { id: true },
+    select: { id: true, name: true },
   });
-  return phase !== null;
 }
 
 /**
@@ -303,14 +373,39 @@ export async function assignFeatureToPhase(
     throw new NotFoundError(`Feature ${featureId} not found`);
   }
 
-  if (phaseId !== null && !(await phaseBelongsToProject(phaseId, projectId))) {
-    throw new ValidationError('That phase was not found in this project.');
+  let target: { id: string; name: string } | null = null;
+  if (phaseId !== null) {
+    target = await findProjectPhase(phaseId, projectId);
+    if (!target) throw new ValidationError('That phase was not found in this project.');
   }
 
-  await prisma.feature.update({
-    where: { id: featureId },
-    // A relation FK — Prisma's update input takes the nested connect/disconnect.
-    data: { phase: phaseId === null ? { disconnect: true } : { connect: { id: phaseId } } },
+  // One transaction so the journal entry commits iff the move did (§33 t-98).
+  await executeTransaction(async (tx) => {
+    // The phase being REPLACED is read inside the transaction rather than from the
+    // earlier access resolve, so `fromPhaseId` is as close to the overwritten value
+    // as this isolation level allows. Honest limit, identical to `update_feature`'s:
+    // at the Read Committed default two concurrent assigns can both read the same
+    // `from`, so one entry may name a phase already superseded. Both destinations
+    // and the final state stay correct, and raising the isolation for a journal
+    // field would repeat the regression t-87's review caught.
+    const before = await tx.feature.findUnique({
+      where: { id: featureId },
+      select: { phase: { select: { id: true, name: true } } },
+    });
+    await tx.feature.update({
+      where: { id: featureId },
+      // A relation FK — Prisma's update input takes the nested connect/disconnect.
+      data: { phase: phaseId === null ? { disconnect: true } : { connect: { id: phaseId } } },
+    });
+    // A no-op re-file (already in this phase) records nothing — see phase-events.
+    await recordPhaseMembershipChange(tx, {
+      projectId,
+      actorUserId: userId,
+      subject: 'feature',
+      featureId,
+      from: before?.phase ?? null,
+      to: target,
+    });
   });
 
   logAdminAction({

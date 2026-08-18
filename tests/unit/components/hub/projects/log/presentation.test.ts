@@ -13,6 +13,7 @@ const ev = (over: Partial<ProjectEventDTO>): ProjectEventDTO => ({
   actorAgentId: null,
   feature: null,
   task: null,
+  phaseId: null,
   title: null,
   body: null,
   metadata: null,

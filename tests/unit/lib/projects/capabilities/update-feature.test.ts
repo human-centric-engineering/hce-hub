@@ -55,11 +55,17 @@ const granted = (status = 'in_flight', ownerUserId: string | null = USER) => ({
 });
 
 const txFeatureUpdate = vi.fn();
+// §33 t-98 reads the phase being replaced, and journals the move, inside the
+// same transaction — so both are `tx` methods the fake has to answer.
+const txFeatureFindUnique = vi.fn();
+const txEventCreate = vi.fn();
 const txDepFindMany = vi.fn();
 const txDepDeleteMany = vi.fn();
 const txDepCreateMany = vi.fn();
 function mockTx() {
   txFeatureUpdate.mockResolvedValue({});
+  txFeatureFindUnique.mockResolvedValue({ phase: null }); // unfiled unless a test says otherwise
+  txEventCreate.mockResolvedValue({ id: 'evt-1' });
   txDepFindMany.mockResolvedValue([]);
   txDepDeleteMany.mockResolvedValue({});
   txDepCreateMany.mockResolvedValue({});
@@ -67,7 +73,8 @@ function mockTx() {
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
-      feature: { update: txFeatureUpdate },
+      feature: { update: txFeatureUpdate, findUnique: txFeatureFindUnique },
+      projectEvent: { create: txEventCreate },
       featureDependency: {
         findMany: txDepFindMany,
         deleteMany: txDepDeleteMany,
@@ -187,6 +194,45 @@ describe('update_feature ownership', () => {
   });
 });
 
+describe('update_feature phase journalling (§33 t-98)', () => {
+  it('appends a membership event naming both ends of the move', async () => {
+    // `update_feature` sets `data.phase` inline and never touches phases-service,
+    // so its emitter is wired here and nowhere else — this is the assertion that
+    // notices if a refactor drops it.
+    phaseFindFirst.mockResolvedValue({ id: 'ph2', name: 'Project flow' });
+    txFeatureFindUnique.mockResolvedValue({ phase: { id: 'ph1', name: 'Foundations' } });
+    await cap.execute({ featureId: 'f1', phaseId: 'ph2' }, ctx());
+    expect(txEventCreate).toHaveBeenCalledTimes(1);
+    const data = txEventCreate.mock.calls[0][0].data;
+    expect(data.kind).toBe('phase_membership_changed');
+    expect(data.phaseId).toBe('ph2');
+    expect(data.featureId).toBe('f1');
+    expect(data.metadata).toMatchObject({
+      subject: 'feature',
+      fromPhaseId: 'ph1',
+      fromPhaseName: 'Foundations',
+      toPhaseId: 'ph2',
+      toPhaseName: 'Project flow',
+    });
+  });
+
+  it('does not read the previous phase — or journal — on an edit that leaves it alone', async () => {
+    // The in-transaction read is scoped to the phase path so a plain title edit
+    // pays nothing for a field it never touches.
+    await cap.execute({ featureId: 'f1', title: 'New title' }, ctx());
+    expect(txFeatureFindUnique).not.toHaveBeenCalled();
+    expect(txEventCreate).not.toHaveBeenCalled();
+  });
+
+  it('records the removal against the phase it left', async () => {
+    txFeatureFindUnique.mockResolvedValue({ phase: { id: 'ph1', name: 'Foundations' } });
+    await cap.execute({ featureId: 'f1', phaseId: null }, ctx());
+    const data = txEventCreate.mock.calls[0][0].data;
+    expect(data.phaseId).toBe('ph1');
+    expect(data.metadata).toMatchObject({ fromPhaseId: 'ph1', toPhaseId: null });
+  });
+});
+
 describe('update_feature phase assignment', () => {
   it('files the feature under a phase in the same project', async () => {
     phaseFindFirst.mockResolvedValue({ id: 'ph1' });
@@ -194,7 +240,8 @@ describe('update_feature phase assignment', () => {
     expect(r.data?.updated).toEqual(['phase']);
     expect(phaseFindFirst).toHaveBeenCalledWith({
       where: { id: 'ph1', projectId: 'p1' },
-      select: { id: true },
+      // `name` too since §33 t-98 — the journal snapshots the phase's name.
+      select: { id: true, name: true },
     });
     expect(txFeatureUpdate).toHaveBeenCalledWith({
       where: { id: 'f1' },

@@ -49,10 +49,11 @@ describe('getProjectEvents access + scoping', () => {
     expect(eventFindMany).not.toHaveBeenCalled();
   });
 
-  it('scopes the query to the project and applies taskId / featureId / kinds filters', async () => {
+  it('scopes the query to the project and applies taskId / featureId / phaseId / kinds filters', async () => {
     await getProjectEvents(USER, PROJECT, {
       taskId: 't1',
       featureId: 'f1',
+      phaseId: 'ph1',
       kinds: ['decision', 'note'],
     });
     expect(eventFindMany).toHaveBeenCalledWith(
@@ -61,10 +62,22 @@ describe('getProjectEvents access + scoping', () => {
           projectId: PROJECT,
           taskId: 't1',
           featureId: 'f1',
+          phaseId: 'ph1',
           kind: { in: ['decision', 'note'] },
         },
         orderBy: { createdAt: 'desc' },
         take: 100,
+      })
+    );
+  });
+
+  it('scopes to one phase, alongside the project (§33 t-98)', async () => {
+    await getProjectEvents(USER, PROJECT, { phaseId: 'ph1' });
+    expect(eventFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // `projectId` rides alongside, which is the whole isolation argument: a
+        // phase id from another project matches nothing rather than leaking.
+        where: { projectId: PROJECT, phaseId: 'ph1' },
       })
     );
   });
@@ -132,6 +145,30 @@ describe('getProjectEvents enrichment', () => {
       metadata: { status: 'available' },
       createdAt: '2026-07-17T10:00:00.000Z',
     });
+  });
+
+  it('returns the phase scope pointer, not just filters on it (§33 t-98)', async () => {
+    // The pointer is the point of the feature; a filterable-but-unreturned column
+    // would be the same write-ahead-of-read gap §33 exists to close. Deliberately a
+    // raw id, not a resolved ref — a phase event already carries its name in
+    // metadata, snapshotted at write time.
+    eventFindMany.mockResolvedValue([
+      {
+        id: 'e1',
+        kind: 'phase_updated',
+        actorUserId: null,
+        actorAgentId: null,
+        featureId: null,
+        taskId: null,
+        phaseId: 'ph1',
+        title: null,
+        body: null,
+        metadata: { fields: ['status'], name: 'Foundations', status: 'active' },
+        createdAt: new Date('2026-08-18T00:00:00.000Z'),
+      },
+    ]);
+    const [event] = await getProjectEvents(USER, PROJECT);
+    expect(event.phaseId).toBe('ph1');
   });
 
   it('nulls a deleted feature/task and an erased actor (retained history)', async () => {

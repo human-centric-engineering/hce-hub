@@ -7,8 +7,8 @@
  *
  * A thin projection over `getProjectEvents` (`lib/projects/journal.ts`), the same
  * funnel-scoped read the web journal renders (`getAccessibleProject` gates
- * visibility, deny ≡ not_found; capped newest-first). Optional `featureId` / `taskId`
- * scope it to one feature or task. `projectId` is fold-pinned for a project-scoped
+ * visibility, deny ≡ not_found; capped newest-first). Optional `featureId` /
+ * `taskId` / `phaseId` (§33 t-98) scope it to one feature, task or phase. `projectId` is fold-pinned for a project-scoped
  * key (ambient) and required otherwise.
  *
  * Events carry authored free-text (decision / note `title` + `body`) and a human
@@ -38,6 +38,10 @@ const schema = z.object({
     ),
   featureId: z.string().optional().describe('Optional: scope to one feature (its events only).'),
   taskId: z.string().optional().describe('Optional: scope to one task (its timeline).'),
+  phaseId: z
+    .string()
+    .optional()
+    .describe('Optional: scope to one phase (its lifecycle + what moved into it).'),
 });
 
 type Args = z.infer<typeof schema>;
@@ -51,6 +55,8 @@ interface EventRef {
   actorAgentId: string | null;
   feature: { id: string; slug: string | null; title: string } | null;
   task: { id: string; number: number | null } | null;
+  /** The phase this event concerns (raw id), or `null`. */
+  phaseId: string | null;
   /** Authored-kind heading (decision / note); `null` for auto-events. */
   title: string | null;
   /** Authored-kind markdown body; `null` for auto-events. */
@@ -71,7 +77,7 @@ export class ListEventsCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'list_events',
     description:
-      "Read a project's journal (newest first, capped) — decisions, notes, and lifecycle events (claim / plan / ship / merge), each with its kind, actor, feature/task ref, authored title + body, and timestamp. Use it to catch up on what happened, or scope with featureId / taskId for one feature's activity or a task's timeline. Membership-scoped: a project you can't see is not_found.",
+      "Read a project's journal (newest first, capped) — decisions, notes, and lifecycle events (claim / plan / ship / merge / phase change), each with its kind, actor, feature/task/phase ref, authored title + body, and timestamp. Use it to catch up on what happened, or scope with featureId / taskId for one feature's activity or a task's timeline, or phaseId for one phase's history: when it was created, renamed or re-statused, and which features and tasks moved into it. Membership-scoped: a project you can't see is not_found.",
     parameters: {
       type: 'object',
       properties: {
@@ -85,6 +91,10 @@ export class ListEventsCapability extends BaseCapability<Args, Data> {
           description: 'Optional: scope to one feature (its events only).',
         },
         taskId: { type: 'string', description: 'Optional: scope to one task (its timeline).' },
+        phaseId: {
+          type: 'string',
+          description: 'Optional: scope to one phase (its lifecycle + what moved into it).',
+        },
       },
       required: [],
     },
@@ -101,6 +111,7 @@ export class ListEventsCapability extends BaseCapability<Args, Data> {
         projectId: args.projectId ?? null,
         featureId: args.featureId ?? null,
         taskId: args.taskId ?? null,
+        phaseId: args.phaseId ?? null,
       },
       resultPreview: redactedString(`${count} event(s)`),
     };
@@ -122,6 +133,7 @@ export class ListEventsCapability extends BaseCapability<Args, Data> {
       const events = await getProjectEvents(userId, args.projectId, {
         ...(args.featureId ? { featureId: args.featureId } : {}),
         ...(args.taskId ? { taskId: args.taskId } : {}),
+        ...(args.phaseId ? { phaseId: args.phaseId } : {}),
       });
       return this.success({
         events: events.map((e) => ({
@@ -131,6 +143,7 @@ export class ListEventsCapability extends BaseCapability<Args, Data> {
           actorAgentId: e.actorAgentId,
           feature: e.feature,
           task: e.task,
+          phaseId: e.phaseId,
           title: e.title,
           body: e.body,
           metadata: e.metadata,

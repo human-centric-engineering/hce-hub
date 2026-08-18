@@ -55,10 +55,33 @@ describe('list_events', () => {
     expect(getEvents).toHaveBeenCalledWith('caller', 'p1', {});
   });
 
-  it('forwards featureId / taskId scoping to getProjectEvents', async () => {
+  it('forwards featureId / taskId / phaseId scoping to getProjectEvents', async () => {
     getEvents.mockResolvedValue([]);
-    await cap.execute({ projectId: 'p1', featureId: 'f1', taskId: 't1' }, ctx('caller'));
-    expect(getEvents).toHaveBeenCalledWith('caller', 'p1', { featureId: 'f1', taskId: 't1' });
+    await cap.execute(
+      { projectId: 'p1', featureId: 'f1', taskId: 't1', phaseId: 'ph1' },
+      ctx('caller')
+    );
+    expect(getEvents).toHaveBeenCalledWith('caller', 'p1', {
+      featureId: 'f1',
+      taskId: 't1',
+      phaseId: 'ph1',
+    });
+  });
+
+  it('returns the phase pointer on each event, not only the filter', async () => {
+    getEvents.mockResolvedValue([{ ...event(), phaseId: 'ph1' }]);
+    const r = await cap.execute({ projectId: 'p1' }, ctx());
+    expect(r.data?.events[0].phaseId).toBe('ph1');
+  });
+
+  it('advertises phaseId to the model, not just to the handler', async () => {
+    // The published schema is what an MCP client is shown; a param the handler
+    // accepts but the schema omits is unreachable over MCP (§21 t-91).
+    const params = cap.functionDefinition.parameters as {
+      properties: Record<string, unknown>;
+    };
+    expect(params.properties).toHaveProperty('phaseId');
+    expect(cap.functionDefinition.description).toContain('phaseId');
   });
 
   it('maps a getProjectEvents NotFoundError to not_found', async () => {
@@ -102,7 +125,12 @@ describe('list_events', () => {
     getEvents.mockResolvedValue([event()]);
     const result = await cap.execute({ projectId: 'p1', featureId: 'f1' }, ctx());
     const redacted = cap.redactProvenance({ projectId: 'p1', featureId: 'f1' }, result);
-    expect(redacted.args).toEqual({ projectId: 'p1', featureId: 'f1', taskId: null });
+    expect(redacted.args).toEqual({
+      projectId: 'p1',
+      featureId: 'f1',
+      taskId: null,
+      phaseId: null,
+    });
     expect(redacted.resultPreview).not.toContain('hard isolation'); // bodies not persisted verbatim
     expect(redacted.resultPreview).toContain('1 event');
   });
