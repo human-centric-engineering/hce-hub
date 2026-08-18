@@ -67,7 +67,11 @@ exception** — ordering is presentation, not history.
 - **`create_phase`** — add a phase (name, optional description / status / ordinal;
   appends after the last phase unless positioned).
 - **`update_phase`** — rename, edit description, change status (incl. park), move
-  (ordinal). Partial patch; `nothing_to_update` if empty.
+  (ordinal). Partial patch; `nothing_to_update` if empty. A **status** edit runs at
+  `Serializable` (§33 t-103), so it can also return `concurrent_modification` —
+  "re-read it and retry" — once the in-process retries are exhausted; the REST
+  face returns **409** for the same case. Name/description-only edits keep the
+  default isolation and cannot produce either.
 - **`update_feature`** extended with **`phaseId`** — file a feature under a phase
   (same-project, owner-tier) or `null` to unfile.
 

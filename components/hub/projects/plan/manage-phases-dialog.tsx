@@ -150,8 +150,10 @@ export function ManagePhasesDialog({
     void call(`${base}/${id}`, 'PATCH', { status });
   // The PATCH route has accepted `description` since f-phases §22 t3 — only the UI
   // was missing, so this is client-only. Empty clears it (the route takes null).
+  // Returns `call`'s outcome rather than discarding it: the row needs to know
+  // whether the write landed, so a failed save can be retried (§33 t-103 review).
   const setDescription = (id: string, description: string) =>
-    void call(`${base}/${id}`, 'PATCH', { description: description.trim() || null });
+    call(`${base}/${id}`, 'PATCH', { description: description.trim() || null });
 
   // dnd-kit drag glue — the reorder computation lives in the unit-tested
   // `reorderedIds`; this handler only fires on a real pointer/keyboard drag, which
@@ -292,7 +294,7 @@ function PhaseRow({
   disabled: boolean;
   onRename: (id: string, name: string) => void;
   onStatus: (id: string, status: PhaseStatus) => void;
-  onDescribe: (id: string, description: string) => void;
+  onDescribe: (id: string, description: string) => Promise<boolean>;
   /** Report an uncommitted intent so the dialog can save it on close. */
   registerPending: (id: string, flush: (() => void) | null) => void;
 }) {
@@ -346,8 +348,20 @@ function PhaseRow({
 
   const saveDescription = () => {
     if (!descriptionDirty) return;
+    // Optimistic, then REVERTED IF THE WRITE FAILED. Recording the send up front is
+    // what stops a blur-then-close sending twice, but leaving it recorded after a
+    // failure silently ate the draft: `committed` became the typed value, so the
+    // field went clean, the next blur short-circuited, `pendingSave` de-registered
+    // so closing no longer carried it either — and `phase.description` never
+    // changed, so the adopt-the-server-value effect never fired to undo any of it.
+    // The text survived only in a textarea nothing would ever read again.
+    //
+    // This PR is what makes that reachable on purpose: a 409 says "retry", and
+    // until now the UI made retrying impossible (§33 t-103 review).
     setLastSent(description);
-    onDescribe(phase.id, description);
+    void onDescribe(phase.id, description).then((ok) => {
+      if (!ok) setLastSent(null); // dirty again ⇒ blur retries, close still flushes
+    });
   };
 
   // Report an uncommitted draft to the dialog so closing it commits rather than

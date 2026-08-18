@@ -205,6 +205,36 @@ describe('ManagePhasesDialog', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    // The close must really have happened: the keydown is the only thing driving
+    // that path, and if it ever stops dismissing (a Radix change, a focus
+    // precondition) this silently becomes "focusout alone saves once" — which the
+    // test above already covers — and would pass against a double-writing
+    // implementation. Exactly the wrong-reason pass the blur/focusout note records.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('lets you retry a failed intent save — the write is optimistic, not final', async () => {
+    // The 409 this branch introduces says "re-read and retry", so the UI has to let
+    // you. It did not: `lastSent` was recorded before the response, so a failure
+    // left the field clean, the next blur short-circuited, and closing the dialog
+    // carried nothing — the typed paragraph was only in a textarea nothing read.
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: false, status: 409 }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ManagePhasesDialog projectId="p1" phases={phases} />);
+    open();
+
+    const intent = screen.getByLabelText('Phase intent: Foundations');
+    fireEvent.change(intent, { target: { value: 'Worth keeping' } });
+    fireEvent.blur(intent);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    // Same text, second attempt — the draft must still be dirty.
+    fireEvent.blur(intent);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/v1/projects/p1/phases/ph1',
+      expect.objectContaining({ body: JSON.stringify({ description: 'Worth keeping' }) })
+    );
   });
 
   it('does not PATCH an intent that differs only by surrounding whitespace', () => {
