@@ -14,6 +14,11 @@ function readMeta(metadata: unknown): Record<string, unknown> {
     : {};
 }
 
+/** `" X"` when the phase's name was recorded, else `''` — never a bare "undefined". */
+function phaseSuffix(name: unknown): string {
+  return typeof name === 'string' && name.length > 0 ? ` ${name}` : '';
+}
+
 /**
  * A short verb phrase describing what happened, phrased to read after the
  * actor's name in both the project Log ("Simon created the task") and the
@@ -59,6 +64,40 @@ export function describeEvent(event: ProjectEventDTO): string {
       return meta.helpWanted === true ? 'flagged help wanted' : 'cleared help wanted';
     case 'member_added':
       return 'joined the project';
+    case 'phase_created':
+      return `created the phase${phaseSuffix(meta.name)}`;
+    case 'phase_updated': {
+      // One kind, several moves — the changed fields are in the metadata rather
+      // than in three more enum values (the `task_assigned` precedent above).
+      // Only a single-field edit gets a specific verb; a combined edit reads as
+      // "updated", because naming one of two changes would be misleading.
+      const fields = Array.isArray(meta.fields) ? meta.fields : [];
+      if (fields.length === 1) {
+        if (fields[0] === 'name') return `renamed the phase${phaseSuffix(meta.name)}`;
+        if (fields[0] === 'status') {
+          return typeof meta.status === 'string'
+            ? `set the phase to ${meta.status}`
+            : 'changed the phase status';
+        }
+        if (fields[0] === 'description') return 'edited the phase intent';
+      }
+      return 'updated the phase';
+    }
+    case 'phase_membership_changed': {
+      // The subject rides in metadata for the same reason. Phase NAMES are
+      // snapshots taken at write time (see lib/projects/phase-events.ts), so a
+      // later rename never rewrites what an old entry says.
+      const subject = meta.subject === 'task' ? 'task' : 'feature';
+      const to = typeof meta.toPhaseName === 'string' ? meta.toPhaseName : null;
+      const from = typeof meta.fromPhaseName === 'string' ? meta.fromPhaseName : null;
+      if (to === null) {
+        return from !== null
+          ? `took the ${subject} out of ${from}`
+          : `took the ${subject} out of its phase`;
+      }
+      if (from === null) return `filed the ${subject} under ${to}`;
+      return `moved the ${subject} from ${from} to ${to}`;
+    }
     case 'decision':
       return 'recorded a decision';
     case 'note':

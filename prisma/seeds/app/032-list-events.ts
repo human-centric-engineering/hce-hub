@@ -9,7 +9,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const listEventsFunctionDefinition = {
   name: 'list_events',
   description:
-    "Read a project's journal (newest first, capped) — decisions, notes, and lifecycle events (claim / plan / ship / merge), each with its kind, actor, feature/task ref, authored title + body, and timestamp. Use it to catch up on what happened, or scope with featureId / taskId for one feature's activity or a task's timeline. Membership-scoped: a project you can't see is not_found.",
+    "Read a project's journal (newest first, capped) — decisions, notes, and lifecycle events (claim / plan / ship / merge / phase change), each with its kind, actor, feature/task ref, authored title + body, and timestamp. Use it to catch up on what happened, or scope with featureId / taskId for one feature's activity or a task's timeline, or phaseId for one phase's history: when it was created, renamed or re-statused, and which features and tasks moved into it. Membership-scoped: a project you can't see is not_found.",
   parameters: {
     type: 'object',
     properties: {
@@ -23,6 +23,10 @@ export const listEventsFunctionDefinition = {
         description: 'Optional: scope to one feature (its events only).',
       },
       taskId: { type: 'string', description: 'Optional: scope to one task (its timeline).' },
+      phaseId: {
+        type: 'string',
+        description: 'Optional: scope to one phase (its lifecycle + what moved into it).',
+      },
     },
     required: [],
   },
@@ -52,7 +56,7 @@ const unit: SeedUnit = {
         slug: 'list_events',
         name: 'List Events',
         description:
-          "Read a project's journal (decisions, notes, lifecycle events) over MCP; scope by feature/task. Membership-scoped.",
+          "Read a project's journal (decisions, notes, lifecycle events) over MCP; scope by feature/task/phase. Membership-scoped.",
         category: 'coordination',
         ...LIST_EVENTS_IMPL,
         isActive: true,

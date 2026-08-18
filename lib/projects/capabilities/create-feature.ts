@@ -26,7 +26,7 @@ import type {
 import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { canAccessProject } from '@/lib/projects/access';
-import { phaseBelongsToProject } from '@/lib/projects/phases-service';
+import { findProjectPhase } from '@/lib/projects/phases-service';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 import { checkIdeaPromotable, resolveIdeaOnPromotion } from '@/lib/projects/idea-promotion';
@@ -224,7 +224,7 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
     // implementation across create_feature, update_feature, the task verbs and
     // assignFeatureToPhase, so the rule can't drift per call site.
     if (args.phaseId !== undefined) {
-      if (!(await phaseBelongsToProject(args.phaseId, args.projectId))) {
+      if (!(await findProjectPhase(args.phaseId, args.projectId))) {
         return this.error('That phase was not found in this project.', 'invalid_phase');
       }
     }
@@ -280,8 +280,14 @@ export class CreateFeatureCapability extends BaseCapability<Args, Data> {
         featureId: created.id,
         kind: 'feature_created',
         actorUserId: userId,
-        // Capture a born-filed phase so the journal distinguishes it from a later
-        // `update_feature` move (which records 'phase').
+        // A born-filed phase sets the SCOPE POINTER (§33 t-98), so this creation
+        // shows up in that phase's own history — "this feature was born here".
+        // Deliberately not a second `phase_membership_changed` event: a birth is
+        // not a move, and recording both would double every born-filed feature in
+        // the Log for one fact.
+        ...(args.phaseId ? { phaseId: args.phaseId } : {}),
+        // The metadata copy predates the pointer and is kept: it is what
+        // distinguishes a born-filed feature from a later `update_feature` move.
         metadata: {
           slug: created.slug,
           ...(args.phaseId ? { phaseId: args.phaseId } : {}),

@@ -52,7 +52,8 @@ import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess } from '@/lib/projects/access';
 import { assertAcyclic, DependencyCycleError } from '@/lib/projects/dependency-graph';
-import { phaseBelongsToProject } from '@/lib/projects/phases-service';
+import { findProjectPhase } from '@/lib/projects/phases-service';
+import { recordPhaseMembershipChange } from '@/lib/projects/phase-events';
 import { isWriteConflict, withWriteConflictRetry } from '@/lib/projects/write-conflict';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { redactedString } from '@/lib/security/redact';
@@ -244,11 +245,15 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
     // feature's phase again. Scoped to the task's own project via the shared
     // guard; it never propagates upward, so committing a task here can't move its
     // feature between phases.
+    let phaseTarget: { id: string; name: string } | null = null;
     if (args.phaseId !== undefined) {
       if (args.phaseId === null) {
         data.phase = { disconnect: true };
       } else {
-        if (!(await phaseBelongsToProject(args.phaseId, projectId))) {
+        // Returns the row, not a boolean, so §33 t-98 can snapshot the phase NAME
+        // into the journal entry without a second read.
+        phaseTarget = await findProjectPhase(args.phaseId, projectId);
+        if (!phaseTarget) {
           return this.error('That phase was not found in this project.', 'invalid_phase');
         }
         data.phase = { connect: { id: args.phaseId } };
@@ -306,8 +311,31 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
               // rejected edge set never leaves a partial write behind.
               assertAcyclic(edges);
             }
+            // The phase being REPLACED, read before the write on the phase path
+            // only (§33 t-98). See `update_feature` for why this deliberately does
+            // not raise the isolation level.
+            const beforePhase =
+              args.phaseId !== undefined
+                ? await tx.task.findUnique({
+                    where: { id: task.id },
+                    select: { phase: { select: { id: true, name: true } } },
+                  })
+                : null;
             if (Object.keys(data).length > 0) {
               await tx.task.update({ where: { id: task.id }, data });
+            }
+            if (args.phaseId !== undefined) {
+              // A no-op re-commitment records nothing — guard in phase-events.
+              // `featureId` rides along so the Log can chip the task's feature.
+              await recordPhaseMembershipChange(tx, {
+                projectId,
+                actorUserId: userId,
+                subject: 'task',
+                featureId: task.featureId,
+                taskId: task.id,
+                from: beforePhase?.phase ?? null,
+                to: phaseTarget,
+              });
             }
             if (depsToSet !== null) {
               // Replace the outgoing edge set (idempotent via the @@unique constraint).

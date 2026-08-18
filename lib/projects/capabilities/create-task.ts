@@ -30,7 +30,7 @@ import type {
 import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
 import { resolveFeatureAccess } from '@/lib/projects/access';
-import { phaseBelongsToProject } from '@/lib/projects/phases-service';
+import { findProjectPhase } from '@/lib/projects/phases-service';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 import { checkIdeaPromotable, resolveIdeaOnPromotion } from '@/lib/projects/idea-promotion';
@@ -195,10 +195,7 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
     // `null` is accepted as "inherit" (not an error): it is the same "no
     // commitment" the omitted case means, and update_task publishes null as the
     // way to clear one. Only a non-null value needs validating.
-    if (
-      args.phaseId != null &&
-      !(await phaseBelongsToProject(args.phaseId, access.feature.projectId))
-    ) {
+    if (args.phaseId != null && !(await findProjectPhase(args.phaseId, access.feature.projectId))) {
       return this.error('That phase was not found in this project.', 'invalid_phase');
     }
 
@@ -264,9 +261,14 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
         taskId: created.id,
         kind: taskKind === 'bug' ? 'bug_reported' : 'task_created',
         actorUserId: userId,
+        // A born-committed task sets the SCOPE POINTER (§33 t-98) so it appears in
+        // that phase's own history. Not a second `phase_membership_changed`: a
+        // birth is not a move (see create_feature for the same call).
+        ...(args.phaseId ? { phaseId: args.phaseId } : {}),
         metadata: {
           status: created.status,
           kind: taskKind,
+          ...(args.phaseId ? { phaseId: args.phaseId } : {}),
           ...(args.fromIdeaId ? { fromIdeaId: args.fromIdeaId } : {}),
         },
       });
