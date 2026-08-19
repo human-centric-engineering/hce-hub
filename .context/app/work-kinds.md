@@ -66,7 +66,7 @@ rather than theoretical.
 
 **Recovering a null.** Imported history can be dated after the fact from the task's
 GitHub PR:
-`npx tsx --env-file=.env.local scripts/db/backfill-task-merged-at.ts [--dry-run]`
+`npm run db:backfill-merged-at [-- --dry-run]`
 reads `merged_at` for every `status: merged, mergedAt: null` task whose `prUrl`
 resolves, and writes it under the same `mergedAt IS NULL` guard — so it is
 re-runnable and can never move a stamp `complete_task` already set. Run it per

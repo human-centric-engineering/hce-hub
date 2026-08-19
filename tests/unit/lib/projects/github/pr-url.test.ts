@@ -81,6 +81,36 @@ describe('parsePullRequestUrl', () => {
     });
   });
 
+  it('accepts the host variants a person can actually paste', () => {
+    // `set_pr` only enforces `^https?://`, so all of these are storable and are
+    // real, working PR URLs. Rejecting them meant those tasks could never be
+    // backfilled and would be re-reported as unparseable on every future run.
+    for (const url of [
+      'https://www.github.com/o/r/pull/1',
+      'https://GitHub.com/o/r/pull/1',
+      'https://WWW.GitHub.COM/o/r/pull/1',
+    ]) {
+      expect(parsePullRequestUrl(url)).toEqual({ owner: 'o', repo: 'r', number: '1' });
+    }
+  });
+
+  it('refuses a dot-only segment, which the URL parser would RESOLVE away', () => {
+    // `.` and `..` pass the character class but are not inert: the constructed
+    // `https://api.github.com/repos/o/../pulls/1` normalises to
+    // `https://api.github.com/repos/pulls/1` — a different endpoint than the
+    // task's URL named. Same class as `#`/`?`, same answer: don't produce the ref.
+    expect(parsePullRequestUrl('https://github.com/o/../pull/1')).toBeNull();
+    expect(parsePullRequestUrl('https://github.com/../r/pull/1')).toBeNull();
+    expect(parsePullRequestUrl('https://github.com/o/./pull/1')).toBeNull();
+    expect(parsePullRequestUrl('https://github.com/.../r/pull/1')).toBeNull();
+    // A dot INSIDE a name is ordinary and must still parse.
+    expect(parsePullRequestUrl('https://github.com/o.rg/r.js/pull/1')).toEqual({
+      owner: 'o.rg',
+      repo: 'r.js',
+      number: '1',
+    });
+  });
+
   it('never yields a number that could escape the API path', () => {
     // `number` is interpolated straight into an api.github.com path, so it must
     // be digits or nothing — there is no sanitising step downstream.

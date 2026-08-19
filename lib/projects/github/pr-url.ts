@@ -25,9 +25,22 @@
  * DIFFERENT resource than the URL named. That resolves to a 404 rather than a
  * wrong write, so it fails loudly; the point is that a parser should not produce
  * a ref it cannot honour in the first place.
+ *
+ * `www.` is optional and the match is case-insensitive because BOTH are real URLs
+ * a person can paste: `set_pr` accepts any `https://…`, so `https://www.github.com/…`
+ * and `https://GitHub.com/…` are storable and would otherwise be permanently
+ * unbackfillable — re-reported as unparseable on every future run.
  */
 const PR_URL =
-  /^https:\/\/github\.com\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)\/pull\/(\d+)(?:[/?#]|$)/;
+  /^https:\/\/(?:www\.)?github\.com\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)\/pull\/(\d+)(?:[/?#]|$)/i;
+
+/**
+ * A path segment of nothing but dots (`.`, `..`, `...`) — legal in the character
+ * class above, but the URL parser RESOLVES it: `repos/o/../pulls/1` normalises to
+ * `repos/pulls/1`, a different endpoint than the task's URL named. Same class of
+ * problem as `#` and `?`, and the same answer — refuse to produce the ref.
+ */
+const ALL_DOTS = /^\.+$/;
 
 export interface PullRequestRef {
   owner: string;
@@ -45,5 +58,6 @@ export function parsePullRequestUrl(url: string | null | undefined): PullRequest
   const match = PR_URL.exec(url);
   if (!match) return null;
   const [, owner, repo, number] = match;
+  if (ALL_DOTS.test(owner) || ALL_DOTS.test(repo)) return null;
   return { owner, repo, number };
 }
