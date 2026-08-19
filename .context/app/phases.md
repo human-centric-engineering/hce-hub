@@ -149,9 +149,11 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
 - **A feature that moved mid-flight marks the boundary in its own task list**
   (`feature-view/feature-task-list.tsx`) — a rule naming the phase on each side and
   the date, between the work completed under each. Tasks group into bands by **when
-  they merged** (read from the `task_merged` event; `Task` has no merged-at column),
-  `t-N` order kept within a band. A task with **no** merge event is placed by its
-  status: `merged` ⇒ imported history ⇒ first band, otherwise ⇒ last band. A rule
+  they merged**, `t-N` order kept within a band. A task with **no** known merge
+  instant is placed by its status: `merged` ⇒ imported history ⇒ first band,
+  otherwise ⇒ last band. (The instant is still read from the `task_merged` event
+  here; `Task.mergedAt` now carries it and this read should move to the column —
+  see [work kinds](./work-kinds.md#when-a-task-landed).) A rule
   with nothing above it is dropped; one with nothing below it is kept. Does **not**
   read `Task.phaseId` — commitment is a separate axis and this surface shows no
   `→ <phase>` mark. A feature that never moved renders exactly as before.

@@ -75,6 +75,15 @@ stop two owners starting the same feature.
 A **task is one PR** (~200–600 lines; cohesive, reviewable). For each:
 
 1. **Branch off `main`** — `feat/<feature>-tN-<slug>`. **Never commit or push to `main`.**
+   Use `git switch -c <name> --no-track origin/main`: PRs are **squash-merged**, so a branch
+   cut from a previously-merged local branch carries duplicate commits under new SHAs, and
+   plain `git checkout -b X origin/main` silently sets upstream to **main** (a bare
+   `git push` then targets it).
+
+   **Then `start_task` it in the Hub — every task you pick up, before you write code.**
+   The Hub is the system of record; a task you are actively building that still reads
+   `claimed` tells every other reader it is unclaimed work. This is the step most easily
+   skipped, because nothing in the code enforces it and the branch works fine without it.
 2. **Build to the right shape, not the expedient one.** If it needs doing properly (a real
    seam, a correct data model), do that now — don't ship a review-passing-but-wrong version
    and defer the correct one. **Extend through the seam; never fork-and-edit a platform file**
@@ -104,8 +113,20 @@ A **task is one PR** (~200–600 lines; cohesive, reviewable). For each:
    **five CI runs, one per review-fix push**, hours apart, every one completing and billing.
    Reviewing locally makes the review loop CI-free, so more rounds now cost less, not more.
 
-   Also run **`npm run build`** and, if the branch touches a seed, **`npm run db:seed`**
-   before pushing — CI runs both and neither is covered by `/pre-pr`.
+   **Run CI's jobs locally before the first push.** `/pre-pr` does not cover all of
+   them, and each miss costs a full CI cycle to discover:
+
+   | Run | When |
+   | --- | --- |
+   | `npm run build` | always — the Next build catches what `tsc` doesn't |
+   | `npx tsx --env-file=.env.local scripts/smoke/erasure.ts` | always — real-DB GDPR erasure |
+   | `npx tsx --env-file=.env.local scripts/smoke/export.ts` | always — the ~28 subject-access queries the mocked unit suite never executes |
+   | `npm run db:drift-check` | any `prisma/` change |
+   | `npm run db:seed` | any `prisma/seeds/**` change (also proves change-detection fires: `(updating)`, not `(skipping)`) |
+
+   **The smokes need `--env-file=.env.local`.** CI supplies `DATABASE_URL` and friends
+   as job env, so the workflow calls them bare; run bare locally and they die on Zod
+   env validation, which reads like a code failure and isn't.
 
    - **`/pre-pr`** — type-check, lint, format, full test suite + coverage, migration-drift.
      It also flags the `lib/app/**` import-boundary and (via `app:ci-checks`) fork-hygiene.
@@ -130,7 +151,10 @@ A **task is one PR** (~200–600 lines; cohesive, reviewable). For each:
    PR conversations. Recover it with **one summary comment after opening the PR** covering
    what each round found — the commits carry the detail, the comment carries the narrative.
    Document findings you accept or refute, and why.
-6. **The owner merges.** A task PR is **pure code** — do **not** open a per-task docs/close-out
+6. **`set_pr` the task(s) as soon as the PR exists** — routine bookkeeping, not a decision
+   to check in about. A PR that closes three tasks links from all three. **`complete_task`
+   once it merges** (f-github-sync will automate this later).
+7. **The owner merges.** A task PR is **pure code** — do **not** open a per-task docs/close-out
    PR to flip its board row (that overhead buys no coordination once the feature is claimed to one
    dev). The row flip to `done #<PR>`, decisions, and any cross-cutting carries are **batched into
    the single feature close-out PR** (§3). Do **not** track an "in-PR" status — one transition,
@@ -147,6 +171,21 @@ for a plain read); app scripts go under the `app:*` namespace. The `lib/app/**` 
 enforced by ESLint + CI — no runtime `next/*` imports there, `@/` alias only.
 
 ## 3. Close out the feature
+
+> ⚠️ **The markdown half of this section is SUPERSEDED and kept only for the pre-§19
+> history.** `f-selfhost-cutover` (§19) made **the Hub its own system of record**:
+> `plan.md` and the per-feature `<feature>.md` files are a **frozen historical record**,
+> not a live board. Do **not** flip rows, frontmatter, or logs in them.
+>
+> The live equivalents are MCP verbs — `complete_task`, `ship_feature`, `record_decision`
+> — which step 6 above already prescribes. What still applies below: **shipping is a
+> reconciliation, not just a merge** (dependents become claimable), and **decisions and
+> execution lessons must be recorded somewhere durable** — now `record_decision` and
+> `planning-retro.md` respectively, plus a `.context/app/<feature>.md` describing what
+> the feature *does* (not what was done to build it).
+>
+> Rewriting this section properly is **§35 t-83**. Until then, read it for the *intent*
+> and ignore the file mechanics.
 
 When the **last task merges**, the feature is shipped — reconcile everything so the board
 tells the truth (a merge changes what's claimable):

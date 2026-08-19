@@ -494,6 +494,10 @@ export async function completeTask(
   const adoptDoer = adoptsMergerAsDoer(task.claimedByUserId, mergedBy);
 
   if (task.status === 'merged') {
+    // Deliberately does NOT stamp `mergedAt`. A task that is already merged with
+    // no timestamp was merged before the column existed (§19 imported 34 of the
+    // 47 merged rows this way), and `now()` is not when it landed — an invented
+    // timestamp is worse than an honest NULL, which at least sorts as oldest.
     if (mergedBy) {
       await prisma.task.update({
         where: { id: task.taskId },
@@ -520,6 +524,19 @@ export async function completeTask(
         ...(mergedBy ? { mergedByUserId: mergedBy.userId } : {}),
         ...(adoptDoer ? { claimedByUserId: mergedBy.userId } : {}),
       },
+    });
+    // Stamp WHEN it landed (§33-sweep t-115) — but only if nothing stamped it
+    // already. This is an `updateMany` with `mergedAt: null` in the predicate
+    // rather than a value on the update above, and the guard is load-bearing:
+    // the early-return at the top of this function tests `task.status` from a
+    // read taken BEFORE any lock, so two concurrent completions both reach here.
+    // Postgres re-evaluates an UPDATE's predicate after taking the row lock, so
+    // the loser matches zero rows and the first stamp stands. Setting it inline
+    // above would let the second writer move a milestone that is now rendered —
+    // the §33 t-103 failure, one model over.
+    await tx.task.updateMany({
+      where: { id: task.taskId, mergedAt: null },
+      data: { mergedAt: new Date() },
     });
     await recordProjectEvent(tx, {
       projectId: task.projectId,
