@@ -105,8 +105,8 @@ describe('IdeaRow', () => {
 });
 
 describe('IdeaRow — markdown (t-112)', () => {
-  /** A jot past both clamp thresholds, so "long" is not a near-miss judgement. */
-  const longText = `## Repro\n\n${'x'.repeat(400)}\n\n- one\n- two`;
+  /** A jot well past the clamp threshold, so "long" is not a near-miss judgement. */
+  const longText = `## Repro\n\n${'x'.repeat(400)}\n\n- one\n- two\n- three\n\nAnd a closing paragraph.`;
 
   it('renders the jot as formatted markdown rather than source', () => {
     // Ideas now routinely carry a repro, a fix shape and cross-references — #24
@@ -150,11 +150,46 @@ describe('IdeaRow — markdown (t-112)', () => {
     expect(clipped()).not.toBeNull();
   });
 
-  it('clamps on line count too, not only on length', () => {
-    // A jot of many short lines is exactly as tall as one long paragraph, and a
-    // character-only threshold would let it swamp the list unclamped.
+  it('does NOT treat SOFT line breaks as height — markdown collapses them', () => {
+    // This is the case an earlier version of the heuristic got backwards. Counting
+    // raw `\n` called this seven lines; markdown renders it as ONE paragraph on one
+    // line (no `<br>`), so collapsing it hid text that was already fully visible.
     render(<IdeaRow projectId="p1" idea={{ ...openIdea, text: 'a\nb\nc\nd\ne\nf\ng' }} />);
+    expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
+  });
+
+  it('DOES count the breaks that start a real block', () => {
+    // Blank-line-separated paragraphs and list items each render on their own
+    // line, so these are height in a way soft breaks are not.
+    const listy = '- one\n- two\n- three\n- four\n- five\n- six\n- seven';
+    render(<IdeaRow projectId="p1" idea={{ ...openIdea, text: listy }} />);
     expect(screen.getByRole('button', { name: 'Show more' })).toBeInTheDocument();
+  });
+
+  it('never clips without also offering the way back', () => {
+    // The invariant that makes an imprecise height estimate safe: the clipping box
+    // and the toggle come from ONE flag, so there is no state where content is cut
+    // off and nothing says so. Checked on a short jot and a long one.
+    const short = render(<IdeaRow projectId="p1" idea={openIdea} />);
+    expect(short.container.querySelector('.overflow-hidden')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Show more/ })).not.toBeInTheDocument();
+    short.unmount();
+
+    const { container } = render(<IdeaRow projectId="p1" idea={{ ...openIdea, text: longText }} />);
+    expect(container.querySelector('.overflow-hidden')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Show more' })).toBeInTheDocument();
+  });
+
+  it('reports its expanded state to assistive tech', () => {
+    render(<IdeaRow projectId="p1" idea={{ ...openIdea, text: longText }} />);
+    const toggle = screen.getByRole('button', { name: 'Show more' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveAttribute('aria-controls', 'idea-body-i1');
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
   });
 
   it('edits the raw source, not the rendering', () => {

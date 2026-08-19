@@ -47,11 +47,4 @@ describe('Markdown', () => {
     const { container } = render(<Markdown content={'[a](https://example.com/x)'} />);
     expect(container.querySelector('a')).toHaveAttribute('href', 'https://example.com/x');
   });
-
-  it('applies a caller-supplied style to the prose container', () => {
-    // The Log passes its own `--ink-soft`; the typography plugin sets `color` on
-    // `.prose` itself, so only an inline style beats it deterministically.
-    const { container } = render(<Markdown content="hi" style={{ color: 'rgb(1, 2, 3)' }} />);
-    expect(container.firstElementChild).toHaveStyle({ color: 'rgb(1, 2, 3)' });
-  });
 });

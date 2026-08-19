@@ -118,11 +118,13 @@ export function EventRow({
           </p>
         )}
         {authored && event.body && (
-          <Markdown
-            content={event.body}
-            className="mt-0.5 text-[13px] leading-relaxed"
-            style={{ color: 'var(--ink-soft)' }}
-          />
+          // Rendered in prose's own palette, NOT the row's `--ink-soft`. An
+          // inherited container colour reaches the plain text but not `strong`,
+          // `code`, links or headings — the typography plugin sets an explicit
+          // `color` on each of those — so overriding it would render a decision
+          // body in two inks. The feature page and task sheet already accept the
+          // prose palette for the same authored content; the Log now matches.
+          <Markdown content={event.body} className="mt-0.5 text-[13px] leading-relaxed" />
         )}
       </div>
     </li>

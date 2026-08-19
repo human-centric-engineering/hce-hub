@@ -22,20 +22,12 @@ import { cn } from '@/lib/utils';
 export function Markdown({
   content,
   className,
-  style,
 }: {
   content: string;
   className?: string;
-  /**
-   * Inline overrides for the prose container. The typography plugin sets `color`
-   * on `.prose` itself, so a utility class fights it on equal specificity and
-   * loses or wins by stylesheet order; an inline style is the one deterministic
-   * way for a caller to keep its own ink colour (the Log's `--ink-soft` bodies).
-   */
-  style?: React.CSSProperties;
 }): React.ReactElement {
   return (
-    <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)} style={style}>
+    <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
     </div>
   );

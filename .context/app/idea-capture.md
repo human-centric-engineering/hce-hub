@@ -68,12 +68,19 @@ work), server-fetched like them so mutations `router.refresh()` cleanly.
   suited a short line; ideas now routinely carry a repro, a fix shape and
   cross-references, and that content wants formatting. **The editor stays plain** —
   you refine the source you wrote, not a rendering of it.
-- **A long jot is clamped** with a fade and a `Show more`/`Show less` toggle, so one
-  essay can't swamp the list. "Long" is judged from the **source** (character count
-  or line count), not from laid-out height: a `scrollHeight` measurement is
-  untestable under jsdom and would differ between the server and client render. The
-  heuristic is one-directional by design — a misjudged _short_ renders in full, so
-  the worst case is a tall row, never an idea you can't finish reading.
+- **A long jot is collapsed** behind a `Show more`/`Show less` toggle, so one essay
+  can't swamp the list. "Long" is _estimated_ from the source, not measured from
+  laid-out height (a `scrollHeight` read is untestable under jsdom and would differ
+  between the server and client render). The estimate counts only the breaks that
+  start a **new rendered block** — a blank line, a list item, a heading — because
+  markdown collapses soft line breaks, so `a\nb\nc` is one line and not three.
+  **The estimate is safe to get wrong**: the clipping box and the toggle are applied
+  by the same flag, so a jot is either uncollapsed and whole, or collapsed with a
+  way back — there is no state where text is cut off and nothing says so. Being
+  wrong only changes how often a `Show more` appears with little behind it.
+  (A fade mask was tried and reverted: it dims the bottom of the _box_, and the box
+  is only as tall as its content, so a jot that tripped the threshold and still
+  fitted had its last lines faded away with no way to un-fade them.)
 
 ## Reading the inbox from Claude Code — `list_ideas`
 
