@@ -61,8 +61,18 @@ The two together are the model's lifecycle timestamps, alongside
 `Phase.startedAt`/`completedAt`.
 
 Its first reader is the **Board's Merged column**, which shows the newest few per lane
-and folds the rest — so the null-sorts-oldest rule above is load-bearing, not
-theoretical: most of the Hub's own merged history is still undated.
+and folds the rest — which is why the null-sorts-oldest rule above is load-bearing
+rather than theoretical.
+
+**Recovering a null.** Imported history can be dated after the fact from the task's
+GitHub PR:
+`npx tsx --env-file=.env.local scripts/db/backfill-task-merged-at.ts [--dry-run]`
+reads `merged_at` for every `status: merged, mergedAt: null` task whose `prUrl`
+resolves, and writes it under the same `mergedAt IS NULL` guard — so it is
+re-runnable and can never move a stamp `complete_task` already set. Run it per
+environment; each carries its own history. `GITHUB_TOKEN` raises the API limit from
+60/hr to 5,000/hr, which matters above ~50 tasks. A PR that was never merged, or a
+`prUrl` that doesn't parse, is reported and left null — never guessed.
 
 ### The line is _shipped_, not _small_
 
