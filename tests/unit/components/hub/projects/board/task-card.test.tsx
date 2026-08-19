@@ -18,6 +18,7 @@ const card = (over: Partial<BoardTaskCard> = {}): BoardTaskCard => ({
   status: 'claimed',
   kind: 'feature_work',
   column: 'claimed',
+  mergedAt: null,
   prUrl: null,
   claimer: null,
   isMine: false,

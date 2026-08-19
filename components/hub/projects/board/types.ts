@@ -25,6 +25,8 @@ export interface BoardTaskCard {
   /** `bug` (a defect, marked distinctly) vs `feature_work` (f-bug-handling §22-02). */
   kind: TaskKind;
   column: BoardColumn;
+  /** ISO instant the task merged; `null` when unmerged, or merged before we tracked it. */
+  mergedAt: string | null;
   prUrl: string | null;
   /** `null` when unclaimed or the claimant was erased. */
   claimer: UserRef | null;

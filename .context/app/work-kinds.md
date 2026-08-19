@@ -60,6 +60,10 @@ than the `task_merged` journal event.
 The two together are the model's lifecycle timestamps, alongside
 `Phase.startedAt`/`completedAt`.
 
+Its first reader is the **Board's Merged column**, which shows the newest few per lane
+and folds the rest — so the null-sorts-oldest rule above is load-bearing, not
+theoretical: most of the Hub's own merged history is still undated.
+
 ### The line is _shipped_, not _small_
 
 Work on an **unshipped** feature is `feature_work` even when it is scope discovered

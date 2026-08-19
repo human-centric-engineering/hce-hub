@@ -3,7 +3,7 @@
  * bucketed into columns, empty-column dots, the Unassigned lane.
  */
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { SwimLane } from '@/components/hub/projects/board/swim-lane';
 import type { BoardLane, BoardTaskCard } from '@/components/hub/projects/board/types';
 
@@ -17,6 +17,7 @@ const card = (over: Partial<BoardTaskCard>): BoardTaskCard => ({
   status: 'claimed',
   kind: 'feature_work',
   column: 'claimed',
+  mergedAt: null,
   prUrl: null,
   claimer: null,
   isMine: false,
@@ -36,14 +37,17 @@ const lane = (over: Partial<BoardLane> = {}): BoardLane => ({
 
 describe('SwimLane', () => {
   it('renders the member name and role', () => {
-    render(<SwimLane lane={lane()} />);
+    render(<SwimLane hideBugs={false} lane={lane()} />);
     expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
     expect(screen.getByText('lead')).toBeInTheDocument();
   });
 
   it('renders owned-feature chips', () => {
     render(
-      <SwimLane lane={lane({ ownedFeatures: [{ id: 'f1', slug: 'f-access', title: 'Access' }] })} />
+      <SwimLane
+        hideBugs={false}
+        lane={lane({ ownedFeatures: [{ id: 'f1', slug: 'f-access', title: 'Access' }] })}
+      />
     );
     expect(screen.getByText('f-access')).toBeInTheDocument();
   });
@@ -51,6 +55,7 @@ describe('SwimLane', () => {
   it('renders the Unassigned lane head (no member) as a pool anyone can take from', () => {
     render(
       <SwimLane
+        hideBugs={false}
         lane={lane({
           key: 'unassigned',
           member: null,
@@ -70,6 +75,7 @@ describe('SwimLane', () => {
   it('singularises the lane count', () => {
     render(
       <SwimLane
+        hideBugs={false}
         lane={lane({
           key: 'unassigned',
           member: null,
@@ -85,6 +91,7 @@ describe('SwimLane', () => {
   it('places a task in its column and shows dots for the empty ones', () => {
     render(
       <SwimLane
+        hideBugs={false}
         lane={lane({
           tasks: [card({ id: 't1', title: 'Merged task', column: 'merged' })],
           taskCount: 1,
@@ -94,5 +101,242 @@ describe('SwimLane', () => {
     expect(screen.getByText('Merged task')).toBeInTheDocument();
     // claimed/active empty → two dots (merged has the card)
     expect(screen.getAllByText('·')).toHaveLength(2);
+  });
+});
+
+describe('SwimLane — bugs out of Assigned (§33-sweep t-107)', () => {
+  const bugs = () =>
+    lane({
+      tasks: [
+        card({ id: 'a', title: 'Real work', column: 'claimed', kind: 'feature_work' }),
+        card({ id: 'b', title: 'A defect', column: 'claimed', kind: 'bug' }),
+        card({ id: 'c', title: 'Bug in flight', column: 'active', kind: 'bug' }),
+      ],
+    });
+
+  it('hides bug cards from Assigned when the toggle is on', () => {
+    render(<SwimLane hideBugs lane={bugs()} />);
+    expect(screen.getByText('Real work')).toBeInTheDocument();
+    expect(screen.queryByText('A defect')).not.toBeInTheDocument();
+  });
+
+  it('leaves an ACTIVE bug visible — in-flight work is not clutter', () => {
+    // The filter is Assigned-only by design: a bug someone is working on is work
+    // in progress, and hiding it board-wide would conceal live activity.
+    render(<SwimLane hideBugs lane={bugs()} />);
+    expect(screen.getByText('Bug in flight')).toBeInTheDocument();
+  });
+
+  it('shows everything when the toggle is off', () => {
+    render(<SwimLane hideBugs={false} lane={bugs()} />);
+    expect(screen.getByText('A defect')).toBeInTheDocument();
+    expect(screen.getByText('Bug in flight')).toBeInTheDocument();
+  });
+});
+
+describe('SwimLane — Merged column cap (§33-sweep t-108)', () => {
+  /** Seven merged cards, deliberately supplied OLDEST-first to prove the sort. */
+  const sevenMerged = () =>
+    lane({
+      tasks: Array.from({ length: 7 }, (_, i) =>
+        card({
+          id: `m${i}`,
+          title: `Merged ${i}`,
+          column: 'merged',
+          mergedAt: `2026-08-0${i + 1}T00:00:00.000Z`,
+        })
+      ),
+    });
+
+  it('shows the five NEWEST and folds the rest', () => {
+    render(<SwimLane hideBugs={false} lane={sevenMerged()} />);
+    // Newest is index 6 (2026-08-07); the two oldest fall behind the control.
+    expect(screen.getByText('Merged 6')).toBeInTheDocument();
+    expect(screen.getByText('Merged 2')).toBeInTheDocument();
+    expect(screen.queryByText('Merged 1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Merged 0')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show 2 more' })).toBeInTheDocument();
+  });
+
+  it('reveals the rest and folds them again', () => {
+    render(<SwimLane hideBugs={false} lane={sevenMerged()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show 2 more' }));
+    expect(screen.getByText('Merged 0')).toBeInTheDocument();
+    const collapse = screen.getByRole('button', { name: 'Show fewer' });
+    expect(collapse).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(collapse);
+    expect(screen.queryByText('Merged 0')).not.toBeInTheDocument();
+  });
+
+  it('offers no control at or under the cap', () => {
+    render(
+      <SwimLane
+        hideBugs={false}
+        lane={lane({
+          tasks: Array.from({ length: 5 }, (_, i) =>
+            card({ id: `m${i}`, title: `Merged ${i}`, column: 'merged' })
+          ),
+        })}
+      />
+    );
+    expect(screen.queryByRole('button', { name: /Show/ })).not.toBeInTheDocument();
+  });
+
+  it('sorts a null mergedAt LAST — imported history, not unmerged', () => {
+    // `null` means "merged before we tracked it" (§19's import predates the
+    // column). Sorting it newest would put the oldest work at the top; dropping
+    // it would hide real history. It goes last, which is where it belongs.
+    render(
+      <SwimLane
+        hideBugs={false}
+        lane={lane({
+          tasks: [
+            card({ id: 'old', title: 'Imported', column: 'merged', mergedAt: null }),
+            card({
+              id: 'new',
+              title: 'Recent',
+              column: 'merged',
+              mergedAt: '2026-08-19T00:00:00.000Z',
+            }),
+          ],
+        })}
+      />
+    );
+    // Both fit under the cap; ORDER is what is under test.
+    const shown = screen.getAllByRole('button', { name: /Open task/ });
+    const text = shown.map((b) => b.textContent ?? '').join('|');
+    expect(text.indexOf('Recent')).toBeLessThan(text.indexOf('Imported'));
+  });
+});
+
+describe('SwimLane — merged ordering ties (§33-sweep t-108)', () => {
+  it('keeps both cards when two tasks share a merge instant', () => {
+    // Not hypothetical: one PR closing several tasks is the normal shape here
+    // (#170 merged t-85, t-105 and t-112 together), so equal instants are common.
+    // The comparator must return 0 rather than dropping or duplicating either.
+    const at = '2026-08-19T10:00:00.000Z';
+    render(
+      <SwimLane
+        hideBugs={false}
+        lane={lane({
+          tasks: [
+            card({ id: 'x', title: 'Same PR A', column: 'merged', mergedAt: at }),
+            card({ id: 'y', title: 'Same PR B', column: 'merged', mergedAt: at }),
+          ],
+        })}
+      />
+    );
+    expect(screen.getByText('Same PR A')).toBeInTheDocument();
+    expect(screen.getByText('Same PR B')).toBeInTheDocument();
+  });
+
+  it('sorts a null LAST from either side of the comparison', () => {
+    // Symmetry, not coverage-chasing. A two-element sort only ever calls the
+    // comparator one way round, so `null` reaching it as the LEFT operand was
+    // never exercised. If that branch's sign were flipped, nulls would sort first
+    // from one direction and last from the other — an inconsistent comparator,
+    // which is worse than simply-wrong order. Three cards force both directions.
+    render(
+      <SwimLane
+        hideBugs={false}
+        lane={lane({
+          tasks: [
+            card({
+              id: '1',
+              title: 'Older',
+              column: 'merged',
+              mergedAt: '2026-08-01T00:00:00.000Z',
+            }),
+            card({ id: '2', title: 'Undated', column: 'merged', mergedAt: null }),
+            card({
+              id: '3',
+              title: 'Newer',
+              column: 'merged',
+              mergedAt: '2026-08-19T00:00:00.000Z',
+            }),
+          ],
+        })}
+      />
+    );
+    const text = screen
+      .getAllByRole('button', { name: /Open task/ })
+      .map((b) => b.textContent ?? '')
+      .join('|');
+    expect(text.indexOf('Newer')).toBeLessThan(text.indexOf('Older'));
+    expect(text.indexOf('Older')).toBeLessThan(text.indexOf('Undated'));
+  });
+
+  it('keeps every card when they are ALL undated', () => {
+    // The whole imported-history block compares equal to itself. Sorting must not
+    // lose any of it — this is three quarters of the Hub's own merged history.
+    render(
+      <SwimLane
+        hideBugs={false}
+        lane={lane({
+          tasks: [
+            card({ id: 'p', title: 'Imported one', column: 'merged', mergedAt: null }),
+            card({ id: 'q', title: 'Imported two', column: 'merged', mergedAt: null }),
+          ],
+        })}
+      />
+    );
+    expect(screen.getByText('Imported one')).toBeInTheDocument();
+    expect(screen.getByText('Imported two')).toBeInTheDocument();
+  });
+});
+
+describe('SwimLane — "free to take" counts what is takeable (review round 1)', () => {
+  const unassigned = (tasks: ReturnType<typeof card>[]) =>
+    lane({ key: 'unassigned', member: null, role: null, tasks, taskCount: tasks.length });
+
+  it('excludes MERGED work — nobody can take a finished task', () => {
+    // Pre-existing, and worse than the filter that surfaced it: the head read
+    // `lane.taskCount`, which is every task in the lane. An unassigned lane
+    // holding finished work claimed to offer it.
+    render(
+      <SwimLane
+        hideBugs={false}
+        lane={unassigned([
+          card({ id: 'a', title: 'Takeable', column: 'claimed' }),
+          card({ id: 'b', title: 'Done', column: 'merged' }),
+          card({ id: 'c', title: 'Also done', column: 'merged' }),
+        ])}
+      />
+    );
+    expect(screen.getByText('1 task · free to take')).toBeInTheDocument();
+  });
+
+  it('still counts a HIDDEN bug — it is takeable, just not on screen', () => {
+    // The count stays true; the header's "N bugs hidden" chip explains the gap.
+    // Subtracting here would make the lane head lie in the other direction.
+    render(
+      <SwimLane
+        hideBugs
+        lane={unassigned([
+          card({ id: 'a', title: 'Takeable', column: 'claimed' }),
+          card({ id: 'b', title: 'A bug', column: 'claimed', kind: 'bug' }),
+        ])}
+      />
+    );
+    expect(screen.getByText('2 tasks · free to take')).toBeInTheDocument();
+    expect(screen.queryByText('A bug')).not.toBeInTheDocument();
+  });
+
+  it('associates the merged disclosure control with the list it reveals', () => {
+    render(
+      <SwimLane
+        hideBugs={false}
+        lane={lane({
+          key: 'u1',
+          tasks: Array.from({ length: 7 }, (_, i) =>
+            card({ id: `m${i}`, title: `M${i}`, column: 'merged' })
+          ),
+        })}
+      />
+    );
+    const toggle = screen.getByRole('button', { name: /Show 2 more/ });
+    const controls = toggle.getAttribute('aria-controls');
+    expect(controls).toBe('merged-u1');
+    expect(document.getElementById(controls!)).toContainElement(toggle);
   });
 });
