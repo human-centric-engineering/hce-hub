@@ -362,6 +362,18 @@ function PhaseRow({
     void onDescribe(phase.id, description).then((ok) => {
       if (!ok) setLastSent(null); // dirty again ⇒ blur retries, close still flushes
     });
+    // ACCEPTED LIMIT (owner, 2026-08-19): this covers the BLUR path only. Save via
+    // the close path and the row unmounts before the response, so the revert above
+    // is a no-op and the draft is gone — and the error banner lives inside
+    // `DialogContent`, so nothing is shown either; you find out on reopening, when
+    // the textarea re-seeds from the unchanged server value. Pre-existing, not
+    // introduced by the 409.
+    //
+    // Not fixed because closing it means lifting the error state (or the pending
+    // draft) out of `DialogContent`, which is a structural change for a save that
+    // has to fail in the same instant you dismiss the dialog. Revisit if 409s stop
+    // being rare — i.e. once there are enough concurrent writers to make losing
+    // that race normal rather than unlucky.
   };
 
   // Report an uncommitted draft to the dialog so closing it commits rather than
