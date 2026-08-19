@@ -81,15 +81,17 @@ const grantedFeature = (
 const txClaimUpdateMany = vi.fn();
 const txClaimCreate = vi.fn();
 const txTaskUpdate = vi.fn();
+const txTaskUpdateMany = vi.fn();
 function mockTx() {
   txClaimUpdateMany.mockResolvedValue({});
   txClaimCreate.mockResolvedValue({});
   txTaskUpdate.mockResolvedValue({});
+  txTaskUpdateMany.mockResolvedValue({ count: 1 });
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       taskClaim: { updateMany: txClaimUpdateMany, create: txClaimCreate },
-      task: { update: txTaskUpdate },
+      task: { update: txTaskUpdate, updateMany: txTaskUpdateMany },
     })
   );
 }
@@ -731,5 +733,52 @@ describe('reassignFeatureTasks (f-task-assignment §22 t2)', () => {
       where: { taskId: 't1', releasedAt: null },
       data: { releasedAt: expect.any(Date) },
     });
+  });
+});
+
+describe('completeTask — mergedAt (§33-sweep t-115)', () => {
+  it('stamps the merge instant inside the same transaction as the status flip', async () => {
+    resolveTask.mockResolvedValue(granted({ status: 'active' }));
+    await completeTask(USER, 't1');
+
+    expect(txTaskUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'merged' }) })
+    );
+    const stamp = txTaskUpdateMany.mock.calls[0][0];
+    expect(stamp.data.mergedAt).toBeInstanceOf(Date);
+    // Same tx client as the status write — the timestamp commits iff the merge does.
+    expect(txTaskUpdateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('guards the stamp on `mergedAt: null` so a concurrent completion cannot move it', async () => {
+    // The load-bearing assertion. `completeTask`'s early return tests `task.status`
+    // from a read taken BEFORE any lock, so two concurrent completions both reach
+    // the transaction. Postgres re-evaluates an UPDATE's predicate after taking
+    // the row lock, so the loser matches zero rows and the first stamp stands —
+    // but ONLY because the predicate carries `mergedAt: null`. Setting the value
+    // on the update above instead would let the second writer overwrite it, which
+    // is the §33 t-103 failure one model over.
+    resolveTask.mockResolvedValue(granted({ status: 'active' }));
+    await completeTask(USER, 't1');
+
+    expect(txTaskUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 't1', mergedAt: null } })
+    );
+    // …and it must NOT ride on the unguarded update.
+    expect(txTaskUpdate.mock.calls[0][0].data).not.toHaveProperty('mergedAt');
+  });
+
+  it('does NOT stamp an already-merged task, even when a webhook backfills the merger', async () => {
+    // A merged task with a null `mergedAt` was merged before the column existed
+    // (§19 imported 34 of 47 such rows). `now()` is not when it landed, and an
+    // invented timestamp is worse than an honest NULL.
+    resolveTask.mockResolvedValue(granted({ status: 'merged' }));
+    await completeTask(USER, 't1', undefined, { userId: 'u9', githubLogin: 'bo' });
+
+    expect(runTx).not.toHaveBeenCalled();
+    expect(taskUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ mergedByUserId: 'u9' }) })
+    );
+    expect(taskUpdate.mock.calls[0][0].data).not.toHaveProperty('mergedAt');
   });
 });

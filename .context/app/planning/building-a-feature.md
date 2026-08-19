@@ -75,6 +75,15 @@ stop two owners starting the same feature.
 A **task is one PR** (~200–600 lines; cohesive, reviewable). For each:
 
 1. **Branch off `main`** — `feat/<feature>-tN-<slug>`. **Never commit or push to `main`.**
+   Use `git switch -c <name> --no-track origin/main`: PRs are **squash-merged**, so a branch
+   cut from a previously-merged local branch carries duplicate commits under new SHAs, and
+   plain `git checkout -b X origin/main` silently sets upstream to **main** (a bare
+   `git push` then targets it).
+
+   **Then `start_task` it in the Hub — every task you pick up, before you write code.**
+   The Hub is the system of record; a task you are actively building that still reads
+   `claimed` tells every other reader it is unclaimed work. This is the step most easily
+   skipped, because nothing in the code enforces it and the branch works fine without it.
 2. **Build to the right shape, not the expedient one.** If it needs doing properly (a real
    seam, a correct data model), do that now — don't ship a review-passing-but-wrong version
    and defer the correct one. **Extend through the seam; never fork-and-edit a platform file**
@@ -130,7 +139,10 @@ A **task is one PR** (~200–600 lines; cohesive, reviewable). For each:
    PR conversations. Recover it with **one summary comment after opening the PR** covering
    what each round found — the commits carry the detail, the comment carries the narrative.
    Document findings you accept or refute, and why.
-6. **The owner merges.** A task PR is **pure code** — do **not** open a per-task docs/close-out
+6. **`set_pr` the task(s) as soon as the PR exists** — routine bookkeeping, not a decision
+   to check in about. A PR that closes three tasks links from all three. **`complete_task`
+   once it merges** (f-github-sync will automate this later).
+7. **The owner merges.** A task PR is **pure code** — do **not** open a per-task docs/close-out
    PR to flip its board row (that overhead buys no coordination once the feature is claimed to one
    dev). The row flip to `done #<PR>`, decisions, and any cross-cutting carries are **batched into
    the single feature close-out PR** (§3). Do **not** track an "in-PR" status — one transition,

@@ -87,6 +87,31 @@ A feature plan that names a single ORM call ("boot-time upsert") hides the corre
 - **A primitive** — read its validators and serialisers and ask what they assume about input *shape* (string vs object, size caps, one-vs-many anchor), not just its type signature. A green type-check on a copied primitive proves the shapes *compile*, not that its silent assumptions hold ([planning-retro](./planning-retro.md) B24).
 - **A guard** — identify the exact failure state it detects and confirm the new usage can actually *reach* it. A drift-guard on query-vs-stored vectors is dead code over same-run node-to-node vectors ([planning-retro](./planning-retro.md) B26).
 
+## 5b · Files in scope — narrow, and **never** `tests/**`
+
+`filesScope` exists to drive soft-collision warnings when two people claim overlapping
+ground. Two rules, both learned the hard way (owner, 2026-08-19):
+
+**Never declare `tests/**`.** It is the worst possible entry: it collides with *every*
+other task carrying it — which was most of them — while catching nothing real. Omit test
+paths entirely; a task's tests live under the mirror of its source scope, so the source
+entry is the meaningful signal. Declare a test path only for work that is *purely* test
+work (a `/test-fix` pass), and then name the specific mirrored directory.
+
+**Prefer a bare directory to a `dir/**` glob.** `pathsOverlap`
+([`lib/projects/collision.ts`](../../../lib/projects/collision.ts)) is literal
+prefix matching — it does **not** expand globs — so a trailing `/**` can only ever match
+an *identical string*:
+
+| A | B | Overlap |
+| --- | --- | --- |
+| `components/hub/projects/board/**` | `components/hub/projects/board/board-view.tsx` | ✗ |
+| `components/hub/projects/**` | `components/hub/projects/board/**` | ✗ |
+| `components/hub/projects/board` | `components/hub/projects/board/board-view.tsx` | ✓ |
+
+So `dir/**` gives false positives against an identical entry and false negatives against
+everything else. Write `components/hub/projects/board`, or name the actual files.
+
 ## 6 · Test strategy up front, and budget the review-fix commit
 
 State the test approach *in the plan*, matched to the repo's real harness.

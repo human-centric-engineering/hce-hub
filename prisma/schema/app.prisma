@@ -259,6 +259,7 @@ model Task {
   assigneeUserId  String? // hand-FK → "user" · ON DELETE SET NULL — "this is yours" (defaults to feature owner at plan time; distinct from the pull-claim)
   claimedByUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the task, drop the claimant)
   mergedByUserId  String? // hand-FK → "user" · ON DELETE SET NULL — the GitHub merger (merged_by) mapped to a Hub user (f-github-identity §23); ADDITIVE, never the doer (claimedByUserId)
+  mergedAt        DateTime? // WHEN it landed, stamped by complete_task (§33-sweep t-115). Sibling of Feature.shippedAt / Phase.completedAt — Task was the odd model out, and the instant survived only as the `task_merged` event, which is ABSENT for every task imported by §19's cutover. NULL ⇒ merged before we tracked it (sorts oldest, which is true). Never moved once set.
   phaseId         String? // intra-Hub FK → app_phase · ON DELETE SET NULL — COMMITMENT MARKER (f-work-kinds §32 t-80): the phase that *chose* to do this work, when that differs from its feature's phase. NULL = inherit the feature's phase (today's behaviour exactly). Never propagates upward — a feature's phase is solely Feature.phaseId, so a task can't drag its feature between phases.
   prUrl           String?
   createdAt       DateTime   @default(now())
