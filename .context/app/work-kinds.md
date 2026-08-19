@@ -70,7 +70,9 @@ GitHub PR:
 reads `merged_at` for every `status: merged, mergedAt: null` task whose `prUrl`
 resolves, and writes it under the same `mergedAt IS NULL` guard — so it is
 re-runnable and can never move a stamp `complete_task` already set. Run it per
-environment; each carries its own history. `GITHUB_TOKEN` raises the API limit from
+environment; each carries its own history, and **every imported project needs it** —
+tasks that merged before the Hub knew about them arrive with a PR link and nothing
+else, whatever the import. `GITHUB_TOKEN` raises the API limit from
 60/hr to 5,000/hr, which matters above ~50 tasks. A PR that was never merged, or a
 `prUrl` that doesn't parse, is reported and left null — never guessed.
 

@@ -12,6 +12,12 @@
  * authoritative instant the work actually landed — better than anything we could
  * reconstruct locally.
  *
+ * **Expect to run this again.** It is not a one-off for §19: ANY project imported
+ * with existing history arrives the same way — tasks that merged long before the
+ * Hub knew about them, carrying a PR link and nothing else. ConQuest is first,
+ * §27's Sunrise onboarding after it. Run it once per imported project, per
+ * environment.
+ *
  * **A script, not a migration.** It makes network calls, and a migration that
  * depends on an external API is a migration that can fail forever on a fresh
  * database — `migrate deploy` on a new environment would try to reach GitHub.
