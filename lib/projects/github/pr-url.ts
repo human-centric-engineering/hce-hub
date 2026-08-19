@@ -18,10 +18,16 @@
  * `https://evil.example/?x=https://github.com/o/r/pull/1`, which would send the
  * lookup somewhere the URL never pointed. `^` is the whole defence.
  *
- * Owner and repo exclude `/` and whitespace so a crafted path cannot smuggle
- * extra segments into the API URL this feeds.
+ * Owner and repo are restricted to GitHub's own character set rather than merely
+ * "not a slash". A looser `[^/\s]+` still cannot change the HOST of the API URL
+ * these feed — that is fixed at `api.github.com` — but it does admit `#` and `?`,
+ * which turn the rest of the path into a fragment or query and silently request a
+ * DIFFERENT resource than the URL named. That resolves to a 404 rather than a
+ * wrong write, so it fails loudly; the point is that a parser should not produce
+ * a ref it cannot honour in the first place.
  */
-const PR_URL = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)(?:[/?#]|$)/;
+const PR_URL =
+  /^https:\/\/github\.com\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)\/pull\/(\d+)(?:[/?#]|$)/;
 
 export interface PullRequestRef {
   owner: string;

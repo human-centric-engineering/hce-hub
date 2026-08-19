@@ -63,6 +63,24 @@ describe('parsePullRequestUrl', () => {
     expect(parsePullRequestUrl('')).toBeNull();
   });
 
+  it('refuses an owner or repo that would re-point the API request', () => {
+    // `#` and `?` are legal in a URL path but turn the REST of the constructed
+    // API URL into a fragment or query — so `.../repos/a#b/r/pulls/1` requests
+    // `/repos/a`, not what the task's URL named. The host stays api.github.com
+    // either way (there is no SSRF here), but a parser should not hand back a
+    // ref it cannot honour. GitHub owners and repos are `[A-Za-z0-9._-]` anyway.
+    expect(parsePullRequestUrl('https://github.com/a#b/r/pull/1')).toBeNull();
+    expect(parsePullRequestUrl('https://github.com/a?x=1/r/pull/1')).toBeNull();
+    expect(parsePullRequestUrl('https://github.com/o/r%2Fx/pull/1')).toBeNull();
+    expect(parsePullRequestUrl('https://github.com/o/r:8080/pull/1')).toBeNull();
+    // …while every character GitHub actually allows still parses.
+    expect(parsePullRequestUrl('https://github.com/My-Org.1/repo_name.js/pull/7')).toEqual({
+      owner: 'My-Org.1',
+      repo: 'repo_name.js',
+      number: '7',
+    });
+  });
+
   it('never yields a number that could escape the API path', () => {
     // `number` is interpolated straight into an api.github.com path, so it must
     // be digits or nothing — there is no sanitising step downstream.
