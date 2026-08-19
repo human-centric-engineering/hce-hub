@@ -32,6 +32,8 @@ export function SwimLane({ lane, hideBugs }: { lane: BoardLane; hideBugs: boolea
   const isUnassigned = lane.member === null && lane.role === null;
   const [showAllMerged, setShowAllMerged] = useState(false);
   const mergedHidden = Math.max(0, byColumn.merged.length - MERGED_VISIBLE);
+  const takeable = byColumn.claimed.length;
+  const mergedListId = `merged-${lane.key}`;
 
   return (
     <div
@@ -63,7 +65,15 @@ export function SwimLane({ lane, hideBugs }: { lane: BoardLane; hideBugs: boolea
                 // affordance here IS assign (to yourself, which is the pull). The
                 // lane went from theoretical to real in §32 t-89, so its copy is
                 // now read rather than imagined.
-                `${lane.taskCount} ${lane.taskCount === 1 ? 'task' : 'tasks'} · free to take`
+                //
+                // Counts the ASSIGNED column, not `lane.taskCount`. That field is
+                // every task in the lane including merged ones, so an unassigned
+                // lane holding finished work read "3 tasks · free to take" when
+                // none of the three were takeable — wrong before this branch, and
+                // t-107's filter would only have added a second way to disagree.
+                // Unfiltered on purpose: a hidden bug IS still free to take, and
+                // the header's "N bugs hidden" chip explains the difference.
+                `${takeable} ${takeable === 1 ? 'task' : 'tasks'} · free to take`
               : (lane.role ?? 'member')}
           </span>
           {lane.ownedFeatures.length > 0 && (
@@ -95,7 +105,11 @@ export function SwimLane({ lane, hideBugs }: { lane: BoardLane; hideBugs: boolea
               ? all.slice(0, MERGED_VISIBLE)
               : all;
         return (
-          <div key={col.key} className="flex min-w-0 flex-col gap-1.5">
+          <div
+            key={col.key}
+            id={col.key === 'merged' ? mergedListId : undefined}
+            className="flex min-w-0 flex-col gap-1.5"
+          >
             {cards.length === 0 ? (
               <span
                 className="py-2 text-center font-mono text-[10px]"
@@ -111,6 +125,7 @@ export function SwimLane({ lane, hideBugs }: { lane: BoardLane; hideBugs: boolea
                 type="button"
                 onClick={() => setShowAllMerged((v) => !v)}
                 aria-expanded={showAllMerged}
+                aria-controls={mergedListId}
                 className="focus-visible:ring-ring rounded px-1 py-0.5 text-left text-[10px] underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none"
                 style={{ color: 'var(--ink-mute)' }}
               >

@@ -22,6 +22,18 @@ export function BoardView({ board }: { board: ProjectBoardDTO }) {
   // Project-keyed, matching the active-fixes strip: hiding bugs on one project
   // says nothing about another. Default `false` — showing — so the board never
   // silently withholds work from someone who has not opted in.
+  //
+  // ACCEPTED LIMIT (review round 1): `useLocalStorage` deliberately returns
+  // `initial` on the first render so the client's tree matches the server's HTML,
+  // and picks the stored value up post-mount. For a viewer who HAS opted in, that
+  // means the bugs render once and then vanish — a visible flash and a small
+  // layout shift on every load, and any screenshot or print is unfiltered.
+  // Kept because every alternative is worse: the server cannot read localStorage,
+  // so removing the flash means either withholding the whole board until mount (a
+  // blank flash instead of a content one, on the primary surface) or moving the
+  // preference server-side, which is a user-preferences model and API for one
+  // boolean. The active-fixes strip already accepts the same trade; this is a
+  // bigger surface, but the same reasoning and the same wrong alternatives.
   const [hideBugs, setHideBugs] = useLocalStorage(
     `hub:board-hide-assigned-bugs:${board.projectId}`,
     false

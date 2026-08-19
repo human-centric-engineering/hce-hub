@@ -130,3 +130,23 @@ describe('BoardView — hide bugs from Assigned (§33-sweep t-107)', () => {
     expect(screen.queryByRole('button', { name: /bugs?/ })).not.toBeInTheDocument();
   });
 });
+
+describe('BoardView — the opt-out stays reachable (review round 1)', () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it('keeps the toggle when the last bug merges, so a set preference can be cleared', () => {
+    // Gating purely on `hiddenBugs > 0` removed the only control the moment the
+    // last bug merged, while `hideBugs` stayed true in storage — a preference
+    // still in force with nothing on screen admitting it, and no way back.
+    window.localStorage.setItem('hub:board-hide-assigned-bugs:p1', 'true');
+    render(<BoardView board={board()} />); // no bugs at all
+    const toggle = screen.getByRole('button', { name: 'bugs hidden' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(toggle);
+    // …and once cleared with nothing to hide, the control correctly goes away —
+    // there is no preference in force and no bug to act on.
+    expect(screen.queryByRole('button', { name: /bugs?/ })).not.toBeInTheDocument();
+    expect(window.localStorage.getItem('hub:board-hide-assigned-bugs:p1')).toBe('false');
+  });
+});

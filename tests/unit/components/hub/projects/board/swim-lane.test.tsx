@@ -284,3 +284,59 @@ describe('SwimLane — merged ordering ties (§33-sweep t-108)', () => {
     expect(screen.getByText('Imported two')).toBeInTheDocument();
   });
 });
+
+describe('SwimLane — "free to take" counts what is takeable (review round 1)', () => {
+  const unassigned = (tasks: ReturnType<typeof card>[]) =>
+    lane({ key: 'unassigned', member: null, role: null, tasks, taskCount: tasks.length });
+
+  it('excludes MERGED work — nobody can take a finished task', () => {
+    // Pre-existing, and worse than the filter that surfaced it: the head read
+    // `lane.taskCount`, which is every task in the lane. An unassigned lane
+    // holding finished work claimed to offer it.
+    render(
+      <SwimLane
+        hideBugs={false}
+        lane={unassigned([
+          card({ id: 'a', title: 'Takeable', column: 'claimed' }),
+          card({ id: 'b', title: 'Done', column: 'merged' }),
+          card({ id: 'c', title: 'Also done', column: 'merged' }),
+        ])}
+      />
+    );
+    expect(screen.getByText('1 task · free to take')).toBeInTheDocument();
+  });
+
+  it('still counts a HIDDEN bug — it is takeable, just not on screen', () => {
+    // The count stays true; the header's "N bugs hidden" chip explains the gap.
+    // Subtracting here would make the lane head lie in the other direction.
+    render(
+      <SwimLane
+        hideBugs
+        lane={unassigned([
+          card({ id: 'a', title: 'Takeable', column: 'claimed' }),
+          card({ id: 'b', title: 'A bug', column: 'claimed', kind: 'bug' }),
+        ])}
+      />
+    );
+    expect(screen.getByText('2 tasks · free to take')).toBeInTheDocument();
+    expect(screen.queryByText('A bug')).not.toBeInTheDocument();
+  });
+
+  it('associates the merged disclosure control with the list it reveals', () => {
+    render(
+      <SwimLane
+        hideBugs={false}
+        lane={lane({
+          key: 'u1',
+          tasks: Array.from({ length: 7 }, (_, i) =>
+            card({ id: `m${i}`, title: `M${i}`, column: 'merged' })
+          ),
+        })}
+      />
+    );
+    const toggle = screen.getByRole('button', { name: /Show 2 more/ });
+    const controls = toggle.getAttribute('aria-controls');
+    expect(controls).toBe('merged-u1');
+    expect(document.getElementById(controls!)).toContainElement(toggle);
+  });
+});

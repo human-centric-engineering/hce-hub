@@ -55,7 +55,11 @@ export function BoardHeader({
             >
               {columnTotals[col.key]}
             </span>
-            {col.key === 'claimed' && hiddenBugs > 0 && (
+            {/* Shown while anything IS hidden, and also whenever the viewer has
+                opted in — otherwise the last bug merging removes the only control
+                while `hideBugs` stays true in storage, leaving a preference set
+                with nothing on screen admitting it. */}
+            {col.key === 'claimed' && (hiddenBugs > 0 || hideBugs) && (
               <button
                 type="button"
                 onClick={onToggleBugs}
@@ -72,7 +76,11 @@ export function BoardHeader({
                 {/* The visible text IS the accessible name (text content beats
                     `title`), so it has to read sensibly on its own; `aria-pressed`
                     carries the on/off state rather than the label doing it. */}
-                {hideBugs ? `${hiddenBugs} bug${hiddenBugs === 1 ? '' : 's'} hidden` : 'hide bugs'}
+                {!hideBugs
+                  ? 'hide bugs'
+                  : hiddenBugs === 0
+                    ? 'bugs hidden'
+                    : `${hiddenBugs} bug${hiddenBugs === 1 ? '' : 's'} hidden`}
               </button>
             )}
           </div>
