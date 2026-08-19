@@ -100,8 +100,10 @@ work (a `/test-fix` pass), and then name the specific mirrored directory.
 
 **Prefer a bare directory to a `dir/**` glob.** `pathsOverlap`
 ([`lib/projects/collision.ts`](../../../lib/projects/collision.ts)) is literal
-prefix matching — it does **not** expand globs — so a trailing `/**` can only ever match
-an *identical string*:
+prefix matching — it does **not** expand globs. A trailing `/**` still matches an
+identical entry, a bare ancestor directory (`dir/**` vs `dir` overlaps, because
+`"dir/**".startsWith("dir/")`), and a path written literally under `dir/**/`. What it
+misses is the case that matters — **a real file path beneath it**:
 
 | A | B | Overlap |
 | --- | --- | --- |
@@ -109,8 +111,9 @@ an *identical string*:
 | `components/hub/projects/**` | `components/hub/projects/board/**` | ✗ |
 | `components/hub/projects/board` | `components/hub/projects/board/board-view.tsx` | ✓ |
 
-So `dir/**` gives false positives against an identical entry and false negatives against
-everything else. Write `components/hub/projects/board`, or name the actual files.
+So two tasks that both say `dir/**` warn each other, and a `dir/**` task warns against a
+bare-`dir` task — but neither notices a task naming an actual file in that directory.
+Write `components/hub/projects/board`, or name the actual files.
 
 ## 6 · Test strategy up front, and budget the review-fix commit
 
