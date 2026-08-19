@@ -112,7 +112,10 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
 ### UI (t2 render + t3 management), `components/hub/projects/plan/`
 
 - **`PhaseBand`** — a collapsible band header (name, signal-toned status chip,
-  feature count). `parked` and `complete` bands collapse by default; active /
+  feature count, and — open only — the phase's **intent** (two-line clamp) and its
+  **lifecycle** (`started 3 Aug 2026 · finished 18 Aug 2026`, each half shown only
+  when set). Dates are `utcShortDate`: UTC and locale-free, so server and client
+  agree. `parked` and `complete` bands collapse by default; active /
   upcoming and the residual band start open — plus any band holding the view's
   auto-expanded (active-work) feature.
   - **A band renders `rows`, not `features`** (f-work-kinds §32 t-95). `rows` is an
@@ -143,38 +146,27 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
     `update_task { phaseId }` write it; there is **no UI control** — `PhasePicker`
     (below) files a _feature_, and has no task equivalent. So the commitment can be
     read on the Plan but not made there.
-- **A feature that moved mid-flight shows the boundary in its own task list**
-  (f-phase-history §33 t-100, `feature-view/feature-task-list.tsx`) — a rule naming
-  the phase on each side and the date, between the work completed under each. The
-  split keys off **when each task merged**, read from its `task_merged` event
-  (`Task` has no merged-at column), because a feature is normally planned in full
-  and re-homed later — so a creation-time split would draw nothing in exactly the
-  case it exists for. Tasks are grouped into bands rather than split by one divider,
-  since merge order and `t-N` order genuinely diverge; within a band the `t-N` order
-  is untouched, and a feature that never moved renders exactly as before. A task
-  with no merge event is read by its `status`: **merged** ⇒ imported history
-  (`completeTask` is the sole emitter and every live merge routes through it, so
-  no event means it predates anything recorded) ⇒ the _first_ band; **unmerged**
-  ⇒ not done ⇒ the _last_ band, since it will be done under the phase the feature
-  is in now. That distinction is load-bearing, not tidiness — most of the
-  imported §1–§21 tasks have no event. A rule with **nothing above it** is dropped
-  (it would segment no work — a feature re-homed before any of its work landed);
-  a rule with nothing _below_ it is kept, because "all of this was done, then it
-  moved" is a real statement. The drop tests "any task at or above this band",
-  not "the band directly above is non-empty" — an empty band _between_ two others
-  is the stacked-move case (A→B→C with nothing under B) and both rules must stay
-  or B vanishes. Moves made before §33 shipped were never recorded, so a feature
-  re-homed earlier shows no boundary. **The boundary does not read
-  `Task.phaseId`** — a commitment is a different axis from "where was the feature
-  when this landed", and the feature page carries no reciprocal `→ <phase>` mark
-  (unlike the Plan's task row), so a committed task is placed by merge time and
-  its commitment is invisible on this surface.
+- **A feature that moved mid-flight marks the boundary in its own task list**
+  (`feature-view/feature-task-list.tsx`) — a rule naming the phase on each side and
+  the date, between the work completed under each. Tasks group into bands by **when
+  they merged** (read from the `task_merged` event; `Task` has no merged-at column),
+  `t-N` order kept within a band. A task with **no** merge event is placed by its
+  status: `merged` ⇒ imported history ⇒ first band, otherwise ⇒ last band. A rule
+  with nothing above it is dropped; one with nothing below it is kept. Does **not**
+  read `Task.phaseId` — commitment is a separate axis and this surface shows no
+  `→ <phase>` mark. A feature that never moved renders exactly as before.
 - **`ManagePhasesDialog`** ("Manage phases", top-right of the Plan) — create,
-  rename, set status / park, and **drag-to-reorder** (`@dnd-kit`, keyboard-
+  rename, **edit intent**, set status / park, and **drag-to-reorder** (`@dnd-kit`, keyboard-
   accessible: focus the grip, Space, arrows, Space). Reorder is **optimistic** —
   the list follows the drop immediately from local order state, then `PUT`s the
   batch order and `router.refresh()`es; a failed write reverts to the server order
   and surfaces the error. The pure reorder math is `reorderedIds()`.
+- **A phase is linkable.** `/projects/<ref>?phase=<id>` opens the Plan with that
+  band expanded and scrolled to (offset past the sticky topbar). The link outranks
+  collapse-by-default — following one must not land you on a closed row. Plan is the
+  default tab, so a bare `?phase=` needs no `?view=`. The feature page links the
+  phase it is filed under back to its band. (A real phase _page_ is idea #9; this is
+  deliberately a deep link, not that.)
 - **`PhasePicker`** — a compact per-feature dropdown (⬡ + current phase) on each
   Plan row to file a feature into a phase or "No phase". The current phase is the
   band the row renders in — no extra field on the feature payload.
