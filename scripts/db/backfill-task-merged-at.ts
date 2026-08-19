@@ -70,6 +70,11 @@ async function fetchMergedAt(owner: string, repo: string, num: string): Promise<
   const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${num}`, {
     headers: {
       Accept: 'application/vnd.github+json',
+      // GitHub documents User-Agent as REQUIRED, and `lib/projects/github/oauth.ts`
+      // sets it for that reason. In practice this script's 34 live calls all
+      // succeeded without one, so today's API is lenient — which is precisely why
+      // it is worth sending rather than depending on that staying true.
+      'User-Agent': 'hce-hub',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     signal: AbortSignal.timeout(10_000),
