@@ -41,11 +41,13 @@ const granted = {
 };
 
 const txFeatureUpdate = vi.fn();
+const txFeatureUpdateMany = vi.fn();
 function mockTx() {
   txFeatureUpdate.mockResolvedValue({});
+  txFeatureUpdateMany.mockResolvedValue({ count: 1 });
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   runTx.mockImplementation((cb: (tx: unknown) => Promise<unknown>) =>
-    cb({ feature: { update: txFeatureUpdate } })
+    cb({ feature: { update: txFeatureUpdate, updateMany: txFeatureUpdateMany } })
   );
 }
 
@@ -86,12 +88,16 @@ describe('ship_feature close-out', () => {
       success: true,
       data: { featureId: 'f1', shipped: true, warnings: [] },
     });
-    // `shippedAt` is stamped in the SAME update as the status flip (f-work-kinds
-    // §32 t-79) — a shipped feature without a boundary would silently keep
-    // counting every future task toward its completion.
+    // `shippedAt` is stamped in the SAME TRANSACTION as the status flip
+    // (f-work-kinds §32 t-79) — a shipped feature without a boundary would
+    // silently keep counting every future task toward its completion.
     expect(txFeatureUpdate).toHaveBeenCalledWith({
       where: { id: 'f1' },
-      data: { status: 'shipped', shippedAt: expect.any(Date) },
+      data: { status: 'shipped' },
+    });
+    expect(txFeatureUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'f1', shippedAt: null },
+      data: { shippedAt: expect.any(Date) },
     });
     expect(emit).toHaveBeenCalledWith(expect.anything(), {
       projectId: 'p1',
@@ -110,6 +116,11 @@ describe('ship_feature close-out', () => {
     // forward and pull work raised since the real ship back inside it, denting the
     // bar this feature exists to protect. First ship wins, matching the backfill's
     // MIN(createdAt).
+    //
+    // "First wins" is enforced by the SQL predicate, NOT by a `??` on the
+    // pre-transaction read — so the assertion is that the stamp is GUARDED, not
+    // that it re-sends the old value. The guard is what makes two OVERLAPPING
+    // ships safe; the `??` only ever handled the sequential case.
     const firstShip = new Date('2026-08-01T12:00:00Z');
     resolveFeature.mockResolvedValue({
       ...granted,
@@ -121,8 +132,14 @@ describe('ship_feature close-out', () => {
 
     expect(txFeatureUpdate).toHaveBeenCalledWith({
       where: { id: 'f1' },
-      data: { status: 'shipped', shippedAt: firstShip },
+      data: { status: 'shipped' },
     });
+    expect(txFeatureUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'f1', shippedAt: null },
+      data: { shippedAt: expect.any(Date) },
+    });
+    // The instant must never ride on the UNGUARDED update — that is the bug.
+    expect(txFeatureUpdate.mock.calls[0][0].data).not.toHaveProperty('shippedAt');
   });
 
   it('stamps a shipped feature whose boundary the backfill could not resolve', async () => {
@@ -136,9 +153,10 @@ describe('ship_feature close-out', () => {
 
     await cap.execute({ featureId: 'f1', summary: 'repair' }, ctx());
 
-    expect(txFeatureUpdate).toHaveBeenCalledWith({
-      where: { id: 'f1' },
-      data: { status: 'shipped', shippedAt: expect.any(Date) },
+    // The same guarded write repairs it: `shippedAt: null` matches, so it stamps.
+    expect(txFeatureUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'f1', shippedAt: null },
+      data: { shippedAt: expect.any(Date) },
     });
   });
 

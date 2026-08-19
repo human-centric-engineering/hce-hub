@@ -130,16 +130,28 @@ export class ShipFeatureCapability extends BaseCapability<Args, Data> {
       // disagree — a shipped feature without a boundary would silently go back to
       // counting every future task.
       //
-      // FIRST ship wins (`?? new Date()`), matching the backfill's MIN(createdAt).
-      // `ship_feature` is idempotent and re-runnable — a corrected narrative, or an
-      // agent retrying after an MCP timeout — and re-stamping would move the
-      // boundary forward, pulling work raised since the real ship back inside it and
-      // denting the bar. That is precisely the dent this feature exists to remove.
-      // A null here still stamps, so re-shipping repairs a feature the backfill
-      // couldn't resolve (safe: a null was counting everything already).
+      // FIRST ship wins. `ship_feature` is idempotent and re-runnable — a corrected
+      // narrative, or an agent retrying after an MCP timeout — and re-stamping would
+      // move the boundary forward, pulling work raised since the real ship back
+      // inside it and denting the bar. That is precisely the dent this feature
+      // exists to remove. A null still stamps, so re-shipping repairs a feature the
+      // backfill couldn't resolve (safe: a null was counting everything already).
+      //
+      // The "first wins" test is the SQL predicate `shippedAt: null`, not a `??` in
+      // JavaScript. It used to be `access.feature.shippedAt ?? new Date()`, and
+      // `access` is resolved before the transaction opens — so two OVERLAPPING ships
+      // both read null and the second overwrote the first, moving a boundary
+      // `computeFeatureProgress` filters on. (A *sequential* retry was always fine:
+      // it re-reads the committed value. True concurrency was the hole.) Postgres
+      // re-evaluates the predicate after taking the row lock, so the loser now
+      // matches zero rows — the same guard `complete_task` uses for `Task.mergedAt`.
       await tx.feature.update({
         where: { id: args.featureId },
-        data: { status: 'shipped', shippedAt: access.feature.shippedAt ?? new Date() },
+        data: { status: 'shipped' },
+      });
+      await tx.feature.updateMany({
+        where: { id: args.featureId, shippedAt: null },
+        data: { shippedAt: new Date() },
       });
       // The ship narrative is the journal entry's body; atomic with the flip.
       await recordProjectEvent(tx, {
