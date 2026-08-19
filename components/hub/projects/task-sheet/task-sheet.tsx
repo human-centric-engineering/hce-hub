@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { X, Link2, Play, Check, GitPullRequest, MessageSquare, Lock, Folder } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -96,10 +97,13 @@ function DepRow({ dep, onJump }: { dep: TaskDetailRef; onJump: (id: string) => v
  */
 export function TaskSheet({
   projectId,
+  projectRef,
   taskId,
   onClose,
 }: {
   projectId: string;
+  /** The project's slug (or id) — the header's feature link, per §19's slug-first URLs. */
+  projectRef: string;
   taskId: string;
   onClose: () => void;
 }) {
@@ -289,9 +293,16 @@ export function TaskSheet({
                   <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
                     ·
                   </span>
-                  <span className="font-mono text-xs" style={{ color: 'var(--ink-mute)' }}>
+                  {/* The slug identified the parent but didn't reach it (t-105).
+                      A real navigation, unlike the task chips in the Log — the
+                      feature page is a route, not overlay state. */}
+                  <Link
+                    href={`/projects/${projectRef}/features/${detail.feature.slug ?? detail.feature.id}`}
+                    className="focus-visible:ring-ring rounded-sm font-mono text-xs underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+                    style={{ color: 'var(--ink-mute)' }}
+                  >
                     {detail.feature.slug ?? detail.feature.title}
-                  </span>
+                  </Link>
                 </>
               )}
             </div>
@@ -581,7 +592,12 @@ export function TaskSheet({
               {/* Activity timeline — the task's ProjectEvent stream (f-journal
                   §17 t-3). Refetches after a claim via `reloadKey`. Sidekick
                   notes still land with the sidekick (§12). */}
-              <TaskActivity projectId={projectId} taskId={taskId} refreshKey={reloadKey} />
+              <TaskActivity
+                projectId={projectId}
+                projectRef={projectRef}
+                taskId={taskId}
+                refreshKey={reloadKey}
+              />
             </div>
           )}
         </div>

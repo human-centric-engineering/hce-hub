@@ -62,7 +62,7 @@ describe('TaskSheetProvider', () => {
   it('opens the sheet on mount when the URL already carries ?task= (deep-link)', async () => {
     seedParams('view=plan&task=t1');
     render(
-      <TaskSheetProvider projectId="p1">
+      <TaskSheetProvider projectRef="hce-hub" projectId="p1">
         <Trigger />
       </TaskSheetProvider>
     );
@@ -71,7 +71,7 @@ describe('TaskSheetProvider', () => {
 
   it('does not render the sheet with no ?task=', () => {
     render(
-      <TaskSheetProvider projectId="p1">
+      <TaskSheetProvider projectRef="hce-hub" projectId="p1">
         <Trigger />
       </TaskSheetProvider>
     );
@@ -81,7 +81,7 @@ describe('TaskSheetProvider', () => {
   it('closes the sheet when a navigation drops ?task= (URL is the source of truth)', async () => {
     seedParams('view=plan&task=t1');
     const { rerender } = render(
-      <TaskSheetProvider projectId="p1">
+      <TaskSheetProvider projectRef="hce-hub" projectId="p1">
         <Trigger />
       </TaskSheetProvider>
     );
@@ -90,7 +90,7 @@ describe('TaskSheetProvider', () => {
     // A <Link> tab switch navigates to a URL without ?task= — the sheet follows.
     seedParams('view=board');
     rerender(
-      <TaskSheetProvider projectId="p1">
+      <TaskSheetProvider projectRef="hce-hub" projectId="p1">
         <Trigger />
       </TaskSheetProvider>
     );
@@ -99,7 +99,7 @@ describe('TaskSheetProvider', () => {
 
   it('open(id) writes ?task= and shows the sheet; close() clears it', async () => {
     render(
-      <TaskSheetProvider projectId="p1">
+      <TaskSheetProvider projectRef="hce-hub" projectId="p1">
         <Trigger />
       </TaskSheetProvider>
     );

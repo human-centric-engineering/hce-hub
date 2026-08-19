@@ -226,7 +226,11 @@ export function FeatureView({ feature }: { feature: FeatureDetailDTO }) {
           />
         </section>
 
-        <FeatureActivity projectId={feature.projectId} featureId={feature.id} />
+        <FeatureActivity
+          projectId={feature.projectId}
+          projectRef={feature.projectSlug ?? feature.projectId}
+          featureId={feature.id}
+        />
       </div>
     </div>
   );

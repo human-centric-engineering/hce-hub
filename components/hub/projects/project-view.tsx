@@ -94,7 +94,7 @@ export function ProjectView({
 
       {/* The task sheet opens (deep-linked via `?task=`) over whichever tab is
           active — mounted here so Plan rows and Board cards can open it. */}
-      <TaskSheetProvider projectId={project.id}>
+      <TaskSheetProvider projectId={project.id} projectRef={project.slug ?? project.id}>
         <ProjectViewTabs projectRef={project.slug ?? project.id} active={activeTab} />
 
         {/* The active-fixes strip sits above the work body (Plan/Board) — a
@@ -142,7 +142,7 @@ export function ProjectView({
             />
           ) : (
             // Log — the journal stream, client-fetched + filterable (f-journal §17).
-            <LogView projectId={project.id} />
+            <LogView projectId={project.id} projectRef={project.slug ?? project.id} />
           )}
         </div>
       </TaskSheetProvider>

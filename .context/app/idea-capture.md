@@ -62,6 +62,18 @@ work), server-fetched like them so mutations `router.refresh()` cleanly.
   human ops: **edit** the jot inline, **drop**, **restore** — each a
   `PATCH …/ideas/:ideaId` + refresh, failures surfaced inline (never a toast — this
   codebase has no toast lib).
+- **The jot renders as markdown**, through the shared safe renderer
+  ([`components/hub/markdown.tsx`](../../components/hub/markdown.tsx) — react-markdown
+  with raw HTML escaped). `Idea.text` was designed as "the raw jot" and plain text
+  suited a short line; ideas now routinely carry a repro, a fix shape and
+  cross-references, and that content wants formatting. **The editor stays plain** —
+  you refine the source you wrote, not a rendering of it.
+- **A long jot is clamped** with a fade and a `Show more`/`Show less` toggle, so one
+  essay can't swamp the list. "Long" is judged from the **source** (character count
+  or line count), not from laid-out height: a `scrollHeight` measurement is
+  untestable under jsdom and would differ between the server and client render. The
+  heuristic is one-directional by design — a misjudged _short_ renders in full, so
+  the worst case is a tall row, never an idea you can't finish reading.
 
 ## Reading the inbox from Claude Code — `list_ideas`
 

@@ -31,7 +31,7 @@ describe('TaskActivity', () => {
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [claimed] }) })
     );
-    render(<TaskActivity projectId="p1" taskId="t1" refreshKey={0} />);
+    render(<TaskActivity projectRef="hce-hub" projectId="p1" taskId="t1" refreshKey={0} />);
     // task_claimed is reused for Start under f-status-model §20 — a task is
     // *born* claimed, so the notable event is being actively taken.
     expect(await screen.findByText(/started the task/)).toBeInTheDocument();
@@ -46,7 +46,7 @@ describe('TaskActivity', () => {
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [] }) })
     );
-    render(<TaskActivity projectId="p1" taskId="t1" refreshKey={0} />);
+    render(<TaskActivity projectRef="hce-hub" projectId="p1" taskId="t1" refreshKey={0} />);
     expect(await screen.findByText('No activity yet.')).toBeInTheDocument();
   });
 
@@ -55,16 +55,18 @@ describe('TaskActivity', () => {
       .fn()
       .mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [] }) });
     vi.stubGlobal('fetch', fetchMock);
-    const { rerender } = render(<TaskActivity projectId="p1" taskId="t1" refreshKey={0} />);
+    const { rerender } = render(
+      <TaskActivity projectRef="hce-hub" projectId="p1" taskId="t1" refreshKey={0} />
+    );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-    rerender(<TaskActivity projectId="p1" taskId="t1" refreshKey={1} />);
+    rerender(<TaskActivity projectRef="hce-hub" projectId="p1" taskId="t1" refreshKey={1} />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   });
 
   it('renders the error state on a failed fetch (no crash)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
-    render(<TaskActivity projectId="p1" taskId="t1" refreshKey={0} />);
+    render(<TaskActivity projectRef="hce-hub" projectId="p1" taskId="t1" refreshKey={0} />);
     expect(await screen.findByText(/Couldn.t load activity/)).toBeInTheDocument();
   });
 });

@@ -10,6 +10,13 @@
  * web button. Mutations PATCH `…/ideas/:ideaId` and `router.refresh()` so the
  * server-rendered inbox re-reads; a failed write is surfaced inline, never
  * swallowed (the phase-picker pattern).
+ *
+ * **The jot renders as markdown** (§33-sweep t-112). Not a defect being fixed but
+ * a change of intent: `Idea.text` was designed as "the raw jot" and plain text was
+ * the right call for a short line. Ideas now routinely carry a repro, a fix shape
+ * and cross-references — the triage reasoning that makes a sweep possible — and
+ * that content wants formatting. The **editor stays plain**: you edit the source
+ * you wrote, not a rendering of it.
  */
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
@@ -17,8 +24,24 @@ import { Pencil, Archive, RotateCcw, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { IDEA_TEXT_MAX } from '@/lib/projects/idea-constants';
+import { Markdown } from '@/components/hub/markdown';
 import { utcShortDate } from '@/components/hub/projects/presentation';
 import type { IdeaView } from '@/components/hub/projects/ideas/types';
+
+/**
+ * When a jot is long enough to need collapsing. Measured from the **source**, not
+ * from laid-out height: jsdom has no layout, so a `scrollHeight`-based clamp would
+ * be untestable and would flicker between server and client render. The heuristic
+ * only has to be conservative in one direction — a false "short" renders in full
+ * (a taller row, never a clipped one), so the failure mode is a long row, not a
+ * truncated idea with no way to read the rest.
+ */
+const CLAMP_CHARS = 320;
+const CLAMP_LINES = 6;
+
+function isLongJot(text: string): boolean {
+  return text.length > CLAMP_CHARS || text.split('\n').length > CLAMP_LINES;
+}
 
 export function IdeaRow({ projectId, idea }: { projectId: string; idea: IdeaView }) {
   const router = useRouter();
@@ -26,11 +49,13 @@ export function IdeaRow({ projectId, idea }: { projectId: string; idea: IdeaView
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState(idea.text);
   const editRef = useRef<HTMLTextAreaElement>(null);
 
   const dropped = idea.status === 'dropped';
   const locked = busy || pending;
+  const long = isLongJot(idea.text);
 
   // Grow the editor to fit its content — a fixed row count clips a long jot.
   const autosize = () => {
@@ -132,14 +157,40 @@ export function IdeaRow({ projectId, idea }: { projectId: string; idea: IdeaView
       ) : (
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-sm break-words whitespace-pre-wrap">
+            <div className="flex min-w-0 gap-2">
               {idea.number !== null && (
-                <span className="mr-1.5 font-mono text-xs" style={{ color: 'var(--ink-faint)' }}>
+                <span
+                  className="mt-0.5 shrink-0 font-mono text-xs"
+                  style={{ color: 'var(--ink-faint)' }}
+                >
                   #{idea.number}
                 </span>
               )}
-              {idea.text}
-            </p>
+              <div className="min-w-0 flex-1">
+                {/* Collapsed with a mask rather than a gradient overlay: the mask
+                    fades the content itself, so it works over the open card AND the
+                    sunken dropped card without either knowing the other's colour. */}
+                <div
+                  className={
+                    long && !expanded
+                      ? 'max-h-28 overflow-hidden [mask-image:linear-gradient(to_bottom,black_55%,transparent)]'
+                      : undefined
+                  }
+                >
+                  <Markdown content={idea.text} className="text-sm break-words" />
+                </div>
+                {long && (
+                  <button
+                    type="button"
+                    onClick={() => setExpanded((v) => !v)}
+                    className="focus-visible:ring-ring mt-1 rounded-sm text-xs underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+                    style={{ color: 'var(--ink-mute)' }}
+                  >
+                    {expanded ? 'Show less' : 'Show more'}
+                  </button>
+                )}
+              </div>
+            </div>
             <p className="mt-1.5 text-xs" style={{ color: 'var(--ink-faint)' }}>
               captured by {idea.createdBy?.name ?? 'former member'} · {utcShortDate(idea.createdAt)}
               {dropped && idea.triagedAt ? ` · dropped ${utcShortDate(idea.triagedAt)}` : ''}

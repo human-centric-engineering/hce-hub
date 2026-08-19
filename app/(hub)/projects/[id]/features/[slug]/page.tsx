@@ -59,7 +59,10 @@ export default async function FeaturePage({
       <BreadcrumbLabel segment={slug} label={feature.title} />
       {/* The task sheet opens (deep-linked via `?task=`) over the feature page —
           mounted here so the feature's task rows can open it in place. */}
-      <TaskSheetProvider projectId={feature.projectId}>
+      <TaskSheetProvider
+        projectId={feature.projectId}
+        projectRef={feature.projectSlug ?? feature.projectId}
+      >
         <FeatureView feature={feature} />
       </TaskSheetProvider>
     </>

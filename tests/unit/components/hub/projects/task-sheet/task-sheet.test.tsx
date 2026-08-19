@@ -66,7 +66,12 @@ function mockFetchOnce(res: { ok?: boolean; data?: TaskDetailDTO }) {
 const renderSheet = (opts: { sidekickOpen?: boolean; onClose?: () => void } = {}) =>
   render(
     <SidekickProvider value={{ open: opts.sidekickOpen ?? false, setOpen: () => {} }}>
-      <TaskSheet projectId="p1" taskId="t1" onClose={opts.onClose ?? (() => {})} />
+      <TaskSheet
+        projectRef="hce-hub"
+        projectId="p1"
+        taskId="t1"
+        onClose={opts.onClose ?? (() => {})}
+      />
     </SidekickProvider>
   );
 
@@ -137,7 +142,7 @@ describe('TaskSheet', () => {
 
     rerender(
       <SidekickProvider value={{ open: false, setOpen: () => {} }}>
-        <TaskSheet projectId="p1" taskId="t1" onClose={() => {}} />
+        <TaskSheet projectRef="hce-hub" projectId="p1" taskId="t1" onClose={() => {}} />
       </SidekickProvider>
     );
     expect(screen.getByRole('dialog')).toHaveStyle({ right: '0px' });
@@ -282,7 +287,7 @@ describe('TaskSheet body + actions', () => {
     return render(
       <SidekickProvider value={{ open: false, setOpen: opts.setSidekickOpen ?? (() => {}) }}>
         <TaskSheetControlsProvider value={{ open: opts.onOpen ?? (() => {}), close: () => {} }}>
-          <TaskSheet projectId="p1" taskId="t1" onClose={() => {}} />
+          <TaskSheet projectRef="hce-hub" projectId="p1" taskId="t1" onClose={() => {}} />
         </TaskSheetControlsProvider>
       </SidekickProvider>
     );
@@ -454,7 +459,7 @@ describe('TaskSheet body + actions', () => {
     );
     render(
       <SidekickProvider value={{ open: false, setOpen: () => {} }}>
-        <TaskSheet projectId="p1" taskId="t1" onClose={() => {}} />
+        <TaskSheet projectRef="hce-hub" projectId="p1" taskId="t1" onClose={() => {}} />
       </SidekickProvider>
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
@@ -482,7 +487,7 @@ describe('TaskSheet body + actions', () => {
     );
     render(
       <SidekickProvider value={{ open: false, setOpen: () => {} }}>
-        <TaskSheet projectId="p1" taskId="t1" onClose={() => {}} />
+        <TaskSheet projectRef="hce-hub" projectId="p1" taskId="t1" onClose={() => {}} />
       </SidekickProvider>
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
@@ -545,6 +550,35 @@ describe('TaskSheet body + actions', () => {
     renderSheet({ detail: detail({ prUrl: 'https://github.com/o/r/pull/9' }) });
     await screen.findByText('Wire the streaming handler');
     expect(screen.getByRole('button', { name: 'Edit PR' })).toBeInTheDocument();
-    expect(screen.getByRole('link')).toHaveAttribute('href', 'https://github.com/o/r/pull/9');
+    // Named, not `getByRole('link')` alone: the header's feature slug is a link
+    // too since t-105, so an unnamed query now matches two.
+    expect(screen.getByRole('link', { name: '#9' })).toHaveAttribute(
+      'href',
+      'https://github.com/o/r/pull/9'
+    );
+  });
+
+  it('links the header feature slug to that feature page (t-105)', async () => {
+    // The slug identified the parent but didn't reach it — reading a task and
+    // then opening its feature was a manual hunt through the Plan.
+    renderSheet({ detail: detail({}) });
+    await screen.findByText('Wire the streaming handler');
+    expect(screen.getByRole('link', { name: 'f-mcp' })).toHaveAttribute(
+      'href',
+      '/projects/hce-hub/features/f-mcp'
+    );
+  });
+
+  it('falls back to the feature id in the href, and the title as the label', async () => {
+    // The label falls back to the TITLE and the href to the ID — different
+    // fallbacks, because one has to be readable and the other has to resolve.
+    renderSheet({
+      detail: detail({ feature: { id: 'f1', slug: null, title: 'MCP server', owner: null } }),
+    });
+    await screen.findByText('Wire the streaming handler');
+    expect(screen.getByRole('link', { name: 'MCP server' })).toHaveAttribute(
+      'href',
+      '/projects/hce-hub/features/f1'
+    );
   });
 });
