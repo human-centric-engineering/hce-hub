@@ -17,6 +17,7 @@ import { successResponse, errorResponse } from '@/lib/api/responses';
 import { getRouteLogger } from '@/lib/api/context';
 import { parseCuidParam } from '@/lib/api/route-params';
 import { updatePhase } from '@/lib/projects/phases-service';
+import { isWriteConflict } from '@/lib/projects/write-conflict';
 
 // No `ordinal` here on purpose — order is changed only via the batch reorder
 // (`PUT …/phases/order`), which rewrites the whole dense `0..n-1` sequence and
@@ -42,16 +43,35 @@ export const PATCH = withAuth<{ id: string; phaseId: string }>(
 
     // `id` scopes the phase to this project (no cross-project id-swap). A
     // `nothing_to_update` empty patch surfaces as ValidationError → 400.
-    const result = await updatePhase(
-      session.user.id,
-      phaseId,
-      {
-        name: parsed.data.name,
-        description: parsed.data.description,
-        status: parsed.data.status,
-      },
-      id
-    );
+    let result;
+    try {
+      result = await updatePhase(
+        session.user.id,
+        phaseId,
+        {
+          name: parsed.data.name,
+          description: parsed.data.description,
+          status: parsed.data.status,
+        },
+        id
+      );
+    } catch (err) {
+      // A STATUS edit runs at Serializable (§33 t-103), so Postgres SSI can abort
+      // it; `withWriteConflictRetry` absorbs the usual case and this is only
+      // reached once those retries are also exhausted. 409 rather than the
+      // generic 500 `handleAPIError` would otherwise give: losing a serialization
+      // race is an expected outcome of a correct concurrent write, and the client
+      // can just retry. This is the first REST surface able to produce one — the
+      // sibling Serializable verbs are MCP-only, which is why there was no
+      // existing route precedent to copy.
+      if (isWriteConflict(err)) {
+        return errorResponse('A concurrent change to this phase won. Re-read it and retry.', {
+          code: 'CONFLICT',
+          status: 409,
+        });
+      }
+      throw err;
+    }
 
     log.info('Phase updated', { userId: session.user.id, projectId: id, phaseId });
     return successResponse(result);

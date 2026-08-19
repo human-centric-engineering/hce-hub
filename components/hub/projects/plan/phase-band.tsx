@@ -56,6 +56,26 @@ export function PhaseBand({
   const collapsedByDefault = isParked || band.status === 'complete';
   const [open, setOpen] = useState(forceOpen || !collapsedByDefault);
 
+  // `useState` only SEEDS, so a `?phase=` change on an already-mounted Plan left a
+  // collapsed band collapsed while the effect below dutifully scrolled to it —
+  // landing you on a closed row, the exact failure the outrank-collapse rule was
+  // written to prevent (§33 t-101). React reconciles bands by `band.id`, so a
+  // same-route searchParam change re-renders without remounting; it was latent only
+  // because the sole link producer today sits on a different route.
+  //
+  // Keyed on `focused` (the deep-link) and NOT on `forceOpen`, which is the wider
+  // "…or this band holds the auto-expanded feature". `ManagePhasesDialog` calls
+  // `router.refresh()` after every write, re-rendering the Plan without remounting,
+  // so a refresh that moves the auto-expanded feature into this band would flip
+  // `forceOpen` false → true and re-open a band the reader had just clicked shut.
+  // Following a link is a request to see that band; a background refresh is not.
+  //
+  // Opens, never closes: `focused` going false means some OTHER band became the
+  // target, which is no reason to slam this one shut on someone who opened it.
+  useEffect(() => {
+    if (focused) setOpen(true);
+  }, [focused]);
+
   // Bring the deep-linked band into view. Optional call because jsdom does not
   // implement scrollIntoView, and a link that scrolls is a nicety — it must never
   // be the reason the Plan fails to render.

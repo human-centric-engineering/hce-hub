@@ -14,6 +14,7 @@ vi.mock('@/lib/projects/phases-service', () => ({ updatePhase: vi.fn() }));
 import { auth } from '@/lib/auth/config';
 import { updatePhase } from '@/lib/projects/phases-service';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
+import { Prisma } from '@prisma/client';
 import { PATCH } from '@/app/api/v1/projects/[id]/phases/[phaseId]/route';
 import { mockAuthenticatedUser, mockUnauthenticatedUser } from '@/tests/helpers/auth';
 
@@ -33,6 +34,25 @@ const patch = (body: unknown) =>
 beforeEach(() => vi.clearAllMocks());
 
 describe('PATCH /api/v1/projects/:id/phases/:phaseId', () => {
+  it('409s an exhausted write conflict rather than a generic 500', async () => {
+    // A status edit runs at Serializable (§33 t-103), so Postgres SSI can abort it;
+    // `withWriteConflictRetry` absorbs the usual case and this is only reached once
+    // those retries are exhausted. Losing a serialization race is an expected
+    // outcome of a correct concurrent write, and the caller can simply retry — an
+    // opaque INTERNAL_ERROR says neither. This is the first REST surface able to
+    // produce one, so there was no route precedent to copy.
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAuthenticatedUser());
+    updateMock.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('write conflict', {
+        code: 'P2034',
+        clientVersion: 'test',
+      })
+    );
+    const res = await PATCH(patch({ status: 'complete' }), params);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe('CONFLICT');
+  });
+
   it('401s the signed-out caller', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockUnauthenticatedUser());
     expect((await PATCH(patch({ name: 'x' }), params)).status).toBe(401);

@@ -5,7 +5,7 @@
  * pointer limits); its PATCH path is the same `call` the rename input exercises.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const refresh = vi.hoisted(() => vi.fn());
@@ -162,6 +162,79 @@ describe('ManagePhasesDialog', () => {
     // Still one: the row clears its pending entry the moment the draft matches
     // what was sent, so closing cannot duplicate the write (or its journal entry).
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends ONE PATCH when the blur and the close land in the same tick (§33 t-102)', async () => {
+    // The test above awaits between blur and close. This one does not — both land
+    // in a single batch, which is what a real pointerdown-dismissal gives you
+    // (Radix closes on `pointerdown`, and the same pointerdown blurs the field).
+    //
+    // Review predicted two PATCHes here, on the grounds that both calls would run
+    // from one render's closure and see a stale `descriptionDirty`. They do not:
+    // React flushes each discrete event's updates before the next handler runs, and
+    // its delegated listener reads current props off the fiber, so the second call
+    // gets the new closure and short-circuits. This test therefore pins the
+    // BEHAVIOUR (one write, one audit row) rather than any guard — it is a
+    // regression net for a future change to batching or to the flush path, and it
+    // deliberately passes against today's code with nothing added. Measured with a
+    // real focusout: the field alone saves once, and adding the close in the same
+    // tick still saves once — in either order.
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ManagePhasesDialog projectId="p1" phases={phases} />);
+    open();
+
+    const intent = screen.getByLabelText('Phase intent: Foundations');
+    fireEvent.change(intent, { target: { value: 'Typed once, dismissed by click' } });
+
+    // One act() = one batch, which is what "the same tick" means here. Escape
+    // stands in for the pointerdown-dismissal: both reach the same `flushPending`,
+    // and the reverse order (close first, then focusout) measures identically.
+    //
+    // `focusout`, NOT `blur` — React binds onBlur to the native focusout event, so
+    // a raw `new FocusEvent('blur')` is ignored by its delegated listener and the
+    // save path is never entered at all. The first version of this test dispatched
+    // `blur` and measured 0 saves while asserting 1, so it passed for the wrong
+    // reason and would have passed against a genuinely double-writing
+    // implementation. RTL's `fireEvent.blur` dispatches focusout for exactly this
+    // reason; going around it is what lost the coverage.
+    act(() => {
+      intent.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+      intent.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // The close must really have happened: the keydown is the only thing driving
+    // that path, and if it ever stops dismissing (a Radix change, a focus
+    // precondition) this silently becomes "focusout alone saves once" — which the
+    // test above already covers — and would pass against a double-writing
+    // implementation. Exactly the wrong-reason pass the blur/focusout note records.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('lets you retry a failed intent save — the write is optimistic, not final', async () => {
+    // The 409 this branch introduces says "re-read and retry", so the UI has to let
+    // you. It did not: `lastSent` was recorded before the response, so a failure
+    // left the field clean, the next blur short-circuited, and closing the dialog
+    // carried nothing — the typed paragraph was only in a textarea nothing read.
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: false, status: 409 }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ManagePhasesDialog projectId="p1" phases={phases} />);
+    open();
+
+    const intent = screen.getByLabelText('Phase intent: Foundations');
+    fireEvent.change(intent, { target: { value: 'Worth keeping' } });
+    fireEvent.blur(intent);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    // Same text, second attempt — the draft must still be dirty.
+    fireEvent.blur(intent);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/v1/projects/p1/phases/ph1',
+      expect.objectContaining({ body: JSON.stringify({ description: 'Worth keeping' }) })
+    );
   });
 
   it('does not PATCH an intent that differs only by surrounding whitespace', () => {

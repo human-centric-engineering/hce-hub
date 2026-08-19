@@ -23,6 +23,7 @@ import type {
   CapabilityResult,
 } from '@/lib/orchestration/capabilities/types';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
+import { isWriteConflict } from '@/lib/projects/write-conflict';
 import { updatePhase } from '@/lib/projects/phases-service';
 import { redactedString } from '@/lib/security/redact';
 
@@ -123,6 +124,17 @@ export class UpdatePhaseCapability extends BaseCapability<Args, Data> {
       }
       if (err instanceof ValidationError) {
         return this.error(err.message, 'nothing_to_update');
+      }
+      if (isWriteConflict(err)) {
+        // A status edit runs at Serializable (§33 t-103), so SSI can abort this
+        // one; only reached once the in-process retries are also exhausted.
+        // Mapped for the same reason `update_task` and `update_feature` map it:
+        // unmapped, a routine abort reaches an agent as an opaque 500 with no
+        // instruction, and the retry that would succeed never happens.
+        return this.error(
+          'A concurrent change to this phase kept winning. Re-read it and retry.',
+          'concurrent_modification'
+        );
       }
       throw err;
     }

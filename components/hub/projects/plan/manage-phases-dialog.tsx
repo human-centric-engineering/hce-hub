@@ -150,8 +150,10 @@ export function ManagePhasesDialog({
     void call(`${base}/${id}`, 'PATCH', { status });
   // The PATCH route has accepted `description` since f-phases §22 t3 — only the UI
   // was missing, so this is client-only. Empty clears it (the route takes null).
+  // Returns `call`'s outcome rather than discarding it: the row needs to know
+  // whether the write landed, so a failed save can be retried (§33 t-103 review).
   const setDescription = (id: string, description: string) =>
-    void call(`${base}/${id}`, 'PATCH', { description: description.trim() || null });
+    call(`${base}/${id}`, 'PATCH', { description: description.trim() || null });
 
   // dnd-kit drag glue — the reorder computation lives in the unit-tested
   // `reorderedIds`; this handler only fires on a real pointer/keyboard drag, which
@@ -292,7 +294,7 @@ function PhaseRow({
   disabled: boolean;
   onRename: (id: string, name: string) => void;
   onStatus: (id: string, status: PhaseStatus) => void;
-  onDescribe: (id: string, description: string) => void;
+  onDescribe: (id: string, description: string) => Promise<boolean>;
   /** Report an uncommitted intent so the dialog can save it on close. */
   registerPending: (id: string, flush: (() => void) | null) => void;
 }) {
@@ -346,13 +348,45 @@ function PhaseRow({
 
   const saveDescription = () => {
     if (!descriptionDirty) return;
+    // Optimistic, then REVERTED IF THE WRITE FAILED. Recording the send up front is
+    // what stops a blur-then-close sending twice, but leaving it recorded after a
+    // failure silently ate the draft: `committed` became the typed value, so the
+    // field went clean, the next blur short-circuited, `pendingSave` de-registered
+    // so closing no longer carried it either — and `phase.description` never
+    // changed, so the adopt-the-server-value effect never fired to undo any of it.
+    // The text survived only in a textarea nothing would ever read again.
+    //
+    // This PR is what makes that reachable on purpose: a 409 says "retry", and
+    // until now the UI made retrying impossible (§33 t-103 review).
     setLastSent(description);
-    onDescribe(phase.id, description);
+    void onDescribe(phase.id, description).then((ok) => {
+      if (!ok) setLastSent(null); // dirty again ⇒ blur retries, close still flushes
+    });
+    // ACCEPTED LIMIT (owner, 2026-08-19): this covers the BLUR path only. Save via
+    // the close path and the row unmounts before the response, so the revert above
+    // is a no-op and the draft is gone — and the error banner lives inside
+    // `DialogContent`, so nothing is shown either; you find out on reopening, when
+    // the textarea re-seeds from the unchanged server value. Pre-existing, not
+    // introduced by the 409.
+    //
+    // Not fixed because closing it means lifting the error state (or the pending
+    // draft) out of `DialogContent`, which is a structural change for a save that
+    // has to fail in the same instant you dismiss the dialog. Revisit if 409s stop
+    // being rare — i.e. once there are enough concurrent writers to make losing
+    // that race normal rather than unlucky.
   };
 
   // Report an uncommitted draft to the dialog so closing it commits rather than
   // discards it. Registered as `saveDescription` itself, so the close path runs
   // the same guard as blur and cannot duplicate a write.
+  //
+  // That last clause was challenged by review (§33 t-102) on the grounds that a
+  // pointerdown-dismissal fires `flushPending` and `onBlur` from one render's
+  // closure, so both would see a stale `descriptionDirty`. Measured, and it does
+  // NOT: React flushes each discrete event's updates before the next handler runs,
+  // and its delegated listener reads the CURRENT props off the fiber — so the
+  // second call gets the new closure and short-circuits. No synchronous ref guard
+  // is needed; the test below pins the behaviour rather than the mechanism.
   const pendingSave = descriptionDirty ? saveDescription : null;
   useEffect(() => {
     registerPending(phase.id, pendingSave);

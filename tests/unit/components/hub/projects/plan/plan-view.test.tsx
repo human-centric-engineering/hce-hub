@@ -463,6 +463,108 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
     expect(screen.getByText('Shipped work')).toBeInTheDocument();
   });
 
+  it('opens a newly deep-linked band on an ALREADY-MOUNTED Plan (§33 t-101)', () => {
+    // `useState` only seeds, and React reconciles bands by `band.id`, so a
+    // same-route `?phase=` change (Back/Forward, or any future Plan→Plan link)
+    // re-rendered without remounting: the scroll effect fired and the band stayed
+    // shut. Latent only because today's sole link producer is on another route.
+    const twoCollapsedBands = banded([
+      {
+        id: 'one',
+        name: 'First',
+        status: 'complete', // both collapse by default
+        ordinal: 0,
+        features: [feature({ id: 'a', title: 'First work', status: 'shipped' })],
+      },
+      {
+        id: 'two',
+        name: 'Second',
+        status: 'complete',
+        ordinal: 1,
+        features: [feature({ id: 'b', title: 'Second work', status: 'shipped' })],
+      },
+    ]);
+    const { rerender } = render(<PlanView focusPhaseId="one" plan={twoCollapsedBands} />);
+    expect(screen.getByText('First work')).toBeInTheDocument();
+    expect(screen.queryByText('Second work')).not.toBeInTheDocument();
+
+    rerender(<PlanView focusPhaseId="two" plan={twoCollapsedBands} />);
+    expect(screen.getByText('Second work')).toBeInTheDocument();
+  });
+
+  it('leaves an already-open band open when the deep-link moves elsewhere', () => {
+    // The effect opens and never closes: `forceOpen` going false means some OTHER
+    // band became the target, which is no reason to shut this one on someone.
+    const twoCollapsedBands = banded([
+      {
+        id: 'one',
+        name: 'First',
+        status: 'complete',
+        ordinal: 0,
+        features: [feature({ id: 'a', title: 'First work', status: 'shipped' })],
+      },
+      {
+        id: 'two',
+        name: 'Second',
+        status: 'complete',
+        ordinal: 1,
+        features: [feature({ id: 'b', title: 'Second work', status: 'shipped' })],
+      },
+    ]);
+    const { rerender } = render(<PlanView focusPhaseId="one" plan={twoCollapsedBands} />);
+    rerender(<PlanView focusPhaseId="two" plan={twoCollapsedBands} />);
+    expect(screen.getByText('First work')).toBeInTheDocument();
+  });
+
+  it('does not re-open a band the reader collapsed when a refresh moves auto-expand into it', () => {
+    // The open-on-focus effect is keyed on `focused` (the deep-link) and NOT on the
+    // wider `forceOpen`, which is also true for "this band holds the auto-expanded
+    // feature". `ManagePhasesDialog` calls `router.refresh()` after every write, so
+    // the Plan re-renders without remounting — and a refresh that gives a feature an
+    // `active` task flips that band's `forceOpen` false → true. Keyed on `forceOpen`,
+    // that would re-open a band the reader had just clicked shut. Following a link is
+    // a request to see a band; a background refresh is not.
+    const band = (over: Partial<PlanFeature>) =>
+      banded([
+        {
+          id: 'one',
+          name: 'Foundations',
+          status: 'active', // open by default, so it can be collapsed by hand
+          ordinal: 0,
+          features: [feature({ id: 'a', title: 'Work in the band', ...over })],
+        },
+      ]);
+
+    const { rerender } = render(<PlanView plan={band({ status: 'shipped' })} />);
+    expect(screen.getByText('Work in the band')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Foundations/ }));
+    expect(screen.queryByText('Work in the band')).not.toBeInTheDocument();
+
+    // A refresh lands: the feature now has an active task, so it becomes the
+    // auto-expand pick and this band's `forceOpen` turns true.
+    rerender(
+      <PlanView
+        plan={band({
+          status: 'in_flight',
+          tasks: [
+            {
+              id: 't1',
+              number: 1,
+              title: 'Live',
+              status: 'active',
+              kind: 'feature_work',
+              prUrl: null,
+              claimer: null,
+              committedPhaseName: null,
+            },
+          ],
+        })}
+      />
+    );
+    expect(screen.queryByText('Work in the band')).not.toBeInTheDocument();
+  });
+
   it('offsets the scroll anchor past the sticky topbar', () => {
     // `scrollIntoView({block:'start'})` aligns the band with the viewport top,
     // which the shell's sticky 52px topbar then covers — you land inside the

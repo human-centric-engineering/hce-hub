@@ -30,6 +30,7 @@
 import type { PhaseStatus, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
+import { withWriteConflictRetry } from '@/lib/projects/write-conflict';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { canAccessProject, resolveFeatureAccess } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
@@ -174,7 +175,12 @@ export async function updatePhase(
 ): Promise<UpdatePhaseResult> {
   const phase = await prisma.phase.findUnique({
     where: { id: phaseId },
-    select: { projectId: true, status: true, startedAt: true, completedAt: true },
+    // Deliberately NARROW: only what resolving and authorising the phase needs.
+    // The lifecycle timestamps and the previous status are read INSIDE the
+    // transaction (§33 t-103) — selecting them here too is what let a pre-lock
+    // value be written back over a concurrent commit, so they are gone rather
+    // than merely unused.
+    select: { projectId: true },
   });
   if (!phase) throw new NotFoundError(`Phase ${phaseId} not found`);
   // Scope to the route's project when asked (no cross-project id-swap).
@@ -200,18 +206,6 @@ export async function updatePhase(
   }
   if (input.status !== undefined) {
     data.status = input.status;
-    // Keep the lifecycle timestamps coherent with the resulting status:
-    //   completedAt set ⟺ status is complete (reopening clears it, no stale "done"),
-    //   startedAt persists once the phase has begun (stamped on the first
-    //   active/complete, never un-stamped) — so it's never complete-with-null-start.
-    const now = new Date();
-    if (input.status === 'complete') {
-      data.completedAt = phase.completedAt ?? now;
-      if (phase.startedAt === null) data.startedAt = now;
-    } else {
-      if (phase.completedAt !== null) data.completedAt = null; // reopened → drop the done stamp
-      if (input.status === 'active' && phase.startedAt === null) data.startedAt = now;
-    }
     updated.push('status');
   }
 
@@ -220,49 +214,114 @@ export async function updatePhase(
   }
 
   // One transaction so the journal entry commits iff the edit did (§33 t-98).
-  await executeTransaction(async (tx) => {
-    // The values the journal compares against are re-read INSIDE the transaction,
-    // for the same reason the three sibling paths read the previous phase in-tx:
-    // the pre-transaction read above is taken before any lock, so a concurrent
-    // rename committing in between would make this one journal a rename that never
-    // happened (B sets the name A just set, sees A's old value, and calls it a
-    // change). The journal must not assert a change the write did not make.
-    const before = await tx.phase.findUnique({
-      where: { id: phaseId },
-      select: { name: true, description: true, status: true },
-    });
-    // What actually DIFFERS — the only thing the journal is allowed to claim.
-    // `update_phase({status:'active'})` on an already-active phase is a legitimate
-    // idempotent call (a retry, a "make sure" step); recording "set the phase to
-    // active" for it would put a change in the history that never happened. Same
-    // rule `recordPhaseMembershipChange` applies to a no-op re-file.
-    const changed: string[] = [];
-    if (input.name !== undefined && input.name !== before?.name) changed.push('name');
-    // Normalise the empty patch: clearing an already-null description is no change.
-    if (
-      input.description !== undefined &&
-      (input.description ?? null) !== (before?.description ?? null)
+  //
+  // **Serializable, but only for a status edit** (§33 t-103 review). Moving the
+  // lifecycle derivation in-transaction narrowed the lost-update window; it did not
+  // close it. `executeTransaction` defaults to READ COMMITTED and the re-read is a
+  // plain non-locking SELECT, so B can still read `completedAt = null`, block on A's
+  // row lock, and then apply its own stamp over A's — the same milestone moved with
+  // no journal entry, in a smaller window. Under SSI Postgres aborts one of the pair
+  // instead, surfaced as P2034 and absorbed by `withWriteConflictRetry`; the body is
+  // idempotent (re-read, re-derive, write), so the loser re-runs and sees the winner.
+  //
+  // Conditional because the §21 t-87 review caught the unconditional version: a
+  // plain name or intent edit has no such hazard and would start returning P2034
+  // where it used to simply wait on the row lock.
+  await withWriteConflictRetry(() =>
+    executeTransaction(
+      async (tx) => {
+        // The values the journal compares against are re-read INSIDE the transaction,
+        // for the same reason the three sibling paths read the previous phase in-tx:
+        // the pre-transaction read above is taken before any lock, so a concurrent
+        // rename committing in between would make this one journal a rename that never
+        // happened (B sets the name A just set, sees A's old value, and calls it a
+        // change). The journal must not assert a change the write did not make.
+        //
+        // **How far that holds — an accepted limit, not a guarantee.** Only a STATUS
+        // edit runs at Serializable (see below). A name- or description-only edit
+        // stays at READ COMMITTED, where this is still a plain non-locking SELECT:
+        // two clients writing the SAME description can have B read the old value,
+        // block on A's row lock, then write an identical value and journal a phantom
+        // `phase_updated`. Narrowed, not closed.
+        //
+        // Left open deliberately. The status path loses a rendered MILESTONE, which
+        // is worth paying P2034 for; this path costs one duplicate journal line for a
+        // write that did land, and closing it would make every plain rename abortable
+        // — the exact over-application the §21 t-87 review rejected. Recorded so it is
+        // a choice on the record rather than a discovery later.
+        const before = await tx.phase.findUnique({
+          where: { id: phaseId },
+          // `startedAt`/`completedAt` are here for the same reason as the other three,
+          // and it took a second review pass to notice: t-98 moved the JOURNAL's
+          // comparison in-transaction but left the lifecycle derivation on the
+          // pre-transaction read. See `lifecycle` below.
+          select: {
+            name: true,
+            description: true,
+            status: true,
+            startedAt: true,
+            completedAt: true,
+          },
+        });
+        // What actually DIFFERS — the only thing the journal is allowed to claim.
+        // `update_phase({status:'active'})` on an already-active phase is a legitimate
+        // idempotent call (a retry, a "make sure" step); recording "set the phase to
+        // active" for it would put a change in the history that never happened. Same
+        // rule `recordPhaseMembershipChange` applies to a no-op re-file.
+        const changed: string[] = [];
+        if (input.name !== undefined && input.name !== before?.name) changed.push('name');
+        // Normalise the empty patch: clearing an already-null description is no change.
+        if (
+          input.description !== undefined &&
+          (input.description ?? null) !== (before?.description ?? null)
+        )
+          changed.push('description');
+        if (input.status !== undefined && input.status !== before?.status) changed.push('status');
+
+        // Keep the lifecycle timestamps coherent with the resulting status:
+        //   completedAt set ⟺ status is complete (reopening clears it, no stale "done"),
+        //   startedAt persists once the phase has begun (stamped on the first
+        //   active/complete, never un-stamped) — so it's never complete-with-null-start.
+        //
+        // Derived from the IN-TRANSACTION `before`, never the outer read (§33 t-103).
+        // Two concurrent `PATCH {status:'complete'}` on one phase: A commits, stamping
+        // `completedAt = T1`; B read null before A committed, so from the outer read it
+        // would write `completedAt = T2` — MOVING a milestone that t-99 now renders —
+        // while B's `changed` diff correctly sees the status already `complete` and
+        // journals nothing. An overwrite with no record, which is the exact failure
+        // this feature exists to close.
+        const lifecycle: Prisma.PhaseUpdateInput = {};
+        if (input.status !== undefined && before) {
+          const now = new Date();
+          if (input.status === 'complete') {
+            lifecycle.completedAt = before.completedAt ?? now;
+            if (before.startedAt === null) lifecycle.startedAt = now;
+          } else {
+            if (before.completedAt !== null) lifecycle.completedAt = null; // reopened → drop the stamp
+            if (input.status === 'active' && before.startedAt === null) lifecycle.startedAt = now;
+          }
+        }
+
+        await tx.phase.update({ where: { id: phaseId }, data: { ...data, ...lifecycle } });
+
+        // The name is ALWAYS snapshotted, even on a status- or description-only edit:
+        // the entry has no feature/task ref to chip, so without it the Log reads "set
+        // the phase to complete" with no way to tell which of the project's phases that
+        // was. `status` rides along only when it CHANGED — metadata asserting a status
+        // an edit never touched would be the same lie `fields` exists to prevent.
+        // Emits nothing when `changed` is empty.
+        await recordPhaseUpdated(tx, {
+          projectId: phase.projectId,
+          actorUserId: userId,
+          phaseId,
+          fields: changed,
+          name: input.name ?? before?.name,
+          ...(changed.includes('status') ? { status: input.status } : {}),
+        });
+      },
+      input.status !== undefined ? { isolationLevel: 'Serializable' } : undefined
     )
-      changed.push('description');
-    if (input.status !== undefined && input.status !== before?.status) changed.push('status');
-
-    await tx.phase.update({ where: { id: phaseId }, data });
-
-    // The name is ALWAYS snapshotted, even on a status- or description-only edit:
-    // the entry has no feature/task ref to chip, so without it the Log reads "set
-    // the phase to complete" with no way to tell which of the project's phases that
-    // was. `status` rides along only when it CHANGED — metadata asserting a status
-    // an edit never touched would be the same lie `fields` exists to prevent.
-    // Emits nothing when `changed` is empty.
-    await recordPhaseUpdated(tx, {
-      projectId: phase.projectId,
-      actorUserId: userId,
-      phaseId,
-      fields: changed,
-      name: input.name ?? before?.name,
-      ...(changed.includes('status') ? { status: input.status } : {}),
-    });
-  });
+  );
 
   logAdminAction({
     userId,

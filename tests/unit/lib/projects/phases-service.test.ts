@@ -52,19 +52,37 @@ const USER = 'user-1';
  * actually changed. Same row ⇒ nobody wrote in between, which is the normal case;
  * a test simulates a concurrent writer by overriding `txPhaseFindUnique` after.
  */
-function setPhaseRow(row: {
-  projectId: string;
-  name: string;
-  description: string | null;
-  status: string;
-  startedAt: Date | null;
-  completedAt: Date | null;
-}) {
+function setPhaseRow(
+  row: {
+    projectId: string;
+    name: string;
+    description: string | null;
+    status: string;
+    startedAt: Date | null;
+    completedAt: Date | null;
+  },
+  /**
+   * What the IN-TRANSACTION re-read returns, when it differs from the outer read
+   * — i.e. another writer committed in between. Defaults to agreeing with `row`.
+   * Divergence is the whole point of reading twice (§33 t-98, t-103), so the
+   * helper has to be able to express it.
+   */
+  inTx?: Partial<{
+    name: string;
+    description: string | null;
+    status: string;
+    startedAt: Date | null;
+    completedAt: Date | null;
+  }>
+) {
   phaseFindUnique.mockResolvedValue(row);
   txPhaseFindUnique.mockResolvedValue({
     name: row.name,
     description: row.description,
     status: row.status,
+    startedAt: row.startedAt,
+    completedAt: row.completedAt,
+    ...inTx,
   });
 }
 
@@ -294,6 +312,66 @@ describe('updatePhase', () => {
     const data = txPhaseUpdate.mock.calls[0][0].data;
     expect(data.completedAt).toBeInstanceOf(Date);
     expect(data.startedAt).toBeUndefined(); // kept, not overwritten
+  });
+
+  it('derives the lifecycle from the IN-TRANSACTION read, so a concurrent complete is not overwritten (§33 t-103)', async () => {
+    // Two concurrent `PATCH {status:'complete'}` on one phase. A commits first,
+    // stamping completedAt. B's outer read (taken before any lock) still says null,
+    // so deriving from it would write a SECOND timestamp — moving a milestone t-99
+    // renders — while B's `changed` diff correctly sees the status already complete
+    // and journals nothing. An overwrite with no record.
+    const alreadyCompleted = new Date('2026-03-01');
+    setPhaseRow(
+      {
+        projectId: 'p1',
+        name: 'Foundations',
+        description: null,
+        status: 'active',
+        startedAt: new Date('2026-02-01'),
+        completedAt: null, // what B saw before A committed
+      },
+      { status: 'complete', completedAt: alreadyCompleted } // what A actually committed
+    );
+    await updatePhase(USER, 'ph1', { status: 'complete' });
+    const data = txPhaseUpdate.mock.calls[0][0].data;
+    expect(data.completedAt).toEqual(alreadyCompleted); // preserved, not re-stamped
+  });
+
+  it('does not resurrect a startedAt that a concurrent writer already stamped', async () => {
+    // The same hazard on the other timestamp: the outer read says never-started, the
+    // in-transaction read says a concurrent activate already stamped it.
+    const alreadyStarted = new Date('2026-02-01');
+    setPhaseRow(
+      {
+        projectId: 'p1',
+        name: 'Foundations',
+        description: null,
+        status: 'upcoming',
+        startedAt: null, // stale
+        completedAt: null,
+      },
+      { status: 'active', startedAt: alreadyStarted }
+    );
+    await updatePhase(USER, 'ph1', { status: 'active' });
+    const data = txPhaseUpdate.mock.calls[0][0].data;
+    expect(data.startedAt).toBeUndefined(); // left exactly as the concurrent write left it
+  });
+
+  it('runs a STATUS edit at Serializable, and a plain edit at the default (§33 t-103 review)', async () => {
+    // In-transaction derivation narrowed the lost-update window but did not close
+    // it: READ COMMITTED plus a non-locking re-read still lets B read null, block on
+    // A's row lock, then stamp over A. SSI aborts one of the pair instead.
+    //
+    // Conditional on purpose — the §21 t-87 review caught the unconditional version
+    // of this on `update_task`: a plain rename has no such hazard and would start
+    // returning P2034 where it used to just wait on the lock.
+    await updatePhase(USER, 'ph1', { status: 'complete' });
+    expect(executeTransaction).toHaveBeenLastCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
+
+    await updatePhase(USER, 'ph1', { name: 'Renamed' });
+    expect(executeTransaction).toHaveBeenLastCalledWith(expect.any(Function), undefined);
   });
 
   it('clears completedAt when a completed phase is reopened (no stale "done")', async () => {
