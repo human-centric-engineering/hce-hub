@@ -25,4 +25,26 @@ describe('Markdown', () => {
     // react-markdown escapes raw HTML (no rehype-raw) → no element is created.
     expect(container.querySelector('img')).toBeNull();
   });
+
+  it('strips dangerous URL schemes from markdown links', () => {
+    // Escaping raw HTML is only half the guarantee: `[x](javascript:…)` is
+    // ordinary markdown, so it survives the HTML escape and becomes a real
+    // anchor. react-markdown's default `urlTransform` blanks it — pinned here
+    // because the guarantee is a DEFAULT, and passing a custom `urlTransform`
+    // (or an older major) would silently remove it. Every caller of this
+    // component renders member-authored text: task/feature detail, journal
+    // decision + note bodies, and idea jots.
+    const { container } = render(
+      <Markdown content={'[a](javascript:alert(1))\n\n[b](data:text/html,hi)'} />
+    );
+    const hrefs = Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'));
+    expect(hrefs).toEqual(['', '']);
+  });
+
+  it('keeps an ordinary https link intact', () => {
+    // The counterweight: the check above must be sanitisation, not "links are
+    // broken". A test that only asserts the blanking would pass on both.
+    const { container } = render(<Markdown content={'[a](https://example.com/x)'} />);
+    expect(container.querySelector('a')).toHaveAttribute('href', 'https://example.com/x');
+  });
 });

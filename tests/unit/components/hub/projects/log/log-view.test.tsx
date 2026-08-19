@@ -37,7 +37,7 @@ beforeEach(() => vi.clearAllMocks());
 describe('LogView', () => {
   it('fetches all events and renders the stream', async () => {
     mockFetch(() => [decision]);
-    render(<LogView projectId="p1" />);
+    render(<LogView projectRef="hce-hub" projectId="p1" />);
     expect(await screen.findByText('One journal')).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       '/api/v1/projects/p1/events',
@@ -47,7 +47,7 @@ describe('LogView', () => {
 
   it('re-queries with kinds=decision when the Decisions filter is chosen', async () => {
     mockFetch(() => [decision]);
-    render(<LogView projectId="p1" />);
+    render(<LogView projectRef="hce-hub" projectId="p1" />);
     await screen.findByText('One journal');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Decisions' }));
@@ -61,7 +61,7 @@ describe('LogView', () => {
 
   it('renders a per-filter empty state', async () => {
     mockFetch(() => []);
-    render(<LogView projectId="p1" />);
+    render(<LogView projectRef="hce-hub" projectId="p1" />);
     expect(await screen.findByText('No activity yet.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Decisions' }));
@@ -70,7 +70,7 @@ describe('LogView', () => {
 
   it('renders the error state on a failed fetch (no crash)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
-    render(<LogView projectId="p1" />);
+    render(<LogView projectRef="hce-hub" projectId="p1" />);
     expect(await screen.findByText(/Couldn.t load the log/)).toBeInTheDocument();
   });
 });

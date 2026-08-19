@@ -19,7 +19,7 @@ type LoadState = 'loading' | 'ready' | 'error';
  * view is server-scoped, not a client slice of a mixed page. Client-fetched
  * (like the task sheet) so switching filters is instant and needs no reload.
  */
-export function LogView({ projectId }: { projectId: string }) {
+export function LogView({ projectId, projectRef }: { projectId: string; projectRef: string }) {
   const [filter, setFilter] = useState<LogFilter>('all');
   const [events, setEvents] = useState<ProjectEventDTO[]>([]);
   const [state, setState] = useState<LoadState>('loading');
@@ -89,7 +89,7 @@ export function LogView({ projectId }: { projectId: string }) {
         (events.length > 0 ? (
           <ul className="divide-border/60 divide-y">
             {events.map((e) => (
-              <EventRow key={e.id} event={e} showRefs />
+              <EventRow key={e.id} event={e} projectRef={projectRef} showRefs />
             ))}
           </ul>
         ) : (

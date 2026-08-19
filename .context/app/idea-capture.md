@@ -62,6 +62,25 @@ work), server-fetched like them so mutations `router.refresh()` cleanly.
   human ops: **edit** the jot inline, **drop**, **restore** — each a
   `PATCH …/ideas/:ideaId` + refresh, failures surfaced inline (never a toast — this
   codebase has no toast lib).
+- **The jot renders as markdown**, through the shared safe renderer
+  ([`components/hub/markdown.tsx`](../../components/hub/markdown.tsx) — react-markdown
+  with raw HTML escaped). `Idea.text` was designed as "the raw jot" and plain text
+  suited a short line; ideas now routinely carry a repro, a fix shape and
+  cross-references, and that content wants formatting. **The editor stays plain** —
+  you refine the source you wrote, not a rendering of it.
+- **A long jot is collapsed** behind a `Show more`/`Show less` toggle, so one essay
+  can't swamp the list. "Long" is _estimated_ from the source, not measured from
+  laid-out height (a `scrollHeight` read is untestable under jsdom and would differ
+  between the server and client render). The estimate counts only the breaks that
+  start a **new rendered block** — a blank line, a list item, a heading — because
+  markdown collapses soft line breaks, so `a\nb\nc` is one line and not three.
+  **The estimate is safe to get wrong**: the clipping box and the toggle are applied
+  by the same flag, so a jot is either uncollapsed and whole, or collapsed with a
+  way back — there is no state where text is cut off and nothing says so. Being
+  wrong only changes how often a `Show more` appears with little behind it.
+  (A fade mask was tried and reverted: it dims the bottom of the _box_, and the box
+  is only as tall as its content, so a jot that tripped the threshold and still
+  fitted had its last lines faded away with no way to un-fade them.)
 
 ## Reading the inbox from Claude Code — `list_ideas`
 

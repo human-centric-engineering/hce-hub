@@ -24,9 +24,12 @@ import { TaskSheet } from '@/components/hub/projects/task-sheet/task-sheet';
  */
 export function TaskSheetProvider({
   projectId,
+  projectRef,
   children,
 }: {
   projectId: string;
+  /** The project's slug (or id) — the sheet's feature link needs a URL ref, not the raw id. */
+  projectRef: string;
   children: React.ReactNode;
 }) {
   const searchParams = useSearchParams();
@@ -60,7 +63,9 @@ export function TaskSheetProvider({
   return (
     <TaskSheetControlsProvider value={controls}>
       {children}
-      {taskId && <TaskSheet projectId={projectId} taskId={taskId} onClose={close} />}
+      {taskId && (
+        <TaskSheet projectId={projectId} projectRef={projectRef} taskId={taskId} onClose={close} />
+      )}
     </TaskSheetControlsProvider>
   );
 }

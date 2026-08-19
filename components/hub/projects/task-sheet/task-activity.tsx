@@ -13,10 +13,18 @@ const sectionLabel = 'font-mono text-[10px] tracking-wider uppercase';
  */
 export function TaskActivity({
   projectId,
+  projectRef,
   taskId,
   refreshKey,
 }: {
   projectId: string;
+  /**
+   * The project's slug (or id). This timeline renders no ref chips (`showRefs`
+   * is off — we're already in the task's context), but `EventRow` takes the ref
+   * unconditionally: making it optional would let a caller silently fall back to
+   * unlinked chips, which is the defect t-105 exists to remove.
+   */
+  projectRef: string;
   taskId: string;
   refreshKey: number;
 }) {
@@ -69,7 +77,7 @@ export function TaskActivity({
         (events.length > 0 ? (
           <ul className="divide-border/60 divide-y">
             {events.map((e) => (
-              <EventRow key={e.id} event={e} />
+              <EventRow key={e.id} event={e} projectRef={projectRef} />
             ))}
           </ul>
         ) : (

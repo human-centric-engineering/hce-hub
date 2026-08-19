@@ -16,9 +16,12 @@ const sectionLabel = 'font-mono text-[10px] tracking-wider uppercase';
  */
 export function FeatureActivity({
   projectId,
+  projectRef,
   featureId,
 }: {
   projectId: string;
+  /** The project's slug (or id) for the ref chips' feature-page hrefs (t-105). */
+  projectRef: string;
   featureId: string;
 }) {
   const [events, setEvents] = useState<ProjectEventDTO[]>([]);
@@ -70,7 +73,7 @@ export function FeatureActivity({
         (events.length > 0 ? (
           <ul className="divide-border/60 divide-y">
             {events.map((e) => (
-              <EventRow key={e.id} event={e} showRefs />
+              <EventRow key={e.id} event={e} projectRef={projectRef} showRefs />
             ))}
           </ul>
         ) : (

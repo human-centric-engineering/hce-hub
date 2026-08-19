@@ -31,7 +31,7 @@ describe('FeatureActivity', () => {
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [planned] }) })
     );
-    render(<FeatureActivity projectId="p1" featureId="f1" />);
+    render(<FeatureActivity projectRef="hce-hub" projectId="p1" featureId="f1" />);
     expect(await screen.findByText(/Simon/)).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       '/api/v1/projects/p1/events?featureId=f1',
@@ -44,13 +44,13 @@ describe('FeatureActivity', () => {
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [] }) })
     );
-    render(<FeatureActivity projectId="p1" featureId="f1" />);
+    render(<FeatureActivity projectRef="hce-hub" projectId="p1" featureId="f1" />);
     expect(await screen.findByText(/No activity yet/)).toBeInTheDocument();
   });
 
   it('renders the error state when the fetch fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
-    render(<FeatureActivity projectId="p1" featureId="f1" />);
+    render(<FeatureActivity projectRef="hce-hub" projectId="p1" featureId="f1" />);
     expect(await screen.findByText(/Couldn.t load activity/)).toBeInTheDocument();
   });
 });
