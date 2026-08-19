@@ -83,8 +83,15 @@ A **task is one PR** (~200–600 lines; cohesive, reviewable). For each:
 3. **Run the gates, in this order:**
 
    ```
-   commit → /pre-pr → /security-review → (npm run format) → push → open PR → /code-review
+   commit → /pre-pr → /security-review → /code-review → fix (new commits) ⟲
+          → npm run format → push ONCE → open PR → post a review summary comment
    ```
+
+   **`/code-review` runs BEFORE the first push** (changed 2026-08-19, owner). It reads
+   `origin/main...HEAD` and never needed the PR to exist. CI bills **per push**, and
+   `cancel-in-progress` only helps when pushes land close together — one branch here ran
+   **five CI runs, one per review-fix push**, hours apart, every one completing and billing.
+   Reviewing locally makes the review loop CI-free, so more rounds now cost less, not more.
 
    - **`/pre-pr`** — type-check, lint, format, full test suite + coverage, migration-drift.
      It also flags the `lib/app/**` import-boundary and (via `app:ci-checks`) fork-hygiene.
@@ -100,9 +107,15 @@ A **task is one PR** (~200–600 lines; cohesive, reviewable). For each:
      state, the reconcile webhook's idempotency) — treat a _clean_ review there as the
      surprise. `/pre-pr` green is necessary, not sufficient.
 
-4. **Fix confirmed findings as a transparent follow-up commit** (don't force-push over the
-   reviewed commit — the review's effect should be visible in history). Document findings you
-   accept or refute, and why.
+4. **Fix confirmed findings as additional local commits** — never amend or force-push over
+   the reviewed commit. The point is unchanged: the review's effect stays visible in history.
+   What changed is *when* they are pushed — they accumulate locally and go up in the single
+   push, so the commit-level record survives at one CI cycle instead of five.
+
+   **What this costs, accepted knowingly:** the review rounds no longer appear as separate
+   PR conversations. Recover it with **one summary comment after opening the PR** covering
+   what each round found — the commits carry the detail, the comment carries the narrative.
+   Document findings you accept or refute, and why.
 5. **The owner merges.** A task PR is **pure code** — do **not** open a per-task docs/close-out
    PR to flip its board row (that overhead buys no coordination once the feature is claimed to one
    dev). The row flip to `done #<PR>`, decisions, and any cross-cutting carries are **batched into
