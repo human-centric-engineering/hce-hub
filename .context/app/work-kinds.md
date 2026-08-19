@@ -34,6 +34,32 @@ Completion now hangs off a date, not the enum:
   resolved) — the failure mode is "counts too much", never "reads complete when it
   isn't".
 
+## When a task landed
+
+**`Task.mergedAt`** — stamped by `complete_task` in the same transaction as
+`status: 'merged'`. It is the source of truth for _when a task landed_; read it rather
+than the `task_merged` journal event.
+
+- **`null` means "merged before we tracked it", not "unmerged".** Merge instants used
+  to exist only as the `task_merged` event, and §19's cutover imported most of the
+  Hub's own history before that stream existed — **34 of 47** merged tasks had no
+  event when the column was added. Those rows are honestly null rather than given an
+  invented timestamp. **Any read must handle it**: sort it oldest (which it is), never
+  drop the row.
+- **Never moved once set.** The stamp is guarded by a SQL predicate
+  (`updateMany({ where: { mergedAt: null } })`), so two concurrent completions can't
+  overwrite each other — Postgres re-evaluates the predicate after taking the row
+  lock and the loser writes nothing. An already-merged task with a null `mergedAt` is
+  deliberately **not** back-stamped, even when a webhook arrives to attribute the
+  merger: `now()` is not when it landed.
+- **`Feature.shippedAt` works the same way** and carries the same guarantee — _first
+  ship wins_, enforced by the same predicate. `ship_feature` is idempotent and
+  re-runnable (a corrected narrative, an agent retrying), and re-stamping would move
+  the completion boundary forward and pull post-ship work back inside the bar.
+
+The two together are the model's lifecycle timestamps, alongside
+`Phase.startedAt`/`completedAt`.
+
 ### The line is _shipped_, not _small_
 
 Work on an **unshipped** feature is `feature_work` even when it is scope discovered

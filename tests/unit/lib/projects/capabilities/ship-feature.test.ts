@@ -138,8 +138,10 @@ describe('ship_feature close-out', () => {
       where: { id: 'f1', shippedAt: null },
       data: { shippedAt: expect.any(Date) },
     });
-    // The instant must never ride on the UNGUARDED update — that is the bug.
-    expect(txFeatureUpdate.mock.calls[0][0].data).not.toHaveProperty('shippedAt');
+    // No separate "must not ride on the unguarded update" assertion here: the
+    // `toHaveBeenCalledWith` above is a STRICT deep match, so a stray `shippedAt`
+    // on that call already fails it. (Its sibling in `task-actions.test.ts` does
+    // need one — that assertion is an `objectContaining`, so it matches partially.)
   });
 
   it('stamps a shipped feature whose boundary the backfill could not resolve', async () => {
