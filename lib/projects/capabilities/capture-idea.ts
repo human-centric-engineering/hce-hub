@@ -30,7 +30,9 @@ const schema = z.object({
     .trim()
     .min(1)
     .max(IDEA_TEXT_MAX)
-    .describe('The idea — a short line; it lands in the project inbox to triage later.'),
+    .describe(
+      'The idea (markdown) — a short jot, or more structure if it needs one; it lands in the project inbox to triage later.'
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -49,14 +51,15 @@ export class CaptureIdeaCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'capture_idea',
     description:
-      "Capture an idea or tweak without leaving your current work — jot a short line and it lands as an idea in the project's inbox, to triage later. Any project member may capture.",
+      "Capture an idea or tweak without leaving your current work — jot a line (markdown) and it lands as an idea in the project's inbox, to triage later. Any project member may capture.",
     parameters: {
       type: 'object',
       properties: {
         projectId: { type: 'string', description: 'The project to capture the idea into.' },
         text: {
           type: 'string',
-          description: 'The idea — a short line; it lands in the project inbox to triage later.',
+          description:
+            'The idea (markdown) — a short jot, or more structure if it needs one; it lands in the project inbox to triage later.',
         },
       },
       required: ['projectId', 'text'],

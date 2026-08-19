@@ -9,14 +9,15 @@ import type { SeedUnit } from '@/prisma/runner';
 export const captureIdeaFunctionDefinition = {
   name: 'capture_idea',
   description:
-    "Capture an idea or tweak without leaving your current work — jot a short line and it lands as an idea in the project's inbox, to triage later. Any project member may capture.",
+    "Capture an idea or tweak without leaving your current work — jot a line (markdown) and it lands as an idea in the project's inbox, to triage later. Any project member may capture.",
   parameters: {
     type: 'object',
     properties: {
       projectId: { type: 'string', description: 'The project to capture the idea into.' },
       text: {
         type: 'string',
-        description: 'The idea — a short line; it lands in the project inbox to triage later.',
+        description:
+          'The idea (markdown) — a short jot, or more structure if it needs one; it lands in the project inbox to triage later.',
       },
     },
     required: ['projectId', 'text'],

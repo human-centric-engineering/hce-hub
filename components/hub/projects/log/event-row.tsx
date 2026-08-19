@@ -124,7 +124,10 @@ export function EventRow({
           // `color` on each of those — so overriding it would render a decision
           // body in two inks. The feature page and task sheet already accept the
           // prose palette for the same authored content; the Log now matches.
-          <Markdown content={event.body} className="mt-0.5 text-[13px] leading-relaxed" />
+          <Markdown
+            content={event.body}
+            className="mt-0.5 text-[13px] leading-relaxed break-words"
+          />
         )}
       </div>
     </li>
