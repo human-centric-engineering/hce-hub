@@ -208,3 +208,79 @@ describe('SwimLane — Merged column cap (§33-sweep t-108)', () => {
     expect(text.indexOf('Recent')).toBeLessThan(text.indexOf('Imported'));
   });
 });
+
+describe('SwimLane — merged ordering ties (§33-sweep t-108)', () => {
+  it('keeps both cards when two tasks share a merge instant', () => {
+    // Not hypothetical: one PR closing several tasks is the normal shape here
+    // (#170 merged t-85, t-105 and t-112 together), so equal instants are common.
+    // The comparator must return 0 rather than dropping or duplicating either.
+    const at = '2026-08-19T10:00:00.000Z';
+    render(
+      <SwimLane
+        hideBugs={false}
+        lane={lane({
+          tasks: [
+            card({ id: 'x', title: 'Same PR A', column: 'merged', mergedAt: at }),
+            card({ id: 'y', title: 'Same PR B', column: 'merged', mergedAt: at }),
+          ],
+        })}
+      />
+    );
+    expect(screen.getByText('Same PR A')).toBeInTheDocument();
+    expect(screen.getByText('Same PR B')).toBeInTheDocument();
+  });
+
+  it('sorts a null LAST from either side of the comparison', () => {
+    // Symmetry, not coverage-chasing. A two-element sort only ever calls the
+    // comparator one way round, so `null` reaching it as the LEFT operand was
+    // never exercised. If that branch's sign were flipped, nulls would sort first
+    // from one direction and last from the other — an inconsistent comparator,
+    // which is worse than simply-wrong order. Three cards force both directions.
+    render(
+      <SwimLane
+        hideBugs={false}
+        lane={lane({
+          tasks: [
+            card({
+              id: '1',
+              title: 'Older',
+              column: 'merged',
+              mergedAt: '2026-08-01T00:00:00.000Z',
+            }),
+            card({ id: '2', title: 'Undated', column: 'merged', mergedAt: null }),
+            card({
+              id: '3',
+              title: 'Newer',
+              column: 'merged',
+              mergedAt: '2026-08-19T00:00:00.000Z',
+            }),
+          ],
+        })}
+      />
+    );
+    const text = screen
+      .getAllByRole('button', { name: /Open task/ })
+      .map((b) => b.textContent ?? '')
+      .join('|');
+    expect(text.indexOf('Newer')).toBeLessThan(text.indexOf('Older'));
+    expect(text.indexOf('Older')).toBeLessThan(text.indexOf('Undated'));
+  });
+
+  it('keeps every card when they are ALL undated', () => {
+    // The whole imported-history block compares equal to itself. Sorting must not
+    // lose any of it — this is three quarters of the Hub's own merged history.
+    render(
+      <SwimLane
+        hideBugs={false}
+        lane={lane({
+          tasks: [
+            card({ id: 'p', title: 'Imported one', column: 'merged', mergedAt: null }),
+            card({ id: 'q', title: 'Imported two', column: 'merged', mergedAt: null }),
+          ],
+        })}
+      />
+    );
+    expect(screen.getByText('Imported one')).toBeInTheDocument();
+    expect(screen.getByText('Imported two')).toBeInTheDocument();
+  });
+});

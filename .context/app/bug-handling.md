@@ -105,6 +105,13 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
 - Verifying the bug UX end-to-end (t3) also closed the sheet's stale-surface gap: Start /
   Complete / Link-PR (and reassign) refresh the Plan/Board behind the sheet, so working a
   bug from the sheet updates the views without a manual reload.
+- **Bugs can be hidden from the Board's Assigned column** (a per-viewer, per-project
+  toggle in the column header, persisted in `localStorage`, **default showing**). Bugs
+  keep the owner cascade, so they arrive assigned and accumulate there, crowding out work
+  someone actually chose. **Assigned only** — a bug in the Active column is work in
+  progress and stays visible. The column **count keeps the true total**; the number
+  hidden rides on the toggle instead, because a count that moves with a display filter
+  is the same quiet lie the `N/N` roll-up was fixed to stop telling.
 
 ## The standing "Platform / Maintenance" feature
 
