@@ -55,6 +55,8 @@ export interface BoardTaskCard {
   /** `bug` (a defect, marked distinctly) vs `feature_work` (f-bug-handling §22-02). */
   kind: TaskKind;
   column: BoardColumn;
+  /** ISO instant the task merged; `null` when unmerged, or merged before we tracked it. */
+  mergedAt: string | null;
   prUrl: string | null;
   /**
    * The person shown against the card (via `taskHolderId`, f-task-assignment §22
@@ -120,6 +122,7 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
         prUrl: true,
         claimedByUserId: true,
         assigneeUserId: true,
+        mergedAt: true,
         dependencies: { select: { dependsOn: { select: { status: true } } } },
       },
     }),
@@ -204,6 +207,10 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
       // doer once merged) — so the card, its lane, and the highlight all agree on
       // one person, even in the someone-else-started edge (assignee ≠ claimant).
       isMine: holderId === userId,
+      // When it landed — the Merged column orders newest-first on it (§33-sweep
+      // t-108). `null` means merged before the column existed (§19's import), which
+      // sorts oldest because it is. ISO so the DTO stays Date-free.
+      mergedAt: t.mergedAt ? t.mergedAt.toISOString() : null,
       collision: collisionByTask.get(t.id) ?? null,
     });
   }

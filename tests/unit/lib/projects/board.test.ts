@@ -46,6 +46,7 @@ const task = (o: Record<string, unknown> & { deps?: string[] }) => ({
   prUrl: o.prUrl ?? null,
   claimedByUserId: o.claimedByUserId ?? null,
   assigneeUserId: o.assigneeUserId ?? null,
+  mergedAt: o.mergedAt ?? null,
   dependencies: (o.deps ?? []).map((s: string) => ({ dependsOn: { status: s } })),
 });
 const feature = (id: string, ownerUserId: string | null = null, slug: string | null = null) => ({
@@ -413,5 +414,32 @@ describe('getProjectBoard — presentation', () => {
     const u1 = laneOf(board, 'u1')!;
     expect(u1.role).toBe('lead');
     expect(u1.ownedFeatures.map((f) => f.id)).toEqual(['f1', 'f2']);
+  });
+});
+
+describe('getProjectBoard — mergedAt on the card (§33-sweep t-108)', () => {
+  it('serialises the merge instant as ISO, and null when never tracked', async () => {
+    // The Board orders its Merged column on this; `null` is imported history
+    // (§19's cutover predates the column), never "unmerged".
+    setup({
+      members: [member('u1', 'lead')],
+      features: [feature('f1', 'u1', 'f-one')],
+      tasks: [
+        task({
+          id: 'a',
+          featureId: 'f1',
+          status: 'merged',
+          claimedByUserId: 'u1',
+          mergedAt: new Date('2026-08-19T10:00:00.000Z'),
+        }),
+        task({ id: 'b', featureId: 'f1', status: 'merged', claimedByUserId: 'u1' }),
+      ],
+      users: [userRow('u1')],
+    });
+
+    const board = await getProjectBoard('u1', 'p1');
+    const cards = laneOf(board, 'u1')!.tasks;
+    expect(cards.find((c) => c.id === 'a')!.mergedAt).toBe('2026-08-19T10:00:00.000Z');
+    expect(cards.find((c) => c.id === 'b')!.mergedAt).toBeNull();
   });
 });
