@@ -181,15 +181,21 @@ export function PhaseBand({
         </span>
       </button>
       {/*
-        The authored intent — why this grouping exists and what would make it
-        complete. Rendered under the header rather than in it: it is prose, and
-        the header is a row of labels. Only when open, so a collapsed band stays
-        one line, and clamped to two lines because a band is a summary — the full
-        text belongs on a phase page (idea #9).
+        The phase's intent. Rendered under the header rather than in it: it is
+        prose, and the header is a row of labels. Only when open, so a collapsed
+        band stays one line.
+
+        `summary ?? description` (§33-sweep t-104). `description` is long-form
+        markdown, so clamping it here truncated an essay mid-sentence AND leaked
+        raw syntax (`**bold**` as source) — the band was showing a feature list
+        and decision history where an intent belonged. `summary` is plain text
+        written to fit, so there is nothing to render and nothing to truncate.
+        The fallback keeps a phase nobody has summarised yet exactly as it was.
+        The full text belongs on a phase page (idea #9).
       */}
-      {open && band.description && (
+      {open && (band.summary ?? band.description) && (
         <p className="text-muted-foreground mt-1 line-clamp-2 px-2 pl-8 text-xs leading-relaxed">
-          {band.description}
+          {band.summary ?? band.description}
         </p>
       )}
       {open && <div className="mt-3 space-y-3">{rows}</div>}

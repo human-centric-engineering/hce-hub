@@ -19,8 +19,16 @@ management UI + REST.
 
 ## The model (pre-existing, `prisma/schema/app.prisma`)
 
-- **`Phase`** — `projectId`, `ordinal` (display order), `name`, `description?`,
-  `status`, `startedAt?` / `completedAt?` (lifecycle timestamps), `createdAt`.
+- **`Phase`** — `projectId`, `ordinal` (display order), `name`, `summary?`,
+  `description?`, `status`, `startedAt?` / `completedAt?` (lifecycle timestamps),
+  `createdAt`.
+- **`summary` vs `description`** (§33-sweep t-104) — the same split `Feature` has
+  had since §21: `summary` is a short **plain-text** one-liner, `description` is
+  long-form **markdown**. The Plan band renders `summary ?? description`.
+  Before the split it had only `description` to show, so it clamped an authored
+  essay to two lines mid-sentence _and_ leaked raw markdown (`**bold**` as source).
+  A summary is written to fit, so there is nothing to truncate and nothing to
+  render. The long description keeps no reader until the phase page (idea #9).
 - **`PhaseStatus`** — `upcoming` · `active` · `complete` · `parked`. `parked` is
   the dormant idea-pool: visible and browseable, hidden (collapsed) from active
   views.
@@ -64,10 +72,10 @@ exception** — ordering is presentation, not history.
 
 ### MCP capabilities (t1)
 
-- **`create_phase`** — add a phase (name, optional description / status / ordinal;
-  appends after the last phase unless positioned).
-- **`update_phase`** — rename, edit description, change status (incl. park), move
-  (ordinal). Partial patch; `nothing_to_update` if empty. A **status** edit runs at
+- **`create_phase`** — add a phase (name, optional summary / description / status /
+  ordinal; appends after the last phase unless positioned).
+- **`update_phase`** — rename, set the one-line summary, edit the long-form
+  description, change status (incl. park), move (ordinal). Partial patch; `nothing_to_update` if empty. A **status** edit runs at
   `Serializable` (§33 t-103), so it can also return `concurrent_modification` —
   "re-read it and retry" — once the in-process retries are exhausted; the REST
   face returns **409** for the same case. Name/description-only edits keep the
@@ -112,7 +120,8 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
 ### UI (t2 render + t3 management), `components/hub/projects/plan/`
 
 - **`PhaseBand`** — a collapsible band header (name, signal-toned status chip,
-  feature count, and — open only — the phase's **intent** (two-line clamp) and its
+  feature count, and — open only — the phase's **intent** (`summary ?? description`,
+  two-line clamp; see the model note above for why the summary exists) and its
   **lifecycle** (`started 3 Aug 2026 · finished 18 Aug 2026`, each half shown only
   when set). Dates are `utcShortDate`: UTC and locale-free, so server and client
   agree. `parked` and `complete` bands collapse by default; active /
@@ -158,8 +167,15 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
   read `Task.phaseId` — commitment is a separate axis and this surface shows no
   `→ <phase>` mark. A feature that never moved renders exactly as before.
 - **`ManagePhasesDialog`** ("Manage phases", top-right of the Plan) — create,
-  rename, **edit intent**, set status / park, and **drag-to-reorder** (`@dnd-kit`, keyboard-
-  accessible: focus the grip, Space, arrows, Space). Reorder is **optimistic** —
+  rename, **write the one-line summary**, **edit the long-form intent**, set status /
+  park, and **drag-to-reorder** (`@dnd-kit`, keyboard-accessible: focus the grip,
+  Space, arrows, Space). The summary is an `Input` and the intent a `Textarea` — the
+  control's shape is the clearest signal that markdown and paragraphs belong in one
+  and not the other. Both run through the same `useFieldDraft` hook (§33-sweep
+  t-104), which carries the adopt-the-server-value, trim-both-sides,
+  optimistic-then-revert and flush-on-close rules that the intent field learned the
+  hard way across §33 t-98/t-102/t-103; they register under distinct pending keys,
+  so editing one neither marks nor flushes the other. Reorder is **optimistic** —
   the list follows the drop immediately from local order state, then `PUT`s the
   batch order and `router.refresh()`es; a failed write reverts to the server order
   and surfaces the error. The pure reorder math is `reorderedIds()`.

@@ -28,6 +28,14 @@ import { redactedString } from '@/lib/security/redact';
 const schema = z.object({
   projectId: z.string().describe('The project to add the phase to.'),
   name: z.string().min(1).max(200).describe('The phase name (e.g. "v0.9.0", "Onboarding").'),
+  summary: z
+    .string()
+    .max(300)
+    .nullable()
+    .optional()
+    .describe(
+      'A short PLAIN-TEXT one-liner shown on the Plan band — what this phase is for, in a sentence. Not markdown: it is rendered raw, so syntax would leak as source. The long-form `description` stays the place for detail.'
+    ),
   description: z
     .string()
     .max(2000)
@@ -72,6 +80,11 @@ export class CreatePhaseCapability extends BaseCapability<Args, Data> {
       properties: {
         projectId: { type: 'string', description: 'The project to add the phase to.' },
         name: { type: 'string', description: 'The phase name (e.g. "v0.9.0", "Onboarding").' },
+        summary: {
+          type: ['string', 'null'],
+          description:
+            'A short PLAIN-TEXT one-liner shown on the Plan band — what this phase is for, in a sentence. Not markdown: it is rendered raw, so syntax would leak as source. The long-form `description` stays the place for detail.',
+        },
         description: {
           type: ['string', 'null'],
           description: 'Optional description of what the phase covers (markdown).',
@@ -109,6 +122,10 @@ export class CreatePhaseCapability extends BaseCapability<Args, Data> {
         ordinal: args.ordinal,
         fromIdeaId: args.fromIdeaId ?? null,
         name: redactedString(`name (${args.name.length} chars)`),
+        summary:
+          typeof args.summary === 'string'
+            ? redactedString(`summary (${args.summary.length} chars)`)
+            : args.summary,
         description:
           typeof args.description === 'string'
             ? redactedString(`description (${args.description.length} chars)`)
@@ -138,6 +155,7 @@ export class CreatePhaseCapability extends BaseCapability<Args, Data> {
     try {
       const result = await createPhase(userId, args.projectId, {
         name: args.name,
+        summary: args.summary,
         description: args.description,
         status: args.status,
         ordinal: args.ordinal,

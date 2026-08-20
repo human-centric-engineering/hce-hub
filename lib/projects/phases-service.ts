@@ -44,6 +44,12 @@ import {
 /** The mutable fields of a phase (its lifecycle timestamps are derived, not set). */
 export interface CreatePhaseInput {
   name: string;
+  /**
+   * Short **plain-text** one-liner for the Plan band (§33-sweep t-104), mirroring
+   * `Feature.summary`. Not markdown: the band renders it raw, so syntax would leak
+   * as source — which is the leak this field exists to remove.
+   */
+  summary?: string | null;
   description?: string | null;
   /** Defaults to `upcoming`. */
   status?: PhaseStatus;
@@ -64,6 +70,12 @@ export interface CreatePhaseResult {
 
 export interface UpdatePhaseInput {
   name?: string;
+  /**
+   * Short **plain-text** one-liner for the Plan band (§33-sweep t-104), mirroring
+   * `Feature.summary`. Not markdown: the band renders it raw, so syntax would leak
+   * as source — which is the leak this field exists to remove.
+   */
+  summary?: string | null;
   description?: string | null;
   status?: PhaseStatus;
   // No `ordinal` — order is changed only via `reorderPhases` (batch, collision-free).
@@ -110,6 +122,7 @@ export async function createPhase(
       data: {
         projectId,
         name: input.name,
+        summary: input.summary ?? null,
         description: input.description ?? null,
         status,
         ordinal,
@@ -200,6 +213,10 @@ export async function updatePhase(
     data.name = input.name;
     updated.push('name');
   }
+  if (input.summary !== undefined) {
+    data.summary = input.summary;
+    updated.push('summary');
+  }
   if (input.description !== undefined) {
     data.description = input.description;
     updated.push('description');
@@ -257,6 +274,7 @@ export async function updatePhase(
           // pre-transaction read. See `lifecycle` below.
           select: {
             name: true,
+            summary: true,
             description: true,
             status: true,
             startedAt: true,
@@ -270,7 +288,9 @@ export async function updatePhase(
         // rule `recordPhaseMembershipChange` applies to a no-op re-file.
         const changed: string[] = [];
         if (input.name !== undefined && input.name !== before?.name) changed.push('name');
-        // Normalise the empty patch: clearing an already-null description is no change.
+        // Normalise the empty patch: clearing an already-null field is no change.
+        if (input.summary !== undefined && (input.summary ?? null) !== (before?.summary ?? null))
+          changed.push('summary');
         if (
           input.description !== undefined &&
           (input.description ?? null) !== (before?.description ?? null)

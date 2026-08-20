@@ -166,6 +166,20 @@ describe('createPhase', () => {
     );
   });
 
+  it('writes the summary, and defaults it to null when unset (§33-sweep t-104)', async () => {
+    await createPhase(USER, 'p1', { name: 'Project flow', summary: 'One line of intent.' });
+    expect(txCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ summary: 'One line of intent.' }),
+      })
+    );
+    txCreate.mockClear();
+    await createPhase(USER, 'p1', { name: 'No summary' });
+    expect(txCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ summary: null }) })
+    );
+  });
+
   it('defaults status to upcoming with no lifecycle timestamps', async () => {
     txAggregate.mockResolvedValue({ _max: { ordinal: null } });
     txCreate.mockResolvedValue({ id: 'ph', ordinal: 0 });
@@ -259,6 +273,28 @@ describe('updatePhase', () => {
       data: { name: 'Renamed', description: 'why' },
     });
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'phase.update' }));
+  });
+
+  it('patches the summary, and reports it in field order (§33-sweep t-104)', async () => {
+    const r = await updatePhase(USER, 'ph1', {
+      summary: 'What this phase is for, in a line.',
+      description: 'The long version.',
+    });
+    expect(r).toEqual({ phaseId: 'ph1', updated: ['summary', 'description'] });
+    expect(txPhaseUpdate).toHaveBeenCalledWith({
+      where: { id: 'ph1' },
+      data: { summary: 'What this phase is for, in a line.', description: 'The long version.' },
+    });
+  });
+
+  it('clears the summary with null, independently of the description', async () => {
+    // The two are separate fields, not a fallback pair on the write side — the
+    // `summary ?? description` fallback lives in the band, at read time.
+    await updatePhase(USER, 'ph1', { summary: null });
+    expect(txPhaseUpdate).toHaveBeenCalledWith({
+      where: { id: 'ph1' },
+      data: { summary: null },
+    });
   });
 
   it('clears the description with null', async () => {

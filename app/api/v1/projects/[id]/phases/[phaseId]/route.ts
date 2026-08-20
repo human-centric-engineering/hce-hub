@@ -1,7 +1,7 @@
 /**
  * Consumer — edit a phase (f-phases §22 t3)
  *
- * PATCH /api/v1/projects/:id/phases/:phaseId — rename, edit description, change
+ * PATCH /api/v1/projects/:id/phases/:phaseId — rename, edit summary/description, change
  * status (upcoming → active → complete, or park), or move it (ordinal). Partial
  * patch — only supplied fields change; a null description clears it. At least one
  * field is required.
@@ -25,6 +25,8 @@ import { isWriteConflict } from '@/lib/projects/write-conflict';
 // (there is no `@@unique(projectId, ordinal)`).
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
+  // Plain text, and shorter than `description` on purpose — see the create route.
+  summary: z.string().max(300).nullish(),
   description: z.string().max(2000).nullish(),
   status: z.enum(['upcoming', 'active', 'complete', 'parked']).optional(),
 });
@@ -50,6 +52,7 @@ export const PATCH = withAuth<{ id: string; phaseId: string }>(
         phaseId,
         {
           name: parsed.data.name,
+          summary: parsed.data.summary,
           description: parsed.data.description,
           status: parsed.data.status,
         },

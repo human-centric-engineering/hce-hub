@@ -46,8 +46,13 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
  * about features. Defaulted below to exactly those features, which is what the
  * server produces for a band with nothing borrowed into it (§32 t-95).
  */
-type BandInput = Omit<PlanPhaseBand, 'rows' | 'description' | 'startedAt' | 'completedAt'> & {
+type BandInput = Omit<
+  PlanPhaseBand,
+  'rows' | 'summary' | 'description' | 'startedAt' | 'completedAt'
+> & {
   rows?: PlanBandRow[];
+  /** §33-sweep t-104 — the one line the band renders; most tests care about grouping. */
+  summary?: string | null;
   /** §33 t-99 — optional here too: most tests care about grouping, not the header. */
   description?: string | null;
   startedAt?: string | null;
@@ -55,6 +60,7 @@ type BandInput = Omit<PlanPhaseBand, 'rows' | 'description' | 'startedAt' | 'com
 };
 
 const withRows = (b: BandInput): PlanPhaseBand => ({
+  summary: null,
   description: null,
   startedAt: null,
   completedAt: null,
@@ -386,6 +392,52 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
       />
     );
     expect(screen.getByText(/Done when a 2nd person can use it/)).toBeInTheDocument();
+  });
+
+  it('prefers the plain-text summary over the long-form description (§33-sweep t-104)', () => {
+    // The defect: `description` is markdown long-form, so the band clamped an
+    // essay mid-sentence AND leaked raw syntax as source. `summary` is written to
+    // fit, so there is nothing to truncate and nothing to render.
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'flow',
+            name: 'Project flow',
+            status: 'active',
+            ordinal: 0,
+            summary: 'The machinery for running product development through the UI and MCP.',
+            description: '**The machinery** for managing development. Declared as…',
+            features: [feature({ id: 'a', title: 'Some work' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText(/The machinery for running product development/)).toBeInTheDocument();
+    // The markdown long-form is not rendered at all — so its `**` cannot leak.
+    expect(screen.queryByText(/Declared as/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument();
+  });
+
+  it('falls back to the description when no summary is written', () => {
+    // Every phase predates this field, so the fallback is what keeps them all
+    // exactly as they were until someone writes one.
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'flow',
+            name: 'Project flow',
+            status: 'active',
+            ordinal: 0,
+            summary: null,
+            description: 'The long-form intent, still shown when there is nothing shorter.',
+            features: [feature({ id: 'a', title: 'Some work' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText(/still shown when there is nothing shorter/)).toBeInTheDocument();
   });
 
   it('hides the intent while the band is collapsed, so a closed band stays one line', () => {

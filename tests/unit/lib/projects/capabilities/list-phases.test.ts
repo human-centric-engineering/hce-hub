@@ -118,6 +118,7 @@ describe('list_phases', () => {
                 name: 'Project flow',
                 status: 'active',
                 ordinal: 0,
+                summary: null,
                 description: 'sensitive planning prose that must not be persisted',
                 startedAt: null,
                 completedAt: null,

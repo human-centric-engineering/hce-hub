@@ -21,12 +21,21 @@ const phases: ManagedPhase[] = [
   {
     id: 'ph1',
     name: 'Foundations',
+    summary: null,
     description: null,
     status: 'complete',
     ordinal: 0,
     featureCount: 3,
   },
-  { id: 'ph2', name: 'UI Spine', description: null, status: 'active', ordinal: 1, featureCount: 4 },
+  {
+    id: 'ph2',
+    name: 'UI Spine',
+    summary: null,
+    description: null,
+    status: 'active',
+    ordinal: 1,
+    featureCount: 4,
+  },
 ];
 
 const okFetch = () => vi.fn().mockResolvedValue({ ok: true, status: 200 });
@@ -102,6 +111,61 @@ describe('ManagePhasesDialog', () => {
         body: JSON.stringify({ description: 'The base everything stands on.' }),
       })
     );
+  });
+
+  it('saves a phase summary (PATCH) on blur (§33-sweep t-104)', async () => {
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ManagePhasesDialog projectId="p1" phases={phases} />);
+    open();
+
+    const summary = screen.getByLabelText('Phase summary: Foundations');
+    fireEvent.change(summary, { target: { value: 'What this phase is for, in a line.' } });
+    fireEvent.blur(summary);
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/p1/phases/ph1',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ summary: 'What this phase is for, in a line.' }),
+      })
+    );
+  });
+
+  it('saves the summary on Enter — it is one line, so Enter means done', async () => {
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ManagePhasesDialog projectId="p1" phases={phases} />);
+    open();
+
+    const summary = screen.getByLabelText('Phase summary: Foundations');
+    fireEvent.change(summary, { target: { value: 'One line.' } });
+    fireEvent.keyDown(summary, { key: 'Enter' });
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/p1/phases/ph1',
+      expect.objectContaining({ body: JSON.stringify({ summary: 'One line.' }) })
+    );
+  });
+
+  it('keeps the summary and the intent as independent drafts', async () => {
+    // Both run through the same `useFieldDraft` hook but register under distinct
+    // pending keys — editing one must not mark the other dirty or flush it.
+    const fetchMock = okFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ManagePhasesDialog projectId="p1" phases={phases} />);
+    open();
+
+    const summary = screen.getByLabelText('Phase summary: Foundations');
+    fireEvent.change(summary, { target: { value: 'Only the summary changed.' } });
+    fireEvent.blur(summary);
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    const bodies = fetchMock.mock.calls.map((c) => String((c[1] as { body?: string })?.body ?? ''));
+    expect(bodies.some((b) => b.includes('summary'))).toBe(true);
+    expect(bodies.some((b) => b.includes('description'))).toBe(false);
   });
 
   it('clears an intent with null rather than an empty string', async () => {
@@ -279,6 +343,7 @@ describe('ManagePhasesDialog', () => {
       {
         id: 'ph1',
         name: 'Alpha',
+        summary: null,
         description: null,
         status: 'active',
         ordinal: 0,

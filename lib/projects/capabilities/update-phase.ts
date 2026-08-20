@@ -30,6 +30,14 @@ import { redactedString } from '@/lib/security/redact';
 const schema = z.object({
   phaseId: z.string().describe('The phase to edit.'),
   name: z.string().min(1).max(200).optional().describe('New phase name.'),
+  summary: z
+    .string()
+    .max(300)
+    .nullable()
+    .optional()
+    .describe(
+      'A short PLAIN-TEXT one-liner shown on the Plan band — what this phase is for, in a sentence. Not markdown: it is rendered raw, so syntax would leak as source. The long-form `description` stays the place for detail. Null clears it.'
+    ),
   description: z
     .string()
     .max(2000)
@@ -57,12 +65,17 @@ export class UpdatePhaseCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'update_phase',
     description:
-      'Edit an existing phase: rename it, change its description, or advance its status (upcoming → active → complete, or park it). Only supplied fields change; a null description clears it. Any project member may edit a phase. (Reordering is a separate batch operation.)',
+      'Edit an existing phase: rename it, set its one-line summary, change its long-form description, or advance its status (upcoming → active → complete, or park it). Only supplied fields change; a null description clears it. Any project member may edit a phase. (Reordering is a separate batch operation.)',
     parameters: {
       type: 'object',
       properties: {
         phaseId: { type: 'string', description: 'The phase to edit.' },
         name: { type: 'string', description: 'New phase name.' },
+        summary: {
+          type: ['string', 'null'],
+          description:
+            'A short PLAIN-TEXT one-liner shown on the Plan band — what this phase is for, in a sentence. Not markdown: it is rendered raw, so syntax would leak as source. The long-form `description` stays the place for detail. Null clears it.',
+        },
         description: {
           type: ['string', 'null'],
           description: 'New description (markdown); null clears it.',
@@ -91,6 +104,10 @@ export class UpdatePhaseCapability extends BaseCapability<Args, Data> {
           typeof args.name === 'string'
             ? redactedString(`name (${args.name.length} chars)`)
             : args.name,
+        summary:
+          typeof args.summary === 'string'
+            ? redactedString(`summary (${args.summary.length} chars)`)
+            : args.summary,
         description:
           typeof args.description === 'string'
             ? redactedString(`description (${args.description.length} chars)`)
@@ -112,6 +129,7 @@ export class UpdatePhaseCapability extends BaseCapability<Args, Data> {
         args.phaseId,
         {
           name: args.name,
+          summary: args.summary,
           description: args.description,
           status: args.status,
         },

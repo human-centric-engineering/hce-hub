@@ -15,6 +15,11 @@ export const createPhaseFunctionDefinition = {
     properties: {
       projectId: { type: 'string', description: 'The project to add the phase to.' },
       name: { type: 'string', description: 'The phase name (e.g. "v0.9.0", "Onboarding").' },
+      summary: {
+        type: ['string', 'null'],
+        description:
+          'A short PLAIN-TEXT one-liner shown on the Plan band — what this phase is for, in a sentence. Not markdown: it is rendered raw, so syntax would leak as source. The long-form `description` stays the place for detail.',
+      },
       description: {
         type: ['string', 'null'],
         description: 'Optional description of what the phase covers (markdown).',
