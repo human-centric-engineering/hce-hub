@@ -253,7 +253,17 @@ describe('ManagePhasesDialog', () => {
     const summary = screen.getByLabelText('Phase summary: Foundations');
     fireEvent.change(summary, { target: { value: 'Worth keeping' } });
     fireEvent.blur(summary);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    // Wait for the FAILURE to land, not merely for the request to go out. The
+    // revert that makes the draft dirty again happens in the promise's `.then`,
+    // so awaiting the call alone leaves a race: blur again before that state
+    // flushes and `dirty` is still false, the second attempt short-circuits, and
+    // the assertion below times out. Latent since §33 t-103 and inherited when
+    // t-104 retargeted this onto the summary; it surfaced under full-suite load,
+    // never in isolation. The error banner is rendered by the same promise, so it
+    // is the honest signal that the revert has happened.
+    expect(await screen.findByRole('alert')).toHaveTextContent(/went wrong/i);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
     // Same text, second attempt — the draft must still be dirty.
     fireEvent.blur(summary);
