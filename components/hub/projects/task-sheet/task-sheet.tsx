@@ -18,6 +18,7 @@ import { initials } from '@/components/hub/projects/presentation';
 import type {
   TaskDetailDTO,
   TaskDetailRef,
+  TaskCollision,
   TaskActionResultDTO,
   CollisionWarning,
 } from '@/components/hub/projects/task-sheet/types';
@@ -81,6 +82,73 @@ function DepRow({ dep, onJump }: { dep: TaskDetailRef; onJump: (id: string) => v
         {dep.title}
       </span>
       <StatusPill tone={s.tone} label={s.label} />
+    </button>
+  );
+}
+
+/**
+ * One overlapping open claim (§33-sweep t-109) — click to jump to that task.
+ *
+ * Echoes the Board card's collision marker (the same accent dot and slow ping)
+ * so the two surfaces read as one signal rather than two unrelated warnings.
+ * Unlike the card it names *who* holds the claim and *which* declared paths are
+ * contested, because the sheet is where that detail can actually change what you
+ * do — the card only has room to say that something is there.
+ */
+function CollisionRow({
+  collision,
+  onJump,
+}: {
+  collision: TaskCollision;
+  onJump: (id: string) => void;
+}) {
+  // A holder who was erased still leaves their claim behind, so the row has to
+  // read without them rather than dereference a null (the funnel's rule).
+  const who = collision.isMine
+    ? 'yours'
+    : collision.holder
+      ? firstName(collision.holder.name)
+      : 'former member';
+  return (
+    <button
+      type="button"
+      onClick={() => onJump(collision.taskId)}
+      className="flex w-full flex-col gap-1 rounded px-1.5 py-1.5 text-left transition-colors hover:bg-[var(--bg-tint)]"
+    >
+      <span className="flex w-full items-center gap-2">
+        <span
+          className="relative inline-block h-[5px] w-[5px] shrink-0 rounded-full"
+          style={{ backgroundColor: 'var(--accent)' }}
+        >
+          <span
+            aria-hidden
+            className="absolute -inset-0.5 animate-ping rounded-full opacity-40"
+            style={{ backgroundColor: 'var(--accent)' }}
+          />
+        </span>
+        <span className="font-mono text-[11px]" style={{ color: 'var(--ink-faint)' }}>
+          {collision.number != null ? `t-${collision.number}` : '—'}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-xs" style={{ color: 'var(--ink-soft)' }}>
+          {collision.title}
+        </span>
+        <span className="shrink-0 text-[11px]" style={{ color: 'var(--ink-faint)' }}>
+          {who}
+        </span>
+      </span>
+      {/* The contested entries, indented under the dot. These are *this* task's
+          declared paths, so they match the list directly above them. */}
+      <span className="flex flex-wrap gap-1 pl-[13px]">
+        {collision.paths.map((p) => (
+          <span
+            key={p}
+            className="rounded px-1 py-px font-mono text-[10px]"
+            style={{ backgroundColor: 'var(--accent-bg)', color: 'var(--accent-ink)' }}
+          >
+            {p}
+          </span>
+        ))}
+      </span>
     </button>
   );
 }
@@ -555,6 +623,24 @@ export function TaskSheet({
                   </p>
                 )}
               </section>
+
+              {/* Overlapping claims (§33-sweep t-109) — the soft-collision signal the
+                  Board card carries, surfaced on the surface you read *before*
+                  starting. Absent entirely when nothing overlaps: an empty
+                  "no collisions" block would be noise on almost every task. */}
+              {detail.collisions.length > 0 && (
+                <section className="flex flex-col gap-1.5">
+                  <div className={sectionLabel} style={{ color: 'var(--accent-ink)' }}>
+                    Overlapping claims{' '}
+                    <span className="normal-case">&middot; advisory, never a lock</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {detail.collisions.map((c) => (
+                      <CollisionRow key={c.taskId} collision={c} onJump={openTask} />
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* Dependency graph */}
               <section className="flex flex-col gap-2">

@@ -20,6 +20,23 @@ export interface TaskDetailRef {
   hasHolder: boolean;
 }
 
+/**
+ * An open claim elsewhere in the project whose file scope overlaps this task's
+ * (§33-sweep t-109) — mirrors `TaskCollision` in `lib/projects/task-detail.ts`.
+ */
+export interface TaskCollision {
+  /** The overlapping task, so the row can jump straight to it. */
+  taskId: string;
+  number: number | null;
+  title: string;
+  /** `null` when the holder was erased — rendered, never dereferenced. */
+  holder: UserRef | null;
+  /** True when the overlapping claim is the viewer's own — labelled, not hidden. */
+  isMine: boolean;
+  /** Which of *this* task's declared entries the other claim also covers. */
+  paths: string[];
+}
+
 /** One task's full detail (`GET /api/v1/projects/:id/tasks/:taskId`). */
 export interface TaskDetailDTO {
   id: string;
@@ -32,6 +49,11 @@ export interface TaskDetailDTO {
   kind: TaskKind;
   prUrl: string | null;
   filesScope: string[];
+  /**
+   * Open claims elsewhere whose scope overlaps `filesScope`. Empty when this task
+   * declares no scope, when nothing overlaps, or once it has merged.
+   */
+  collisions: TaskCollision[];
   /** The doer, once merged; `null` when unclaimed/erased. */
   claimer: UserRef | null;
   /**

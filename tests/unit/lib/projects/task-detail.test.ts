@@ -19,6 +19,7 @@ vi.mock('@/lib/db/client', () => ({
   prisma: {
     task: { findFirst: vi.fn() },
     projectMember: { findMany: vi.fn() },
+    taskClaim: { findMany: vi.fn() },
     user: { findMany: vi.fn() },
   },
 }));
@@ -31,6 +32,7 @@ const { getTaskDetail } = await import('@/lib/projects/task-detail');
 const getAccessible = getAccessibleProject as ReturnType<typeof vi.fn>;
 const taskFindFirst = prisma.task.findFirst as ReturnType<typeof vi.fn>;
 const memberFindMany = prisma.projectMember.findMany as ReturnType<typeof vi.fn>;
+const claimFindMany = prisma.taskClaim.findMany as ReturnType<typeof vi.fn>;
 const userFindMany = prisma.user.findMany as ReturnType<typeof vi.fn>;
 
 /** A dependency-graph neighbour (blocker or dependent). */
@@ -79,7 +81,25 @@ beforeEach(() => {
   vi.clearAllMocks();
   getAccessible.mockResolvedValue({ id: 'p1' });
   memberFindMany.mockResolvedValue([]);
+  claimFindMany.mockResolvedValue([]);
   userFindMany.mockResolvedValue([]);
+});
+
+/** An open (unreleased) claim on another task, as the collision query returns it. */
+const openClaim = (o: {
+  id: string;
+  userId?: string;
+  number?: number | null;
+  title?: string;
+  files?: string[];
+}) => ({
+  userId: o.userId ?? 'u2',
+  task: {
+    id: o.id,
+    number: o.number ?? null,
+    title: o.title ?? o.id,
+    filesScope: o.files ?? [],
+  },
 });
 
 describe('getTaskDetail', () => {
@@ -278,5 +298,84 @@ describe('getTaskDetail', () => {
     expect(detail.assignee?.id).toBe('gone');
     // Members (m1) + the current assignee appended (so the Select has its value).
     expect(detail.members.map((m) => m.id)).toEqual(['m1', 'gone']);
+  });
+});
+
+describe('getTaskDetail — overlapping claims (§33-sweep t-109)', () => {
+  it('names the overlapping task, its holder, and which declared paths collide', async () => {
+    taskFindFirst.mockResolvedValue(taskRow({ filesScope: ['lib/projects/collision.ts'] }));
+    claimFindMany.mockResolvedValue([
+      openClaim({ id: 't9', number: 9, title: 'Other work', files: ['lib/projects/**'] }),
+    ]);
+    userFindMany.mockResolvedValue([userRow('u2')]);
+    const detail = await getTaskDetail('u1', 'p1', 't1');
+    expect(detail.collisions).toEqual([
+      {
+        taskId: 't9',
+        number: 9,
+        title: 'Other work',
+        holder: userRow('u2'),
+        isMine: false,
+        // *This* task's entry, not the other's — the reader recognises their own
+        // declared path; `lib/projects/**` would name a scope they never wrote.
+        paths: ['lib/projects/collision.ts'],
+      },
+    ]);
+  });
+
+  it('only matches thanks to the wildcard normalisation (t-114)', async () => {
+    // The pairing above is glob-vs-file: before t-114 this returned nothing at
+    // all, which is precisely why the sheet had nothing to show.
+    taskFindFirst.mockResolvedValue(taskRow({ filesScope: ['components/hub/a.tsx'] }));
+    claimFindMany.mockResolvedValue([openClaim({ id: 't9', files: ['components/hub/**'] })]);
+    userFindMany.mockResolvedValue([userRow('u2')]);
+    expect((await getTaskDetail('u1', 'p1', 't1')).collisions).toHaveLength(1);
+  });
+
+  it('reports an overlapping claim held by the VIEWER, flagged rather than hidden', async () => {
+    // Two of your own tasks over the same files is a real merge conflict ahead,
+    // and in a single-member project filtering this leaves the feature inert.
+    taskFindFirst.mockResolvedValue(taskRow({ filesScope: ['lib/a.ts'] }));
+    claimFindMany.mockResolvedValue([openClaim({ id: 't9', userId: 'u1', files: ['lib/a.ts'] })]);
+    userFindMany.mockResolvedValue([userRow('u1')]);
+    const [collision] = (await getTaskDetail('u1', 'p1', 't1')).collisions;
+    expect(collision.isMine).toBe(true);
+  });
+
+  it('excludes the task under read from its own collision query', async () => {
+    taskFindFirst.mockResolvedValue(taskRow({ filesScope: ['lib/a.ts'] }));
+    await getTaskDetail('u1', 'p1', 't1');
+    expect(claimFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { releasedAt: null, taskId: { not: 't1' }, task: { feature: { projectId: 'p1' } } },
+      })
+    );
+  });
+
+  it('stays quiet when the task declares no scope, or nothing overlaps', async () => {
+    claimFindMany.mockResolvedValue([openClaim({ id: 't9', files: ['lib/a.ts'] })]);
+    taskFindFirst.mockResolvedValue(taskRow({ filesScope: [] }));
+    expect((await getTaskDetail('u1', 'p1', 't1')).collisions).toEqual([]);
+    taskFindFirst.mockResolvedValue(taskRow({ filesScope: ['web/home.tsx'] }));
+    expect((await getTaskDetail('u1', 'p1', 't1')).collisions).toEqual([]);
+  });
+
+  it('stays quiet once the task has MERGED — nothing left to coordinate', async () => {
+    taskFindFirst.mockResolvedValue(taskRow({ status: 'merged', filesScope: ['lib/a.ts'] }));
+    claimFindMany.mockResolvedValue([openClaim({ id: 't9', files: ['lib/a.ts'] })]);
+    userFindMany.mockResolvedValue([userRow('u2')]);
+    expect((await getTaskDetail('u1', 'p1', 't1')).collisions).toEqual([]);
+  });
+
+  it('renders an ERASED holder as null rather than dereferencing them', async () => {
+    // The claim outlives the user row; the funnel's rule is resolve-or-null.
+    taskFindFirst.mockResolvedValue(taskRow({ filesScope: ['lib/a.ts'] }));
+    claimFindMany.mockResolvedValue([
+      openClaim({ id: 't9', userId: 'ghost', files: ['lib/a.ts'] }),
+    ]);
+    userFindMany.mockResolvedValue([]); // 'ghost' no longer exists
+    const [collision] = (await getTaskDetail('u1', 'p1', 't1')).collisions;
+    expect(collision.holder).toBeNull();
+    expect(collision.taskId).toBe('t9');
   });
 });

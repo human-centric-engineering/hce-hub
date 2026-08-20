@@ -53,7 +53,7 @@ No other schema change: assignment is a state move on existing columns.
    rather than `update_task` because it moves the task's _status_, and `update_task`
    is explicitly the verb that doesn't. Releasing an **active** task resets it to
    `claimed` and closes its open `TaskClaim` — an active task with no worker is
-   incoherent, and a stale open claim would keep tripping the collision detector for
+   incoherent, and a stale open claim would keep tripping the [collision detector](./soft-collisions.md) for
    whoever picked it up next. Only a _different_ person's displaced work warns;
    putting your own task down is the normal case, not a collision.
 

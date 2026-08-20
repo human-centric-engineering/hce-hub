@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import {
   pathsOverlap,
   filesOverlap,
+  overlappingPaths,
   detectFileOverlapWarnings,
   type OpenClaim,
 } from '@/lib/projects/collision';
@@ -173,5 +174,46 @@ describe('filesOverlap — real scopes from the backlog (§33-sweep t-114)', () 
         ['components/hub/projects/plan/phase-band.tsx', 'lib/projects/phases-service.ts']
       )
     ).toBe(false);
+  });
+});
+
+describe('overlappingPaths (§33-sweep t-109)', () => {
+  it('returns the entries from the FIRST set, not the second', () => {
+    // The task sheet shows the reader their *own* declared paths. Echoing the
+    // other claim's scope back would name paths this task never declared —
+    // `lib/projects/**` means nothing to someone who wrote one filename.
+    expect(overlappingPaths(['lib/projects/collision.ts'], ['lib/projects/**'])).toEqual([
+      'lib/projects/collision.ts',
+    ]);
+    expect(overlappingPaths(['lib/projects/**'], ['lib/projects/collision.ts'])).toEqual([
+      'lib/projects/**',
+    ]);
+  });
+
+  it('keeps only the entries that actually overlap, in declared order', () => {
+    expect(
+      overlappingPaths(['lib/a.ts', 'web/home.tsx', 'lib/b.ts'], ['lib/**', 'docs/readme.md'])
+    ).toEqual(['lib/a.ts', 'lib/b.ts']);
+  });
+
+  it('agrees with filesOverlap in both directions', () => {
+    // The two must never disagree: one drives the Board's flag and the other the
+    // sheet's detail, and a surface that flags with nothing to show — or shows
+    // paths nothing flagged — is worse than either alone.
+    const pairs: [string[], string[]][] = [
+      [['lib/a.ts'], ['lib/**']],
+      [['lib/**'], ['web/home.tsx']],
+      [[], ['lib/**']],
+      [['lib/user/**'], ['lib/users/**']],
+    ];
+    for (const [a, b] of pairs) {
+      expect(overlappingPaths(a, b).length > 0).toBe(filesOverlap(a, b));
+      expect(overlappingPaths(b, a).length > 0).toBe(filesOverlap(b, a));
+    }
+  });
+
+  it('is empty for an empty scope on either side', () => {
+    expect(overlappingPaths([], ['lib/**'])).toEqual([]);
+    expect(overlappingPaths(['lib/**'], [])).toEqual([]);
   });
 });

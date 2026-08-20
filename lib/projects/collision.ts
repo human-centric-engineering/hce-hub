@@ -75,6 +75,25 @@ export function filesOverlap(a: string[], b: string[]): boolean {
 }
 
 /**
+ * The entries of `a` that overlap something in `b` — `filesOverlap`'s witness,
+ * for surfaces that must say *which* paths collided rather than merely that
+ * something did (§33-sweep t-109's task sheet).
+ *
+ * Returns `a`'s side deliberately. `a` is the task being read, so its own
+ * declared entries are the ones its reader recognises and can act on; echoing
+ * the other claim's scope back would name paths this task never declared.
+ *
+ * Kept beside `filesOverlap` because the two must agree: any change to the
+ * predicate belongs in `pathsOverlap`, which both delegate to, never in one of
+ * these. `filesOverlap` stays a short-circuiting `some` rather than a
+ * `length > 0` on this, because the Board runs it over every pair of open
+ * claims.
+ */
+export function overlappingPaths(a: string[], b: string[]): string[] {
+  return a.filter((x) => b.some((y) => pathsOverlap(x, y)));
+}
+
+/**
  * Warnings for open claims on *other* tasks whose file scope overlaps the task
  * being claimed. Empty when the claiming task declares no file scope (nothing
  * to overlap) or nothing overlaps.

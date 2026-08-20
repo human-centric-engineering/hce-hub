@@ -121,6 +121,9 @@ that fires on nothing. Name the directory you will genuinely work in, or the fil
 Write path segments as they appear on disk — Next.js dynamic segments (`[id]`) and route
 groups (`(hub)`) are literal directory names here, not patterns, and need no escaping.
 
+What the warnings actually look like, and on which surfaces, is in
+[soft collisions](../soft-collisions.md).
+
 ## 6 · Test strategy up front, and budget the review-fix commit
 
 State the test approach *in the plan*, matched to the repo's real harness.
