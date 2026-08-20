@@ -58,6 +58,55 @@ Inter Tight is a variable font, so the design's 450 ("body-ish emphasis") weight
 resolves. Body text on the consumer surface uses `--font-ui`; apply `var(--font-mono)`
 per-component for IDs, paths, PR links, timestamps, and micro-labels.
 
+## Favicon
+
+`public/favicon.svg` + `public/favicon.ico` carry the same mark as
+[`components/brand/brand-mark.tsx`](../../components/brand/brand-mark.tsx) — the ink
+square with a mono "H" — redrawn for a 16px canvas. Colours are this file's tokens:
+
+| Scheme | Square    | "H"       |
+| ------ | --------- | --------- |
+| light  | `#1a1a1a` | `#faf8f3` |
+| dark   | `#e8e6e1` | `#1a1916` |
+
+**The tab follows the OS, not the in-app toggle, and the two can disagree.** A favicon
+has exactly one signal available to it — `prefers-color-scheme` — while the Hub's own
+theme is user-selectable: `localStorage.theme` drives a `light`/`dark` class on `<html>`
+(the inline script in `app/layout.tsx`, kept in sync by `hooks/use-theme`), and only
+_falls back_ to the OS preference when nothing is stored. So a user on a light-mode OS
+who switches the Hub to dim gets a dim sidebar and a light-cut tab. That is a limit of
+the format, not a bug to chase: nothing in a favicon can read the app's `localStorage`.
+
+Three things about it are deliberate and easy to undo by accident:
+
+- **The "H" is a path, not type.** A favicon is a standalone document with no access to
+  `public/fonts/`, so JetBrains Mono is not available to it. The outline is a touch
+  heavier than the real SemiBold cut — hairlines vanish at 16px.
+- **Light lives on presentation attributes; dark lives in the `<style>` block.** CSS
+  beats presentation attributes, so the `prefers-color-scheme` rules win where they are
+  honoured — and a renderer that ignores the `<style>` block entirely still gets correct
+  light colours instead of defaulting both shapes to black.
+- **The ICO is generated from the SVG**, at 16/32/48/128, light only (an ICO cannot
+  adapt). Regenerate it if you change the mark, or the two drift silently. 16/32/48 are
+  what tab strips ask for; **128 is not decorative** — Safari has no SVG-favicon support,
+  so its bookmark tile and Windows' pinned shortcuts (which want 64–256px) fall back to
+  the largest raster we ship, and upstream's single 128×128 entry is what they were
+  getting before. Dropping it would have been a quiet downgrade on exactly the surfaces
+  the SVG cannot reach.
+
+Both are linked from the root `metadata.icons` in `app/layout.tsx` — a keep-mine edit
+to a platform file, because Sunrise declares no `icons` and never links its own SVG
+([divergence rows 24 + 25](./platform-divergences.md), upstream `sunrise#640`). Only
+the ICO would be found without it, by root-path convention.
+
+**`sizes` there is a selection hint, not a manifest.** It is what a browser compares when
+choosing _between_ the two links, and the SVG declares none — read as "scalable, any
+size". So the ICO declares a single `32x32` even though the file carries four sizes.
+Widening that declaration to the file's real contents hands Chrome's size-matching a
+large concrete raster to prefer over the SVG, which costs the dark-mode adaptation that
+is the only reason the SVG is linked — silently, with every gate still green. Narrow that
+declaration if you must; do not widen it.
+
 ## Rules of thumb
 
 - **Cards separate by border, not shadow** (Linear-like calm density, §13.5).

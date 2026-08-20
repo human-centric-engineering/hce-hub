@@ -25,6 +25,33 @@ export const metadata: Metadata = {
     template: `%s - ${BRAND.name}`,
   },
   description: `${BRAND.name} — internal operations platform.`,
+  // KEEP-MINE (platform-divergences row 25 — its OWN row, not row 16's): vanilla
+  // declares no `icons` at all, so the only icon any Sunrise app ever serves is
+  // `/favicon.ico`, found by root convention rather than by a link.
+  // `public/favicon.svg` ships upstream referenced by nothing (sunrise#640), which
+  // is why branding the tab needed this block as well as the two asset files.
+  //
+  // Order is the fallback chain, not a preference: a browser takes the last
+  // declaration it can render, so the ICO is listed first as the floor (Safari,
+  // and anything else without SVG-favicon support) and the SVG last for the
+  // browsers that can take it — which are also the ones that honour the file's
+  // `prefers-color-scheme` block, so the tab mark follows the OS theme there and
+  // stays on the light cut everywhere else.
+  //
+  // `sizes` is a **selection hint, not a manifest** — it is what the browser
+  // compares when choosing between these two links, and the SVG deliberately
+  // declares none, which is read as "scalable, any size". A single `32x32` here
+  // is the widely-deployed form and is left alone on purpose: the file itself
+  // carries 16/32/48/128, and declaring that whole set instead hands Chrome's
+  // size-matching a large concrete raster to prefer over the SVG — which would
+  // cost the dark-mode adaptation that is the only reason to link the SVG at
+  // all, silently, with every gate still green. Narrow it, do not widen it.
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+  },
 };
 
 export default async function RootLayout({
