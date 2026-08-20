@@ -4,8 +4,9 @@
  * The Hub never hard-locks a task (v1-requirements §5): two people *can* work
  * overlapping ground. Instead, claiming surfaces **soft warnings** — "someone
  * else has an open claim touching files you're about to touch" — so a human can
- * decide. This module is the pure overlap logic; the DB query + the claim write
- * live in the `claim_task` capability.
+ * decide. This module is the pure overlap logic. The queries that feed it live
+ * with their surfaces: `task-actions.ts` (`start_task`'s advisory return),
+ * `board.ts` (the card marker) and `task-detail.ts` (the sheet's section).
  *
  * A file-scope entry is a repo-relative path, optionally ending in a `/**` or
  * `/*` wildcard standing for "everything under here" (a hint, not enforced).

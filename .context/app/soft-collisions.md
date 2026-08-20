@@ -46,17 +46,20 @@ before that fix were repaired by it, not re-authored.
 
 Three surfaces, sharing one predicate but answering slightly different questions.
 
-| Surface                                         | Shows                                                  | Includes your own claims? |
-| ----------------------------------------------- | ------------------------------------------------------ | ------------------------- |
-| **Board card** (`board.ts` → `task-card.tsx`)   | An ambient pulsing marker: "overlaps _<other task>_"   | Yes                       |
-| **Task sheet** — _Overlapping claims_           | The task, who holds it, and which declared paths clash | Yes, labelled `yours`     |
-| **`start_task` / `claim_task`** advisory return | A warning per overlapping claim                        | **No**                    |
+| Surface                                       | Shows                                                  | Includes your own claims? |
+| --------------------------------------------- | ------------------------------------------------------ | ------------------------- |
+| **Board card** (`board.ts` → `task-card.tsx`) | An ambient pulsing marker naming the other task        | Yes                       |
+| **Task sheet** — _Overlapping claims_         | The task, who holds it, and which declared paths clash | Yes, labelled `yours`     |
+| **`start_task`** advisory return              | A warning per overlapping claim                        | **No**                    |
 
-The MCP verbs exclude your own open claims because they answer "is somebody
-_already here_?" at the moment you take a task over. The two visual surfaces
-include them, and the sheet labels them `yours`: two of your own tasks in flight
-over the same files is a real merge conflict ahead, and in a single-member project
-filtering them out would leave the feature showing nothing at all.
+`start_task` is the only verb that returns these — `detectFileOverlapWarnings` has
+exactly one caller. It excludes your own open claims because it answers a different
+question: "is somebody _already here_?", asked at the moment you take a task over.
+
+The two visual surfaces include them, and the sheet labels them `yours`. Two of your
+own tasks in flight over the same files is a real merge conflict ahead, and in a
+single-member project filtering them out would leave the feature showing nothing at
+all.
 
 The sheet does **not** require the task to hold an open claim of its own — that is
 the point of putting it there. The sheet is the surface you read _before_ starting,
