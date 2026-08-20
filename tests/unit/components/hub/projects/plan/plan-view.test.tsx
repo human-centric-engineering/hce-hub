@@ -419,6 +419,29 @@ describe('PlanView phase grouping (f-phases §22 t2)', () => {
     expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument();
   });
 
+  it('treats an EMPTY summary as no summary, not as a blank intent', () => {
+    // `??` only falls back on null, but `''` is storable: both capabilities and
+    // both routes accept `z.string()`, and only the dialog coerced it to null. An
+    // agent told "null clears it" that sends `''` would otherwise blank the band
+    // and silently suppress a description that had been showing (`/code-review`).
+    render(
+      <PlanView
+        plan={banded([
+          {
+            id: 'flow',
+            name: 'Project flow',
+            status: 'active',
+            ordinal: 0,
+            summary: '',
+            description: 'The long-form intent, which must still show.',
+            features: [feature({ id: 'a', title: 'Some work' })],
+          },
+        ])}
+      />
+    );
+    expect(screen.getByText(/must still show/)).toBeInTheDocument();
+  });
+
   it('falls back to the description when no summary is written', () => {
     // Every phase predates this field, so the fallback is what keeps them all
     // exactly as they were until someone writes one.

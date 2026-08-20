@@ -134,6 +134,13 @@ describe('describeEvent — phase kinds', () => {
     expect(
       describeEvent(eventOf('phase_updated', { fields: ['description'], name: 'Foundations' }))
     ).toBe('edited the intent of Foundations');
+    // §33-sweep t-104: the manage dialog writes `summary`, so this is the field a
+    // UI intent edit actually journals. Without a case for it, every such edit
+    // read as the generic "updated the phase" and the specific verb survived only
+    // on the `description` path the UI can no longer reach (`/code-review`).
+    expect(
+      describeEvent(eventOf('phase_updated', { fields: ['summary'], name: 'Foundations' }))
+    ).toBe('edited the intent of Foundations');
   });
 
   it('does not claim one specific change when several landed together', () => {
@@ -150,6 +157,9 @@ describe('describeEvent — phase kinds', () => {
       'set the phase to active'
     );
     expect(describeEvent(eventOf('phase_updated', { fields: ['description'] }))).toBe(
+      'edited the intent of the phase'
+    );
+    expect(describeEvent(eventOf('phase_updated', { fields: ['summary'] }))).toBe(
       'edited the intent of the phase'
     );
   });

@@ -83,7 +83,14 @@ export function describeEvent(event: ProjectEventDTO): string {
             ? `set${named || ' the phase'} to ${meta.status}`
             : `changed the status of${named || ' the phase'}`;
         }
-        if (fields[0] === 'description') return `edited the intent of${named || ' the phase'}`;
+        // Both fields are "the intent" at the Log's granularity — a reader wants
+        // to know the phase's stated purpose changed, not which column held it.
+        // `summary` is what the manage dialog writes since §33-sweep t-104, so
+        // without it every UI intent edit fell through to the generic line below
+        // and the specific verb survived only on the `description` path that the
+        // UI can no longer reach (`/code-review`).
+        if (fields[0] === 'summary' || fields[0] === 'description')
+          return `edited the intent of${named || ' the phase'}`;
       }
       return `updated the phase${named}`;
     }

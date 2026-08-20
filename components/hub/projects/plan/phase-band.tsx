@@ -193,9 +193,9 @@ export function PhaseBand({
         The fallback keeps a phase nobody has summarised yet exactly as it was.
         The full text belongs on a phase page (idea #9).
       */}
-      {open && (band.summary ?? band.description) && (
+      {open && (band.summary || band.description) && (
         <p className="text-muted-foreground mt-1 line-clamp-2 px-2 pl-8 text-xs leading-relaxed">
-          {band.summary ?? band.description}
+          {band.summary || band.description}
         </p>
       )}
       {open && <div className="mt-3 space-y-3">{rows}</div>}

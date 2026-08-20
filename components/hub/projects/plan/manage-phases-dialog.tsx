@@ -64,7 +64,6 @@ export interface ManagedPhase {
    * a real phase page (idea #9 / §37 `f-phase-page`).
    */
   summary: string | null;
-  /** The authored intent — why the phase exists, and what would complete it. */
   status: PhaseStatus;
   ordinal: number;
   featureCount: number;
@@ -154,10 +153,10 @@ export function ManagePhasesDialog({
   const rename = (id: string, name: string) => void call(`${base}/${id}`, 'PATCH', { name });
   const setStatus = (id: string, status: PhaseStatus) =>
     void call(`${base}/${id}`, 'PATCH', { status });
-  // The PATCH route has accepted `description` since f-phases §22 t3 — only the UI
-  // was missing, so this is client-only. Empty clears it (the route takes null).
-  // Returns `call`'s outcome rather than discarding it: the row needs to know
-  // whether the write landed, so a failed save can be retried (§33 t-103 review).
+  // Empty clears it — the route takes null, and normalises `''` to null too, so
+  // the two agree. Returns `call`'s outcome rather than discarding it: the row
+  // needs to know whether the write landed, so a failed save can be retried
+  // (§33 t-103 review).
   const setSummary = (id: string, summary: string) =>
     call(`${base}/${id}`, 'PATCH', { summary: summary.trim() || null });
 
@@ -174,13 +173,15 @@ export function ManagePhasesDialog({
   };
   /* v8 ignore stop */
 
-  // Pending intent edits, keyed by phase id. A Textarea saves on blur, but closing
-  // the dialog — Escape, the X, or a click outside — unmounts the content without
-  // delivering one, so a paragraph of typed intent would vanish with no error and
-  // no indication. The name Input survives that because Enter also commits it and
-  // it is short; a multi-line intent has neither defence. Rows register a flush
-  // here and the dialog runs them on close, which covers every dismissal path in
-  // one place rather than guessing at each one.
+  // Pending intent edits, keyed `${phaseId}:${field}`. The summary saves on blur,
+  // but closing the dialog — Escape, the X, or a click outside — unmounts the
+  // content without delivering one, so a typed line would vanish with no error and
+  // no indication. Rows register a flush here and the dialog runs them on close,
+  // which covers every dismissal path in one place rather than guessing at each
+  // one. (Written when this guarded a multi-line Textarea with no other defence;
+  // the summary also commits on Enter, but the dismissal paths are unchanged and
+  // Escape in particular closes *without* committing, so the flush still earns its
+  // place.)
   const pendingEdits = useRef(new Map<string, () => void>());
   const flushPending = () => {
     for (const flush of pendingEdits.current.values()) flush();
@@ -290,9 +291,11 @@ export function ManagePhasesDialog({
 }
 
 /**
- * One free-text phase field's draft state, shared by the summary and the intent
- * (§33-sweep t-104 extracted it; every rule below predates that and was learned
- * the hard way on the description).
+ * One free-text phase field's draft state. Its only caller is the summary — it was
+ * extracted (§33-sweep t-104) when the dialog briefly had two such fields, and kept
+ * when the owner removed the long-form one, because every rule below was learned the
+ * hard way on that field and all of them still apply to this one. The keying stays
+ * per-field so a second caller costs nothing.
  *
  *  - **Adopt the server value whenever it changes** (own save landed, or another
  *    client edited) so a stale local value cannot clobber it on the next blur.

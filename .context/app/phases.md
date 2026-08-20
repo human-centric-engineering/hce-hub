@@ -186,10 +186,13 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
     and flush-on-close rules learned the hard way on the long-form field across §33
     t-98 / t-102 / t-103. Those rules outlived the control that taught them: the
     tests were **retargeted onto the summary, not deleted**, because the behaviour
-    they pin still exists. Reorder is **optimistic** —
-    the list follows the drop immediately from local order state, then `PUT`s the
-    batch order and `router.refresh()`es; a failed write reverts to the server order
-    and surfaces the error. The pure reorder math is `reorderedIds()`.
+    they pin still exists.
+
+  Reorder is **optimistic** — the list follows the drop immediately from local order
+  state, then `PUT`s the batch order and `router.refresh()`es; a failed write reverts
+  to the server order and surfaces the error. The pure reorder math is
+  `reorderedIds()`.
+
 - **A phase is linkable.** `/projects/<ref>?phase=<id>` opens the Plan with that
   band expanded and scrolled to (offset past the sticky topbar). The link outranks
   collapse-by-default — following one must not land you on a closed row. Plan is the
