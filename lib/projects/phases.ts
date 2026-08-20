@@ -18,6 +18,12 @@ import { getAccessibleProject } from '@/lib/projects/access';
 export interface PhaseView {
   id: string;
   name: string;
+  /**
+   * Short plain-text one-liner (§33-sweep t-104), mirroring `Feature.summary`.
+   * The band renders `summary ?? description`, so a phase without one is no worse
+   * off than before this field existed.
+   */
+  summary: string | null;
   description: string | null;
   status: PhaseStatus;
   ordinal: number;
@@ -47,6 +53,7 @@ export async function listProjectPhases(userId: string, projectId: string): Prom
     select: {
       id: true,
       name: true,
+      summary: true,
       description: true,
       status: true,
       ordinal: true,
@@ -59,6 +66,7 @@ export async function listProjectPhases(userId: string, projectId: string): Prom
   return phases.map((p) => ({
     id: p.id,
     name: p.name,
+    summary: p.summary,
     description: p.description,
     status: p.status,
     ordinal: p.ordinal,

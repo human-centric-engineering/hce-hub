@@ -394,6 +394,7 @@ model Phase {
   projectId   String
   ordinal     Int // display order within the project
   name        String
+  summary     String?     @db.Text // short plain one-liner for the Plan band / compact views — mirrors Feature.summary (§33-sweep t-104)
   description String?     @db.Text
   status      PhaseStatus @default(upcoming)
   startedAt   DateTime?

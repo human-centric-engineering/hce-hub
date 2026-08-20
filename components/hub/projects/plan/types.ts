@@ -141,6 +141,12 @@ export interface PlanPhaseBand {
   status: PhaseStatus | null;
   ordinal: number | null;
   /**
+   * The phase's one-line intent, **plain text** (§33-sweep t-104). What the band
+   * actually renders. `null` for the residual band, and for any phase nobody has
+   * written one for yet — the band then falls back to `description`.
+   */
+  summary: string | null;
+  /**
    * The phase's authored intent — why this grouping exists, and what would make
    * it complete. Written since f-phases §22 and carried by the payload all along;
    * this mirror simply never declared it, so nothing could render it (§33 t-99).

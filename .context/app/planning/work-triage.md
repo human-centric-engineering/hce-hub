@@ -183,13 +183,20 @@ said it would retire once the machinery landed.
 
 ## Phases carry intent
 
-A phase description states **what the phase is for, and what would make it
-complete.** A convention on the existing `Phase.description`, deliberately not a
-phase-level `doneWhen`: Phase serves three semantics from one model (epic /
-release band / idea park), and a completion contract is nonsense for a park. A
-field meaningful in one of three modes is a field left blank. Promote it to a real
-field only if two or three phases prove the convention too weak — the same
+A phase states **what it is for, and what would make it complete.** A convention,
+deliberately not a phase-level `doneWhen`: Phase serves three semantics from one
+model (epic / release band / idea park), and a completion contract is nonsense for a
+park. A field meaningful in one of three modes is a field left blank. Promote it to a
+real field only if two or three phases prove the convention too weak — the same
 defer-until-it-earns-it discipline applied to the `Issue` and `Release` models.
+
+**The convention lives on `Phase.summary`** since §33-sweep t-104 — one plain line,
+which is what the Plan band renders and the only intent the manage dialog edits
+(*"the summary IS the intent"*, owner, 2026-08-20). `Phase.description` still holds
+the long-form detail the Hub's own phases accumulated — completion conditions,
+sequencing decisions — and is still writable over `update_phase`, but has no UI
+writer and no reader beyond the band's `summary ?? description` fallback until §37
+`f-phase-page`. See [phases](../phases.md).
 
 Phase membership changes, renames and status changes are **journalled** (§33), so
 a move appends rather than overwrites. That is what makes re-scoping a phase

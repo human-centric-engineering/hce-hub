@@ -168,9 +168,16 @@ export interface PlanPhaseBand {
   /** `null` for the residual band; `parked` bands are rendered collapsed. */
   status: PhaseStatus | null;
   /**
+   * The phase's one-line intent, plain text (§33-sweep t-104). What the band
+   * renders — `description` is long-form markdown and was being clamped to two
+   * lines mid-sentence, which is the defect this replaced.
+   */
+  summary: string | null;
+  /**
    * The phase's authored intent — why this grouping exists (f-work-kinds §32
    * t-80). Written since f-phases §22 and carried here so it can finally be
    * rendered and projected; `null` for the residual band, which nobody authored.
+   * Still the band's fallback when no `summary` is written.
    */
   description: string | null;
   /**
@@ -233,6 +240,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
       name: true,
       status: true,
       ordinal: true,
+      summary: true,
       description: true,
       startedAt: true,
       completedAt: true,
@@ -444,6 +452,7 @@ type PhaseRow = {
   name: string;
   status: PhaseStatus;
   ordinal: number;
+  summary: string | null;
   description: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -535,6 +544,7 @@ function groupIntoPhaseBands(
       name: p.name,
       status: p.status,
       ordinal: p.ordinal,
+      summary: p.summary,
       description: p.description,
       startedAt: p.startedAt?.toISOString() ?? null,
       completedAt: p.completedAt?.toISOString() ?? null,
@@ -548,6 +558,7 @@ function groupIntoPhaseBands(
       name: null,
       status: null,
       ordinal: null,
+      summary: null,
       description: null,
       // The residual band is not a phase, so it has no lifecycle of its own.
       startedAt: null,

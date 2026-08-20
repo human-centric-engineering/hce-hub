@@ -14,6 +14,7 @@ const planFixture: ProjectPlanDTO = {
       name: null,
       status: null,
       ordinal: null,
+      summary: null,
       description: null,
       startedAt: null,
       completedAt: null,

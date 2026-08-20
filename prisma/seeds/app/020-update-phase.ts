@@ -10,12 +10,17 @@ import type { SeedUnit } from '@/prisma/runner';
 export const updatePhaseFunctionDefinition = {
   name: 'update_phase',
   description:
-    'Edit an existing phase: rename it, change its description, or advance its status (upcoming → active → complete, or park it). Only supplied fields change; a null description clears it. Any project member may edit a phase. (Reordering is a separate batch operation.)',
+    'Edit an existing phase: rename it, set its one-line summary, change its long-form description, or advance its status (upcoming → active → complete, or park it). Only supplied fields change; a null description clears it. Any project member may edit a phase. (Reordering is a separate batch operation.)',
   parameters: {
     type: 'object',
     properties: {
       phaseId: { type: 'string', description: 'The phase to edit.' },
       name: { type: 'string', description: 'New phase name.' },
+      summary: {
+        type: ['string', 'null'],
+        description:
+          'A short PLAIN-TEXT one-liner shown on the Plan band — what this phase is for, in a sentence. Not markdown: it is rendered raw, so syntax would leak as source. The long-form `description` stays the place for detail. Null clears it.',
+      },
       description: {
         type: ['string', 'null'],
         description: 'New description (markdown); null clears it.',

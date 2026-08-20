@@ -29,6 +29,17 @@ export const GET = withAuth<{ id: string }>(async (_request, session, { params }
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(200),
+  // Plain text, and shorter than `description` on purpose — it is the one line the
+  // Plan band renders (§33-sweep t-104).
+  // `''` normalises to null: the band falls back to `description` on a missing
+  // summary, and a stored blank would suppress that fallback instead of
+  // clearing it. An agent told "null clears it" that sends `''` gets the same
+  // outcome it asked for (`/code-review`).
+  summary: z
+    .string()
+    .max(300)
+    .nullish()
+    .transform((v) => (typeof v === 'string' && v.trim() === '' ? null : v)),
   description: z.string().max(2000).nullish(),
   status: z.enum(['upcoming', 'active', 'complete', 'parked']).optional(),
   ordinal: z.number().int().min(0).optional(),
@@ -49,6 +60,7 @@ export const POST = withAuth<{ id: string }>(async (request, session, { params }
 
   const result = await createPhase(session.user.id, id, {
     name: parsed.data.name,
+    summary: parsed.data.summary,
     description: parsed.data.description,
     status: parsed.data.status,
     ordinal: parsed.data.ordinal,

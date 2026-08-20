@@ -42,7 +42,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { FieldHelp } from '@/components/ui/field-help';
 import {
   Select,
@@ -57,8 +56,14 @@ import type { PhaseStatus } from '@/components/hub/projects/plan/types';
 export interface ManagedPhase {
   id: string;
   name: string;
-  /** The authored intent — why the phase exists, and what would complete it. */
-  description: string | null;
+  /**
+   * Short plain-text one-liner — what the Plan band renders, and the only intent
+   * this dialog edits (§33-sweep t-104). The long-form `description` is still on
+   * the model and still writable over `update_phase`, but has no control here:
+   * the owner removed it on 2026-08-20 — *"the summary IS the intent"* — pending
+   * a real phase page (idea #9 / §37 `f-phase-page`).
+   */
+  summary: string | null;
   status: PhaseStatus;
   ordinal: number;
   featureCount: number;
@@ -148,12 +153,12 @@ export function ManagePhasesDialog({
   const rename = (id: string, name: string) => void call(`${base}/${id}`, 'PATCH', { name });
   const setStatus = (id: string, status: PhaseStatus) =>
     void call(`${base}/${id}`, 'PATCH', { status });
-  // The PATCH route has accepted `description` since f-phases §22 t3 — only the UI
-  // was missing, so this is client-only. Empty clears it (the route takes null).
-  // Returns `call`'s outcome rather than discarding it: the row needs to know
-  // whether the write landed, so a failed save can be retried (§33 t-103 review).
-  const setDescription = (id: string, description: string) =>
-    call(`${base}/${id}`, 'PATCH', { description: description.trim() || null });
+  // Empty clears it — the route takes null, and normalises `''` to null too, so
+  // the two agree. Returns `call`'s outcome rather than discarding it: the row
+  // needs to know whether the write landed, so a failed save can be retried
+  // (§33 t-103 review).
+  const setSummary = (id: string, summary: string) =>
+    call(`${base}/${id}`, 'PATCH', { summary: summary.trim() || null });
 
   // dnd-kit drag glue — the reorder computation lives in the unit-tested
   // `reorderedIds`; this handler only fires on a real pointer/keyboard drag, which
@@ -168,13 +173,15 @@ export function ManagePhasesDialog({
   };
   /* v8 ignore stop */
 
-  // Pending intent edits, keyed by phase id. A Textarea saves on blur, but closing
-  // the dialog — Escape, the X, or a click outside — unmounts the content without
-  // delivering one, so a paragraph of typed intent would vanish with no error and
-  // no indication. The name Input survives that because Enter also commits it and
-  // it is short; a multi-line intent has neither defence. Rows register a flush
-  // here and the dialog runs them on close, which covers every dismissal path in
-  // one place rather than guessing at each one.
+  // Pending intent edits, keyed `${phaseId}:${field}`. The summary saves on blur,
+  // but closing the dialog — Escape, the X, or a click outside — unmounts the
+  // content without delivering one, so a typed line would vanish with no error and
+  // no indication. Rows register a flush here and the dialog runs them on close,
+  // which covers every dismissal path in one place rather than guessing at each
+  // one. (Written when this guarded a multi-line Textarea with no other defence;
+  // the summary also commits on Enter, but the dismissal paths are unchanged and
+  // Escape in particular closes *without* committing, so the flush still earns its
+  // place.)
   const pendingEdits = useRef(new Map<string, () => void>());
   const flushPending = () => {
     for (const flush of pendingEdits.current.values()) flush();
@@ -202,14 +209,15 @@ export function ManagePhasesDialog({
           <DialogTitle>Manage phases</DialogTitle>
           <DialogDescription className="flex items-center gap-1">
             <span>
-              Create, rename, describe, drag to reorder, or set the status of this project&rsquo;s
+              Create, rename, summarise, drag to reorder, or set the status of this project&rsquo;s
               phases.
             </span>
-            <FieldHelp title="Phase intent" ariaLabel="What to write in a phase description">
+            <FieldHelp title="Phase intent" ariaLabel="What to write in a phase summary">
               <p>
-                A phase description says <strong>what the phase is for</strong>, and{' '}
+                One plain line saying <strong>what the phase is for</strong>, and where it fits,{' '}
                 <strong>what would make it complete</strong>. It shows under the phase in the plan,
-                so the grouping explains itself.
+                so the grouping explains itself &mdash; so write it to be read there, not as a
+                document.
               </p>
               <p>
                 Deliberately not a checklist: a phase can be an epic, a release band or an idea
@@ -247,7 +255,7 @@ export function ManagePhasesDialog({
                   disabled={working}
                   onRename={rename}
                   onStatus={setStatus}
-                  onDescribe={setDescription}
+                  onSummarise={setSummary}
                   registerPending={registerPending}
                 />
               ))}
@@ -282,19 +290,97 @@ export function ManagePhasesDialog({
   );
 }
 
+/**
+ * One free-text phase field's draft state. Its only caller is the summary — it was
+ * extracted (§33-sweep t-104) when the dialog briefly had two such fields, and kept
+ * when the owner removed the long-form one, because every rule below was learned the
+ * hard way on that field and all of them still apply to this one. The keying stays
+ * per-field so a second caller costs nothing.
+ *
+ *  - **Adopt the server value whenever it changes** (own save landed, or another
+ *    client edited) so a stale local value cannot clobber it on the next blur.
+ *    Keyed on the value itself, so in-progress typing survives a refresh caused by
+ *    a *different* row.
+ *  - **An empty value is legitimate** — it clears the field — so `dirty` compares
+ *    against the stored value rather than requiring content.
+ *  - **Trimmed on BOTH sides.** Nothing trims on the write path (the route schema
+ *    is `.nullish()`, not `.trim()`), so an MCP-authored value can arrive with a
+ *    trailing newline; comparing it against a trimmed local value made merely
+ *    tabbing through the field "dirty", and since §33 t-98 journals every phase
+ *    change that phantom PATCH wrote a `phase_updated` event nobody made.
+ *  - **`lastSent` is state, not a ref**, because `dirty` is derived from it during
+ *    render — a ref read there would not re-render when it changed, which is what
+ *    the `react-hooks/refs` rule protects against.
+ *  - **Optimistic, then reverted if the write failed.** Recording the send up front
+ *    stops a blur-then-close sending twice; leaving it recorded after a failure
+ *    silently ate the draft (the field went clean, the next blur short-circuited,
+ *    and the server value never changed so the adopt effect never undid it). A 409
+ *    says "retry", and until §33 t-103 the UI made retrying impossible.
+ */
+function useFieldDraft({
+  serverValue,
+  save,
+  registerPending,
+  pendingKey,
+}: {
+  serverValue: string | null;
+  save: (value: string) => Promise<boolean>;
+  registerPending: (key: string, flush: (() => void) | null) => void;
+  pendingKey: string;
+}) {
+  const [value, setValue] = useState(serverValue ?? '');
+  const [lastSent, setLastSent] = useState<string | null>(null);
+  useEffect(() => {
+    setValue(serverValue ?? '');
+    setLastSent(null);
+  }, [serverValue]);
+
+  const committed = (lastSent ?? serverValue ?? '').trim();
+  const dirty = value.trim() !== committed;
+
+  const flush = () => {
+    if (!dirty) return;
+    setLastSent(value);
+    void save(value).then((ok) => {
+      if (!ok) setLastSent(null); // dirty again ⇒ blur retries, close still flushes
+    });
+    // ACCEPTED LIMIT (owner, 2026-08-19): this covers the BLUR path only. Save via
+    // the close path and the row unmounts before the response, so the revert above
+    // is a no-op and the draft is gone — and the error banner lives inside
+    // `DialogContent`, so nothing is shown either; you find out on reopening. Not
+    // fixed because closing it means lifting the error state out of `DialogContent`
+    // for a save that has to fail in the same instant you dismiss the dialog.
+  };
+
+  // Report an uncommitted draft to the dialog so closing it commits rather than
+  // discards. Registered as `flush` itself, so the close path runs the same guard
+  // as blur and cannot duplicate a write. Challenged by review (§33 t-102) on the
+  // grounds that a pointerdown-dismissal fires `flushPending` and `onBlur` from one
+  // render's closure; measured, and it does NOT — React flushes each discrete
+  // event's updates before the next handler runs, so the second call sees the new
+  // closure and short-circuits.
+  const pending = dirty ? flush : null;
+  useEffect(() => {
+    registerPending(pendingKey, pending);
+    return () => registerPending(pendingKey, null);
+  }, [pendingKey, pending, registerPending]);
+
+  return { value, setValue, flush };
+}
+
 function PhaseRow({
   phase,
   disabled,
   onRename,
   onStatus,
-  onDescribe,
+  onSummarise,
   registerPending,
 }: {
   phase: ManagedPhase;
   disabled: boolean;
   onRename: (id: string, name: string) => void;
   onStatus: (id: string, status: PhaseStatus) => void;
-  onDescribe: (id: string, description: string) => Promise<boolean>;
+  onSummarise: (id: string, summary: string) => Promise<boolean>;
   /** Report an uncommitted intent so the dialog can save it on close. */
   registerPending: (id: string, flush: (() => void) | null) => void;
 }) {
@@ -319,79 +405,16 @@ function PhaseRow({
     if (dirty) onRename(phase.id, name.trim());
   };
 
-  // Same adopt-the-server-value discipline as the name, for the same reason: a
-  // stale local value must not clobber another client's edit on the next blur.
-  // Unlike the name, an EMPTY description is legitimate (it clears the intent),
-  // so `dirty` compares against the stored value rather than requiring content.
-  const [description, setDescription] = useState(phase.description ?? '');
-  // What this row last SENT, which is not what the server has yet: the refreshed
-  // prop arrives a round-trip later, and in that window a blur-save followed by an
-  // immediate close would otherwise send the identical value a second time. Reset
-  // when the stored value changes, so the server's copy governs again.
-  //
-  // State, not a ref, because `descriptionDirty` is derived from it during render —
-  // a ref read there would not re-render when it changed, which is exactly what the
-  // `react-hooks/refs` rule is protecting against.
-  const [lastSent, setLastSent] = useState<string | null>(null);
-  useEffect(() => {
-    setDescription(phase.description ?? '');
-    setLastSent(null);
-  }, [phase.description]);
-
-  // Trimmed on BOTH sides. Nothing trims on the write path (the route's schema is
-  // `.nullish()`, not `.trim()`), so an MCP-authored description can arrive with a
-  // trailing newline — and comparing it against a trimmed local value made merely
-  // tabbing through the field "dirty". Since §33 t-98 journals every phase change,
-  // that phantom PATCH also wrote a `phase_updated` event nobody made.
-  const committed = (lastSent ?? phase.description ?? '').trim();
-  const descriptionDirty = description.trim() !== committed;
-
-  const saveDescription = () => {
-    if (!descriptionDirty) return;
-    // Optimistic, then REVERTED IF THE WRITE FAILED. Recording the send up front is
-    // what stops a blur-then-close sending twice, but leaving it recorded after a
-    // failure silently ate the draft: `committed` became the typed value, so the
-    // field went clean, the next blur short-circuited, `pendingSave` de-registered
-    // so closing no longer carried it either — and `phase.description` never
-    // changed, so the adopt-the-server-value effect never fired to undo any of it.
-    // The text survived only in a textarea nothing would ever read again.
-    //
-    // This PR is what makes that reachable on purpose: a 409 says "retry", and
-    // until now the UI made retrying impossible (§33 t-103 review).
-    setLastSent(description);
-    void onDescribe(phase.id, description).then((ok) => {
-      if (!ok) setLastSent(null); // dirty again ⇒ blur retries, close still flushes
-    });
-    // ACCEPTED LIMIT (owner, 2026-08-19): this covers the BLUR path only. Save via
-    // the close path and the row unmounts before the response, so the revert above
-    // is a no-op and the draft is gone — and the error banner lives inside
-    // `DialogContent`, so nothing is shown either; you find out on reopening, when
-    // the textarea re-seeds from the unchanged server value. Pre-existing, not
-    // introduced by the 409.
-    //
-    // Not fixed because closing it means lifting the error state (or the pending
-    // draft) out of `DialogContent`, which is a structural change for a save that
-    // has to fail in the same instant you dismiss the dialog. Revisit if 409s stop
-    // being rare — i.e. once there are enough concurrent writers to make losing
-    // that race normal rather than unlucky.
-  };
-
-  // Report an uncommitted draft to the dialog so closing it commits rather than
-  // discards it. Registered as `saveDescription` itself, so the close path runs
-  // the same guard as blur and cannot duplicate a write.
-  //
-  // That last clause was challenged by review (§33 t-102) on the grounds that a
-  // pointerdown-dismissal fires `flushPending` and `onBlur` from one render's
-  // closure, so both would see a stale `descriptionDirty`. Measured, and it does
-  // NOT: React flushes each discrete event's updates before the next handler runs,
-  // and its delegated listener reads the CURRENT props off the fiber — so the
-  // second call gets the new closure and short-circuits. No synchronous ref guard
-  // is needed; the test below pins the behaviour rather than the mechanism.
-  const pendingSave = descriptionDirty ? saveDescription : null;
-  useEffect(() => {
-    registerPending(phase.id, pendingSave);
-    return () => registerPending(phase.id, null);
-  }, [phase.id, pendingSave, registerPending]);
+  // Both free-text fields share one draft discipline — see `useFieldDraft`. The
+  // summary is a §33-sweep t-104 addition; giving it its own copy of this logic
+  // would have been ~40 lines of subtle, hard-won behaviour duplicated, and two
+  // copies drift.
+  const summaryDraft = useFieldDraft({
+    serverValue: phase.summary,
+    save: (v) => onSummarise(phase.id, v),
+    registerPending,
+    pendingKey: `${phase.id}:summary`,
+  });
 
   return (
     <div ref={setNodeRef} style={style} className="space-y-1.5">
@@ -446,16 +469,23 @@ function PhaseRow({
         no explicit save in this dialog, and adding one only for this field would
         make the two edits behave differently for no reason.
       */}
-      <Textarea
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        onBlur={saveDescription}
-        rows={2}
-        maxLength={2000}
+      {/*
+        The one-liner the Plan band actually renders (§33-sweep t-104). An `Input`
+        rather than a `Textarea` because it IS one line — the control's shape is
+        the strongest hint that markdown and paragraphs do not belong here.
+      */}
+      <Input
+        value={summaryDraft.value}
+        onChange={(e) => summaryDraft.setValue(e.target.value)}
+        onBlur={summaryDraft.flush}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') summaryDraft.flush();
+        }}
+        maxLength={300}
         disabled={disabled}
-        placeholder="What is this phase for, and what would make it complete?"
-        aria-label={`Phase intent: ${phase.name}`}
-        className="ml-6 w-[calc(100%-1.5rem)] resize-y text-xs"
+        placeholder="One line: what is this phase for?"
+        aria-label={`Phase summary: ${phase.name}`}
+        className="ml-6 w-[calc(100%-1.5rem)] text-xs"
       />
     </div>
   );
