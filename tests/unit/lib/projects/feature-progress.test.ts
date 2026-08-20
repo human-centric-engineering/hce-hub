@@ -86,7 +86,7 @@ describe('computeFeatureProgress', () => {
       expect(p.total).toBe(2);
       expect(p.merged).toBe(2); // still reads 2/2 — visibly complete
       expect(p.blocked).toBe(0);
-      expect(p.openBugs).toBe(0); // an enhancement is not a fix
+      expect(p.openBugs).toBe(0); // an enhancement is not a bug
     });
 
     it('excludes post-ship feature_work from COMPLETION too — the boundary is kind-blind', () => {

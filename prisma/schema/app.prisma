@@ -229,7 +229,7 @@ enum TaskStatus {
 // (f-bug-handling §22-02, split by f-work-kinds §32 t-79).
 //
 // `bug` = a defect on the feature it broke: `next_task` biases it up, and it's
-// excluded from completion progress and tallied as an open fix instead.
+// excluded from completion progress and tallied as an open bug instead.
 // `enhancement` = a task-sized improvement to work that already exists — the kind
 // that used to have to masquerade as a `bug` to avoid denting a shipped feature's
 // progress bar, which falsified the very provenance the enum exists to record.

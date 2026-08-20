@@ -82,8 +82,8 @@ describe('FeatureRow', () => {
     expect(screen.queryByText('the long one')).not.toBeInTheDocument();
   });
 
-  describe('open-fixes label (f-bug-handling §22-02)', () => {
-    const withFixes = (openBugs: number) =>
+  describe('open-bugs label (f-bug-handling §22-02)', () => {
+    const withBugs = (openBugs: number) =>
       feature({
         status: 'shipped',
         tasks: [
@@ -109,18 +109,18 @@ describe('FeatureRow', () => {
         },
       });
 
-    it('surfaces multiple open bug fixes as "· N open bugs"', () => {
-      renderRow({ feature: withFixes(2) });
+    it('surfaces multiple open bugs as "· N open bugs"', () => {
+      renderRow({ feature: withBugs(2) });
       expect(screen.getByText(/open bugs/)).toBeInTheDocument();
     });
 
-    it('uses the singular "· 1 open bug" for a single fix', () => {
-      renderRow({ feature: withFixes(1) });
+    it('uses the singular "· 1 open bug" for a single bug', () => {
+      renderRow({ feature: withBugs(1) });
       expect(screen.getByText(/open bug$/)).toBeInTheDocument();
     });
 
-    it('shows no open-fixes label when there are none', () => {
-      renderRow({ feature: withFixes(0) });
+    it('shows no open-bugs label when there are none', () => {
+      renderRow({ feature: withBugs(0) });
       expect(screen.queryByText(/open bug/)).not.toBeInTheDocument();
     });
 
