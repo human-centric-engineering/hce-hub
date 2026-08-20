@@ -7,11 +7,12 @@
  * decide. This module is the pure overlap logic; the DB query + the claim write
  * live in the `claim_task` capability.
  *
- * File-scope entries are paths or globs (a hint, not enforced). v1 overlap is a
- * deliberately simple, forgiving heuristic: two entries overlap if they're the
- * same path or one contains the other as a directory prefix. It's a *signal*,
- * not a precise conflict analysis — false positives are cheap (a warning), false
- * negatives just mean no warning.
+ * A file-scope entry is a repo-relative path, optionally ending in a `/**` or
+ * `/*` wildcard standing for "everything under here" (a hint, not enforced).
+ * Overlap is deliberately simple and forgiving: normalise a trailing wildcard
+ * away, then treat two entries as overlapping when they are the same path or
+ * one is a directory prefix of the other. It is a *signal*, not a conflict
+ * analysis — a false positive costs a warning, a false negative costs silence.
  */
 
 /** An open claim on another task, as seen when computing collisions. */
@@ -34,9 +35,30 @@ export interface CollisionWarning {
   claimedAt?: Date;
 }
 
-/** Strip trailing slashes for comparison. */
+/**
+ * Strip trailing slashes, then any trailing wildcard segments, so `dir/**` and
+ * `dir/*` both collapse to `dir` and the prefix rule below does the rest.
+ *
+ * **The wildcard strip is what makes this module do anything** (§33-sweep
+ * t-114). Without it the comparison was literal, so a `dir/**` scope could
+ * match another `dir/**` and a bare `dir` — but never `dir/file.ts`, the case
+ * the warning exists for. Two tasks warned each other only when their scope
+ * strings were byte-identical, which is why `tests/**` collided with every task
+ * carrying it while catching nothing real.
+ *
+ * Only a segment that is entirely `*` or `**`, and only at the end. Not a
+ * shortcut: `*` is the only glob character the Hub's scopes actually use, and
+ * the two bracket-ish shapes that *look* like patterns — Next.js dynamic
+ * segments (`[id]`) and route groups (`(hub)`) — are **literal directory names
+ * on disk**. Expanding those would mis-handle the single most common entry
+ * shape in the backlog. A partial pattern like `*.ts` is likewise left intact
+ * rather than guessed at; it matches only itself, which is silence, not noise.
+ *
+ * A bare `**` has no leading slash and so is left alone, rather than collapsing
+ * to the empty string that `pathsOverlap` reads as "no path at all".
+ */
 function normalize(path: string): string {
-  return path.replace(/\/+$/, '');
+  return path.replace(/\/+$/, '').replace(/(?:\/\*{1,2})+$/, '');
 }
 
 /** Do two path/glob entries overlap — same path, or one a directory prefix of the other? */

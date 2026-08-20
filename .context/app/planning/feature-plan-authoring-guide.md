@@ -98,22 +98,28 @@ paths entirely; a task's tests live under the mirror of its source scope, so the
 entry is the meaningful signal. Declare a test path only for work that is *purely* test
 work (a `/test-fix` pass), and then name the specific mirrored directory.
 
-**Prefer a bare directory to a `dir/**` glob.** `pathsOverlap`
-([`lib/projects/collision.ts`](../../../lib/projects/collision.ts)) is literal
-prefix matching — it does **not** expand globs. A trailing `/**` still matches an
-identical entry, a bare ancestor directory (`dir/**` vs `dir` overlaps, because
-`"dir/**".startsWith("dir/")`), and a path written literally under `dir/**/`. What it
-misses is the case that matters — **a real file path beneath it**:
+**Keep the scope as narrow as it truthfully is.** A trailing `/**` is fine to write:
+`pathsOverlap` ([`lib/projects/collision.ts`](../../../lib/projects/collision.ts))
+normalises `dir/**` and `dir/*` down to `dir` before comparing, so a glob scope matches
+real files beneath it and a broad scope matches a narrower one under it.
 
 | A | B | Overlap |
 | --- | --- | --- |
-| `components/hub/projects/board/**` | `components/hub/projects/board/board-view.tsx` | ✗ |
-| `components/hub/projects/**` | `components/hub/projects/board/**` | ✗ |
-| `components/hub/projects/board` | `components/hub/projects/board/board-view.tsx` | ✓ |
+| `components/hub/projects/board/**` | `components/hub/projects/board/board-view.tsx` | ✓ |
+| `components/hub/projects/**` | `components/hub/projects/board/**` | ✓ |
+| `components/hub/projects/board/**` | `components/hub/projects/plan/**` | ✗ |
 
-So two tasks that both say `dir/**` warn each other, and a `dir/**` task warns against a
-bare-`dir` task — but neither notices a task naming an actual file in that directory.
-Write `components/hub/projects/board`, or name the actual files.
+Until §33-sweep t-114 it compared literal strings, so a `dir/**` entry matched only a
+byte-identical one and the whole feature was close to inert — which is why the rule here
+used to be "write a bare directory". That is no longer necessary, and existing scopes
+were repaired by the fix rather than re-authored.
+
+What still costs you is **breadth**. A scope of `lib/**` warns against every task
+touching `lib/`, and a warning that fires on everything gets ignored exactly like one
+that fires on nothing. Name the directory you will genuinely work in, or the files.
+
+Write path segments as they appear on disk — Next.js dynamic segments (`[id]`) and route
+groups (`(hub)`) are literal directory names here, not patterns, and need no escaping.
 
 ## 6 · Test strategy up front, and budget the review-fix commit
 
