@@ -112,6 +112,11 @@ function wireOk() {
   );
 }
 
+/** Every payload kind any tab declares — derived, so a new one is covered on sight. */
+const PAYLOAD_KINDS = [
+  ...new Set(PROJECT_TABS.map((tab) => tab.payload).filter((p) => p !== null)),
+];
+
 beforeEach(() => vi.clearAllMocks());
 
 describe('project tab registry — every derived surface agrees', () => {
@@ -151,8 +156,17 @@ describe('project tab registry — every derived surface agrees', () => {
 
       // The declared payload is the one fetched — and a `payload: null` tab makes
       // no sub-fetch at all beyond the project header.
+      //
+      // The kinds are DERIVED from the registry rather than hand-listed, and that
+      // is what closes the gap `satisfies Record<…>` leaves open in `page.tsx`.
+      // The type guard forces a new payload kind to have a *fetcher*; it cannot
+      // force anyone to wire that fetcher into the `Promise.all` or to add the
+      // matching (optional) prop on `ProjectView`. A tab declaring an unwired
+      // payload would compile and render `LoadFailed` — indistinguishable from a
+      // failed request. Deriving here means such a tab fails this assertion
+      // instead.
       const urls = fetchMock.mock.calls.map((call) => call[0]);
-      for (const kind of ['plan', 'board', 'ideas'] as const) {
+      for (const kind of PAYLOAD_KINDS) {
         const expected = tab.payload === kind;
         expect(urls.includes(`/api/v1/projects/p1/${kind}`)).toBe(expected);
       }

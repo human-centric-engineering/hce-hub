@@ -106,9 +106,16 @@ async function getIdeas(id: string): Promise<IdeaInboxDTO | null> {
  * Every payload kind a tab spec can declare, mapped to the fetcher that serves it.
  *
  * `satisfies Record<…>` is the point: add a payload kind to `ProjectTabSpec` and
- * this object fails to compile until it has a fetcher here — rather than the new
- * tab silently rendering with `null` data and looking like a failed request.
- * `satisfies` (not an annotation) so each fetcher keeps its precise return type.
+ * this object fails to compile until it has a fetcher here. `satisfies` (not an
+ * annotation) so each fetcher keeps its precise return type.
+ *
+ * **It forces the fetcher to exist, not to be used** (`/code-review`). Nothing
+ * here makes you add the matching line to the `Promise.all` below, or the prop on
+ * `ProjectView` — those props are optional. So a tab declaring an unwired payload
+ * still compiles and renders `LoadFailed`, which is exactly the "looks like a
+ * failed request" outcome this guard is often assumed to prevent. The assertion
+ * that actually closes that gap is in `id-page-tabs.test.tsx`, which derives the
+ * payload kinds from the registry and checks each one is really fetched.
  */
 const PAYLOAD_FETCHERS = {
   plan: getPlan,

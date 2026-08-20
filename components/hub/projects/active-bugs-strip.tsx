@@ -23,6 +23,14 @@ export function ActiveBugsStrip({ bugs, projectId }: { bugs: ActiveBugDTO[]; pro
   const { open } = useTaskSheet();
   // Project-keyed so the collapse choice is per-project (the strip is
   // project-scoped everywhere else); collapsing project A doesn't collapse B.
+  //
+  // **Renamed from `hub:active-fixes-collapsed:` with no migration** (t-110), and
+  // that is the decision, not an oversight (`/code-review` raised it). Anyone who
+  // had collapsed the strip sees it expanded once more, and the old key is
+  // orphaned in their browser. Both are cheaper than a read-the-old-key fallback,
+  // which would be permanent code carrying a removal trigger nobody will ever
+  // pull, to preserve one boolean UI preference on an internal tool. The value is
+  // re-set the next time anyone collapses it.
   const [collapsed, setCollapsed] = useLocalStorage(
     `hub:active-bugs-collapsed:${projectId}`,
     false

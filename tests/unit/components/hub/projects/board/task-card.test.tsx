@@ -42,7 +42,7 @@ describe('TaskCard', () => {
   it('marks a bug-kind card with a distinct "bug" cue (§22-02 t2)', () => {
     render(<TaskCard card={card({ kind: 'bug' })} />);
     expect(screen.getByText('bug')).toBeInTheDocument();
-    expect(screen.getByTitle(/A bug — a fix/)).toBeInTheDocument();
+    expect(screen.getByTitle(/A bug — a defect/)).toBeInTheDocument();
   });
 
   // The fixture card is otherwise bare — no claimer, PR, collision or blocked

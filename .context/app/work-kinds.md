@@ -4,7 +4,7 @@ What a task **is** (`Task.kind`), what a feature's completion **counts** (the
 `Feature.shippedAt` boundary), and how the two are kept from lying to each other.
 
 Applies to every task. `bug` is one kind of three and has behaviour of its own —
-`next_task` bias, the active-fixes strip, the standing Platform feature — which lives
+`next_task` bias, the active-bugs strip, the standing Platform feature — which lives
 in [bug handling](./bug-handling.md).
 
 ## The two facts a task carries
@@ -86,7 +86,7 @@ mid-build: an enhancement raised before ship is scope, not an afterthought.
 
 It is new work on an existing, already-claimed feature, so the feature's owner says
 nothing about who should do it. `bug` and `feature_work` keep the owner cascade — a
-bug goes to the most relevant owner and is visible to everyone on the active-fixes
+bug goes to the most relevant owner and is visible to everyone on the active-bugs
 strip. See [task assignment](./task-assignment.md).
 
 ## The accounting is closed

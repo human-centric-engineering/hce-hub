@@ -48,7 +48,7 @@ export interface PlanTaskView {
   title: string;
   /** Effective status (via `computeEffectiveStatus`) — matches the §10 Board. */
   status: EffectiveStatus;
-  /** `bug` (a defect, styled distinctly + surfaced as a fix) vs `feature_work` (f-bug-handling §22-02). */
+  /** `bug` (a defect, styled distinctly + surfaced on the active-bugs strip) vs `feature_work` (f-bug-handling §22-02). */
   kind: TaskKind;
   prUrl: string | null;
   /**
