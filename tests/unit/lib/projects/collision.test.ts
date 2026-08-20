@@ -131,6 +131,19 @@ describe('pathsOverlap — trailing wildcards (§33-sweep t-114)', () => {
     expect(pathsOverlap('lib/projects/*.ts', 'lib/projects/*.ts')).toBe(true);
   });
 
+  it('does not let a ROOTED wildcard collapse to the empty path', () => {
+    // `/**` strips to '', and while the equality branch guards on `na.length > 0`
+    // the PREFIX branch does not: `'/a'.startsWith('' + '/')` is true, so an
+    // emptied entry would match every absolute path. Surfaced by
+    // `/security-review` while establishing that the strip has no security
+    // blast radius — a correctness bug the review found on its way past.
+    expect(pathsOverlap('/**', '/lib/projects/collision.ts')).toBe(false);
+    expect(pathsOverlap('/lib/projects/collision.ts', '/**')).toBe(false);
+    expect(pathsOverlap('/**', '/**')).toBe(true);
+    // The ordinary rooted case keeps working.
+    expect(pathsOverlap('/lib/**', '/lib/projects/collision.ts')).toBe(true);
+  });
+
   it('does not collapse a bare wildcard to the empty path', () => {
     // Stripping `**` to '' would make it compare equal to a no-path entry and,
     // via the `na.length > 0` guard, silently match nothing at all. It has no

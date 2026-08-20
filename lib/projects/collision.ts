@@ -59,7 +59,14 @@ export interface CollisionWarning {
  * to the empty string that `pathsOverlap` reads as "no path at all".
  */
 function normalize(path: string): string {
-  return path.replace(/\/+$/, '').replace(/(?:\/\*{1,2})+$/, '');
+  const trimmed = path.replace(/\/+$/, '');
+  const stripped = trimmed.replace(/(?:\/\*{1,2})+$/, '');
+  // Never let a whole-path wildcard collapse to the empty string. `pathsOverlap`
+  // reads '' as "no path" for the equality branch, but the PREFIX branch would
+  // still fire — `'/a'.startsWith('' + '/')` is true — so a rooted `/**` would
+  // silently match every absolute entry. Found by `/security-review` while
+  // proving the (correctness-only) blast radius of this strip.
+  return stripped === '' ? trimmed : stripped;
 }
 
 /** Do two path/glob entries overlap — same path, or one a directory prefix of the other? */
