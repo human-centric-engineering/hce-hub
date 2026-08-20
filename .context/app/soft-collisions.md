@@ -105,10 +105,26 @@ The matcher works; **breadth** is now the only thing that costs you. A scope of
 `lib/**` warns against every task touching `lib/`, and a warning that fires on
 everything is ignored exactly like one that fires on nothing.
 
-Rules, and the reasoning behind them, are in
-[the plan-authoring guide §5b](./planning/feature-plan-authoring-guide.md) — the
-short version being **never declare `tests/**`**, and name the directory you will
-genuinely work in.
+**The write path tells you** (§33-sweep t-118). `create_task`, `update_task` and
+`plan_feature` return a `scopeWarnings` array naming any entry that covers a whole
+top-level tree, and how many scope-declaring tasks in the project it would collide
+with — the number is what makes the case. A batch write attributes each warning to
+its task via `taskRef`.
+
+It is **advisory, never a rejection**, matching the rest of this feature: the scope
+is saved exactly as written, and an entry that genuinely is that broad may stay. It
+also costs nothing on a normal write — the corpus is only read if an entry has
+already failed the predicate.
+
+Breadth is measured **after normalisation**, so `app`, `app/` and `app/**` are one
+rule rather than three, and one surviving segment is the line. A file at the repo
+root (`package.json`) is one segment but narrow, and is not flagged; a dot-prefixed
+extensionless name (`.context` the directory, `.npmrc` the file) is ambiguous by
+name alone and is deliberately read as a directory, since over-warning costs a line
+and under-warning ships the silent over-broad scope.
+
+Rules and reasoning for authors are in
+[the plan-authoring guide §5b](./planning/feature-plan-authoring-guide.md).
 
 ## Related
 

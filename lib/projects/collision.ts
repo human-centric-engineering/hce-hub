@@ -111,6 +111,51 @@ export function overlappingPaths(a: string[], b: string[]): string[] {
 }
 
 /**
+ * Does this segment carry a file extension? `package.json` and `proxy.ts` do;
+ * `tests` and `.context` do not. The dot must be at index > 0, or every dotfile
+ * name would read as an extension of the empty string.
+ */
+function hasExtension(segment: string): boolean {
+  return segment.lastIndexOf('.') > 0;
+}
+
+/**
+ * Is this file-scope entry so broad that it stops being a signal? (§33-sweep t-118)
+ *
+ * `filesScope` drives soft collisions, and after t-114 made the matcher work,
+ * **breadth is the entire cost**. Measured on the Hub's own corpus: a task scoped
+ * `lib/**` collides with 86% of every task that declares a scope, `app/**` with
+ * 39%. A warning that fires on two in five tasks is ignored exactly like one that
+ * fires on none — which is the state t-114 just spent a task escaping.
+ *
+ * **The test is breadth after normalisation, not "is it a glob".** `normalize()`
+ * strips a trailing wildcard, so `app`, `app/` and `app/**` are the same entry and
+ * overlap identically. A glob-only rule would miss the bare form — and the bare
+ * form is the common one here, because §5b's *previous* advice told authors to
+ * "prefer a bare directory to a `dir/**` glob". Six entries in the corpus are a
+ * bare `tests`, on t-43 through t-48.
+ *
+ * One surviving segment means a whole top-level tree. Two or more (`lib/projects/**`,
+ * `app/(hub)/**`) is a real signal and stays silent.
+ *
+ * **A root-level FILE is narrow, and the only way to tell one from a directory is
+ * its name.** The Hub tracks projects other than this repository, so the predicate
+ * cannot look at a filesystem — it only ever sees the string. That leaves
+ * dot-prefixed extensionless names (`.npmrc` the file vs `.context` the directory)
+ * genuinely ambiguous, and this deliberately reads them as directories: over-warning
+ * on a `.npmrc` costs one advisory line a human dismisses, while under-warning on a
+ * `.context` ships exactly the silent over-broad scope this exists to catch.
+ */
+export function isOverlyBroadScope(entry: string): boolean {
+  const normalized = normalize(entry);
+  // '' is "no path at all" — a different defect, and `pathsOverlap` already
+  // refuses to match on it. Not this predicate's business to also complain.
+  if (normalized === '') return false;
+  if (normalized.includes('/')) return false;
+  return !hasExtension(normalized);
+}
+
+/**
  * Warnings for open claims on *other* tasks whose file scope overlaps the task
  * being claimed. Empty when the claiming task declares no file scope (nothing
  * to overlap) or nothing overlaps.

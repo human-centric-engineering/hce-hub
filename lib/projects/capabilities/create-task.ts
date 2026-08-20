@@ -35,6 +35,7 @@ import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 import { checkIdeaPromotable, resolveIdeaOnPromotion } from '@/lib/projects/idea-promotion';
 import { redactedString } from '@/lib/security/redact';
+import { scopeBreadthWarnings } from '@/lib/projects/scope-advisory';
 
 const schema = z.object({
   featureId: z.string().describe('The feature to add the task to.'),
@@ -298,11 +299,25 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
       },
     });
 
+    // Advisory, and deliberately AFTER the write (owner, 2026-08-20): an
+    // over-broad scope is a quality problem for the next reader of the board, not
+    // a reason to refuse the task. Costs no query unless an entry actually failed
+    // the predicate. Excludes the task just created, which would otherwise count
+    // itself as one of its own collisions.
+    const scopeWarnings = await scopeBreadthWarnings(
+      access.feature.projectId,
+      // `taskRef: null` — a single-task write, and the response above already
+      // names it. The ref exists for `plan_feature`'s batch.
+      [{ taskRef: null, filesScope: args.filesScope ?? [] }],
+      { excludeTaskIds: [task.id] }
+    );
+
     return this.success({
       taskId: task.id,
       number: task.number,
       status: task.status,
       featureId: args.featureId,
+      scopeWarnings,
     });
   }
 }

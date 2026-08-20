@@ -57,6 +57,7 @@ import { recordPhaseMembershipChange } from '@/lib/projects/phase-events';
 import { isWriteConflict, withWriteConflictRetry } from '@/lib/projects/write-conflict';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { redactedString } from '@/lib/security/redact';
+import { scopeBreadthWarnings } from '@/lib/projects/scope-advisory';
 
 const schema = z.object({
   taskId: z.string().describe('The task to edit.'),
@@ -391,6 +392,14 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
       metadata: { fields: updated },
     });
 
-    return this.success({ taskId: task.id, updated });
+    // Only when the caller actually supplied a scope — re-warning about an entry
+    // this call did not touch would nag on every unrelated edit.
+    const scopeWarnings = args.filesScope
+      ? await scopeBreadthWarnings(projectId, [{ taskRef: null, filesScope: args.filesScope }], {
+          excludeTaskIds: [task.id],
+        })
+      : [];
+
+    return this.success({ taskId: task.id, updated, scopeWarnings });
   }
 }

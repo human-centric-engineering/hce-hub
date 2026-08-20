@@ -34,6 +34,7 @@ import { assertAcyclic, DependencyCycleError } from '@/lib/projects/dependency-g
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 import { redactedString } from '@/lib/security/redact';
+import { scopeBreadthWarnings } from '@/lib/projects/scope-advisory';
 
 const taskSpec = z.object({
   ref: z
@@ -301,6 +302,23 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
       metadata: { projectId: access.feature.projectId, taskCount: tasks.length },
     });
 
-    return this.success({ featureId: args.featureId, tasks, planningStage: 'planned' });
+    // One corpus load for the whole batch, and each warning names its task — an
+    // unattributed list across a feature's worth of tasks is unreadable. `tasks`
+    // is pushed in `args.tasks` order, so the index pairing holds.
+    const scopeWarnings = await scopeBreadthWarnings(
+      access.feature.projectId,
+      args.tasks.map((spec, i) => ({
+        taskRef: tasks[i]?.number != null ? `t-${tasks[i].number}` : spec.ref,
+        filesScope: spec.filesScope ?? [],
+      })),
+      { excludeTaskIds: tasks.map((t) => t.id) }
+    );
+
+    return this.success({
+      featureId: args.featureId,
+      tasks,
+      planningStage: 'planned',
+      scopeWarnings,
+    });
   }
 }

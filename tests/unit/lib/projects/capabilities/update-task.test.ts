@@ -131,7 +131,7 @@ describe('update_task patch semantics', () => {
   it('updates only the supplied fields and reports them (undefined = untouched)', async () => {
     const r = await cap.execute({ taskId: 't1', title: 'New title', doneWhen: 'it works' }, ctx());
     expect(r.success).toBe(true);
-    expect(r.data).toEqual({ taskId: 't1', updated: ['title', 'doneWhen'] });
+    expect(r.data).toEqual({ taskId: 't1', updated: ['title', 'doneWhen'], scopeWarnings: [] });
     expect(txTaskUpdate).toHaveBeenCalledWith({
       where: { id: 't1' },
       data: { title: 'New title', doneWhen: 'it works' },
@@ -421,7 +421,10 @@ describe('update_task redactProvenance', () => {
   it('masks the supplied free-text fields, preserves undefined + the id', () => {
     const out = cap.redactProvenance(
       { taskId: 't1', title: 'secret title', description: 'secret body' },
-      { success: true, data: { taskId: 't1', updated: ['title', 'description'] } }
+      {
+        success: true,
+        data: { taskId: 't1', updated: ['title', 'description'], scopeWarnings: [] },
+      }
     );
     const a = out.args as {
       taskId: string;
@@ -438,7 +441,7 @@ describe('update_task redactProvenance', () => {
   it('preserves an explicit null (clear) through redaction', () => {
     const out = cap.redactProvenance(
       { taskId: 't1', description: null },
-      { success: true, data: { taskId: 't1', updated: ['description'] } }
+      { success: true, data: { taskId: 't1', updated: ['description'], scopeWarnings: [] } }
     );
     expect((out.args as { description: unknown }).description).toBeNull();
   });
@@ -446,7 +449,7 @@ describe('update_task redactProvenance', () => {
   it('passes dependency ids through unmasked — they are not free text', () => {
     const out = cap.redactProvenance(
       { taskId: 't1', dependsOnTaskIds: ['t2', 't3'] },
-      { success: true, data: { taskId: 't1', updated: ['dependencies'] } }
+      { success: true, data: { taskId: 't1', updated: ['dependencies'], scopeWarnings: [] } }
     );
     expect((out.args as { dependsOnTaskIds: unknown }).dependsOnTaskIds).toEqual(['t2', 't3']);
   });
