@@ -36,6 +36,7 @@ import { recordProjectEvent } from '@/lib/projects/project-event';
 import { checkIdeaPromotable, resolveIdeaOnPromotion } from '@/lib/projects/idea-promotion';
 import { redactedString } from '@/lib/security/redact';
 import { scopeBreadthWarnings } from '@/lib/projects/scope-advisory';
+import type { ScopeBreadthWarning } from '@/lib/projects/scope-advisory';
 
 const schema = z.object({
   featureId: z.string().describe('The feature to add the task to.'),
@@ -83,6 +84,12 @@ interface Data {
   number: number | null;
   status: TaskStatus;
   featureId: string;
+  /**
+   * Advisory warnings for over-broad `filesScope` entries (§33-sweep t-118) —
+   * empty when every entry is specific enough. Never a rejection: the scope is
+   * saved as written.
+   */
+  scopeWarnings: ScopeBreadthWarning[];
 }
 
 export class CreateTaskCapability extends BaseCapability<Args, Data> {

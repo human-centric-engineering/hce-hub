@@ -58,6 +58,7 @@ import { isWriteConflict, withWriteConflictRetry } from '@/lib/projects/write-co
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { redactedString } from '@/lib/security/redact';
 import { scopeBreadthWarnings } from '@/lib/projects/scope-advisory';
+import type { ScopeBreadthWarning } from '@/lib/projects/scope-advisory';
 
 const schema = z.object({
   taskId: z.string().describe('The task to edit.'),
@@ -105,6 +106,12 @@ interface Data {
   taskId: string;
   /** The names of the fields actually changed. */
   updated: string[];
+  /**
+   * Advisory warnings for over-broad `filesScope` entries (§33-sweep t-118) —
+   * empty when every entry is specific enough. Never a rejection: the scope is
+   * saved as written.
+   */
+  scopeWarnings: ScopeBreadthWarning[];
 }
 
 export class UpdateTaskCapability extends BaseCapability<Args, Data> {

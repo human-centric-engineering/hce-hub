@@ -435,7 +435,7 @@ describe('create_task redactProvenance', () => {
     };
     const out = cap.redactProvenance(args, {
       success: true,
-      data: { taskId: 't', number: 1, status: 'claimed', featureId: 'f1' },
+      data: { taskId: 't', number: 1, status: 'claimed', featureId: 'f1', scopeWarnings: [] },
     });
     const redactedArgs = out.args as {
       title: string;
@@ -452,7 +452,10 @@ describe('create_task redactProvenance', () => {
   it('leaves description / doneWhen null in provenance when omitted', () => {
     const out = cap.redactProvenance(
       { featureId: 'f1', title: 't' },
-      { success: true, data: { taskId: 't', number: 1, status: 'claimed', featureId: 'f1' } }
+      {
+        success: true,
+        data: { taskId: 't', number: 1, status: 'claimed', featureId: 'f1', scopeWarnings: [] },
+      }
     );
     const redactedArgs = out.args as { description: string | null; doneWhen: string | null };
     expect(redactedArgs.description).toBeNull();

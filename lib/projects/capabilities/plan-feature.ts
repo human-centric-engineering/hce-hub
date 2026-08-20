@@ -35,6 +35,7 @@ import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 import { redactedString } from '@/lib/security/redact';
 import { scopeBreadthWarnings } from '@/lib/projects/scope-advisory';
+import type { ScopeBreadthWarning } from '@/lib/projects/scope-advisory';
 
 const taskSpec = z.object({
   ref: z
@@ -73,6 +74,12 @@ interface Data {
    * if unassigned (never for a freshly-created task). */
   tasks: { id: string; number: number | null }[];
   planningStage: 'planned';
+  /**
+   * Advisory warnings for over-broad `filesScope` entries (§33-sweep t-118) —
+   * empty when every entry is specific enough. Never a rejection: the scope is
+   * saved as written.
+   */
+  scopeWarnings: ScopeBreadthWarning[];
 }
 
 export class PlanFeatureCapability extends BaseCapability<Args, Data> {

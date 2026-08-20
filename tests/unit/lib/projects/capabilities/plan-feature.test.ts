@@ -318,7 +318,12 @@ describe('plan_feature redactProvenance', () => {
       },
       {
         success: true,
-        data: { featureId: 'f1', tasks: [{ id: 'x', number: 1 }], planningStage: 'planned' },
+        data: {
+          featureId: 'f1',
+          tasks: [{ id: 'x', number: 1 }],
+          planningStage: 'planned',
+          scopeWarnings: [],
+        },
       }
     );
     const tasks = (out.args as { tasks: Record<string, unknown>[] }).tasks;
@@ -334,7 +339,12 @@ describe('plan_feature redactProvenance', () => {
       { featureId: 'f1', tasks: [{ ref: 't1', title: 'a' }] },
       {
         success: true,
-        data: { featureId: 'f1', tasks: [{ id: 'x', number: 1 }], planningStage: 'planned' },
+        data: {
+          featureId: 'f1',
+          tasks: [{ id: 'x', number: 1 }],
+          planningStage: 'planned',
+          scopeWarnings: [],
+        },
       }
     );
     const tasks = (out.args as { tasks: Record<string, unknown>[] }).tasks;
