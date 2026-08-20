@@ -38,11 +38,17 @@ export const metadata: Metadata = {
   // `prefers-color-scheme` block, so the tab mark follows the OS theme there and
   // stays on the light cut everywhere else.
   //
-  // `sizes` on the ICO is what stops Chrome guessing 16×16 and upscaling it; the
-  // file actually carries 16/32/48.
+  // `sizes` is a **selection hint, not a manifest** — it is what the browser
+  // compares when choosing between these two links, and the SVG deliberately
+  // declares none, which is read as "scalable, any size". A single `32x32` here
+  // is the widely-deployed form and is left alone on purpose: the file itself
+  // carries 16/32/48/128, and declaring that whole set instead hands Chrome's
+  // size-matching a large concrete raster to prefer over the SVG — which would
+  // cost the dark-mode adaptation that is the only reason to link the SVG at
+  // all, silently, with every gate still green. Narrow it, do not widen it.
   icons: {
     icon: [
-      { url: '/favicon.ico', sizes: '16x16 32x32 48x48', type: 'image/x-icon' },
+      { url: '/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
       { url: '/favicon.svg', type: 'image/svg+xml' },
     ],
   },

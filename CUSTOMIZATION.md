@@ -311,8 +311,20 @@ The rule underneath: a real environment variable always beats a file, and
   root-path convention and the `.svg` is found by nothing. Declare the `.ico`
   first and the `.svg` last — a browser takes the last entry it can render — and
   only then can a `prefers-color-scheme` block inside the SVG make the tab follow
-  the OS theme. HCE Hub's is
+  the OS theme. Give the `.ico` a **single** `sizes` value (`32x32`) rather than
+  listing everything the file contains — `sizes` is what the browser compares when
+  choosing between the two links, and advertising a large raster invites Chrome to
+  prefer it over the SVG. HCE Hub's is
   [documented in the theme doc](.context/app/theme.md#favicon)
+- **Pick one mechanism, not both.** [`.context/seo/overview.md`](.context/seo/overview.md)
+  (Sunrise-owned) says _"Sunrise does not include favicon setup by default"_ and points
+  at the `app/` file convention — `app/favicon.ico` or `app/icon.tsx` — which is
+  flatly at odds with the two files sitting in `public/` at every release and with
+  this section. Do **one**: either the `public/` assets plus the `metadata.icons`
+  block above, or the `app/` file convention with no `icons` block at all. Doing both
+  leaves two competing icon sources with no documented winner. The Hub takes the
+  first; sunrise#640 argues the platform should standardise on the second, at which
+  point this bullet and that doc can finally agree
 - Update the landing page hero via the thin-shim ([§6](#6-landing-page--routes)),
   not by editing `app/(public)/page.tsx` in place
 

@@ -59,13 +59,22 @@ function icoSizes(path: string): number[] {
 
 describe('root layout icon metadata', () => {
   it('declares the ICO before the SVG, so the fallback chain resolves', () => {
-    // ORDER IS THE ASSERTION, not an artifact of how the array was typed. A
-    // browser takes the LAST icon declaration it can render, so the ICO has to
-    // come first as the floor (Safari has no SVG-favicon support) and the SVG
-    // last for the browsers that do — and which also honour its
-    // prefers-color-scheme block. Swap these two and every modern browser
-    // silently drops to the raster, losing dark-mode adaptation with no error.
-    expect(declaredIcons().map((i) => i.url)).toEqual(['/favicon.ico', '/favicon.svg']);
+    // ORDER IS THE ASSERTION. A browser takes the LAST icon declaration it can
+    // render, so the ICO has to come first as the floor (Safari has no
+    // SVG-favicon support) and the SVG last for the browsers that do — and which
+    // also honour its prefers-color-scheme block. Swap these two and every modern
+    // browser silently drops to the raster, losing dark-mode adaptation with no
+    // error anywhere.
+    //
+    // Asserted as two indices rather than `toEqual([ico, svg])`, which would also
+    // pin the icon COUNT. Adding a third entry (an apple-touch-icon, say) is a
+    // perfectly good change that has nothing to do with this invariant, and it
+    // would fail here under a name and comment that are entirely about ordering —
+    // sending the next reader hunting for an ordering bug that isn't there.
+    const urls = declaredIcons().map((i) => i.url);
+    expect(urls).toContain('/favicon.ico');
+    expect(urls).toContain('/favicon.svg');
+    expect(urls.indexOf('/favicon.ico')).toBeLessThan(urls.indexOf('/favicon.svg'));
   });
 
   it('points every declared icon at a file that exists', () => {
@@ -74,15 +83,23 @@ describe('root layout icon metadata', () => {
     }
   });
 
-  it('declares the sizes the ICO really carries', () => {
+  it('only claims ICO sizes the file really contains', () => {
     const declared = declaredIcons().find((i) => i.url === '/favicon.ico');
     expect(declared?.sizes).toBeDefined();
-    // `sizes` is what stops Chrome assuming 16x16 and upscaling. It is also the
-    // one claim here that can rot without anyone touching this file: the ICO is
-    // generated from the SVG, so re-generating it at a different set of sizes
-    // leaves the declaration describing a file that no longer matches.
-    const claimed = declared?.sizes?.split(' ').map((s) => Number(s.split('x')[0]));
-    expect(claimed).toEqual(icoSizes(join(process.cwd(), 'public/favicon.ico')));
+    // SUBSET, not equality. `sizes` is a selection hint the browser compares
+    // between links — not a manifest of the file — so the declaration is
+    // deliberately narrower than the ICO's contents (one `32x32` against a file
+    // carrying 16/32/48/128). An equality assertion would read as a drift guard
+    // while actually forbidding that gap, and would fail the moment someone adds
+    // a frame for a bookmark tile.
+    //
+    // What still has to hold is the direction that can rot silently: the ICO is
+    // generated from the SVG, so regenerating it without a size we advertise
+    // leaves the declaration pointing at something the file no longer has.
+    const claimed = declared?.sizes?.split(' ').map((s) => Number(s.split('x')[0])) ?? [];
+    const present = icoSizes(join(process.cwd(), 'public/favicon.ico'));
+    expect(claimed.length).toBeGreaterThan(0);
+    for (const size of claimed) expect(present).toContain(size);
   });
 
   it('ships an SVG that can actually adapt to the OS theme', () => {
