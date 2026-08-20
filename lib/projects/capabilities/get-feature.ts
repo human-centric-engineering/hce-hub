@@ -84,7 +84,7 @@ interface Data {
   /**
    * Task roll-up (once planned) — the SAME numbers the Plan renders, via
    * `computeFeatureProgress` (§32 t-80). Bugs are off the completion axis and
-   * tallied as `openFixes`; past the feature's ship boundary nothing counts
+   * tallied as `openBugs`; past the feature's ship boundary nothing counts
    * toward completion whatever its kind, so `total`/`merged` are settled history.
    * `live` and `blocked` are current activity and deliberately span post-ship
    * work. That span used to be *load-bearing* — `blocked` was the only counter
@@ -94,9 +94,9 @@ interface Data {
    * Keep them spanning post-ship work because "someone is on it" is real
    * information — not because dropping them would hide anything.
    *
-   * `openFixes` + `openSinceShip` are the two counterparts to what `total`/`merged`
+   * `openBugs` + `openSinceShip` are the two counterparts to what `total`/`merged`
    * exclude, and together they close the accounting:
-   * `unmerged === (total − merged) + openFixes + openSinceShip`.
+   * `unmerged === (total − merged) + openBugs + openSinceShip`.
    *
    * `unstartedSinceShip` is the subset of `openSinceShip` nobody has started, and is
    * what the Plan row renders as "· N new" — because `live`/`blocked` already show
@@ -112,7 +112,7 @@ interface Data {
     merged: number;
     live: number;
     blocked: number;
-    openFixes: number;
+    openBugs: number;
     openSinceShip: number;
     unstartedSinceShip: number;
   };
@@ -127,7 +127,7 @@ export class GetFeatureCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'get_feature',
     description:
-      "Read one feature's spec — its description, definition of done, effective status, planning stage (indicative sketch vs planned), the phase it is filed under, dependency graph (dependsOn / waitingOn), a task roll-up, and any indicative-task sketch. The roll-up: total/merged count completion only — bugs, and any work raised after the feature shipped, are excluded from it. Every open task falls into exactly ONE of (total − merged), openFixes, or openSinceShip. live/blocked are descriptive overlays and DO overlap those terms, so never add them in. unstartedSinceShip is the not-yet-started subset of openSinceShip, and is the number the Plan row shows as '· N new'. Use it after list_phases to understand a feature before working it. featureRef is the feature's slug (e.g. 'f-mcp') or id. Membership-scoped: a feature you can't see (or in another project) is not_found.",
+      "Read one feature's spec — its description, definition of done, effective status, planning stage (indicative sketch vs planned), the phase it is filed under, dependency graph (dependsOn / waitingOn), a task roll-up, and any indicative-task sketch. The roll-up: total/merged count completion only — bugs, and any work raised after the feature shipped, are excluded from it. Every open task falls into exactly ONE of (total − merged), openBugs, or openSinceShip. live/blocked are descriptive overlays and DO overlap those terms, so never add them in. unstartedSinceShip is the not-yet-started subset of openSinceShip, and is the number the Plan row shows as '· N new'. Use it after list_phases to understand a feature before working it. featureRef is the feature's slug (e.g. 'f-mcp') or id. Membership-scoped: a feature you can't see (or in another project) is not_found.",
     parameters: {
       type: 'object',
       properties: {
@@ -197,7 +197,7 @@ export class GetFeatureCapability extends BaseCapability<Args, Data> {
           merged: progress.merged,
           live: progress.live,
           blocked: progress.blocked,
-          openFixes: progress.openFixes,
+          openBugs: progress.openBugs,
           openSinceShip: progress.openSinceShip,
           unstartedSinceShip: progress.unstartedSinceShip,
         },

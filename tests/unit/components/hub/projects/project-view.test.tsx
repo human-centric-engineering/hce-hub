@@ -39,7 +39,7 @@ const planFixture: ProjectPlanDTO = {
             total: 0,
             live: 0,
             blocked: 0,
-            openFixes: 0,
+            openBugs: 0,
             openSinceShip: 0,
             unstartedSinceShip: 0,
           },

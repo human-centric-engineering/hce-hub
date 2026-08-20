@@ -101,9 +101,9 @@ export class ShipFeatureCapability extends BaseCapability<Args, Data> {
 
     // Soft signal: how many tasks that count toward completion aren't merged yet.
     // Never blocks the ship. Bug-kind tasks are off the completion axis
-    // (f-bug-handling §22-02 — they're open fixes, not unfinished build-out), so
+    // (f-bug-handling §22-02 — they're open bugs, not unfinished build-out), so
     // they don't count here, matching computeFeatureProgress and the Plan's
-    // "N/N + · N open fixes".
+    // "N/N + · N open bugs".
     //
     // `enhancement` is deliberately NOT excluded (f-work-kinds §32 t-79). The
     // ship boundary hasn't been stamped yet at this point, so every existing task

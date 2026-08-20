@@ -59,7 +59,7 @@ const schema = z.object({
     .nativeEnum(TaskKind)
     .optional()
     .describe(
-      "Task kind; defaults to 'feature_work'. Use 'feature_work' for any work on a feature that has NOT shipped yet — including scope discovered mid-build. Use 'enhancement' only for a task-sized improvement to a feature that has ALREADY shipped (typically in an earlier phase); an enhancement is born unassigned, for whoever picks it up. Use 'bug' for a defect on the feature that broke it (prioritised by next_task, kept out of completion progress and tallied as an open fix). Work raised after its feature shipped never counts toward that feature's completion, whatever its kind."
+      "Task kind; defaults to 'feature_work'. Use 'feature_work' for any work on a feature that has NOT shipped yet — including scope discovered mid-build. Use 'enhancement' only for a task-sized improvement to a feature that has ALREADY shipped (typically in an earlier phase); an enhancement is born unassigned, for whoever picks it up. Use 'bug' for a defect on the feature that broke it (prioritised by next_task, kept out of completion progress and tallied as an open bug). Work raised after its feature shipped never counts toward that feature's completion, whatever its kind."
     ),
   phaseId: z
     .string()
@@ -124,7 +124,7 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           type: 'string',
           enum: ['feature_work', 'bug', 'enhancement'],
           description:
-            "Optional task kind; defaults to 'feature_work'. Use 'feature_work' for any work on a feature that has NOT shipped yet — including scope discovered mid-build. Use 'enhancement' only for a task-sized improvement to a feature that has ALREADY shipped (typically in an earlier phase); an enhancement is born unassigned, for whoever picks it up. Use 'bug' for a defect on the feature that broke it (prioritised by next_task, kept out of completion progress and tallied as an open fix). Work raised after its feature shipped never counts toward that feature's completion, whatever its kind.",
+            "Optional task kind; defaults to 'feature_work'. Use 'feature_work' for any work on a feature that has NOT shipped yet — including scope discovered mid-build. Use 'enhancement' only for a task-sized improvement to a feature that has ALREADY shipped (typically in an earlier phase); an enhancement is born unassigned, for whoever picks it up. Use 'bug' for a defect on the feature that broke it (prioritised by next_task, kept out of completion progress and tallied as an open bug). Work raised after its feature shipped never counts toward that feature's completion, whatever its kind.",
         },
         phaseId: {
           type: ['string', 'null'],

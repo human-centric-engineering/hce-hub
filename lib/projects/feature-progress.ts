@@ -16,18 +16,18 @@
  *
  * `bug` keeps its own accounting *before* the boundary: a defect found during
  * build-out isn't build-out, so it stays out of `merged`/`total`/`live`/`blocked`
- * and is tallied as `openFixes` instead — an open bug must never make a shipped
- * feature read "3/4 merged". `openFixes` deliberately spans the whole set,
- * pre- and post-ship: an open fix is open whenever it was raised.
+ * and is tallied as `openBugs` instead — an open bug must never make a shipped
+ * feature read "3/4 merged". `openBugs` deliberately spans the whole set,
+ * pre- and post-ship: an open bug is open whenever it was raised.
  *
  * **Every exclusion needs a counterpart, or the ratio quietly under-reports**
  * (§32 t-94). `total`/`merged` drop exactly two groups — bugs, and work raised
- * after the ship — so each gets a counter of its own: `openFixes` and
+ * after the ship — so each gets a counter of its own: `openBugs` and
  * `openSinceShip`. That is not a style preference, it is what makes the accounting
  * *closed*, and the closure is asserted directly:
  *
  * ```
- * unmerged.length === (total - merged) + openFixes + openSinceShip
+ * unmerged.length === (total - merged) + openBugs + openSinceShip
  * ```
  *
  * The three terms are disjoint and exhaustive over the unmerged tasks, so no open
@@ -47,7 +47,7 @@ import type { EffectiveStatus } from '@/lib/projects/task-status';
  * A feature's completion progress + its live activity.
  *
  * `total`/`merged` are **sealed** at the ship boundary — a settled historical
- * ratio. `live`/`blocked`/`openFixes` are **not**: they describe what is in
+ * ratio. `live`/`blocked`/`openBugs` are **not**: they describe what is in
  * flight right now, including work raised after the ship.
  */
 export interface FeatureProgress {
@@ -57,13 +57,13 @@ export interface FeatureProgress {
   live: number;
   /** Feature-work claimed but waiting on an unmerged dependency — post-ship included. */
   blocked: number;
-  /** Open (unmerged) `bug`-kind tasks — the "· N open fixes" surface. */
-  openFixes: number;
+  /** Open (unmerged) `bug`-kind tasks — the "· N open bugs" surface. */
+  openBugs: number;
   /**
    * Open (unmerged) non-`bug` tasks raised **after** the feature shipped (§32 t-94).
    * Always 0 for an unshipped feature, where such work is inside the ratio already.
    *
-   * The counterpart `openFixes` has for bugs: `total`/`merged` exclude two groups,
+   * The counterpart `openBugs` has for bugs: `total`/`merged` exclude two groups,
    * and each needs somewhere to be seen or the summary quietly under-reports. This
    * is the **closure term** — the complete count, which `live`/`blocked` may overlap.
    */
@@ -95,7 +95,7 @@ export interface ProgressTaskInput {
 
 /**
  * Compute progress: completion counts over the work the feature was built from,
- * with open bugs tallied separately as `openFixes`.
+ * with open bugs tallied separately as `openBugs`.
  *
  * `shippedAt` is the feature's ship boundary — pass `null` for a feature that
  * hasn't shipped (or whose date is unknown), which counts every task.
@@ -114,15 +114,15 @@ export function computeFeatureProgress(
   const sinceShip = shippedAt
     ? tasks.filter((t) => t.createdAt.getTime() > shippedAt.getTime())
     : [];
-  // Post-ship work still outstanding — bugs excluded, they have `openFixes`.
+  // Post-ship work still outstanding — bugs excluded, they have `openBugs`.
   const openPostShip = sinceShip.filter((t) => t.kind !== 'bug' && t.status !== 'merged');
   // COMPLETION (`total`/`merged`) is sealed at the boundary — that is the point.
   const completion = builtOut.filter((t) => t.kind !== 'bug');
-  // ACTIVITY (`live`/`blocked`/`openFixes`) is NOT sealed, and spans every task.
+  // ACTIVITY (`live`/`blocked`/`openBugs`) is NOT sealed, and spans every task.
   // Sealing it too would hide a post-ship enhancement someone is actively working:
   // the row would read "2/2" with no live marker while its own task table listed
   // that task as active — breaking the §09 invariant that a feature's summary can
-  // never disagree with the tasks beneath it. `openFixes` already worked this way;
+  // never disagree with the tasks beneath it. `openBugs` already worked this way;
   // the other two now match. What shipped is history; what's in flight is news.
   const activity = tasks.filter((t) => t.kind !== 'bug');
   return {
@@ -130,7 +130,7 @@ export function computeFeatureProgress(
     merged: completion.filter((t) => t.status === 'merged').length,
     live: activity.filter((t) => t.status === 'active').length,
     blocked: activity.filter((t) => t.status === 'blocked').length,
-    openFixes: tasks.filter((t) => t.kind === 'bug' && t.status !== 'merged').length,
+    openBugs: tasks.filter((t) => t.kind === 'bug' && t.status !== 'merged').length,
     openSinceShip: openPostShip.length,
     // Derived NEGATIVELY — "whatever `live`/`blocked` don't already show" — rather
     // than positively as `status === 'claimed'`. The positive form encodes today's

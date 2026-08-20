@@ -123,7 +123,7 @@ describe('get_feature', () => {
         merged: 1,
         live: 1,
         blocked: 0,
-        openFixes: 0,
+        openBugs: 0,
         openSinceShip: 0,
         unstartedSinceShip: 0,
       },
@@ -164,7 +164,7 @@ describe('get_feature', () => {
       merged: 2,
       live: 0,
       blocked: 0,
-      openFixes: 1,
+      openBugs: 1,
       openSinceShip: 0,
       unstartedSinceShip: 0,
     });
@@ -203,7 +203,7 @@ describe('get_feature', () => {
       merged: 1,
       live: 1,
       blocked: 0,
-      openFixes: 0,
+      openBugs: 0,
       openSinceShip: 1,
       unstartedSinceShip: 0,
     });
@@ -211,7 +211,7 @@ describe('get_feature', () => {
 
   it('reports a post-ship dependency-blocked task, which every other counter hides', async () => {
     // The gap `blocked` closes: such a task is off `total` (post-ship), not
-    // `active` so not `live`, and not a `bug` so not an `openFixes`. Without
+    // `active` so not `live`, and not a `bug` so not an `openBugs`. Without
     // `blocked` an agent reads "nothing outstanding" while the Plan renders a
     // blocked row — the exact agent-vs-human disagreement this roll-up fixed.
     const SHIPPED = new Date('2026-08-01T00:00:00Z');
@@ -245,7 +245,7 @@ describe('get_feature', () => {
       merged: 1,
       live: 0,
       blocked: 1,
-      openFixes: 0,
+      openBugs: 0,
       openSinceShip: 1,
       unstartedSinceShip: 0,
     });

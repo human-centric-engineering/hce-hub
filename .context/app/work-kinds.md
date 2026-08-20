@@ -95,7 +95,7 @@ strip. See [task assignment](./task-assignment.md).
 so **each gets a counter**, or the ratio silently under-reports:
 
 ```
-unmerged === (total − merged) + openFixes + openSinceShip
+unmerged === (total − merged) + openBugs + openSinceShip
 ```
 
 The three terms are **disjoint and exhaustive** over the unmerged tasks, so no open
@@ -108,7 +108,7 @@ future kind — or a new exclusion — breaks a test instead of quietly hiding a
 | field                | means                                                     |
 | -------------------- | --------------------------------------------------------- |
 | `total` / `merged`   | completion, **sealed** at `shippedAt`; excludes bugs      |
-| `openFixes`          | open `bug` tasks, pre- **and** post-ship                  |
+| `openBugs`           | open `bug` tasks, pre- **and** post-ship                  |
 | `openSinceShip`      | open non-bug tasks raised after the ship — closure term   |
 | `unstartedSinceShip` | the subset of those nobody has started — what a row shows |
 | `live` / `blocked`   | descriptive overlays (see below)                          |
@@ -131,7 +131,7 @@ marker and make it invisible again.
 ## Where it renders
 
 **A feature row** (`components/hub/projects/plan/feature-row.tsx`) shows the sealed
-ratio plus, when non-zero, `· N open fixes` and `· N new`. "New" is
+ratio plus, when non-zero, `· N open bugs` and `· N new`. "New" is
 `unstartedSinceShip`, not `openSinceShip`: `live`/`blocked` already show the started
 ones, and a shipped feature's ratio has no remainder for them to be a breakdown _of_,
 so `4/4 · 1 live · 1 new` would read as two outstanding items where there is one. Each

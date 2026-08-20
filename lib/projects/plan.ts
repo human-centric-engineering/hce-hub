@@ -106,14 +106,14 @@ export interface PlanFeatureView {
    * `merged`/`total`, `live` (actively being worked — effective `active`) and
    * `blocked` (a claimed task waiting on an unmerged dependency). Kind-aware:
    * `bug`-kind tasks are excluded from these completion counts and tallied
-   * separately as `openFixes` (f-bug-handling §22-02).
+   * separately as `openBugs` (f-bug-handling §22-02).
    */
   progress: {
     merged: number;
     total: number;
     live: number;
     blocked: number;
-    openFixes: number;
+    openBugs: number;
     openSinceShip: number;
     unstartedSinceShip: number;
   };
@@ -367,7 +367,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
     // Progress reads off the SAME effective status the rows render (§09 carry):
     // a dep-blocked task counts as `blocked`, never `live`, so a feature's
     // summary can't disagree with its own task table. `bug` tasks are excluded
-    // from completion and tallied as `openFixes` (f-bug-handling §22-02) — an
+    // from completion and tallied as `openBugs` (f-bug-handling §22-02) — an
     // open bug must not make a shipped feature read "3/4 merged" — and, past
     // `shippedAt`, no task counts toward completion at all (f-work-kinds §32 t-79).
     const progress = computeFeatureProgress(progressInput, f.shippedAt);

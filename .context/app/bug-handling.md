@@ -19,7 +19,7 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
   enum, the `Feature.shippedAt` completion boundary and the counters a bug feeds are
   the general accounting model: **[work kinds](./work-kinds.md)**. What matters here
   is that a `bug` is **off its feature's completion axis** — an open bug on a shipped
-  feature reads `N/N · M open fixes`, never `N-1/N`.
+  feature reads `N/N · M open bugs`, never `N-1/N`.
 - **`ProjectEventKind.bug_reported`** — a reported bug journals distinctly from
   `task_created`, so "which shipped work generates defects" stays queryable.
 
@@ -44,9 +44,9 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
     into the parameter, and hard tiers should soften into weights. This is why the
     policy is one named function over a ready set rather than a `where` clause.
 - **Kept off completion** — a `bug` is excluded from its feature's
-  `merged/total/live/blocked` and tallied separately as **`openFixes`**, so an open bug
-  never makes a shipped feature read `N-1/N`. `openFixes` spans the whole set, pre- and
-  post-ship: an open fix is open whenever it was raised. The counters it belongs to,
+  `merged/total/live/blocked` and tallied separately as **`openBugs`**, so an open bug
+  never makes a shipped feature read `N-1/N`. `openBugs` spans the whole set, pre- and
+  post-ship: an open bug is open whenever it was raised. The counters it belongs to,
   and the closure that keeps them honest, are in
   [work kinds](./work-kinds.md#the-accounting-is-closed).
   _Reconciliation:_ a bug **can't** un-ship a feature anyway — `computeFeatureStatus`
@@ -74,7 +74,7 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
 
 ### Plan (t1)
 
-- Each feature row shows **"· N open fixes"** when a shipped/worked feature carries
+- Each feature row shows **"· N open bugs"** when a shipped/worked feature carries
   open bugs (`components/hub/projects/plan/feature-row.tsx`), beside the sealed ratio.
   The other markers on that line, and the rule that keeps them from double-counting one
   task, are in [work kinds](./work-kinds.md#where-it-renders).
