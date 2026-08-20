@@ -42,7 +42,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { FieldHelp } from '@/components/ui/field-help';
 import {
   Select,
@@ -57,10 +56,15 @@ import type { PhaseStatus } from '@/components/hub/projects/plan/types';
 export interface ManagedPhase {
   id: string;
   name: string;
-  /** Short plain-text one-liner — what the Plan band renders (§33-sweep t-104). */
+  /**
+   * Short plain-text one-liner — what the Plan band renders, and the only intent
+   * this dialog edits (§33-sweep t-104). The long-form `description` is still on
+   * the model and still writable over `update_phase`, but has no control here:
+   * the owner removed it on 2026-08-20 — *"the summary IS the intent"* — pending
+   * a real phase page (idea #9 / §37 `f-phase-page`).
+   */
   summary: string | null;
   /** The authored intent — why the phase exists, and what would complete it. */
-  description: string | null;
   status: PhaseStatus;
   ordinal: number;
   featureCount: number;
@@ -156,8 +160,6 @@ export function ManagePhasesDialog({
   // whether the write landed, so a failed save can be retried (§33 t-103 review).
   const setSummary = (id: string, summary: string) =>
     call(`${base}/${id}`, 'PATCH', { summary: summary.trim() || null });
-  const setDescription = (id: string, description: string) =>
-    call(`${base}/${id}`, 'PATCH', { description: description.trim() || null });
 
   // dnd-kit drag glue — the reorder computation lives in the unit-tested
   // `reorderedIds`; this handler only fires on a real pointer/keyboard drag, which
@@ -206,14 +208,15 @@ export function ManagePhasesDialog({
           <DialogTitle>Manage phases</DialogTitle>
           <DialogDescription className="flex items-center gap-1">
             <span>
-              Create, rename, describe, drag to reorder, or set the status of this project&rsquo;s
+              Create, rename, summarise, drag to reorder, or set the status of this project&rsquo;s
               phases.
             </span>
-            <FieldHelp title="Phase intent" ariaLabel="What to write in a phase description">
+            <FieldHelp title="Phase intent" ariaLabel="What to write in a phase summary">
               <p>
-                A phase description says <strong>what the phase is for</strong>, and{' '}
+                One plain line saying <strong>what the phase is for</strong>, and where it fits,{' '}
                 <strong>what would make it complete</strong>. It shows under the phase in the plan,
-                so the grouping explains itself.
+                so the grouping explains itself &mdash; so write it to be read there, not as a
+                document.
               </p>
               <p>
                 Deliberately not a checklist: a phase can be an epic, a release band or an idea
@@ -252,7 +255,6 @@ export function ManagePhasesDialog({
                   onRename={rename}
                   onStatus={setStatus}
                   onSummarise={setSummary}
-                  onDescribe={setDescription}
                   registerPending={registerPending}
                 />
               ))}
@@ -369,7 +371,6 @@ function PhaseRow({
   onRename,
   onStatus,
   onSummarise,
-  onDescribe,
   registerPending,
 }: {
   phase: ManagedPhase;
@@ -377,7 +378,6 @@ function PhaseRow({
   onRename: (id: string, name: string) => void;
   onStatus: (id: string, status: PhaseStatus) => void;
   onSummarise: (id: string, summary: string) => Promise<boolean>;
-  onDescribe: (id: string, description: string) => Promise<boolean>;
   /** Report an uncommitted intent so the dialog can save it on close. */
   registerPending: (id: string, flush: (() => void) | null) => void;
 }) {
@@ -411,12 +411,6 @@ function PhaseRow({
     save: (v) => onSummarise(phase.id, v),
     registerPending,
     pendingKey: `${phase.id}:summary`,
-  });
-  const descriptionDraft = useFieldDraft({
-    serverValue: phase.description,
-    save: (v) => onDescribe(phase.id, v),
-    registerPending,
-    pendingKey: `${phase.id}:description`,
   });
 
   return (
@@ -489,17 +483,6 @@ function PhaseRow({
         placeholder="One line: what is this phase for?"
         aria-label={`Phase summary: ${phase.name}`}
         className="ml-6 w-[calc(100%-1.5rem)] text-xs"
-      />
-      <Textarea
-        value={descriptionDraft.value}
-        onChange={(e) => descriptionDraft.setValue(e.target.value)}
-        onBlur={descriptionDraft.flush}
-        rows={2}
-        maxLength={2000}
-        disabled={disabled}
-        placeholder="What is this phase for, and what would make it complete?"
-        aria-label={`Phase intent: ${phase.name}`}
-        className="ml-6 w-[calc(100%-1.5rem)] resize-y text-xs"
       />
     </div>
   );

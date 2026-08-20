@@ -39,7 +39,6 @@ export function PlanView({
               id: b.id,
               name: b.name,
               summary: b.summary,
-              description: b.description,
               status: b.status,
               ordinal: b.ordinal,
               featureCount: b.features.length,

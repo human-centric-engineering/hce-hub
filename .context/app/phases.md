@@ -28,7 +28,16 @@ management UI + REST.
   Before the split it had only `description` to show, so it clamped an authored
   essay to two lines mid-sentence _and_ leaked raw markdown (`**bold**` as source).
   A summary is written to fit, so there is nothing to truncate and nothing to
-  render. The long description keeps no reader until the phase page (idea #9).
+  render.
+
+  **The summary is the intent** (owner, 2026-08-20). The manage dialog edits the
+  summary and nothing longer — the long-form control was removed the day it gained
+  a sibling, as _"an absolute mess that should never have been there"_. `description`
+  remains on the model and remains writable over `update_phase`, holding the
+  completion conditions and decision history that are load-bearing on the Hub's own
+  phases; it simply has no UI writer and no reader beyond the band's fallback until
+  §37 `f-phase-page`, where the whole treatment gets revisited.
+
 - **`PhaseStatus`** — `upcoming` · `active` · `complete` · `parked`. `parked` is
   the dormant idea-pool: visible and browseable, hidden (collapsed) from active
   views.
@@ -167,18 +176,20 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
   read `Task.phaseId` — commitment is a separate axis and this surface shows no
   `→ <phase>` mark. A feature that never moved renders exactly as before.
 - **`ManagePhasesDialog`** ("Manage phases", top-right of the Plan) — create,
-  rename, **write the one-line summary**, **edit the long-form intent**, set status /
-  park, and **drag-to-reorder** (`@dnd-kit`, keyboard-accessible: focus the grip,
-  Space, arrows, Space). The summary is an `Input` and the intent a `Textarea` — the
-  control's shape is the clearest signal that markdown and paragraphs belong in one
-  and not the other. Both run through the same `useFieldDraft` hook (§33-sweep
-  t-104), which carries the adopt-the-server-value, trim-both-sides,
-  optimistic-then-revert and flush-on-close rules that the intent field learned the
-  hard way across §33 t-98/t-102/t-103; they register under distinct pending keys,
-  so editing one neither marks nor flushes the other. Reorder is **optimistic** —
-  the list follows the drop immediately from local order state, then `PUT`s the
-  batch order and `router.refresh()`es; a failed write reverts to the server order
-  and surfaces the error. The pure reorder math is `reorderedIds()`.
+  rename, **write the one-line summary**, set status / park, and **drag-to-reorder**
+  (`@dnd-kit`, keyboard-accessible: focus the grip, Space, arrows, Space). Name,
+  status and summary: nothing longer, by owner decision (2026-08-20). An `Input`
+  rather than a `Textarea`, because the control's shape is the clearest signal that
+  markdown and paragraphs do not belong here.
+  - The summary field runs through **`useFieldDraft`** (§33-sweep t-104), which
+    carries the adopt-the-server-value, trim-on-both-sides, optimistic-then-revert
+    and flush-on-close rules learned the hard way on the long-form field across §33
+    t-98 / t-102 / t-103. Those rules outlived the control that taught them: the
+    tests were **retargeted onto the summary, not deleted**, because the behaviour
+    they pin still exists. Reorder is **optimistic** —
+    the list follows the drop immediately from local order state, then `PUT`s the
+    batch order and `router.refresh()`es; a failed write reverts to the server order
+    and surfaces the error. The pure reorder math is `reorderedIds()`.
 - **A phase is linkable.** `/projects/<ref>?phase=<id>` opens the Plan with that
   band expanded and scrolled to (offset past the sticky topbar). The link outranks
   collapse-by-default — following one must not land you on a closed row. Plan is the
