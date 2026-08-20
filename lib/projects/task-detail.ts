@@ -245,7 +245,15 @@ export async function getTaskDetail(
     // advisory return excludes your own claims because it answers a different
     // question — "is someone already here?" — at the moment you take over.
     prisma.taskClaim.findMany({
-      where: { releasedAt: null, taskId: { not: taskId }, task: { feature: { projectId } } },
+      // `filesScope.isEmpty: false` is not just an optimisation — a claim whose
+      // task declares no scope can never overlap anything, so returning it only
+      // to discard it makes every `get_task` (which projects `collisions` away
+      // entirely) pay for rows that cannot matter.
+      where: {
+        releasedAt: null,
+        taskId: { not: taskId },
+        task: { feature: { projectId }, filesScope: { isEmpty: false } },
+      },
       orderBy: { claimedAt: 'asc' },
       select: {
         userId: true,
@@ -279,10 +287,20 @@ export async function getTaskDetail(
   const overlaps =
     status === 'merged' || status === 'blocked' || task.filesScope.length === 0
       ? []
-      : openClaims.flatMap((claim) => {
-          const paths = overlappingPaths(task.filesScope, claim.task.filesScope);
-          return paths.length > 0 ? [{ claim, paths }] : [];
-        });
+      : // Deduped by task, not by claim row. `startTask` releases open claims and
+        // creates the new one in one transaction, but under READ COMMITTED two
+        // concurrent starts can each miss the other's INSERT and leave two open
+        // claims on one task — which is why `board.ts`'s pairwise pass carries its
+        // own `a.id === b.id` guard. Without this the sheet would render the same
+        // task twice under a duplicate React key (`/code-review`).
+        [
+          ...new Map(
+            openClaims.flatMap((claim) => {
+              const paths = overlappingPaths(task.filesScope, claim.task.filesScope);
+              return paths.length > 0 ? [[claim.task.id, { claim, paths }] as const] : [];
+            })
+          ).values(),
+        ];
 
   // One batched identity lookup for the claimer + assignee + feature owner + every
   // member (the picker's options).

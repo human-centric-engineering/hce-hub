@@ -347,9 +347,36 @@ describe('getTaskDetail — overlapping claims (§33-sweep t-109)', () => {
     await getTaskDetail('u1', 'p1', 't1');
     expect(claimFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { releasedAt: null, taskId: { not: 't1' }, task: { feature: { projectId: 'p1' } } },
+        where: {
+          releasedAt: null,
+          taskId: { not: 't1' },
+          // Scope-less claims are excluded in the QUERY: they can never overlap,
+          // and `get_task` reuses this read while projecting `collisions` away
+          // entirely, so fetching them would be pure cost (`/code-review`).
+          task: { feature: { projectId: 'p1' }, filesScope: { isEmpty: false } },
+        },
       })
     );
+  });
+
+  it('reports one entry per overlapping TASK, not per claim row', async () => {
+    // `startTask` releases-then-creates in a single transaction, but under READ
+    // COMMITTED two concurrent starts can each take a snapshot before the other's
+    // INSERT is visible, leaving two open claims on one task. `board.ts`'s pairwise
+    // pass already carries its own `a.id === b.id` guard for exactly this. Undeduped,
+    // the sheet renders the same task twice under a duplicate React key.
+    taskFindFirst.mockResolvedValue(taskRow({ filesScope: ['lib/a.ts'] }));
+    claimFindMany.mockResolvedValue([
+      openClaim({ id: 't9', userId: 'u2', files: ['lib/a.ts'] }),
+      openClaim({ id: 't9', userId: 'u3', files: ['lib/a.ts'] }),
+    ]);
+    userFindMany.mockResolvedValue([userRow('u2'), userRow('u3')]);
+    const { collisions } = await getTaskDetail('u1', 'p1', 't1');
+    expect(collisions).toHaveLength(1);
+    expect(collisions[0].taskId).toBe('t9');
+    // The query orders by `claimedAt asc` and the Map keeps the last write, so the
+    // survivor is the most RECENT claimant — who actually holds it now.
+    expect(collisions[0].holder?.id).toBe('u3');
   });
 
   it('stays quiet when the task declares no scope, or nothing overlaps', async () => {

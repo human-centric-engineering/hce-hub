@@ -73,7 +73,16 @@ function normalize(path: string): string {
 export function pathsOverlap(a: string, b: string): boolean {
   const na = normalize(a);
   const nb = normalize(b);
-  if (na === nb) return na.length > 0;
+  // An entry that normalises to nothing — `''` or `'/'` — is "no path", and no
+  // path overlaps anything. Guarded HERE rather than in `normalize` because this
+  // catches every route to empty at once. The equality branch used to carry the
+  // check itself (`na.length > 0`), which read like a guard but only covered half
+  // the function: the PREFIX branch has no such test and `'/lib/x'.startsWith('/')`
+  // is true, so an empty entry matched every absolute path. `filesScope` is a
+  // plain `z.array(z.string())` with no `.min(1)`, so `['', 'lib/a.ts']` is a
+  // storable scope and this is reachable, not hypothetical (`/code-review`).
+  if (na === '' || nb === '') return false;
+  if (na === nb) return true;
   return na.startsWith(nb + '/') || nb.startsWith(na + '/');
 }
 

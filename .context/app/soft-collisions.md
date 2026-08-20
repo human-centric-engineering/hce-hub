@@ -76,19 +76,28 @@ suppressed when they cannot:
   coordinate.
 - **The task is `blocked`** (owner, 2026-08-20). An unmerged dependency already
   stops it, that stop is the stronger signal, and on the sheet it is rendered
-  directly below — often naming the very task the collision would have named. The
-  Board card is suppressed the same way, for the same reason: it already carries
-  the blocked treatment.
+  directly below — often naming the very task the collision would have named.
 
-Two things that deliberately do **not** go quiet:
+One thing that deliberately does **not** go quiet:
 
 - **A task pushed to `active` past an unmerged dependency.** `computeEffectiveStatus`
   keeps a started task `active` whatever its dependencies say, so someone who
   pushed through the block is exactly who needs telling — sequence them, batch
   them into one branch if they are both yours, or coordinate if one is not.
-- **Everyone else's view of a blocked task.** Suppression hides the blocked task's
-  _own_ warning, not its existence: it still holds a claim, so it is still ground
-  somebody has taken, and the tasks it overlaps go on being warned about it.
+
+**Only the sheet needs that blocked rule**, and the reason is an invariant rather
+than a design choice. The Board's marker is computed purely from open claims;
+`startTask` is the only writer of a `TaskClaim` and sets the task `active` in the
+same transaction, while `applyAssignment` (standing a task down) and `completeTask`
+close the claim as the task leaves `active`. So an open claim implies `active`,
+`blocked` only ever arises from `claimed`, and **a blocked card can never carry a
+marker in the first place**. The same invariant means a blocked task is absent from
+everyone _else's_ collisions too — holding no claim, there is nothing for the
+Board's pairwise pass or the sheet's query to find.
+
+The sheet is the exception precisely because it does **not** require the task to
+hold a claim of its own. That is what makes it the surface you can read _before_
+starting, and it is why it is the one place the rule has anything to suppress.
 
 ## Authoring a useful scope
 

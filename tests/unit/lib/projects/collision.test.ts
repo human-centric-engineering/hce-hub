@@ -131,6 +131,19 @@ describe('pathsOverlap — trailing wildcards (§33-sweep t-114)', () => {
     expect(pathsOverlap('lib/projects/*.ts', 'lib/projects/*.ts')).toBe(true);
   });
 
+  it('treats an entry that normalises to nothing as "no path"', () => {
+    // `filesScope` is a plain `z.array(z.string())` with no `.min(1)` in
+    // `create-task`, `update-task` or `plan-feature`, so `['', 'lib/a.ts']` is a
+    // storable scope. Before this guard the empty string reached the PREFIX
+    // branch — `'/lib/x'.startsWith('' + '/')` is true — and so matched every
+    // absolute entry in the project (`/code-review`).
+    expect(pathsOverlap('', '/lib/projects/collision.ts')).toBe(false);
+    expect(pathsOverlap('/lib/projects/collision.ts', '')).toBe(false);
+    expect(pathsOverlap('/', '/lib/projects/collision.ts')).toBe(false);
+    expect(pathsOverlap('/', '/')).toBe(false);
+    expect(pathsOverlap('', 'lib/a.ts')).toBe(false);
+  });
+
   it('does not let a ROOTED wildcard collapse to the empty path', () => {
     // `/**` strips to '', and while the equality branch guards on `na.length > 0`
     // the PREFIX branch does not: `'/a'.startsWith('' + '/')` is true, so an

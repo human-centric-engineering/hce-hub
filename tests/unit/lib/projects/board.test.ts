@@ -325,38 +325,48 @@ describe('getProjectBoard — soft collision', () => {
     expect(laneOf(board, 'u1')!.tasks[0].collision).toBeNull();
   });
 
-  it('hides the marker on a BLOCKED card, but keeps it on what that card collides with', async () => {
-    // Owner, 2026-08-20: a blocked card already says it cannot proceed, and that
-    // is the stronger signal — stacking "mind these files" on top is noise.
-    // Asymmetric on purpose: the blocked task still HOLDS a claim, so it is still
-    // ground somebody has taken and t2 must go on being warned about it.
+  it('never marks a BLOCKED card — such a task holds no open claim to collide with', async () => {
+    // Not a suppression rule, an invariant (`/code-review`, 2026-08-20). The
+    // marker is computed purely from open claims; `startTask` is the only writer
+    // of one and sets the task `active` in the same transaction, while
+    // `applyAssignment` (standing down) and `completeTask` close it as the task
+    // leaves `active`. `blocked` only ever arises from `claimed`, so it cannot
+    // reach `collisionByTask` at all.
+    //
+    // The fixture gives the blocked task NO claim *because no write path could
+    // give it one*. An earlier version handed it one and asserted the marker was
+    // suppressed — which pinned nothing: it passed with or without the code it
+    // was meant to be testing.
     setup({
       members: [member('u1'), member('u2')],
       features: [feature('f1', 'u1')],
       tasks: [
-        // claimed + an unmerged dependency ⇒ effective `blocked`
+        // claimed + an unmerged dependency ⇒ effective `blocked`, and no claim row
         task({
           id: 't1',
           featureId: 'f1',
           status: 'claimed',
-          claimedByUserId: 'u1',
+          assigneeUserId: 'u1',
           deps: ['active'],
         }),
-        task({ id: 't2', featureId: 'f1', status: 'active', claimedByUserId: 'u2' }),
+        task({ id: 't2', featureId: 'f1', status: 'active', claimedByUserId: 'u1' }),
+        task({ id: 't3', featureId: 'f1', status: 'active', claimedByUserId: 'u2' }),
       ],
       claims: [
-        { userId: 'u1', task: { id: 't1', title: 'T1', filesScope: ['src/a'] } },
-        { userId: 'u2', task: { id: 't2', title: 'T2', filesScope: ['src/a/b'] } },
+        { userId: 'u1', task: { id: 't2', title: 'T2', filesScope: ['src/a'] } },
+        { userId: 'u2', task: { id: 't3', title: 'T3', filesScope: ['src/a/b'] } },
       ],
       users: [userRow('u1'), userRow('u2')],
     });
     const board = await getProjectBoard('u1', 'p1');
-    const t1 = laneOf(board, 'u1')!.tasks.find((t) => t.id === 't1')!;
-    const t2 = laneOf(board, 'u2')!.tasks.find((t) => t.id === 't2')!;
+    const all = board.lanes.flatMap((l) => l.tasks);
+    const t1 = all.find((t) => t.id === 't1')!;
     expect(t1.status).toBe('blocked');
     expect(t1.collision).toBeNull();
-    expect(t2.collision).not.toBeNull();
-    expect(t2.collision!.note).toContain('T1');
+    // The two that DO hold claims still mark each other, so the null above is
+    // about t1's state rather than about nothing overlapping anywhere.
+    expect(all.find((t) => t.id === 't2')!.collision).not.toBeNull();
+    expect(all.find((t) => t.id === 't3')!.collision).not.toBeNull();
   });
 
   it('still flags a task pushed to ACTIVE past an unmerged dependency', async () => {

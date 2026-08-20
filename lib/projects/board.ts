@@ -20,10 +20,15 @@
  *     claimed task that can't start yet — no column of its own).
  *   - **collision** = a soft, ambient flag when the task's open (active-work)
  *     claim overlaps another open claim's file scope (`filesOverlap`); never a
- *     lock (§13.5). Not shown on a **blocked** card — the blocked treatment
- *     already says the task can't proceed, and stacking a second caution on it
- *     is noise (owner, 2026-08-20). The blocked task still flags everyone
- *     *else*: it holds a claim, so it is still ground somebody has taken.
+ *     lock (§13.5). **A blocked card can never carry one**, and needs no rule
+ *     to suppress it: the marker is computed purely from open claims, and
+ *     `startTask` — the only writer of a `TaskClaim` — sets the task `active`
+ *     in the same transaction, while `applyAssignment` (standing down) and
+ *     `completeTask` both close the claim as the task leaves `active`. So an
+ *     open claim implies `active`, and `blocked` only ever arises from
+ *     `claimed`. The **task sheet** is the surface that needed the owner's
+ *     blocked rule (2026-08-20), because it deliberately does *not* require the
+ *     task to hold a claim of its own.
  *
  * Membership is the [[f-access]] funnel's: the load goes through
  * `getAccessibleProject`, so a non-member or unknown id is a 404, never a 403.
@@ -214,11 +219,10 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
       // t-108). `null` means merged before the column existed (§19's import), which
       // sorts oldest because it is. ISO so the DTO stays Date-free.
       mergedAt: t.mergedAt ? t.mergedAt.toISOString() : null,
-      // Suppressed on a blocked card only. The pairwise pass above still records
-      // the overlap from the other side, so the task this one collides with keeps
-      // its marker — what is hidden is the redundant caution on the card that is
-      // already telling you it cannot start.
-      collision: effective === 'blocked' ? null : (collisionByTask.get(t.id) ?? null),
+      // No blocked check here: see the header — an open claim implies `active`,
+      // so `collisionByTask` cannot hold a blocked task in the first place. A
+      // ternary here would be dead code asserting an invariant it does not test.
+      collision: collisionByTask.get(t.id) ?? null,
     });
   }
 
