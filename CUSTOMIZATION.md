@@ -301,9 +301,18 @@ The rule underneath: a real environment variable always beats a file, and
 
 **Logo & favicon:**
 
-- Replace `public/favicon.ico`
+- Replace `public/favicon.ico` **and `public/favicon.svg`** — Sunrise ships both,
+  but nothing references the SVG, so only the `.ico` is served until you do the
+  next step (upstream
+  [sunrise#640](https://github.com/human-centric-engineering/sunrise/issues/640))
 - Add logo images to `public/`
-- Update `app/layout.tsx` → `metadata.icons`
+- Update `app/layout.tsx` → `metadata.icons`. **Not optional if you want the SVG:**
+  vanilla declares no `icons` at all, so the `.ico` is found by the browser's
+  root-path convention and the `.svg` is found by nothing. Declare the `.ico`
+  first and the `.svg` last — a browser takes the last entry it can render — and
+  only then can a `prefers-color-scheme` block inside the SVG make the tab follow
+  the OS theme. HCE Hub's is
+  [documented in the theme doc](.context/app/theme.md#favicon)
 - Update the landing page hero via the thin-shim ([§6](#6-landing-page--routes)),
   not by editing `app/(public)/page.tsx` in place
 
