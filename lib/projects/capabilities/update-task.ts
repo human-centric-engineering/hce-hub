@@ -58,7 +58,7 @@ import { isWriteConflict, withWriteConflictRetry } from '@/lib/projects/write-co
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { redactedString } from '@/lib/security/redact';
 import { scopeBreadthWarnings } from '@/lib/projects/scope-advisory';
-import type { ScopeBreadthWarning } from '@/lib/projects/scope-advisory';
+import { compactWarnings, type ScopeBreadthWarning } from '@/lib/projects/scope-advisory';
 
 const schema = z.object({
   taskId: z.string().describe('The task to edit.'),
@@ -183,7 +183,16 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
         kind: args.kind,
         phaseId: args.phaseId,
       },
-      resultPreview: JSON.stringify(result),
+      // The generated advisory prose is dropped from the durable preview — see
+      // `compactWarnings`. Structural facts are kept; only the sentence goes.
+      resultPreview: JSON.stringify(
+        result.data
+          ? {
+              ...result,
+              data: { ...result.data, scopeWarnings: compactWarnings(result.data.scopeWarnings) },
+            }
+          : result
+      ),
     };
   }
 
@@ -292,6 +301,18 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
       updated.push('dependencies');
     }
 
+    // Before the write (see `create_task`): run after it and a transient failure on
+    // this read is normalised into `execution_error`, reporting failure for an edit
+    // that already committed. Only when the caller actually supplied a scope —
+    // re-warning about an entry this call did not touch would nag on every unrelated
+    // edit. Excludes the task itself, which sits in the corpus under its OLD scope
+    // and would otherwise count as one of its own collisions.
+    const scopeWarnings = args.filesScope
+      ? await scopeBreadthWarnings(projectId, [{ taskRef: null, filesScope: args.filesScope }], {
+          excludeTaskIds: [task.id],
+        })
+      : [];
+
     try {
       await withWriteConflictRetry(() =>
         executeTransaction(
@@ -398,14 +419,6 @@ export class UpdateTaskCapability extends BaseCapability<Args, Data> {
       entityId: task.id,
       metadata: { fields: updated },
     });
-
-    // Only when the caller actually supplied a scope — re-warning about an entry
-    // this call did not touch would nag on every unrelated edit.
-    const scopeWarnings = args.filesScope
-      ? await scopeBreadthWarnings(projectId, [{ taskRef: null, filesScope: args.filesScope }], {
-          excludeTaskIds: [task.id],
-        })
-      : [];
 
     return this.success({ taskId: task.id, updated, scopeWarnings });
   }

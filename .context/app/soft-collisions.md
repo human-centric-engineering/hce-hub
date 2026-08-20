@@ -117,11 +117,26 @@ also costs nothing on a normal write — the corpus is only read if an entry has
 already failed the predicate.
 
 Breadth is measured **after normalisation**, so `app`, `app/` and `app/**` are one
-rule rather than three, and one surviving segment is the line. A file at the repo
-root (`package.json`) is one segment but narrow, and is not flagged; a dot-prefixed
-extensionless name (`.context` the directory, `.npmrc` the file) is ambiguous by
-name alone and is deliberately read as a directory, since over-warning costs a line
-and under-warning ships the silent over-broad scope.
+rule rather than three, and one surviving segment is the line.
+
+A **file** at the repo root is one segment but narrow, and is not flagged. Since the
+Hub tracks projects other than this repository, nothing can stat a filesystem to tell
+a file from a directory — it is read off the name, by two conventions:
+
+- an **extension** (`package.json`, `proxy.ts`, `.env.local`), and
+- a **capitalised extensionless name** (`Dockerfile`, `LICENSE`, `Makefile`,
+  `CODEOWNERS`), since directories are conventionally lower-case.
+
+That leaves one genuinely ambiguous shape: a lower-case extensionless dotfile.
+`.context` is a directory and `.npmrc` is a file, and nothing in the string separates
+them. Both are read as directories, deliberately — over-warning on a `.npmrc` costs a
+line someone dismisses, while under-warning on a `.context` ships the silent
+over-broad scope the advisory exists to catch.
+
+A bare `**` gets its own message rather than a count. It is the broadest entry
+expressible _and_ matches nothing — `pathsOverlap` does not expand a slash-less
+wildcard (t-114) — so quoting "overlaps 0" would read as reassurance at exactly the
+wrong moment.
 
 Rules and reasoning for authors are in
 [the plan-authoring guide §5b](./planning/feature-plan-authoring-guide.md).

@@ -35,7 +35,7 @@ import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 import { redactedString } from '@/lib/security/redact';
 import { scopeBreadthWarnings } from '@/lib/projects/scope-advisory';
-import type { ScopeBreadthWarning } from '@/lib/projects/scope-advisory';
+import { compactWarnings, type ScopeBreadthWarning } from '@/lib/projects/scope-advisory';
 
 const taskSpec = z.object({
   ref: z
@@ -153,7 +153,16 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
           dependsOn: t.dependsOn ?? [],
         })),
       },
-      resultPreview: JSON.stringify(result),
+      // The generated advisory prose is dropped from the durable preview — see
+      // `compactWarnings`. Structural facts are kept; only the sentence goes.
+      resultPreview: JSON.stringify(
+        result.data
+          ? {
+              ...result,
+              data: { ...result.data, scopeWarnings: compactWarnings(result.data.scopeWarnings) },
+            }
+          : result
+      ),
     };
   }
 
@@ -227,6 +236,16 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
       }
       throw err;
     }
+
+    // Before the write (see `create_task`), so a corpus-read failure cannot report
+    // a plan that already materialised. One corpus load for the whole batch, and each
+    // warning names its task — an unattributed list across a feature's worth of tasks
+    // is unreadable. The ref is the author's own batch-local id (`t1`), which is what
+    // they are looking at while planning; `t-N` does not exist yet.
+    const scopeWarnings = await scopeBreadthWarnings(
+      access.feature.projectId,
+      args.tasks.map((spec) => ({ taskRef: spec.ref, filesScope: spec.filesScope ?? [] }))
+    );
 
     const tasks = await executeTransaction(async (tx) => {
       // Create every task first so batch-local refs can resolve to real ids.
@@ -308,18 +327,6 @@ export class PlanFeatureCapability extends BaseCapability<Args, Data> {
       entityId: args.featureId,
       metadata: { projectId: access.feature.projectId, taskCount: tasks.length },
     });
-
-    // One corpus load for the whole batch, and each warning names its task — an
-    // unattributed list across a feature's worth of tasks is unreadable. `tasks`
-    // is pushed in `args.tasks` order, so the index pairing holds.
-    const scopeWarnings = await scopeBreadthWarnings(
-      access.feature.projectId,
-      args.tasks.map((spec, i) => ({
-        taskRef: tasks[i]?.number != null ? `t-${tasks[i].number}` : spec.ref,
-        filesScope: spec.filesScope ?? [],
-      })),
-      { excludeTaskIds: tasks.map((t) => t.id) }
-    );
 
     return this.success({
       featureId: args.featureId,

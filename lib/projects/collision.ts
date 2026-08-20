@@ -111,12 +111,30 @@ export function overlappingPaths(a: string[], b: string[]): string[] {
 }
 
 /**
- * Does this segment carry a file extension? `package.json` and `proxy.ts` do;
- * `tests` and `.context` do not. The dot must be at index > 0, or every dotfile
- * name would read as an extension of the empty string.
+ * Does this segment name a FILE rather than a directory? Judged from the string
+ * alone — the Hub tracks projects other than this repository, so nothing here can
+ * stat a filesystem.
+ *
+ * Two signals, both conventions rather than guarantees:
+ *
+ *  - **An extension.** `package.json` and `proxy.ts` have one; `tests` and
+ *    `.context` do not. The dot must be at index > 0, or every dotfile name would
+ *    read as an extension of the empty string.
+ *  - **A capitalised extensionless name.** `Dockerfile`, `LICENSE`, `Makefile`,
+ *    `Procfile`, `CODEOWNERS`. Both `Dockerfile` and `LICENSE` sit in this repo's
+ *    root, and without this they read as whole top-level trees (`/code-review`).
+ *    Directories are conventionally lower-case — every extensionless directory at
+ *    this repo's root is (`app`, `lib`, `tests`, `public`, `prisma`, `scripts`,
+ *    `types`, `emails`, `hooks`, `components`) — so the case carries the signal
+ *    where the extension cannot.
+ *
+ * A lower-case extensionless dotfile (`.npmrc`) still reads as a directory. That
+ * ambiguity is genuine and deliberate: see `isOverlyBroadScope`.
  */
-function hasExtension(segment: string): boolean {
-  return segment.lastIndexOf('.') > 0;
+function looksLikeFile(segment: string): boolean {
+  if (segment.lastIndexOf('.') > 0) return true;
+  const first = segment.replace(/^\.+/, '').charAt(0);
+  return first !== '' && first === first.toUpperCase() && first !== first.toLowerCase();
 }
 
 /**
@@ -152,7 +170,7 @@ export function isOverlyBroadScope(entry: string): boolean {
   // refuses to match on it. Not this predicate's business to also complain.
   if (normalized === '') return false;
   if (normalized.includes('/')) return false;
-  return !hasExtension(normalized);
+  return !looksLikeFile(normalized);
 }
 
 /**

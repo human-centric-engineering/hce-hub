@@ -117,8 +117,9 @@ the scope is saved as written, and you may keep it if the work really is that br
 [soft collisions](../soft-collisions.md).
 
 **From two segments down you are fine**: `lib/projects/**`, `app/(hub)/**`, or the files
-themselves. A file at the repo root (`package.json`, `proxy.ts`) is one segment but
-narrow, and is not flagged.
+themselves. A *file* at the repo root is one segment but narrow, and is not flagged —
+recognised either by its extension (`package.json`, `proxy.ts`) or by being a
+capitalised extensionless name (`Dockerfile`, `LICENSE`).
 
 Write path segments as they appear on disk — Next.js dynamic segments (`[id]`) and route
 groups (`(hub)`) are literal directory names here, not patterns, and need no escaping.

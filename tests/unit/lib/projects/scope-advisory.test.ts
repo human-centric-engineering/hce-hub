@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 vi.mock('@/lib/db/client', () => ({ prisma: { task: { findMany: vi.fn() } } }));
 
 const { prisma } = await import('@/lib/db/client');
-const { scopeBreadthWarnings } = await import('@/lib/projects/scope-advisory');
+const { scopeBreadthWarnings, compactWarnings } = await import('@/lib/projects/scope-advisory');
 
 const findMany = prisma.task.findMany as ReturnType<typeof vi.fn>;
 
@@ -106,5 +106,65 @@ describe('scopeBreadthWarnings', () => {
     const [warning] = await scopeBreadthWarnings('p1', [{ taskRef: null, filesScope: ['app'] }]);
     expect(warning.message).toMatch(/advisory/i);
     expect(warning.message).toContain('saved as written');
+  });
+
+  it('counts a batch against its own siblings, not just the stored corpus', async () => {
+    // `/code-review`: excluding the batch entirely meant planning five tasks that
+    // all declare `lib/**` on a project with nothing else scoped reported
+    // "overlaps 0 of the 0 task(s)" — the number went empty exactly when the
+    // breadth was worst. Here the corpus is empty, so every overlap found must
+    // have come from a sibling.
+    findMany.mockResolvedValue([]);
+    const out = await scopeBreadthWarnings('p1', [
+      { taskRef: 't1', filesScope: ['lib/**'] },
+      { taskRef: 't2', filesScope: ['lib/projects/plan.ts'] },
+      { taskRef: 't3', filesScope: ['lib/projects/board.ts'] },
+    ]);
+    const first = out.find((w) => w.taskRef === 't1')!;
+    expect(first.overlaps).toBe(2);
+    expect(first.scopedTasks).toBe(2);
+  });
+
+  it('does not count a task against itself', async () => {
+    findMany.mockResolvedValue([]);
+    const [only] = await scopeBreadthWarnings('p1', [{ taskRef: 't1', filesScope: ['lib/**'] }]);
+    expect(only.overlaps).toBe(0);
+    expect(only.scopedTasks).toBe(0);
+  });
+
+  it('degrades to no warnings when the corpus read fails — never fails the write', async () => {
+    // The advisory runs on the write path. `capabilityDispatcher` turns any throw
+    // out of `execute()` into `execution_error`, so propagating here would report
+    // failure for a write the caller asked for and may already have got.
+    findMany.mockRejectedValue(new Error('connection terminated'));
+    await expect(
+      scopeBreadthWarnings('p1', [{ taskRef: null, filesScope: ['app/**'] }])
+    ).resolves.toEqual([]);
+  });
+
+  it('does not quote a misleading zero for a bare wildcard', async () => {
+    // `**` is the broadest entry expressible and matches NOTHING: `normalize`
+    // deliberately leaves a slash-less wildcard intact (t-114), so `pathsOverlap`
+    // never fires on it. "overlaps 0" would read as reassurance at the worst
+    // possible moment (`/code-review`).
+    const [warning] = await scopeBreadthWarnings('p1', [{ taskRef: null, filesScope: ['**'] }]);
+    expect(warning.message).toContain('entire repository');
+    expect(warning.message).toContain('no warnings at all');
+    expect(warning.message).not.toMatch(/overlaps \d+ of/);
+  });
+});
+
+describe('compactWarnings', () => {
+  it('keeps every structural fact and drops only the generated prose', async () => {
+    // `redactProvenance` stringifies the whole result into a durable audit row,
+    // bypassing BaseCapability's 480-char cap. Each message is ~430 generated
+    // characters, so a large plan would write tens of kilobytes of boilerplate.
+    const warnings = await scopeBreadthWarnings('p1', [{ taskRef: 't1', filesScope: ['app/**'] }]);
+    expect(warnings[0].message.length).toBeGreaterThan(200);
+    expect(compactWarnings(warnings)).toEqual([
+      { taskRef: 't1', entry: 'app/**', overlaps: expect.any(Number) },
+    ]);
+    // The fact an auditor would want survives; only the sentence goes.
+    expect(JSON.stringify(compactWarnings(warnings)).length).toBeLessThan(80);
   });
 });

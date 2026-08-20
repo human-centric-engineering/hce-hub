@@ -194,9 +194,12 @@ describe('plan_feature materialise', () => {
       // `prisma/` is a whole top-level tree, so §33-sweep t-118's advisory fires
       // — attributed to the task it came from, which is the whole reason a batch
       // write carries `taskRef`. Advisory only: the scope is still written.
-      scopeWarnings: [
-        expect.objectContaining({ taskRef: 't-11', entry: 'prisma/', scopedTasks: 1 }),
-      ],
+      //
+      // The ref is the author's batch-local `t1`, not `t-11`: `/code-review` moved
+      // the advisory ahead of the write (a corpus-read failure after the commit
+      // would report a plan that had already materialised), and at that point no
+      // `t-N` has been assigned. `t1` is also what the planner is looking at.
+      scopeWarnings: [expect.objectContaining({ taskRef: 't1', entry: 'prisma/', scopedTasks: 1 })],
     });
 
     // First task: numbered from the counter, born claimed and owned by the

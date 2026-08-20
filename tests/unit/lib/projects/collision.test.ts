@@ -274,6 +274,20 @@ describe('isOverlyBroadScope (§33-sweep t-118)', () => {
     }
   });
 
+  it('does not flag an extensionless root FILE — Dockerfile, LICENSE', () => {
+    // Both sit in this repo's root and have no extension, so the dot test alone
+    // read them as whole top-level trees (`/code-review`). Directories are
+    // conventionally lower-case — every extensionless directory at this root is —
+    // so the capital carries the signal the extension cannot.
+    for (const entry of ['Dockerfile', 'LICENSE', 'Makefile', 'Procfile', 'CODEOWNERS']) {
+      expect(isOverlyBroadScope(entry)).toBe(false);
+    }
+    // …and a lower-case extensionless directory is still flagged.
+    for (const entry of ['app', 'lib', 'tests', 'public', 'prisma']) {
+      expect(isOverlyBroadScope(entry)).toBe(true);
+    }
+  });
+
   it('reads a dot-prefixed extensionless name as a DIRECTORY, deliberately', () => {
     // `.context` (a directory) and `.npmrc` (a file) are indistinguishable by
     // name, and the Hub tracks projects other than this repo — so the predicate
