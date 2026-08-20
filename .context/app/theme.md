@@ -58,6 +58,35 @@ Inter Tight is a variable font, so the design's 450 ("body-ish emphasis") weight
 resolves. Body text on the consumer surface uses `--font-ui`; apply `var(--font-mono)`
 per-component for IDs, paths, PR links, timestamps, and micro-labels.
 
+## Favicon
+
+`public/favicon.svg` + `public/favicon.ico` carry the same mark as
+[`components/brand/brand-mark.tsx`](../../components/brand/brand-mark.tsx) — the ink
+square with a mono "H" — redrawn for a 16px canvas. Colours are this file's tokens, so
+the tab matches the sidebar it opens onto:
+
+| Scheme | Square    | "H"       |
+| ------ | --------- | --------- |
+| light  | `#1a1a1a` | `#faf8f3` |
+| dark   | `#e8e6e1` | `#1a1916` |
+
+Three things about it are deliberate and easy to undo by accident:
+
+- **The "H" is a path, not type.** A favicon is a standalone document with no access to
+  `public/fonts/`, so JetBrains Mono is not available to it. The outline is a touch
+  heavier than the real SemiBold cut — hairlines vanish at 16px.
+- **Light lives on presentation attributes; dark lives in the `<style>` block.** CSS
+  beats presentation attributes, so the `prefers-color-scheme` rules win where they are
+  honoured — and a renderer that ignores the `<style>` block entirely still gets correct
+  light colours instead of defaulting both shapes to black.
+- **The ICO is generated from the SVG**, at 16/32/48, light only (an ICO cannot adapt).
+  Regenerate it if you change the mark, or the two drift silently.
+
+Both are linked from the root `metadata.icons` in `app/layout.tsx` — a keep-mine edit
+to a platform file, because Sunrise declares no `icons` and never links its own SVG
+([divergence rows 24 + 25](./platform-divergences.md), upstream `sunrise#640`). Only
+the ICO would be found without it, by root-path convention.
+
 ## Rules of thumb
 
 - **Cards separate by border, not shadow** (Linear-like calm density, §13.5).
