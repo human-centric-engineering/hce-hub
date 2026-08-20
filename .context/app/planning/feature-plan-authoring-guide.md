@@ -87,42 +87,42 @@ A feature plan that names a single ORM call ("boot-time upsert") hides the corre
 - **A primitive** — read its validators and serialisers and ask what they assume about input *shape* (string vs object, size caps, one-vs-many anchor), not just its type signature. A green type-check on a copied primitive proves the shapes *compile*, not that its silent assumptions hold ([planning-retro](./planning-retro.md) B24).
 - **A guard** — identify the exact failure state it detects and confirm the new usage can actually *reach* it. A drift-guard on query-vs-stored vectors is dead code over same-run node-to-node vectors ([planning-retro](./planning-retro.md) B26).
 
-## 5b · Files in scope — narrow, and **never** `tests/**`
+## 5b · Files in scope — one segment is too broad
 
-`filesScope` exists to drive soft-collision warnings when two people claim overlapping
-ground. Two rules, both learned the hard way (owner, 2026-08-19):
+`filesScope` drives the soft-collision warnings that fire when two people work
+overlapping ground. Since §33-sweep t-114 made the matcher actually match, **breadth is
+the entire cost** of an entry.
 
-**Never declare `tests/**`.** It is the worst possible entry: it collides with *every*
-other task carrying it — which was most of them — while catching nothing real. Omit test
-paths entirely; a task's tests live under the mirror of its source scope, so the source
-entry is the meaningful signal. Declare a test path only for work that is *purely* test
-work (a `/test-fix` pass), and then name the specific mirrored directory.
+**Never name a whole top-level tree.** `tests`, `tests/**`, `app/**`, `lib/**` and
+`public/**` are all the same mistake — and, to the matcher, all the same *kind* of
+entry: `pathsOverlap` normalises a trailing wildcard away, so `app`, `app/` and `app/**`
+are indistinguishable. Measured against the Hub's own corpus of scope-declaring tasks:
 
-**Keep the scope as narrow as it truthfully is.** A trailing `/**` is fine to write:
-`pathsOverlap` ([`lib/projects/collision.ts`](../../../lib/projects/collision.ts))
-normalises `dir/**` and `dir/*` down to `dir` before comparing, so a glob scope matches
-real files beneath it and a broad scope matches a narrower one under it.
+| Entry            | Collides with |
+| ---------------- | ------------- |
+| `lib/**`         | **86%**       |
+| `app/**`         | **39%**       |
+| `components/**`  | **37%**       |
 
-| A | B | Overlap |
-| --- | --- | --- |
-| `components/hub/projects/board/**` | `components/hub/projects/board/board-view.tsx` | ✓ |
-| `components/hub/projects/**` | `components/hub/projects/board/**` | ✓ |
-| `components/hub/projects/board/**` | `components/hub/projects/plan/**` | ✗ |
+A warning that fires on two tasks in five is ignored exactly like one that never fires.
+`tests/**` was the original offender — carried by ten tasks, colliding with every other
+task that declared it while catching nothing real (owner, 2026-08-19) — but it was never
+a special case, just the first one anyone noticed. The rule is breadth, not that
+particular string.
 
-Until §33-sweep t-114 it compared literal strings, so a `dir/**` entry matched only a
-byte-identical one and the whole feature was close to inert — which is why the rule here
-used to be "write a bare directory". That is no longer necessary, and existing scopes
-were repaired by the fix rather than re-authored.
+**You no longer have to remember this.** Since §33-sweep t-118, `create_task`,
+`update_task` and `plan_feature` return an advisory naming any entry that covers a whole
+top-level tree, with the number of tasks it would collide with. It is advisory only —
+the scope is saved as written, and you may keep it if the work really is that broad. See
+[soft collisions](../soft-collisions.md).
 
-What still costs you is **breadth**. A scope of `lib/**` warns against every task
-touching `lib/`, and a warning that fires on everything gets ignored exactly like one
-that fires on nothing. Name the directory you will genuinely work in, or the files.
+**From two segments down you are fine**: `lib/projects/**`, `app/(hub)/**`, or the files
+themselves. A *file* at the repo root is one segment but narrow, and is not flagged —
+recognised either by its extension (`package.json`, `proxy.ts`) or by being a
+capitalised extensionless name (`Dockerfile`, `LICENSE`).
 
 Write path segments as they appear on disk — Next.js dynamic segments (`[id]`) and route
 groups (`(hub)`) are literal directory names here, not patterns, and need no escaping.
-
-What the warnings actually look like, and on which surfaces, is in
-[soft collisions](../soft-collisions.md).
 
 ## 6 · Test strategy up front, and budget the review-fix commit
 

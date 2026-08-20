@@ -35,6 +35,8 @@ import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
 import { recordProjectEvent } from '@/lib/projects/project-event';
 import { checkIdeaPromotable, resolveIdeaOnPromotion } from '@/lib/projects/idea-promotion';
 import { redactedString } from '@/lib/security/redact';
+import { scopeBreadthWarnings } from '@/lib/projects/scope-advisory';
+import { compactWarnings, type ScopeBreadthWarning } from '@/lib/projects/scope-advisory';
 
 const schema = z.object({
   featureId: z.string().describe('The feature to add the task to.'),
@@ -82,6 +84,12 @@ interface Data {
   number: number | null;
   status: TaskStatus;
   featureId: string;
+  /**
+   * Advisory warnings for over-broad `filesScope` entries (§33-sweep t-118) —
+   * empty when every entry is specific enough. Never a rejection: the scope is
+   * saved as written.
+   */
+  scopeWarnings: ScopeBreadthWarning[];
 }
 
 export class CreateTaskCapability extends BaseCapability<Args, Data> {
@@ -141,7 +149,10 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
   ): { args: unknown; resultPreview: string } {
     // Redact the free-text title / description / done-when on the durable,
     // broadly-visible message provenance row; the ids/paths are not sensitive.
-    // The result carries no free text (just ids + status).
+    // The result carries no *caller-supplied* free text — ids and status, plus
+    // t-118's advisory, whose generated prose is stripped from the durable preview
+    // by `compactWarnings`. The author's own path strings stay, and are already
+    // persisted verbatim in `args.filesScope` anyway.
     return {
       args: {
         ...args,
@@ -151,7 +162,16 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           : null,
         doneWhen: args.doneWhen ? redactedString(`doneWhen (${args.doneWhen.length} chars)`) : null,
       },
-      resultPreview: JSON.stringify(result),
+      // The generated advisory prose is dropped from the durable preview — see
+      // `compactWarnings`. Structural facts are kept; only the sentence goes.
+      resultPreview: JSON.stringify(
+        result.data
+          ? {
+              ...result,
+              data: { ...result.data, scopeWarnings: compactWarnings(result.data.scopeWarnings) },
+            }
+          : result
+      ),
     };
   }
 
@@ -211,6 +231,18 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
         return this.error(promotable.message, promotable.code);
       }
     }
+
+    // BEFORE the write, deliberately (`/code-review`). Run after the transaction
+    // commits and a transient failure here is normalised by the dispatcher into
+    // `execution_error` — reporting failure for a task that already exists and has
+    // consumed a `t-N`, which an agent then retries into a duplicate. Nothing is
+    // written yet at this point, so a failure is clean. Matches `start_task`, which
+    // computes its collision warnings ahead of its write for the same reason.
+    // No exclusion needed: the task does not exist yet.
+    const scopeWarnings = await scopeBreadthWarnings(access.feature.projectId, [
+      // `taskRef: null` — a single-task write, and the response below names it.
+      { taskRef: null, filesScope: args.filesScope ?? [] },
+    ]);
 
     const task = await executeTransaction(async (tx) => {
       // Assign the next project-wide task number by atomically bumping the
@@ -303,6 +335,7 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
       number: task.number,
       status: task.status,
       featureId: args.featureId,
+      scopeWarnings,
     });
   }
 }

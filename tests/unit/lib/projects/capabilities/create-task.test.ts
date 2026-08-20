@@ -132,7 +132,9 @@ describe('create_task dependency integrity', () => {
 
     expect(r).toEqual({
       success: true,
-      data: { taskId: 't-new', number: 7, status: 'claimed', featureId: 'f1' },
+      // `scopeWarnings` is always present, empty when every entry is specific
+      // enough (§33-sweep t-118).
+      data: { taskId: 't-new', number: 7, status: 'claimed', featureId: 'f1', scopeWarnings: [] },
     });
     // De-duplicated edges from the new task to each dep.
     expect(txDepCreateMany).toHaveBeenCalledWith({
@@ -152,7 +154,15 @@ describe('create_task happy path (no deps)', () => {
     const r = await cap.execute({ featureId: 'f1', title: 'Ship it' }, ctx());
 
     // Reports the assigned t-N so the caller can say "created t-7" (t-66).
-    expect(r.data).toEqual({ taskId: 't-1', number: 7, status: 'claimed', featureId: 'f1' });
+    expect(r.data).toEqual({
+      taskId: 't-1',
+      number: 7,
+      status: 'claimed',
+      featureId: 'f1',
+      scopeWarnings: [],
+    });
+    // Also pins t-118's free path: this task declares no scope, so the breadth
+    // advisory must not reach for the project's corpus at all.
     expect(taskFindMany).not.toHaveBeenCalled();
     expect(txDepCreateMany).not.toHaveBeenCalled();
     // Atomic project-wide number: bump the counter, stamp the returned value.
@@ -425,7 +435,7 @@ describe('create_task redactProvenance', () => {
     };
     const out = cap.redactProvenance(args, {
       success: true,
-      data: { taskId: 't', number: 1, status: 'claimed', featureId: 'f1' },
+      data: { taskId: 't', number: 1, status: 'claimed', featureId: 'f1', scopeWarnings: [] },
     });
     const redactedArgs = out.args as {
       title: string;
@@ -442,7 +452,10 @@ describe('create_task redactProvenance', () => {
   it('leaves description / doneWhen null in provenance when omitted', () => {
     const out = cap.redactProvenance(
       { featureId: 'f1', title: 't' },
-      { success: true, data: { taskId: 't', number: 1, status: 'claimed', featureId: 'f1' } }
+      {
+        success: true,
+        data: { taskId: 't', number: 1, status: 'claimed', featureId: 'f1', scopeWarnings: [] },
+      }
     );
     const redactedArgs = out.args as { description: string | null; doneWhen: string | null };
     expect(redactedArgs.description).toBeNull();

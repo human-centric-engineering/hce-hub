@@ -105,10 +105,41 @@ The matcher works; **breadth** is now the only thing that costs you. A scope of
 `lib/**` warns against every task touching `lib/`, and a warning that fires on
 everything is ignored exactly like one that fires on nothing.
 
-Rules, and the reasoning behind them, are in
-[the plan-authoring guide §5b](./planning/feature-plan-authoring-guide.md) — the
-short version being **never declare `tests/**`**, and name the directory you will
-genuinely work in.
+**The write path tells you** (§33-sweep t-118). `create_task`, `update_task` and
+`plan_feature` return a `scopeWarnings` array naming any entry that covers a whole
+top-level tree, and how many scope-declaring tasks in the project it would collide
+with — the number is what makes the case. A batch write attributes each warning to
+its task via `taskRef`.
+
+It is **advisory, never a rejection**, matching the rest of this feature: the scope
+is saved exactly as written, and an entry that genuinely is that broad may stay. It
+also costs nothing on a normal write — the corpus is only read if an entry has
+already failed the predicate.
+
+Breadth is measured **after normalisation**, so `app`, `app/` and `app/**` are one
+rule rather than three, and one surviving segment is the line.
+
+A **file** at the repo root is one segment but narrow, and is not flagged. Since the
+Hub tracks projects other than this repository, nothing can stat a filesystem to tell
+a file from a directory — it is read off the name, by two conventions:
+
+- an **extension** (`package.json`, `proxy.ts`, `.env.local`), and
+- a **capitalised extensionless name** (`Dockerfile`, `LICENSE`, `Makefile`,
+  `CODEOWNERS`), since directories are conventionally lower-case.
+
+That leaves one genuinely ambiguous shape: a lower-case extensionless dotfile.
+`.context` is a directory and `.npmrc` is a file, and nothing in the string separates
+them. Both are read as directories, deliberately — over-warning on a `.npmrc` costs a
+line someone dismisses, while under-warning on a `.context` ships the silent
+over-broad scope the advisory exists to catch.
+
+A bare `**` gets its own message rather than a count. It is the broadest entry
+expressible _and_ matches nothing — `pathsOverlap` does not expand a slash-less
+wildcard (t-114) — so quoting "overlaps 0" would read as reassurance at exactly the
+wrong moment.
+
+Rules and reasoning for authors are in
+[the plan-authoring guide §5b](./planning/feature-plan-authoring-guide.md).
 
 ## Related
 

@@ -12,6 +12,7 @@ import {
   pathsOverlap,
   filesOverlap,
   overlappingPaths,
+  isOverlyBroadScope,
   detectFileOverlapWarnings,
   type OpenClaim,
 } from '@/lib/projects/collision';
@@ -241,5 +242,69 @@ describe('overlappingPaths (§33-sweep t-109)', () => {
   it('is empty for an empty scope on either side', () => {
     expect(overlappingPaths([], ['lib/**'])).toEqual([]);
     expect(overlappingPaths(['lib/**'], [])).toEqual([]);
+  });
+});
+
+describe('isOverlyBroadScope (§33-sweep t-118)', () => {
+  it('flags a whole top-level tree however it was written', () => {
+    // The test is breadth AFTER normalisation, not "is it a glob". `normalize`
+    // strips a trailing wildcard, so these are the same entry and overlap
+    // identically — a glob-only rule would miss two of the three.
+    for (const entry of ['app', 'app/', 'app/**', 'app/*', 'tests', 'tests/**', 'public/**']) {
+      expect(isOverlyBroadScope(entry)).toBe(true);
+    }
+  });
+
+  it('stays silent from two segments down', () => {
+    for (const entry of [
+      'lib/projects/**',
+      'app/(hub)/**',
+      'lib/projects/collision.ts',
+      'app/api/v1/projects/[id]/route.ts',
+      'prisma/seeds/app/**',
+    ]) {
+      expect(isOverlyBroadScope(entry)).toBe(false);
+    }
+  });
+
+  it('does not flag a file at the repo root — one segment, but narrow', () => {
+    // All four are real entries in the Hub's own corpus (t-1 and t-13).
+    for (const entry of ['package.json', 'README.md', 'CLAUDE.md', 'proxy.ts']) {
+      expect(isOverlyBroadScope(entry)).toBe(false);
+    }
+  });
+
+  it('does not flag an extensionless root FILE — Dockerfile, LICENSE', () => {
+    // Both sit in this repo's root and have no extension, so the dot test alone
+    // read them as whole top-level trees (`/code-review`). Directories are
+    // conventionally lower-case — every extensionless directory at this root is —
+    // so the capital carries the signal the extension cannot.
+    for (const entry of ['Dockerfile', 'LICENSE', 'Makefile', 'Procfile', 'CODEOWNERS']) {
+      expect(isOverlyBroadScope(entry)).toBe(false);
+    }
+    // …and a lower-case extensionless directory is still flagged.
+    for (const entry of ['app', 'lib', 'tests', 'public', 'prisma']) {
+      expect(isOverlyBroadScope(entry)).toBe(true);
+    }
+  });
+
+  it('reads a dot-prefixed extensionless name as a DIRECTORY, deliberately', () => {
+    // `.context` (a directory) and `.npmrc` (a file) are indistinguishable by
+    // name, and the Hub tracks projects other than this repo — so the predicate
+    // only ever sees the string and cannot stat anything. It errs toward warning:
+    // over-warning on `.npmrc` costs one line a human dismisses, while
+    // under-warning on `.context` ships the silent over-broad scope this exists
+    // to catch.
+    expect(isOverlyBroadScope('.context')).toBe(true);
+    expect(isOverlyBroadScope('.npmrc')).toBe(true);
+    // A dotfile WITH an extension is unambiguous and stays silent.
+    expect(isOverlyBroadScope('.env.local')).toBe(false);
+  });
+
+  it('says nothing about an entry that is no path at all', () => {
+    // `''` is a different defect — `pathsOverlap` already refuses to match on it,
+    // and reporting it as "too broad" would be the wrong complaint.
+    expect(isOverlyBroadScope('')).toBe(false);
+    expect(isOverlyBroadScope('/')).toBe(false);
   });
 });

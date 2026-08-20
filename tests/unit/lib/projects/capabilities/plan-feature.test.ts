@@ -163,7 +163,7 @@ describe('plan_feature materialise', () => {
   beforeEach(() => resolveFeature.mockResolvedValue(granted()));
 
   it('creates numbered, owner-assigned tasks, wires deps, replaces sketch, flips stage', async () => {
-    taskFindMany.mockResolvedValue([{ id: 'existing-1' }]);
+    taskFindMany.mockResolvedValue([{ id: 'existing-1', filesScope: ['lib/a.ts'] }]);
 
     const r = await cap.execute(
       {
@@ -191,6 +191,15 @@ describe('plan_feature materialise', () => {
         { id: 'id-1', number: 12 },
       ],
       planningStage: 'planned',
+      // `prisma/` is a whole top-level tree, so §33-sweep t-118's advisory fires
+      // — attributed to the task it came from, which is the whole reason a batch
+      // write carries `taskRef`. Advisory only: the scope is still written.
+      //
+      // The ref is the author's batch-local `t1`, not `t-11`: `/code-review` moved
+      // the advisory ahead of the write (a corpus-read failure after the commit
+      // would report a plan that had already materialised), and at that point no
+      // `t-N` has been assigned. `t1` is also what the planner is looking at.
+      scopeWarnings: [expect.objectContaining({ taskRef: 't1', entry: 'prisma/', scopedTasks: 1 })],
     });
 
     // First task: numbered from the counter, born claimed and owned by the
@@ -235,7 +244,7 @@ describe('plan_feature materialise', () => {
   });
 
   it('de-duplicates a task’s repeated dependency (no @@unique collision)', async () => {
-    taskFindMany.mockResolvedValue([{ id: 'existing-1' }]);
+    taskFindMany.mockResolvedValue([{ id: 'existing-1', filesScope: ['lib/a.ts'] }]);
     await cap.execute(
       {
         featureId: 'f1',
@@ -312,7 +321,12 @@ describe('plan_feature redactProvenance', () => {
       },
       {
         success: true,
-        data: { featureId: 'f1', tasks: [{ id: 'x', number: 1 }], planningStage: 'planned' },
+        data: {
+          featureId: 'f1',
+          tasks: [{ id: 'x', number: 1 }],
+          planningStage: 'planned',
+          scopeWarnings: [],
+        },
       }
     );
     const tasks = (out.args as { tasks: Record<string, unknown>[] }).tasks;
@@ -328,7 +342,12 @@ describe('plan_feature redactProvenance', () => {
       { featureId: 'f1', tasks: [{ ref: 't1', title: 'a' }] },
       {
         success: true,
-        data: { featureId: 'f1', tasks: [{ id: 'x', number: 1 }], planningStage: 'planned' },
+        data: {
+          featureId: 'f1',
+          tasks: [{ id: 'x', number: 1 }],
+          planningStage: 'planned',
+          scopeWarnings: [],
+        },
       }
     );
     const tasks = (out.args as { tasks: Record<string, unknown>[] }).tasks;
