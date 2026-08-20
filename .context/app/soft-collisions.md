@@ -60,11 +60,32 @@ filtering them out would leave the feature showing nothing at all.
 
 The sheet does **not** require the task to hold an open claim of its own — that is
 the point of putting it there. The sheet is the surface you read _before_ starting,
-which is the moment the warning can still change what you do. It goes quiet once a
-task has merged: the work has landed, so there is nothing left to coordinate.
+which is the moment the warning can still change what you do.
 
-Nothing renders when nothing overlaps. There is no empty "no collisions" state —
-that would be noise on almost every task.
+## When it goes quiet
+
+A collision warning earns its place only when the reader can act on it. It is
+suppressed when they cannot:
+
+- **Nothing overlaps**, or the task declares no `filesScope`. There is no empty
+  "no collisions" state — that would be noise on almost every task.
+- **The task has merged.** The work has landed; there is nothing left to
+  coordinate.
+- **The task is `blocked`** (owner, 2026-08-20). An unmerged dependency already
+  stops it, that stop is the stronger signal, and on the sheet it is rendered
+  directly below — often naming the very task the collision would have named. The
+  Board card is suppressed the same way, for the same reason: it already carries
+  the blocked treatment.
+
+Two things that deliberately do **not** go quiet:
+
+- **A task pushed to `active` past an unmerged dependency.** `computeEffectiveStatus`
+  keeps a started task `active` whatever its dependencies say, so someone who
+  pushed through the block is exactly who needs telling — sequence them, batch
+  them into one branch if they are both yours, or coordinate if one is not.
+- **Everyone else's view of a blocked task.** Suppression hides the blocked task's
+  _own_ warning, not its existence: it still holds a claim, so it is still ground
+  somebody has taken, and the tasks it overlaps go on being warned about it.
 
 ## Authoring a useful scope
 

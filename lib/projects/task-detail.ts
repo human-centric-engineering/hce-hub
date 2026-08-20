@@ -95,7 +95,8 @@ export interface TaskDetail {
   filesScope: string[];
   /**
    * Open claims elsewhere whose scope overlaps `filesScope`. Empty when this task
-   * declares no scope, when nothing overlaps, or once it has merged.
+   * declares no scope, when nothing overlaps, or when the reader could not act on
+   * it anyway — once `merged`, and while `blocked` (see `getTaskDetail`).
    */
   collisions: TaskCollision[];
   /** `null` when unclaimed or the claimant was erased. The doer, once merged. */
@@ -260,10 +261,23 @@ export async function getTaskDetail(
   );
 
   // Which claims actually overlap — pure, so no identity lookup is spent on
-  // claims that turn out not to collide. Silent once merged: the work has landed,
-  // so "someone else is in these files" is no longer anything the reader can act on.
+  // claims that turn out not to collide.
+  //
+  // Silent unless the reader can actually act on it (owner, 2026-08-20):
+  //   - **merged** — the work has landed; "someone else is in these files" is
+  //     no longer anything to coordinate.
+  //   - **blocked** — an unmerged dependency already stops this task, and that
+  //     is both the stronger signal and the one rendered right below. A second
+  //     warning saying "be careful of these files" adds nothing to "you cannot
+  //     start yet", and the dependency is often the very task it names.
+  //
+  // `active` is deliberately NOT suppressed even when dependencies are unmerged:
+  // `computeEffectiveStatus` keeps a started task `active` regardless of deps, so
+  // someone who pushed past the block is exactly who needs telling to sequence,
+  // batch, or coordinate. This suppresses the reader's OWN warning only — a
+  // blocked task still holds a claim, so it goes on warning everybody else.
   const overlaps =
-    status === 'merged' || task.filesScope.length === 0
+    status === 'merged' || status === 'blocked' || task.filesScope.length === 0
       ? []
       : openClaims.flatMap((claim) => {
           const paths = overlappingPaths(task.filesScope, claim.task.filesScope);

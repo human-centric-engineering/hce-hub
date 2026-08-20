@@ -20,7 +20,10 @@
  *     claimed task that can't start yet — no column of its own).
  *   - **collision** = a soft, ambient flag when the task's open (active-work)
  *     claim overlaps another open claim's file scope (`filesOverlap`); never a
- *     lock (§13.5).
+ *     lock (§13.5). Not shown on a **blocked** card — the blocked treatment
+ *     already says the task can't proceed, and stacking a second caution on it
+ *     is noise (owner, 2026-08-20). The blocked task still flags everyone
+ *     *else*: it holds a claim, so it is still ground somebody has taken.
  *
  * Membership is the [[f-access]] funnel's: the load goes through
  * `getAccessibleProject`, so a non-member or unknown id is a 404, never a 403.
@@ -211,7 +214,11 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
       // t-108). `null` means merged before the column existed (§19's import), which
       // sorts oldest because it is. ISO so the DTO stays Date-free.
       mergedAt: t.mergedAt ? t.mergedAt.toISOString() : null,
-      collision: collisionByTask.get(t.id) ?? null,
+      // Suppressed on a blocked card only. The pairwise pass above still records
+      // the overlap from the other side, so the task this one collides with keeps
+      // its marker — what is hidden is the redundant caution on the card that is
+      // already telling you it cannot start.
+      collision: effective === 'blocked' ? null : (collisionByTask.get(t.id) ?? null),
     });
   }
 

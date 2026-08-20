@@ -360,6 +360,54 @@ describe('getTaskDetail — overlapping claims (§33-sweep t-109)', () => {
     expect((await getTaskDetail('u1', 'p1', 't1')).collisions).toEqual([]);
   });
 
+  it('stays quiet while BLOCKED, and speaks up the moment the block clears', async () => {
+    // Owner, 2026-08-20: an unmerged dependency already stops this task, that
+    // stop is rendered directly below, and the dependency is frequently the very
+    // task the warning would name. Both halves asserted from one fixture, so the
+    // suppression is pinned to the block rather than to some other difference.
+    claimFindMany.mockResolvedValue([openClaim({ id: 't9', files: ['lib/a.ts'] })]);
+    userFindMany.mockResolvedValue([userRow('u2')]);
+
+    taskFindFirst.mockResolvedValue(
+      taskRow({
+        status: 'claimed',
+        filesScope: ['lib/a.ts'],
+        dependencies: [{ dependsOn: neighbour({ id: 'b1', status: 'active' }) }],
+      })
+    );
+    const blocked = await getTaskDetail('u1', 'p1', 't1');
+    expect(blocked.status).toBe('blocked');
+    expect(blocked.collisions).toEqual([]);
+
+    taskFindFirst.mockResolvedValue(
+      taskRow({
+        status: 'claimed',
+        filesScope: ['lib/a.ts'],
+        dependencies: [{ dependsOn: neighbour({ id: 'b1', status: 'merged' }) }],
+      })
+    );
+    const ready = await getTaskDetail('u1', 'p1', 't1');
+    expect(ready.status).toBe('claimed');
+    expect(ready.collisions).toHaveLength(1);
+  });
+
+  it('still warns a task pushed to ACTIVE past an unmerged dependency', async () => {
+    // A started task stays `active` whatever its deps say, and someone who
+    // pushed past the block is exactly who needs to sequence or coordinate.
+    taskFindFirst.mockResolvedValue(
+      taskRow({
+        status: 'active',
+        filesScope: ['lib/a.ts'],
+        dependencies: [{ dependsOn: neighbour({ id: 'b1', status: 'active' }) }],
+      })
+    );
+    claimFindMany.mockResolvedValue([openClaim({ id: 't9', files: ['lib/a.ts'] })]);
+    userFindMany.mockResolvedValue([userRow('u2')]);
+    const detail = await getTaskDetail('u1', 'p1', 't1');
+    expect(detail.status).toBe('active');
+    expect(detail.collisions).toHaveLength(1);
+  });
+
   it('stays quiet once the task has MERGED — nothing left to coordinate', async () => {
     taskFindFirst.mockResolvedValue(taskRow({ status: 'merged', filesScope: ['lib/a.ts'] }));
     claimFindMany.mockResolvedValue([openClaim({ id: 't9', files: ['lib/a.ts'] })]);

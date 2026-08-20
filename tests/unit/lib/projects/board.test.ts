@@ -324,6 +324,69 @@ describe('getProjectBoard — soft collision', () => {
     const board = await getProjectBoard('u1', 'p1');
     expect(laneOf(board, 'u1')!.tasks[0].collision).toBeNull();
   });
+
+  it('hides the marker on a BLOCKED card, but keeps it on what that card collides with', async () => {
+    // Owner, 2026-08-20: a blocked card already says it cannot proceed, and that
+    // is the stronger signal — stacking "mind these files" on top is noise.
+    // Asymmetric on purpose: the blocked task still HOLDS a claim, so it is still
+    // ground somebody has taken and t2 must go on being warned about it.
+    setup({
+      members: [member('u1'), member('u2')],
+      features: [feature('f1', 'u1')],
+      tasks: [
+        // claimed + an unmerged dependency ⇒ effective `blocked`
+        task({
+          id: 't1',
+          featureId: 'f1',
+          status: 'claimed',
+          claimedByUserId: 'u1',
+          deps: ['active'],
+        }),
+        task({ id: 't2', featureId: 'f1', status: 'active', claimedByUserId: 'u2' }),
+      ],
+      claims: [
+        { userId: 'u1', task: { id: 't1', title: 'T1', filesScope: ['src/a'] } },
+        { userId: 'u2', task: { id: 't2', title: 'T2', filesScope: ['src/a/b'] } },
+      ],
+      users: [userRow('u1'), userRow('u2')],
+    });
+    const board = await getProjectBoard('u1', 'p1');
+    const t1 = laneOf(board, 'u1')!.tasks.find((t) => t.id === 't1')!;
+    const t2 = laneOf(board, 'u2')!.tasks.find((t) => t.id === 't2')!;
+    expect(t1.status).toBe('blocked');
+    expect(t1.collision).toBeNull();
+    expect(t2.collision).not.toBeNull();
+    expect(t2.collision!.note).toContain('T1');
+  });
+
+  it('still flags a task pushed to ACTIVE past an unmerged dependency', async () => {
+    // `computeEffectiveStatus` keeps a started task `active` regardless of deps,
+    // so someone who pushed past the block is precisely who needs telling to
+    // sequence, batch, or coordinate.
+    setup({
+      members: [member('u1'), member('u2')],
+      features: [feature('f1', 'u1')],
+      tasks: [
+        task({
+          id: 't1',
+          featureId: 'f1',
+          status: 'active',
+          claimedByUserId: 'u1',
+          deps: ['active'],
+        }),
+        task({ id: 't2', featureId: 'f1', status: 'active', claimedByUserId: 'u2' }),
+      ],
+      claims: [
+        { userId: 'u1', task: { id: 't1', title: 'T1', filesScope: ['src/a'] } },
+        { userId: 'u2', task: { id: 't2', title: 'T2', filesScope: ['src/a/b'] } },
+      ],
+      users: [userRow('u1'), userRow('u2')],
+    });
+    const board = await getProjectBoard('u1', 'p1');
+    const t1 = laneOf(board, 'u1')!.tasks.find((t) => t.id === 't1')!;
+    expect(t1.status).toBe('active');
+    expect(t1.collision).not.toBeNull();
+  });
 });
 
 describe('getProjectBoard — presentation', () => {
