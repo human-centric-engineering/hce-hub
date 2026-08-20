@@ -64,4 +64,7 @@ export interface ProjectViewDTO {
 }
 
 /** The project-view tabs (linkable via `?view=`). */
-export type ProjectTab = 'plan' | 'board' | 'log' | 'ideas' | 'connect';
+// `ProjectTab` now lives with the tab registry it is derived from —
+// `components/hub/projects/tabs.ts` (§33-sweep t-111). Kept out of here on
+// purpose: a hand-written union next to the registry is exactly the second
+// source of truth the registry exists to remove.

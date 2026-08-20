@@ -12,10 +12,23 @@ import { ConnectPanel } from '@/components/hub/projects/connect/connect-panel';
 import { JotIdeaButton } from '@/components/hub/projects/ideas/jot-idea-button';
 import { ActiveBugsStrip } from '@/components/hub/projects/active-bugs-strip';
 import { TaskSheetProvider } from '@/components/hub/projects/task-sheet/task-sheet-host';
-import type { ProjectTab, ProjectViewDTO } from '@/components/hub/projects/types';
+import { projectTabSpec, type ProjectTab } from '@/components/hub/projects/tabs';
+import type { ProjectViewDTO } from '@/components/hub/projects/types';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
 import type { ProjectBoardDTO } from '@/components/hub/projects/board/types';
 import type { IdeaInboxDTO } from '@/components/hub/projects/ideas/types';
+
+/**
+ * The shared "that tab's payload didn't arrive" message. Extracted only because
+ * the switch below now names it three times; the copy is unchanged.
+ */
+function LoadFailed({ what }: { what: string }) {
+  return (
+    <p className="text-muted-foreground py-16 text-center text-sm">
+      Couldn&rsquo;t load {what} just now — try refreshing.
+    </p>
+  );
+}
 
 /** A stacked row of member avatars (overflow collapses to a +N chip). */
 function MemberStack({ members }: { members: ProjectViewDTO['members'] }) {
@@ -64,6 +77,57 @@ export function ProjectView({
 }) {
   const platform = getHostPlatform(project.hostPlatform)?.label ?? project.hostPlatform;
 
+  // A `switch` rather than the nested ternary this replaces, so the compiler can
+  // see it is exhaustive (§33-sweep t-111). The ternary's final `else` was the
+  // Log, which meant a tab added to the registry without a body here would have
+  // silently rendered the journal — wrong content, no error, on a surface nobody
+  // was looking at yet. Now it does not build.
+  //
+  // A body cannot come from the registry: each is a different component with
+  // different props. What the registry gives is the exhaustiveness to check it
+  // against.
+  let body: React.ReactNode;
+  switch (activeTab) {
+    case 'plan':
+      body = plan ? (
+        <PlanView plan={plan} focusPhaseId={focusPhaseId} />
+      ) : (
+        <LoadFailed what="the plan" />
+      );
+      break;
+    case 'board':
+      body = board ? <BoardView board={board} /> : <LoadFailed what="the board" />;
+      break;
+    case 'ideas':
+      body = ideas ? (
+        <IdeasView projectId={project.id} inbox={ideas} />
+      ) : (
+        <LoadFailed what="ideas" />
+      );
+      break;
+    case 'connect':
+      // Connect — the member's self-service scoped-key surface (f-mcp-project-scope
+      // §31 t-C/t-D), client-fetched. `repoUrls` come from the header DTO.
+      body = (
+        <ConnectPanel
+          projectId={project.id}
+          projectName={project.name}
+          serverName={project.slug ?? project.id}
+          repoUrls={project.repoUrls}
+        />
+      );
+      break;
+    case 'log':
+      // Log — the journal stream, client-fetched + filterable (f-journal §17).
+      body = <LogView projectId={project.id} projectRef={project.slug ?? project.id} />;
+      break;
+    default: {
+      // Type-safe exhaustive check
+      const _exhaustiveCheck: never = activeTab;
+      throw new Error(`Unhandled project tab: ${String(_exhaustiveCheck)}`);
+    }
+  }
+
   // Full-width, left-aligned — the board spans the whole main column (design
   // handoff §3); the header + tabs align to the left edge, not centered.
   return (
@@ -99,52 +163,19 @@ export function ProjectView({
 
         {/* The active-bugs strip sits above the work body (Plan/Board) — a
             different axis (bugs from any phase), self-hiding when empty (it
-            carries its own top spacing, so an empty strip leaves no gap). The Log
-            is the history stream, so the strip doesn't belong over it. The list is
-            defaulted defensively — a missing field should hide the strip, not crash. */}
-        {activeTab !== 'log' && activeTab !== 'ideas' && activeTab !== 'connect' && (
+            carries its own top spacing, so an empty strip leaves no gap). The list
+            is defaulted defensively — a missing field should hide the strip, not
+            crash.
+
+            WHICH tabs get it is the registry's `showsBugStrip`, not a negative
+            list here (§33-sweep t-111). The old `!== 'log' && !== 'ideas' &&
+            !== 'connect'` form defaulted a tab nobody had thought about yet INTO
+            the strip; now a new tab has to opt in. */}
+        {projectTabSpec(activeTab).showsBugStrip && (
           <ActiveBugsStrip bugs={project.activeBugs ?? []} projectId={project.id} />
         )}
 
-        <div className="py-8">
-          {activeTab === 'plan' ? (
-            plan ? (
-              <PlanView plan={plan} focusPhaseId={focusPhaseId} />
-            ) : (
-              <p className="text-muted-foreground py-16 text-center text-sm">
-                Couldn&rsquo;t load the plan just now — try refreshing.
-              </p>
-            )
-          ) : activeTab === 'board' ? (
-            board ? (
-              <BoardView board={board} />
-            ) : (
-              <p className="text-muted-foreground py-16 text-center text-sm">
-                Couldn&rsquo;t load the board just now — try refreshing.
-              </p>
-            )
-          ) : activeTab === 'ideas' ? (
-            ideas ? (
-              <IdeasView projectId={project.id} inbox={ideas} />
-            ) : (
-              <p className="text-muted-foreground py-16 text-center text-sm">
-                Couldn&rsquo;t load ideas just now — try refreshing.
-              </p>
-            )
-          ) : activeTab === 'connect' ? (
-            // Connect — the member's self-service scoped-key surface (f-mcp-project-scope
-            // §31 t-C/t-D), client-fetched. `repoUrls` come from the header DTO.
-            <ConnectPanel
-              projectId={project.id}
-              projectName={project.name}
-              serverName={project.slug ?? project.id}
-              repoUrls={project.repoUrls}
-            />
-          ) : (
-            // Log — the journal stream, client-fetched + filterable (f-journal §17).
-            <LogView projectId={project.id} projectRef={project.slug ?? project.id} />
-          )}
-        </div>
+        <div className="py-8">{body}</div>
       </TaskSheetProvider>
     </div>
   );
