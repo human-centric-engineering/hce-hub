@@ -21,7 +21,15 @@ import { metadata } from '@/app/layout';
 /** `metadata.icons` is a broad union; narrow to the array form this layout uses. */
 function declaredIcons(): { url: string; sizes?: string; type?: string }[] {
   const icons = metadata.icons;
-  if (icons === null || icons === undefined || typeof icons !== 'object' || Array.isArray(icons)) {
+  // `URL` has to be excluded by hand: `metadata.icons` is `string | URL | Icon[] |
+  // Icons`, and a `URL` instance passes `typeof x === 'object'` happily.
+  if (
+    icons === null ||
+    icons === undefined ||
+    typeof icons !== 'object' ||
+    Array.isArray(icons) ||
+    icons instanceof URL
+  ) {
     throw new Error('expected metadata.icons to be an Icons object');
   }
   const icon = icons.icon;
