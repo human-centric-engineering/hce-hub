@@ -26,6 +26,7 @@ import {
   taskHolderId,
   type EffectiveStatus,
 } from '@/lib/projects/task-status';
+import { overlappingPaths } from '@/lib/projects/collision';
 import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
 
 /** A neighbour in the dependency graph (a blocker or a dependent), click-to-jump. */
@@ -45,6 +46,29 @@ export interface TaskDetailRef {
    * not a `UserRef`: the chip names the task, never the person.
    */
   hasHolder: boolean;
+}
+
+/**
+ * An open claim elsewhere in the project whose declared scope overlaps this
+ * task's (§33-sweep t-109) — a soft signal, never a lock (§13.5).
+ */
+export interface TaskCollision {
+  /** The overlapping task, so the sheet can link straight to it. */
+  taskId: string;
+  number: number | null;
+  title: string;
+  /** Who holds that claim; `null` if they were since erased (never dereferenced). */
+  holder: UserRef | null;
+  /**
+   * Whether that claim is the caller's own. Self-overlap is reported rather than
+   * filtered: two of your own tasks in flight over the same files is a real merge
+   * conflict waiting to happen, and in a single-member project filtering it would
+   * leave the feature showing nothing at all — the exact inertness t-114 fixed.
+   * The sheet labels it, so it never reads as someone else being there.
+   */
+  isMine: boolean;
+  /** Which of *this* task's declared entries the other claim also covers. */
+  paths: string[];
 }
 
 /** The task sheet's full payload for one task. */
@@ -69,6 +93,12 @@ export interface TaskDetail {
   prUrl: string | null;
   /** Paths/globs the work is expected to touch — soft, "declared, not enforced". */
   filesScope: string[];
+  /**
+   * Open claims elsewhere whose scope overlaps `filesScope`. Empty when this task
+   * declares no scope, when nothing overlaps, or when the reader could not act on
+   * it anyway — once `merged`, and while `blocked` (see `getTaskDetail`).
+   */
+  collisions: TaskCollision[];
   /** `null` when unclaimed or the claimant was erased. The doer, once merged. */
   claimer: UserRef | null;
   /**
@@ -180,7 +210,7 @@ export async function getTaskDetail(
   // Scoped to the confirmed project — a task from another project (even one the
   // caller belongs to) is not found here, closing the cross-project id-swap. The
   // project's members are the assignee picker's options; loaded in parallel.
-  const [task, members] = await Promise.all([
+  const [task, members, openClaims] = await Promise.all([
     prisma.task.findFirst({
       where: { id: taskId, feature: { projectId } },
       select: {
@@ -207,8 +237,70 @@ export async function getTaskDetail(
       orderBy: { addedAt: 'asc' },
       select: { userId: true },
     }),
+    // Every *other* open (active-work) claim in the project — the soft-collision
+    // source, matching the Board's. Deliberately not scoped to claims held by
+    // someone else, and deliberately not conditional on *this* task holding a
+    // claim: the sheet is the surface you read **before** starting, which is the
+    // whole point of surfacing this here (§33-sweep t-109). `start_task`'s
+    // advisory return excludes your own claims because it answers a different
+    // question — "is someone already here?" — at the moment you take over.
+    prisma.taskClaim.findMany({
+      // `filesScope.isEmpty: false` is not just an optimisation — a claim whose
+      // task declares no scope can never overlap anything, so returning it only
+      // to discard it makes every `get_task` (which projects `collisions` away
+      // entirely) pay for rows that cannot matter.
+      where: {
+        releasedAt: null,
+        taskId: { not: taskId },
+        task: { feature: { projectId }, filesScope: { isEmpty: false } },
+      },
+      orderBy: { claimedAt: 'asc' },
+      select: {
+        userId: true,
+        task: { select: { id: true, number: true, title: true, filesScope: true } },
+      },
+    }),
   ]);
   if (!task) throw new NotFoundError(`Task ${taskId} not found`);
+
+  const status = computeEffectiveStatus(
+    task,
+    task.dependencies.map((d) => d.dependsOn)
+  );
+
+  // Which claims actually overlap — pure, so no identity lookup is spent on
+  // claims that turn out not to collide.
+  //
+  // Silent unless the reader can actually act on it (owner, 2026-08-20):
+  //   - **merged** — the work has landed; "someone else is in these files" is
+  //     no longer anything to coordinate.
+  //   - **blocked** — an unmerged dependency already stops this task, and that
+  //     is both the stronger signal and the one rendered right below. A second
+  //     warning saying "be careful of these files" adds nothing to "you cannot
+  //     start yet", and the dependency is often the very task it names.
+  //
+  // `active` is deliberately NOT suppressed even when dependencies are unmerged:
+  // `computeEffectiveStatus` keeps a started task `active` regardless of deps, so
+  // someone who pushed past the block is exactly who needs telling to sequence,
+  // batch, or coordinate. This suppresses the reader's OWN warning only — a
+  // blocked task still holds a claim, so it goes on warning everybody else.
+  const overlaps =
+    status === 'merged' || status === 'blocked' || task.filesScope.length === 0
+      ? []
+      : // Deduped by task, not by claim row. `startTask` releases open claims and
+        // creates the new one in one transaction, but under READ COMMITTED two
+        // concurrent starts can each miss the other's INSERT and leave two open
+        // claims on one task — which is why `board.ts`'s pairwise pass carries its
+        // own `a.id === b.id` guard. Without this the sheet would render the same
+        // task twice under a duplicate React key (`/code-review`).
+        [
+          ...new Map(
+            openClaims.flatMap((claim) => {
+              const paths = overlappingPaths(task.filesScope, claim.task.filesScope);
+              return paths.length > 0 ? [[claim.task.id, { claim, paths }] as const] : [];
+            })
+          ).values(),
+        ];
 
   // One batched identity lookup for the claimer + assignee + feature owner + every
   // member (the picker's options).
@@ -218,6 +310,7 @@ export async function getTaskDetail(
     ...(task.mergedByUserId ? [task.mergedByUserId] : []),
     ...(task.feature.ownerUserId ? [task.feature.ownerUserId] : []),
     ...members.map((m) => m.userId),
+    ...overlaps.map((o) => o.claim.userId),
   ]);
 
   return {
@@ -226,14 +319,19 @@ export async function getTaskDetail(
     title: task.title,
     description: task.description,
     doneWhen: task.doneWhen,
-    status: computeEffectiveStatus(
-      task,
-      task.dependencies.map((d) => d.dependsOn)
-    ),
+    status,
     kind: task.kind,
     phaseId: task.phaseId,
     prUrl: task.prUrl,
     filesScope: task.filesScope,
+    collisions: overlaps.map(({ claim, paths }) => ({
+      taskId: claim.task.id,
+      number: claim.task.number,
+      title: claim.task.title,
+      holder: users.get(claim.userId) ?? null,
+      isMine: claim.userId === userId,
+      paths,
+    })),
     claimer: task.claimedByUserId ? (users.get(task.claimedByUserId) ?? null) : null,
     assignee: task.assigneeUserId ? (users.get(task.assigneeUserId) ?? null) : null,
     mergedBy: task.mergedByUserId ? (users.get(task.mergedByUserId) ?? null) : null,

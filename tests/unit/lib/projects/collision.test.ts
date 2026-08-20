@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import {
   pathsOverlap,
   filesOverlap,
+  overlappingPaths,
   detectFileOverlapWarnings,
   type OpenClaim,
 } from '@/lib/projects/collision';
@@ -70,5 +71,175 @@ describe('detectFileOverlapWarnings', () => {
     expect(warnings.map((w) => w.taskId)).toEqual(['t2', 't4']);
     expect(warnings.every((w) => w.kind === 'file_overlap')).toBe(true);
     expect(warnings[0]).toMatchObject({ userId: 'u2', taskId: 't2' });
+  });
+});
+
+describe('pathsOverlap — trailing wildcards (§33-sweep t-114)', () => {
+  /**
+   * Every row of the table in t-114's description, asserted BOTH ways round.
+   * Order-independence is the point: `filesOverlap` compares the claiming scope
+   * against the open claim's, so which side a glob lands on is an accident of
+   * who claimed first — a matcher that only worked one way would warn or stay
+   * silent depending on claim order.
+   */
+  const overlapping: [string, string][] = [
+    // The case the warning exists for, and the one that never fired: a glob
+    // scope against a real file beneath it.
+    ['components/hub/projects/board/**', 'components/hub/projects/board/board-view.tsx'],
+    // A broad glob against a narrower one under it — different depths.
+    ['components/hub/projects/**', 'components/hub/projects/board/**'],
+    // The entry that produced the false warnings that surfaced the defect.
+    ['tests/**', 'tests/unit/components/hub/projects/ideas/idea-row.test.tsx'],
+    // Already worked before t-114; pinned so the fix cannot regress them.
+    ['components/hub/projects/board/**', 'components/hub/projects/board'],
+    ['components/hub/projects/board', 'components/hub/projects/board/board-view.tsx'],
+  ];
+
+  it.each(overlapping)('%s overlaps %s', (a, b) => {
+    expect(pathsOverlap(a, b)).toBe(true);
+    expect(pathsOverlap(b, a)).toBe(true);
+  });
+
+  it('treats a single-star scope the same as a double-star one', () => {
+    // `dir/*` is "the files in dir" and `dir/**` is "everything under dir".
+    // The heuristic does not distinguish depth, and pretending to would be a
+    // precision this module does not have.
+    expect(pathsOverlap('lib/projects/*', 'lib/projects/collision.ts')).toBe(true);
+    expect(pathsOverlap('lib/projects/*', 'lib/projects/capabilities/start-task.ts')).toBe(true);
+  });
+
+  it('normalises a wildcard written with a trailing slash, or doubled', () => {
+    expect(pathsOverlap('lib/projects/**/', 'lib/projects/plan.ts')).toBe(true);
+    expect(pathsOverlap('lib/projects/**/**', 'lib/projects/plan.ts')).toBe(true);
+  });
+
+  it('still refuses a SIBLING directory — the fix must not make everything collide', () => {
+    // The whole risk of loosening a matcher: warnings that fire on everything
+    // are the same as warnings that fire on nothing.
+    expect(
+      pathsOverlap('components/hub/projects/board/**', 'components/hub/projects/plan/**')
+    ).toBe(false);
+    expect(pathsOverlap('lib/user/**', 'lib/users/**')).toBe(false);
+    expect(pathsOverlap('tests/**', 'lib/projects/collision.ts')).toBe(false);
+  });
+
+  it('leaves a PARTIAL pattern alone rather than guessing at it', () => {
+    // `*.ts` is not a segment this module expands. Matching only itself is
+    // silence — the cheap failure — where a guess could quietly mean "all of
+    // lib". Documented behaviour, pinned so a future "improvement" is deliberate.
+    expect(pathsOverlap('lib/projects/*.ts', 'lib/projects/collision.ts')).toBe(false);
+    expect(pathsOverlap('lib/projects/*.ts', 'lib/projects/*.ts')).toBe(true);
+  });
+
+  it('treats an entry that normalises to nothing as "no path"', () => {
+    // `filesScope` is a plain `z.array(z.string())` with no `.min(1)` in
+    // `create-task`, `update-task` or `plan-feature`, so `['', 'lib/a.ts']` is a
+    // storable scope. Before this guard the empty string reached the PREFIX
+    // branch — `'/lib/x'.startsWith('' + '/')` is true — and so matched every
+    // absolute entry in the project (`/code-review`).
+    expect(pathsOverlap('', '/lib/projects/collision.ts')).toBe(false);
+    expect(pathsOverlap('/lib/projects/collision.ts', '')).toBe(false);
+    expect(pathsOverlap('/', '/lib/projects/collision.ts')).toBe(false);
+    expect(pathsOverlap('/', '/')).toBe(false);
+    expect(pathsOverlap('', 'lib/a.ts')).toBe(false);
+  });
+
+  it('does not let a ROOTED wildcard collapse to the empty path', () => {
+    // `/**` strips to '', and while the equality branch guards on `na.length > 0`
+    // the PREFIX branch does not: `'/a'.startsWith('' + '/')` is true, so an
+    // emptied entry would match every absolute path. Surfaced by
+    // `/security-review` while establishing that the strip has no security
+    // blast radius — a correctness bug the review found on its way past.
+    expect(pathsOverlap('/**', '/lib/projects/collision.ts')).toBe(false);
+    expect(pathsOverlap('/lib/projects/collision.ts', '/**')).toBe(false);
+    expect(pathsOverlap('/**', '/**')).toBe(true);
+    // The ordinary rooted case keeps working.
+    expect(pathsOverlap('/lib/**', '/lib/projects/collision.ts')).toBe(true);
+  });
+
+  it('does not collapse a bare wildcard to the empty path', () => {
+    // Stripping `**` to '' would make it compare equal to a no-path entry and,
+    // via the `na.length > 0` guard, silently match nothing at all. It has no
+    // leading slash, so it is left intact and matches only itself.
+    expect(pathsOverlap('**', '**')).toBe(true);
+    expect(pathsOverlap('**', 'lib/projects/collision.ts')).toBe(false);
+  });
+
+  it('treats Next.js dynamic segments and route groups as literal directories', () => {
+    // `[id]` and `(hub)` are real directory names on disk and the most common
+    // shape in the Hub's own scopes — a matcher that read them as patterns
+    // would mis-handle the majority case.
+    expect(pathsOverlap('app/(hub)/projects/[id]/**', 'app/(hub)/projects/[id]/page.tsx')).toBe(
+      true
+    );
+    expect(
+      pathsOverlap(
+        'app/(hub)/projects/[id]/page.tsx',
+        'app/(hub)/projects/[id]/features/[slug]/page.tsx'
+      )
+    ).toBe(false);
+  });
+});
+
+describe('filesOverlap — real scopes from the backlog (§33-sweep t-114)', () => {
+  it('warns a migration-writing task against one naming a migration file', () => {
+    // t-104 declares `prisma/migrations/**`; any task naming a specific
+    // migration is exactly the conflict worth knowing about before you start.
+    expect(
+      filesOverlap(
+        ['prisma/schema/app.prisma', 'prisma/migrations/**'],
+        ['prisma/migrations/20260819143059_app_add_task_merged_at/migration.sql']
+      )
+    ).toBe(true);
+  });
+
+  it('stays quiet between two genuinely separate scopes', () => {
+    expect(
+      filesOverlap(
+        ['components/hub/projects/task-sheet/**', 'lib/projects/task-detail.ts'],
+        ['components/hub/projects/plan/phase-band.tsx', 'lib/projects/phases-service.ts']
+      )
+    ).toBe(false);
+  });
+});
+
+describe('overlappingPaths (§33-sweep t-109)', () => {
+  it('returns the entries from the FIRST set, not the second', () => {
+    // The task sheet shows the reader their *own* declared paths. Echoing the
+    // other claim's scope back would name paths this task never declared —
+    // `lib/projects/**` means nothing to someone who wrote one filename.
+    expect(overlappingPaths(['lib/projects/collision.ts'], ['lib/projects/**'])).toEqual([
+      'lib/projects/collision.ts',
+    ]);
+    expect(overlappingPaths(['lib/projects/**'], ['lib/projects/collision.ts'])).toEqual([
+      'lib/projects/**',
+    ]);
+  });
+
+  it('keeps only the entries that actually overlap, in declared order', () => {
+    expect(
+      overlappingPaths(['lib/a.ts', 'web/home.tsx', 'lib/b.ts'], ['lib/**', 'docs/readme.md'])
+    ).toEqual(['lib/a.ts', 'lib/b.ts']);
+  });
+
+  it('agrees with filesOverlap in both directions', () => {
+    // The two must never disagree: one drives the Board's flag and the other the
+    // sheet's detail, and a surface that flags with nothing to show — or shows
+    // paths nothing flagged — is worse than either alone.
+    const pairs: [string[], string[]][] = [
+      [['lib/a.ts'], ['lib/**']],
+      [['lib/**'], ['web/home.tsx']],
+      [[], ['lib/**']],
+      [['lib/user/**'], ['lib/users/**']],
+    ];
+    for (const [a, b] of pairs) {
+      expect(overlappingPaths(a, b).length > 0).toBe(filesOverlap(a, b));
+      expect(overlappingPaths(b, a).length > 0).toBe(filesOverlap(b, a));
+    }
+  });
+
+  it('is empty for an empty scope on either side', () => {
+    expect(overlappingPaths([], ['lib/**'])).toEqual([]);
+    expect(overlappingPaths(['lib/**'], [])).toEqual([]);
   });
 });

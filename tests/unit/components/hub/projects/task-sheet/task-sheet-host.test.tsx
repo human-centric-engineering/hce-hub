@@ -23,6 +23,7 @@ const DETAIL: TaskDetailDTO = {
   kind: 'feature_work',
   prUrl: null,
   filesScope: [],
+  collisions: [],
   claimer: null,
   mergedBy: null,
   assignee: null,

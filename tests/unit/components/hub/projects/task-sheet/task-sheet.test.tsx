@@ -10,17 +10,30 @@
  * **Complete** (`active → merged`) are the two hand transitions, POSTing to
  * `.../start` and `.../complete` via the shared `lib/projects/task-actions.ts`.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 // The sheet refreshes the server surface behind it after a reassignment (§22 t2).
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
+// The activity timeline (f-journal §17 t-3) fetches `/events` on its own once the
+// detail loads, and nothing in this file asserts on it — both fetch mocks below
+// used to special-case that URL purely to keep it quiet. Which left the request
+// racing `afterEach`'s `vi.unstubAllGlobals()`: lose the race and a REAL fetch
+// escaped to localhost:3000, printing unhandled ECONNREFUSED noise into the run.
+// It surfaced when §33-sweep t-109 added tests here — not because those tests do
+// anything network-ish, but because more tests changed the timing. Stubbing the
+// component removes the request rather than trying to out-run it.
+vi.mock('@/components/hub/projects/task-sheet/task-activity', () => ({
+  TaskActivity: () => null,
+}));
 
 import { TaskSheet } from '@/components/hub/projects/task-sheet/task-sheet';
 import { SidekickProvider } from '@/components/hub/sidekick-context';
 import { TaskSheetControlsProvider } from '@/components/hub/projects/task-sheet/task-sheet-context';
 import type {
   TaskDetailDTO,
+  TaskCollision,
   TaskActionResultDTO,
 } from '@/components/hub/projects/task-sheet/types';
 
@@ -34,6 +47,7 @@ const detail = (over: Partial<TaskDetailDTO> = {}): TaskDetailDTO => ({
   kind: 'feature_work',
   prUrl: null,
   filesScope: [],
+  collisions: [],
   claimer: null,
   mergedBy: null,
   assignee: null,
@@ -48,12 +62,7 @@ const detail = (over: Partial<TaskDetailDTO> = {}): TaskDetailDTO => ({
 function mockFetchOnce(res: { ok?: boolean; data?: TaskDetailDTO }) {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockImplementation((url: string) => {
-      // The activity timeline (f-journal §17 t-3) fetches events once detail
-      // loads; keep it empty so these detail-focused tests are unaffected.
-      if (typeof url === 'string' && url.includes('/events')) {
-        return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: [] }) });
-      }
+    vi.fn().mockImplementation(() => {
       return Promise.resolve({
         ok: res.ok ?? true,
         status: res.ok === false ? 500 : 200,
@@ -81,7 +90,13 @@ beforeEach(() => {
     configurable: true,
   });
 });
-afterEach(() => vi.unstubAllGlobals());
+// `afterAll`, deliberately NOT `afterEach`. Unstubbing between tests opens a
+// window in which a fetch already in flight — the detail load, whose effect can
+// still be settling — resolves against the REAL global and dials localhost:3000,
+// surfacing as unhandled ECONNREFUSED noise. Each test installs its own stub
+// before rendering, so leaving the previous one in place between tests costs
+// nothing and closes the window (§33-sweep t-109).
+afterAll(() => vi.unstubAllGlobals());
 
 describe('TaskSheet', () => {
   it('fetches the task and renders its identity + status', async () => {
@@ -254,7 +269,7 @@ describe('TaskSheet body + actions', () => {
   function mockFetch(opts: { detail: TaskDetailDTO; action?: TaskActionResultDTO }) {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockImplementation((url: string, init?: { method?: string }) => {
+      vi.fn().mockImplementation((_url: string, init?: { method?: string }) => {
         if (init?.method === 'POST') {
           return Promise.resolve({
             ok: true,
@@ -263,10 +278,6 @@ describe('TaskSheet body + actions', () => {
               data: opts.action ?? { taskId: 't1', status: 'active', warnings: [] },
             }),
           });
-        }
-        // The activity timeline fetches events (GET); keep it empty here.
-        if (typeof url === 'string' && url.includes('/events')) {
-          return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: [] }) });
         }
         return Promise.resolve({
           ok: true,
@@ -299,7 +310,13 @@ describe('TaskSheet body + actions', () => {
       configurable: true,
     });
   });
-  afterEach(() => vi.unstubAllGlobals());
+  // `afterAll`, deliberately NOT `afterEach`. Unstubbing between tests opens a
+  // window in which a fetch already in flight — the detail load, whose effect can
+  // still be settling — resolves against the REAL global and dials localhost:3000,
+  // surfacing as unhandled ECONNREFUSED noise. Each test installs its own stub
+  // before rendering, so leaving the previous one in place between tests costs
+  // nothing and closes the window (§33-sweep t-109).
+  afterAll(() => vi.unstubAllGlobals());
 
   it('renders description, files in scope, and the dependency graph', async () => {
     renderSheet({
@@ -580,5 +597,63 @@ describe('TaskSheet body + actions', () => {
       'href',
       '/projects/hce-hub/features/f1'
     );
+  });
+  /** An overlapping open claim, as the detail read returns it (§33-sweep t-109). */
+  const collision = (over: Partial<TaskCollision> = {}): TaskCollision => ({
+    taskId: 't9',
+    number: 9,
+    title: 'Other work',
+    holder: { id: 'u2', name: 'Ada Lovelace', email: 'a@x.io', image: null },
+    isMine: false,
+    paths: ['lib/projects/collision.ts'],
+    ...over,
+  });
+
+  it('names who holds an overlapping claim and which declared paths collide', async () => {
+    // The warning existed only on the Board card, which has room to say that
+    // something overlaps but not what — so it arrived without the detail that
+    // would change what you do, on the surface you are not reading yet.
+    renderSheet({
+      detail: detail({ filesScope: ['lib/projects/collision.ts'], collisions: [collision()] }),
+    });
+    expect(await screen.findByText('Overlapping claims')).toBeInTheDocument();
+    const row = screen.getByRole('button', { name: /Other work/ });
+    expect(row).toHaveTextContent('t-9');
+    expect(row).toHaveTextContent('Ada'); // first name, as the Board card shows it
+    expect(row).toHaveTextContent('lib/projects/collision.ts');
+  });
+
+  it('jumps to the overlapping task', async () => {
+    // Knowing a claim overlaps is only half of it — the next thing you want is
+    // to read the task that holds it.
+    const onOpen = vi.fn();
+    renderSheet({ detail: detail({ collisions: [collision()] }), onOpen });
+    await screen.findByText('Overlapping claims');
+    fireEvent.click(screen.getByRole('button', { name: /Other work/ }));
+    expect(onOpen).toHaveBeenCalledWith('t9');
+  });
+
+  it('labels the viewer OWN overlapping claim rather than attributing it to a stranger', async () => {
+    renderSheet({ detail: detail({ collisions: [collision({ isMine: true })] }) });
+    await screen.findByText('Overlapping claims');
+    const row = screen.getByRole('button', { name: /Other work/ });
+    expect(row).toHaveTextContent('yours');
+    expect(row).not.toHaveTextContent('Ada');
+  });
+
+  it('survives a holder who has since been erased', async () => {
+    // The claim outlives the user row; a row that dereferenced it would crash
+    // the whole sheet over a detail nobody needs.
+    renderSheet({ detail: detail({ collisions: [collision({ holder: null })] }) });
+    await screen.findByText('Overlapping claims');
+    expect(screen.getByRole('button', { name: /Other work/ })).toHaveTextContent('former member');
+  });
+
+  it('shows no section at all when nothing overlaps', async () => {
+    // Not an empty "no collisions" block: that would be noise on almost every
+    // task, and the quiet state is the normal one.
+    renderSheet({ detail: detail({ filesScope: ['lib/a.ts'], collisions: [] }) });
+    await screen.findByText('Wire the streaming handler');
+    expect(screen.queryByText('Overlapping claims')).not.toBeInTheDocument();
   });
 });
