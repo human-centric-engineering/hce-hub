@@ -25,6 +25,27 @@ export const metadata: Metadata = {
     template: `%s - ${BRAND.name}`,
   },
   description: `${BRAND.name} — internal operations platform.`,
+  // KEEP-MINE (platform-divergences row 25 — its OWN row, not row 16's): vanilla
+  // declares no `icons` at all, so the only icon any Sunrise app ever serves is
+  // `/favicon.ico`, found by root convention rather than by a link.
+  // `public/favicon.svg` ships upstream referenced by nothing (sunrise#640), which
+  // is why branding the tab needed this block as well as the two asset files.
+  //
+  // Order is the fallback chain, not a preference: a browser takes the last
+  // declaration it can render, so the ICO is listed first as the floor (Safari,
+  // and anything else without SVG-favicon support) and the SVG last for the
+  // browsers that can take it — which are also the ones that honour the file's
+  // `prefers-color-scheme` block, so the tab mark follows the OS theme there and
+  // stays on the light cut everywhere else.
+  //
+  // `sizes` on the ICO is what stops Chrome guessing 16×16 and upscaling it; the
+  // file actually carries 16/32/48.
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '16x16 32x32 48x48', type: 'image/x-icon' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+  },
 };
 
 export default async function RootLayout({
