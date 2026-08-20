@@ -267,7 +267,7 @@ export class CreateTaskCapability extends BaseCapability<Args, Data> {
           filesScope: args.filesScope ?? [],
           // The owner cascade, and the one kind that doesn't get it (§32 t-89).
           // `feature_work` inherits the feature-claim; a `bug` goes to the most
-          // relevant owner and is visible to everyone on the active-fixes strip.
+          // relevant owner and is visible to everyone on the active-bugs strip.
           // An `enhancement` is by definition new work on an already-shipped
           // feature, so its owner says nothing about who should pick it up — it is
           // born **unassigned and unclaimed**, in the Board's Unassigned lane, and

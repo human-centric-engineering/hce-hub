@@ -2,14 +2,14 @@
 
 [Phase 2](./planning/phase-2-plan.md)'s second feature. A bug is a **`bug`-kind
 `Task` on the feature it broke** — surfaced by `next_task` as a bias, kept off the
-feature's completion axis, and glanceable in a project-scoped active-fixes strip.
+feature's completion axis, and glanceable in a project-scoped active-bugs strip.
 No Jira, no urgency theatre: a bug is a fix to _pull_, not a crisis. The settled
 convention (why a Task, not a Feature or an `Issue` model) lives in
 [planning/bug-handling.md](./planning/bug-handling.md); this documents what shipped.
 
 > A bug surfaces while you're mid-phase. You `create_task { kind: 'bug' }` on the
 > feature it broke — it doesn't reopen that shipped feature, it floats up your
-> `next_task`, and it shows in a pinned "Active fixes" band above the board with a
+> `next_task`, and it shows in a pinned "Active bugs" band above the board with a
 > breadcrumb back to its origin. Fix it, merge the PR, the task closes — same flow
 > as any task.
 
@@ -33,7 +33,7 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
     the whole ready set. `next_task`'s pool is now your work **plus the commons** (the
     unclaimed pool t-89 made real), and `pickFocusedTask` offers own work first — so
     an unclaimed bug on somebody else's feature does **not** interrupt your own ready
-    work. Deliberate: the active-fixes strip is project-scoped and already shows every
+    work. Deliberate: the active-bugs strip is project-scoped and already shows every
     open bug to everyone, so a bug sweep is a thing you _go and do_, not something
     pushed at you mid-feature.
   - **Known divergence from the target principle.**
@@ -62,7 +62,7 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
 
 - **`create_task { kind: 'bug' }`** files a defect on the feature it broke; a bug keeps
   the **owner cascade** (it goes to the most relevant owner and is visible to everyone
-  on the active-fixes strip), unlike an `enhancement`. Owner-tier via the
+  on the active-bugs strip), unlike an `enhancement`. Owner-tier via the
   [f-access](./planning/f-access.md) funnel. The kind vocabulary and the rest of the
   write surface are in [work kinds](./work-kinds.md#mcp).
 
@@ -82,16 +82,16 @@ convention (why a Task, not a Feature or an `Issue` model) lives in
   shared `TASK_KIND_CUE`, not a bug-specific control; see
   [work kinds](./work-kinds.md#where-it-renders).
 
-### Active-fixes strip (t2)
+### Active-bugs strip (t2)
 
 - A **pinned, project-scoped, self-hiding** band above the Plan/Board body
-  (`components/hub/projects/active-fixes-strip.tsx`, mounted in `project-view.tsx`),
+  (`components/hub/projects/active-bugs-strip.tsx`, mounted in `project-view.tsx`),
   listing every open bug across the project with an origin breadcrumb
-  (`f-journal · Foundations ↩`) and a click-through to the fix task. A **reference**
-  band on a different axis (fixes from any phase) — it never pulls the origin feature
+  (`f-journal · Foundations ↩`) and a click-through to the bug. A **reference**
+  band on a different axis (bugs from any phase) — it never pulls the origin feature
   forward, and being project-scoped it survives the no-active-phase case.
 - **Read:** rides the always-loaded project payload
-  (`getProjectForUser.activeFixes`, `lib/projects/consumer.ts`) rather than a new
+  (`getProjectForUser.activeBugs`, `lib/projects/consumer.ts`) rather than a new
   endpoint — the strip shows on both Plan and Board, whose own payloads are
   tab-specific.
 

@@ -32,10 +32,10 @@ export interface ProjectMemberRef {
 }
 
 /**
- * An open bug-kind task in the active-fixes strip (f-bug-handling §22-02 t2) —
- * a reference to a fix + a breadcrumb to its origin feature/phase.
+ * An open bug-kind task in the active-bugs strip (f-bug-handling §22-02 t2) —
+ * a reference to a bug + a breadcrumb to its origin feature/phase.
  */
-export interface ActiveFixDTO {
+export interface ActiveBugDTO {
   taskId: string;
   taskNumber: number | null;
   title: string;
@@ -59,8 +59,8 @@ export interface ProjectViewDTO {
   memberCount: number;
   featureCount: number;
   taskCount: number;
-  /** Open bug-kind tasks across the project — the active-fixes strip; `[]` when none. */
-  activeFixes: ActiveFixDTO[];
+  /** Open bug-kind tasks across the project — the active-bugs strip; `[]` when none. */
+  activeBugs: ActiveBugDTO[];
 }
 
 /** The project-view tabs (linkable via `?view=`). */

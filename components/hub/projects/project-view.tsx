@@ -10,7 +10,7 @@ import { LogView } from '@/components/hub/projects/log/log-view';
 import { IdeasView } from '@/components/hub/projects/ideas/ideas-view';
 import { ConnectPanel } from '@/components/hub/projects/connect/connect-panel';
 import { JotIdeaButton } from '@/components/hub/projects/ideas/jot-idea-button';
-import { ActiveFixesStrip } from '@/components/hub/projects/active-fixes-strip';
+import { ActiveBugsStrip } from '@/components/hub/projects/active-bugs-strip';
 import { TaskSheetProvider } from '@/components/hub/projects/task-sheet/task-sheet-host';
 import type { ProjectTab, ProjectViewDTO } from '@/components/hub/projects/types';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
@@ -97,13 +97,13 @@ export function ProjectView({
       <TaskSheetProvider projectId={project.id} projectRef={project.slug ?? project.id}>
         <ProjectViewTabs projectRef={project.slug ?? project.id} active={activeTab} />
 
-        {/* The active-fixes strip sits above the work body (Plan/Board) — a
-            different axis (fixes from any phase), self-hiding when empty (it
+        {/* The active-bugs strip sits above the work body (Plan/Board) — a
+            different axis (bugs from any phase), self-hiding when empty (it
             carries its own top spacing, so an empty strip leaves no gap). The Log
             is the history stream, so the strip doesn't belong over it. The list is
             defaulted defensively — a missing field should hide the strip, not crash. */}
         {activeTab !== 'log' && activeTab !== 'ideas' && activeTab !== 'connect' && (
-          <ActiveFixesStrip fixes={project.activeFixes ?? []} projectId={project.id} />
+          <ActiveBugsStrip bugs={project.activeBugs ?? []} projectId={project.id} />
         )}
 
         <div className="py-8">

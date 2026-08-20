@@ -126,7 +126,7 @@ export interface PlanFeatureView {
  *
  * It renders at both ends: here, inline in the borrowing band, and unchanged in its
  * origin feature's own task table. Carries the origin refs so the row can say where
- * it came from — `f-status-model · Foundations (V1) ↩`, the active-fixes strip's
+ * it came from — `f-status-model · Foundations (V1) ↩`, the active-bugs strip's
  * breadcrumb pattern.
  */
 export interface PlanBorrowedTask {
