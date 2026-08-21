@@ -25,14 +25,17 @@ import type {
 } from '@/lib/orchestration/capabilities/types';
 import { NotFoundError } from '@/lib/api/errors';
 import { getProjectTasks } from '@/lib/projects/tasks';
+import type { EffectiveStatus } from '@/lib/projects/task-status';
 
 const schema = z.object({
   projectId: z.string().describe('The project whose tasks to read.'),
   featureId: z.string().optional().describe('Optional: restrict to one feature in the project.'),
   status: z
-    .enum(['claimed', 'active', 'blocked', 'merged'])
+    .enum(['claimed', 'active', 'blocked', 'merged', 'withdrawn'])
     .optional()
-    .describe('Optional: restrict to one effective status (blocked = deps not all merged).'),
+    .describe(
+      'Optional: restrict to one effective status (blocked = deps not all merged; withdrawn = called off, and the only way to see it — every other read hides it).'
+    ),
   kind: z
     .nativeEnum(TaskKind)
     .optional()
@@ -53,8 +56,12 @@ interface TaskRefDto {
   /** Authored feature slug (`f-mcp`); `null` until authored. */
   featureSlug: string | null;
   featureTitle: string;
-  /** Effective status: `claimed` | `active` | `blocked` | `merged`. */
-  status: 'claimed' | 'active' | 'blocked' | 'merged';
+  /**
+   * Effective status. `EffectiveStatus` rather than a hand-written union, for the
+   * reason the `kind` comment immediately below already gives — and which this line
+   * did not heed until §21 t-123 added `withdrawn`.
+   */
+  status: EffectiveStatus;
   /** `bug` | `feature_work`. */
   // `TaskKind` rather than a literal union: a hand-written copy silently goes
   // stale the next time the enum grows (it did, at §32 t-79's `enhancement`).
@@ -78,7 +85,7 @@ export class ListTasksCapability extends BaseCapability<Args, Data> {
   readonly functionDefinition: CapabilityFunctionDefinition = {
     name: 'list_tasks',
     description:
-      "Read a project's tasks — each with its t-N number, id, title, feature (id + slug), effective status (claimed | active | blocked | merged), kind (feature_work | bug | enhancement), the phase that chose it (phaseId; null = inherits its feature's phase), assignee id, and PR url. Narrow with featureId (one feature's tasks), kind (e.g. 'bug' for the open bugs, 'enhancement' for the open improvements), and/or status. Use it to see and name the same tasks/bugs the human sees on the board — e.g. before picking work up. On a large project, prefer narrowing with featureId or kind over reading every task. Membership-scoped: a project you can't see is not_found.",
+      "Read a project's tasks — each with its t-N number, id, title, feature (id + slug), effective status (claimed | active | blocked | merged), kind (feature_work | bug | enhancement), the phase that chose it (phaseId; null = inherits its feature's phase), assignee id, and PR url. Narrow with featureId (one feature's tasks), kind (e.g. 'bug' for the open bugs, 'enhancement' for the open improvements), and/or status. Withdrawn tasks — work called off via withdraw_task — are excluded from every result unless you ask for them with status: 'withdrawn'; this is the only read that shows them, so it is how you find one to restore. Use it to see and name the same tasks/bugs the human sees on the board — e.g. before picking work up. On a large project, prefer narrowing with featureId or kind over reading every task. Membership-scoped: a project you can't see is not_found.",
     parameters: {
       type: 'object',
       properties: {
@@ -89,9 +96,9 @@ export class ListTasksCapability extends BaseCapability<Args, Data> {
         },
         status: {
           type: 'string',
-          enum: ['claimed', 'active', 'blocked', 'merged'],
+          enum: ['claimed', 'active', 'blocked', 'merged', 'withdrawn'],
           description:
-            'Optional: restrict to one effective status (blocked = deps not all merged).',
+            'Optional: restrict to one effective status (blocked = deps not all merged; withdrawn = called off, and the only way to see it — every other read hides withdrawn work).',
         },
         kind: {
           type: 'string',

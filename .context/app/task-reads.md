@@ -86,6 +86,8 @@ get_feature     → read the feature's spec
 list_tasks      → that feature's tasks, or the project's open bugs
 get_task        → read the one you'll work (description, done-when, deps)
 → act: start_task / complete_task / set_pr, or next_task for a recommendation
+        (or withdraw_task, when the work should not happen at all —
+         see [withdrawing work](./withdrawing-work.md))
 
 list_events     → the project journal (decisions / notes / lifecycle), at any point
 ```

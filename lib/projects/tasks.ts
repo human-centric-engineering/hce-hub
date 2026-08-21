@@ -16,7 +16,9 @@
  * Effective status is the **shared** `computeEffectiveStatus` (so this and the
  * Plan / Board never diverge — a deps-blocked `claimed` task reads `blocked`). The
  * status filter is applied *after* that computation, because `blocked` is derived,
- * not stored. `assigneeUserId` is returned raw (an opaque id, not a resolved
+ * not stored. **Withdrawn tasks are excluded unless `status: 'withdrawn'` asks for
+ * them** — this is the only read that surfaces them at all, which is what keeps a
+ * withdrawal reversible (§21 t-123). `assigneeUserId` is returned raw (an opaque id, not a resolved
  * identity) — enough for an agent to tell assigned / unassigned / mine, with no
  * PII lookup.
  */
@@ -35,7 +37,7 @@ export interface TaskRef {
   /** The feature's authored slug (`f-mcp`); `null` until authored. */
   featureSlug: string | null;
   featureTitle: string;
-  /** Effective status (`claimed` | `active` | `blocked` | `merged`) — the shared computation. */
+  /** Effective status (`claimed` | `active` | `blocked` | `merged` | `withdrawn`) — the shared computation. */
   status: EffectiveStatus;
   /** `bug` (a defect) vs `feature_work` vs `enhancement` (f-bug-handling §22-02, f-work-kinds §32). */
   kind: TaskKind;
@@ -53,7 +55,10 @@ export interface TaskRef {
 export interface ListTasksFilter {
   /** Restrict to one feature in the project. */
   featureId?: string;
-  /** Restrict to one effective status (`blocked` included — it's computed). */
+  /**
+   * Restrict to one effective status (`blocked` / `withdrawn` included — they're
+   * computed). Passing `'withdrawn'` is the ONLY way to see withdrawn work.
+   */
   status?: EffectiveStatus;
   /** Restrict to one task kind (e.g. `bug` for the open-bugs read). */
   kind?: TaskKind;
@@ -94,8 +99,9 @@ export async function getProjectTasks(
       phaseId: true,
       prUrl: true,
       assigneeUserId: true,
+      withdrawnAt: true,
       feature: { select: { slug: true, title: true } },
-      dependencies: { select: { dependsOn: { select: { status: true } } } },
+      dependencies: { select: { dependsOn: { select: { status: true, withdrawnAt: true } } } },
     },
   });
 
@@ -116,8 +122,15 @@ export async function getProjectTasks(
       assigneeUserId: t.assigneeUserId,
       prUrl: t.prUrl,
     }))
-    // Effective status is derived (`blocked` isn't stored), so filter post-compute.
-    .filter((t) => (filter.status ? t.status === filter.status : true));
+    // Effective status is derived (`blocked`/`withdrawn` aren't stored), so filter
+    // post-compute.
+    //
+    // **Withdrawn work is excluded unless it is what you asked for** (§21 t-123).
+    // This is the one read that can still see it — every other surface drops it in
+    // the query — because a withdrawal has to stay findable to be reversible: you
+    // cannot restore a task you can no longer name. `IdeaStatus.dropped` works the
+    // same way, and `list_ideas` calls it the reversible archive.
+    .filter((t) => (filter.status ? t.status === filter.status : t.status !== 'withdrawn'));
 
   return { projectId: project.id, tasks };
 }

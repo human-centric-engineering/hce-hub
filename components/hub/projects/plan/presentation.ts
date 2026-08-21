@@ -34,6 +34,12 @@ const TASK_TONE: Record<TaskEffectiveStatus, StatusTone> = {
   active: { tone: 'active', label: 'active' },
   merged: { tone: 'merged', label: 'merged' },
   blocked: { tone: 'blocked', label: 'blocked' },
+  // Reachable on the task sheet only (§21 t-123). Every LIST surface drops withdrawn
+  // work in its query, but `getTaskDetail` deliberately does not — you cannot restore
+  // a task you can no longer open — so a `?task=` link to one still renders. Without
+  // an entry here `TASK_TONE[status]` was `undefined` and the pill rendered with no
+  // tone and no label.
+  withdrawn: { tone: 'withdrawn', label: 'withdrawn' },
 };
 
 export function featureStatus(status: FeatureStatus): StatusTone {

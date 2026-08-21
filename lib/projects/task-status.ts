@@ -14,24 +14,43 @@
  *    unmerged PR"). It's a *computed* overlay with no stored counterpart; the
  *    other values mirror the stored enum. `active`/`merged` are authoritative
  *    (a task being worked or done stays that regardless of deps).
+ *  - **`withdrawn`** — the work is not going to happen (f-authoring-fidelity §21
+ *    t-123). Also computed, from the `Task.withdrawnAt` instant rather than a
+ *    stored status: that keeps this enum the *data* and the overlays *derived*,
+ *    records **when**, and makes restore free — null the column and the prior
+ *    status re-derives, where a stored value would have to remember what it
+ *    displaced. Every work surface filters these out at the query; they stay
+ *    readable through `get_task` and `list_tasks { status: 'withdrawn' }`.
  *
- * Readiness low→high: merged (done) · active (in progress) · blocked · claimed
- * (ready to start).
+ * Readiness low→high: withdrawn (never) · merged (done) · active (in progress) ·
+ * blocked · claimed (ready to start).
  */
 
 import type { TaskStatus } from '@prisma/client';
 
-/** The stored data statuses plus the computed `blocked`. */
-export type EffectiveStatus = TaskStatus | 'blocked';
+/** The stored data statuses plus the computed `blocked` and `withdrawn`. */
+export type EffectiveStatus = TaskStatus | 'blocked' | 'withdrawn';
 
 /** The minimal task shape effective status needs. */
 export interface TaskStatusInput {
   status: TaskStatus;
+  /**
+   * When the task was withdrawn; `null` for live work.
+   *
+   * **Required, not optional, on purpose.** Optional would let a caller that
+   * forgot to select the column silently keep the old behaviour — a withdrawn
+   * task reading `claimed` on one surface and `withdrawn` on another, which is
+   * precisely the divergence this module exists to prevent. Required makes the
+   * compiler ask the question at every call site.
+   */
+  withdrawnAt: Date | null;
 }
 
 /** The minimal dependency shape — the status of each task this task depends on. */
 export interface DependencyStatusInput {
   status: TaskStatus;
+  /** See `TaskStatusInput.withdrawnAt` — required for the same reason. */
+  withdrawnAt: Date | null;
 }
 
 /**
@@ -46,12 +65,29 @@ export function computeEffectiveStatus(
   deps: DependencyStatusInput[]
 ): EffectiveStatus {
   // Being-worked / done stored states are authoritative — deps don't change them.
+  //
+  // `merged` is checked BEFORE `withdrawnAt` deliberately. `withdrawTask` refuses a
+  // merged task, so the pair cannot occur; the order only decides which way an
+  // impossible row would fail. Reading it `merged` ignores the withdrawal and shows
+  // finished work as finished. Reading it `withdrawn` would drop shipped work out of
+  // its feature's completion count and off every surface at once — a silent
+  // subtraction from history. Same reasoning as `feature-progress.ts`: prefer the
+  // failure that stays visible.
   if (task.status === 'merged') return 'merged';
+  if (task.withdrawnAt != null) return 'withdrawn';
   if (task.status === 'active') return 'active';
 
   // `claimed` (owned, not yet started): ready unless a dependency isn't merged,
   // in which case it's blocked (can't start yet).
-  const blocked = deps.some((d) => d.status !== 'merged');
+  //
+  // **A withdrawn dependency does not block.** It can never reach `merged` — that is
+  // what withdrawing it means — so treating it as outstanding would leave every
+  // dependent permanently blocked with no way out but deleting the edge. Withdrawing
+  // is therefore a decision with downstream reach, which is why `withdrawTask`
+  // returns an advisory naming the unmerged tasks that depended on it: the work they
+  // were waiting for is not coming, and that is for a human to weigh, not for this
+  // function to hide.
+  const blocked = deps.some((d) => d.withdrawnAt == null && d.status !== 'merged');
   return blocked ? 'blocked' : 'claimed';
 }
 

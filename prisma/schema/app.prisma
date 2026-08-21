@@ -260,6 +260,7 @@ model Task {
   claimedByUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the task, drop the claimant)
   mergedByUserId  String? // hand-FK → "user" · ON DELETE SET NULL — the GitHub merger (merged_by) mapped to a Hub user (f-github-identity §23); ADDITIVE, never the doer (claimedByUserId)
   mergedAt        DateTime? // WHEN it landed, stamped by complete_task (§33-sweep t-115). Sibling of Feature.shippedAt / Phase.completedAt — Task was the odd model out, and the instant survived only as the `task_merged` event, which is ABSENT for every task imported by §19's cutover. NULL ⇒ merged before we tracked it (sorts oldest, which is true). Never moved once set.
+  withdrawnAt     DateTime? // WITHDRAWN — the task is not going to happen (f-authoring-fidelity §21 t-123). A nullable instant, not a TaskStatus value: it mirrors the shipped siblings (Task.mergedAt / Feature.shippedAt / Phase.completedAt / TaskClaim.releasedAt), keeps the stored enum as *data* with the overlay *derived* (§20's model — `blocked` is the other computed-only status), records WHEN, and makes restore free (null it and the prior effective status re-derives, where a status value would have to remember what it displaced). Set by withdraw_task; never set on a merged task — that is history and it has a PR.
   phaseId         String? // intra-Hub FK → app_phase · ON DELETE SET NULL — COMMITMENT MARKER (f-work-kinds §32 t-80): the phase that *chose* to do this work, when that differs from its feature's phase. NULL = inherit the feature's phase (today's behaviour exactly). Never propagates upward — a feature's phase is solely Feature.phaseId, so a task can't drag its feature between phases.
   prUrl           String?
   createdAt       DateTime   @default(now())
@@ -455,6 +456,12 @@ enum ProjectEventKind {
   // A task (re)assigned to a member via assign_task (f-task-assignment t1) — the
   // handoff trail: who moved whose work, and when.
   task_assigned
+  // A task withdrawn — or restored — via withdraw_task (f-authoring-fidelity §21
+  // t-123). ONE kind for both directions, with `restored` + the free-text `reason`
+  // in `metadata`: the `task_assigned` precedent (one kind, two moves, read the
+  // metadata) rather than a value per variant. The journal is where withdrawn work
+  // stays visible after every work surface stops showing it.
+  task_withdrawn
   // Membership.
   member_added
   // Phase lifecycle + membership (f-phase-history §33 t-98). Three kinds, not

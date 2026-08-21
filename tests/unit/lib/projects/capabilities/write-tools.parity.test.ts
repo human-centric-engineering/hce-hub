@@ -6,6 +6,14 @@
  *
  * `add_backlog` and `claim_task` retired with f-status-model §20 t-1 (you claim
  * features, not tasks — a task is born `claimed`; the pull-task flow is gone).
+ *
+ * **This list is hand-maintained, and nothing else covers it.** The structural
+ * sibling (`capability-class-seed-parity`) reads `functionDefinition` only where it
+ * is an inline object literal in the upsert, so every Hub app seed — which spreads a
+ * hoisted `*_IMPL` const instead — contributes nothing to its completeness check.
+ * Verified by mutating a seed description and watching that suite stay green (§21
+ * t-123). Adding a write verb therefore means adding a row here, by hand, or its
+ * class and its seed can drift with no test saying so.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -13,10 +21,12 @@ import { CreateTaskCapability } from '@/lib/projects/capabilities/create-task';
 import { FlagHelpWantedCapability } from '@/lib/projects/capabilities/flag-help-wanted';
 import { AssignTaskCapability } from '@/lib/projects/capabilities/assign-task';
 import { ReassignFeatureTasksCapability } from '@/lib/projects/capabilities/reassign-feature-tasks';
+import { WithdrawTaskCapability } from '@/lib/projects/capabilities/withdraw-task';
 import { createTaskFunctionDefinition } from '@/prisma/seeds/app/002-create-task';
 import { flagHelpWantedFunctionDefinition } from '@/prisma/seeds/app/004-flag-help-wanted';
 import { assignTaskFunctionDefinition } from '@/prisma/seeds/app/021-assign-task';
 import { reassignFeatureTasksFunctionDefinition } from '@/prisma/seeds/app/022-reassign-feature-tasks';
+import { withdrawTaskFunctionDefinition } from '@/prisma/seeds/app/033-withdraw-task';
 
 describe('write-tool class ↔ seed parity', () => {
   it.each([
@@ -28,6 +38,7 @@ describe('write-tool class ↔ seed parity', () => {
       new ReassignFeatureTasksCapability(),
       reassignFeatureTasksFunctionDefinition,
     ],
+    ['withdraw_task', new WithdrawTaskCapability(), withdrawTaskFunctionDefinition],
   ])(
     '%s: class functionDefinition equals the seeded copy, and name === slug',
     (slug, cap, seedDef) => {

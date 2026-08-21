@@ -22,7 +22,7 @@
  */
 import { prisma } from '@/lib/db/client';
 import { executeTransaction } from '@/lib/db/utils';
-import { NotFoundError, ValidationError } from '@/lib/api/errors';
+import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/api/errors';
 import type { TaskStatus } from '@prisma/client';
 import { resolveTaskAccess, resolveFeatureAccess, canAccessProject } from '@/lib/projects/access';
 import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
@@ -250,6 +250,163 @@ export async function startTask(
   });
 
   return { taskId: task.taskId, number: task.number, status: 'active', warnings };
+}
+
+/** A task named in a withdrawal advisory — enough to identify it, no more. */
+export interface DependentRef {
+  taskId: string;
+  number: number | null;
+  title: string;
+}
+
+/** The outcome of a withdrawal or a restore (f-authoring-fidelity §21 t-123). */
+export interface WithdrawTaskResult {
+  taskId: string;
+  number: number | null;
+  /** `true` when the task is now withdrawn, `false` when it was restored. */
+  withdrawn: boolean;
+  /**
+   * The **unmerged** tasks whose dependency edges point at this one — the reach of
+   * the decision, in both directions.
+   *
+   * Withdrawing: each of these was waiting on work that is no longer coming, so this
+   * edge stops blocking them (`computeEffectiveStatus` treats a withdrawn dependency
+   * as satisfied — it can never reach `merged`, and leaving them blocked forever
+   * would make edge-deletion the only escape). Restoring: the same edges start
+   * blocking again.
+   *
+   * Advisory, never a refusal — the Hub does not block a write. But it is the one
+   * consequence a caller cannot see from the task in front of them, so it is
+   * returned rather than left to be discovered.
+   */
+  affectedDependents: DependentRef[];
+}
+
+/**
+ * Withdraw `taskId` — the work is not going to happen — or restore it
+ * (f-authoring-fidelity §21 t-123). §21's rule is that the MCP verbs are how the
+ * record gets corrected *from the Hub, never the DB*; this is the verb that makes
+ * the rule followable, and its absence is why three smoke tasks were once removed
+ * with a raw `DELETE`.
+ *
+ * **Soft and reversible.** Sets (or clears) `Task.withdrawnAt`; the stored
+ * `TaskStatus` is untouched, so restoring re-derives exactly the effective status
+ * the task had before — `claimed`, `active` or `blocked` — with nothing to
+ * remember. `t-N` is never freed or reused. Every work surface drops the task at the
+ * query; `get_task` and `list_tasks { status: 'withdrawn' }` still see it, which is
+ * what keeps the restore reachable.
+ *
+ * **A merged task can never be withdrawn** — it is history and it has a PR
+ * (`ValidationError`). Idempotent in both directions: withdrawing a withdrawn task,
+ * or restoring a live one, is a no-op that still reports the dependents.
+ *
+ * **Owner tier**, matching `update_task`: the feature owner or a project lead. A
+ * non-member, or a task outside `expectedProjectId`, is `NotFoundError` (→ 404,
+ * never 403 — no enumeration); a member who isn't the owner is `ForbiddenError`.
+ */
+export async function withdrawTask(
+  userId: string,
+  taskId: string,
+  options: { restore?: boolean; reason?: string; expectedProjectId?: string } = {}
+): Promise<WithdrawTaskResult> {
+  const { restore = false, reason, expectedProjectId } = options;
+
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      withdrawnAt: true,
+      featureId: true,
+      feature: { select: { projectId: true } },
+    },
+  });
+  if (!task) throw new NotFoundError(`Task ${taskId} not found`);
+
+  // Owner tier via the shared funnel — it maps non-member → not_found and
+  // member-non-owner → forbidden, so the caller never learns a task exists that
+  // they cannot see.
+  const access = await resolveFeatureAccess(userId, task.featureId, 'owner', expectedProjectId);
+  if (!access.ok) {
+    if (access.reason === 'not_found') throw new NotFoundError(`Task ${taskId} not found`);
+    throw new ForbiddenError('Only the feature owner or a project lead can withdraw its tasks.');
+  }
+
+  // Merged work is history. Refused rather than no-op'd: a silent success would read
+  // as "withdrawn" to the caller while the task went on counting toward its feature's
+  // completion — the one outcome that corrupts the record this verb exists to correct.
+  if (!restore && task.status === 'merged') {
+    throw new ValidationError('A merged task cannot be withdrawn — it has already landed.');
+  }
+
+  // The reach of the decision, gathered before the write so a withdrawal and its
+  // advisory describe the same instant. Unmerged only: a merged dependent already
+  // shipped and cannot be waiting on anything.
+  const dependentRows = await prisma.taskDependency.findMany({
+    where: {
+      dependsOnTaskId: task.id,
+      task: {
+        status: { not: 'merged' },
+        withdrawnAt: null,
+        // Same-project, stated rather than inherited. Every writer of a task edge
+        // (`create_task`, `update_task`, `plan_feature`) already validates the target
+        // is in the same project, so this is **defence in depth on a state nothing can
+        // currently produce** — worth naming as such rather than implying it guards a
+        // live hole. It is here because the advisory names task TITLES back to the
+        // caller, and an authorisation boundary that depends on an invariant enforced
+        // three files away is one refactor from being wrong. The join is already being
+        // made; the clause is free. (Same call `/security-review` made on t-113.)
+        feature: { projectId: task.feature.projectId },
+      },
+    },
+    select: { task: { select: { id: true, number: true, title: true } } },
+  });
+  const affectedDependents: DependentRef[] = dependentRows.map((d) => ({
+    taskId: d.task.id,
+    number: d.task.number,
+    title: d.task.title,
+  }));
+
+  const alreadyThere = restore ? task.withdrawnAt === null : task.withdrawnAt !== null;
+  if (alreadyThere) {
+    return { taskId: task.id, number: task.number, withdrawn: !restore, affectedDependents };
+  }
+
+  await executeTransaction(async (tx) => {
+    await tx.task.update({
+      where: { id: task.id },
+      data: { withdrawnAt: restore ? null : new Date() },
+    });
+    // ONE event kind for both directions, `restored` in the metadata — the
+    // `task_assigned` precedent. The journal is where withdrawn work stays visible
+    // once every work surface has stopped showing it, so the reason belongs here.
+    await recordProjectEvent(tx, {
+      projectId: task.feature.projectId,
+      featureId: task.featureId,
+      taskId: task.id,
+      kind: 'task_withdrawn',
+      actorUserId: userId,
+      metadata: {
+        restored: restore,
+        reason: reason ?? null,
+        from: task.status,
+        affectedDependents: affectedDependents.length,
+      },
+    });
+  });
+
+  logAdminAction({
+    userId,
+    action: restore ? 'task.restore' : 'task.withdraw',
+    entityType: 'app_task',
+    entityId: task.id,
+    // No `reason` — it is free text, and the audit log is not the place for it. The
+    // journal carries it, scoped to a project the reader already has access to.
+    metadata: { from: task.status, affectedDependents: affectedDependents.length },
+  });
+
+  return { taskId: task.id, number: task.number, withdrawn: !restore, affectedDependents };
 }
 
 /**

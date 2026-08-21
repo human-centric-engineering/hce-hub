@@ -47,7 +47,10 @@ const task = (o: Record<string, unknown> & { deps?: string[] }) => ({
   claimedByUserId: o.claimedByUserId ?? null,
   assigneeUserId: o.assigneeUserId ?? null,
   mergedAt: o.mergedAt ?? null,
-  dependencies: (o.deps ?? []).map((s: string) => ({ dependsOn: { status: s } })),
+  withdrawnAt: o.withdrawnAt ?? null,
+  dependencies: (o.deps ?? []).map((s: string) => ({
+    dependsOn: { status: s, withdrawnAt: null },
+  })),
 });
 const feature = (id: string, ownerUserId: string | null = null, slug: string | null = null) => ({
   id,
@@ -514,5 +517,76 @@ describe('getProjectBoard — mergedAt on the card (§33-sweep t-108)', () => {
     const cards = laneOf(board, 'u1')!.tasks;
     expect(cards.find((c) => c.id === 'a')!.mergedAt).toBe('2026-08-19T10:00:00.000Z');
     expect(cards.find((c) => c.id === 'b')!.mergedAt).toBeNull();
+  });
+});
+
+/**
+ * Withdrawn work never reaches the Board (§21 t-123).
+ *
+ * Two independent defences, tested separately on purpose: the query excludes it, and
+ * the routing loop skips it if one ever arrives anyway. The second is not decoration
+ * — there is no honest `BoardColumn` for "not happening", and the pre-existing
+ * `blocked → claimed` fold means the natural mistake is to let it drop into Claimed,
+ * i.e. straight back into the pull queue.
+ */
+describe('getProjectBoard — withdrawn work (§21 t-123)', () => {
+  it('excludes withdrawn tasks in the query, not after the fact', async () => {
+    memberFindMany.mockResolvedValue([member('u1')]);
+    featureFindMany.mockResolvedValue([feature('f1', 'u1')]);
+    taskFindMany.mockResolvedValue([]);
+    claimFindMany.mockResolvedValue([]);
+    userFindMany.mockResolvedValue([userRow('u1')]);
+
+    await getProjectBoard('u1', 'p1');
+
+    expect(taskFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { feature: { projectId: 'p1' }, withdrawnAt: null },
+      })
+    );
+  });
+
+  it(`keeps a withdrawn task's claim out of the collision source`, async () => {
+    // Withdrawing does NOT release the claim — leaving the stored status and the
+    // claim untouched is what makes restore free — so an ACTIVE task that is
+    // withdrawn keeps an open one. Without this filter it would go on warning
+    // everyone else off its files indefinitely, for work nobody will ever do.
+    memberFindMany.mockResolvedValue([member('u1')]);
+    featureFindMany.mockResolvedValue([feature('f1', 'u1')]);
+    taskFindMany.mockResolvedValue([]);
+    claimFindMany.mockResolvedValue([]);
+    userFindMany.mockResolvedValue([userRow('u1')]);
+
+    await getProjectBoard('u1', 'p1');
+
+    expect(claimFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { releasedAt: null, task: { feature: { projectId: 'p1' }, withdrawnAt: null } },
+      })
+    );
+  });
+
+  it('renders no card for a withdrawn task even if the query returns one', async () => {
+    memberFindMany.mockResolvedValue([member('u1')]);
+    featureFindMany.mockResolvedValue([feature('f1', 'u1')]);
+    taskFindMany.mockResolvedValue([
+      task({ id: 'live', featureId: 'f1', assigneeUserId: 'u1' }),
+      task({
+        id: 'gone',
+        featureId: 'f1',
+        assigneeUserId: 'u1',
+        withdrawnAt: new Date('2026-08-21'),
+      }),
+    ]);
+    claimFindMany.mockResolvedValue([]);
+    userFindMany.mockResolvedValue([userRow('u1')]);
+
+    const board = await getProjectBoard('u1', 'p1');
+
+    const ids = board.lanes.flatMap((l) => l.tasks.map((t) => t.id));
+    expect(ids).toEqual(['live']);
+    // And it is not merely hidden from a lane — it must not be counted either, or
+    // the column totals would advertise work no card exists for.
+    expect(board.columnTotals.claimed).toBe(1);
   });
 });

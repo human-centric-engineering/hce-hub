@@ -60,6 +60,13 @@ export function describeEvent(event: ProjectEventDTO): string {
       return 'assigneeUserId' in meta && meta.assigneeUserId === null
         ? 'returned the task to the pool'
         : 'assigned the task';
+    case 'task_withdrawn':
+      // One kind, both directions — `restored` in the metadata, the `task_assigned`
+      // precedent above (§21 t-123). The journal is where withdrawn work stays
+      // visible after every work surface has dropped it, so this line is often the
+      // ONLY remaining trace on screen: it says which way it went, and the reason
+      // rides in the event body.
+      return meta.restored === true ? 'restored the task' : 'withdrew the task';
     case 'help_wanted':
       return meta.helpWanted === true ? 'flagged help wanted' : 'cleared help wanted';
     case 'member_added':

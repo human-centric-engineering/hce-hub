@@ -31,7 +31,7 @@ export interface PlanIndicativeTask {
 }
 
 /** A task's *effective* status (`computeEffectiveStatus`) — includes computed `blocked`. */
-export type TaskEffectiveStatus = 'claimed' | 'active' | 'merged' | 'blocked';
+export type TaskEffectiveStatus = 'claimed' | 'active' | 'merged' | 'blocked' | 'withdrawn';
 
 /**
  * A task's kind (mirrors Prisma `TaskKind`, f-bug-handling §22-02; `enhancement`

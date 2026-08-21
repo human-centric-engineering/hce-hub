@@ -31,6 +31,7 @@ export const PROJECT_EVENT_KINDS = [
   'task_merged',
   'bug_reported',
   'task_assigned',
+  'task_withdrawn',
   'help_wanted',
   'member_added',
   'phase_created',

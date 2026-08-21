@@ -146,10 +146,16 @@ const NEIGHBOUR_SELECT = Prisma.validator<Prisma.TaskSelect>()({
   number: true,
   title: true,
   status: true,
+  // A neighbour CAN be withdrawn, unlike on every other surface — and it must show
+  // as such. A withdrawn blocker no longer blocks (see `computeEffectiveStatus`), so
+  // hiding it would leave a task reading ready with no visible reason it stopped
+  // waiting; and a withdrawn dependent is exactly what you want to see before
+  // deciding whether this task still has a purpose.
+  withdrawnAt: true,
   claimedByUserId: true,
   assigneeUserId: true,
   feature: { select: { slug: true } },
-  dependencies: { select: { dependsOn: { select: { status: true } } } },
+  dependencies: { select: { dependsOn: { select: { status: true, withdrawnAt: true } } } },
 });
 
 // Derived from the select so the two never drift (add a field to the select and
@@ -227,6 +233,10 @@ export async function getTaskDetail(
         claimedByUserId: true,
         assigneeUserId: true,
         mergedByUserId: true,
+        // NOT filtered out here, unlike the Plan / Board / feature page: the sheet and
+        // `get_task` are how you inspect a withdrawn task, and you cannot restore work
+        // you can no longer open.
+        withdrawnAt: true,
         feature: { select: { id: true, slug: true, title: true, ownerUserId: true } },
         dependencies: { select: { dependsOn: { select: NEIGHBOUR_SELECT } } },
         dependents: { select: { task: { select: NEIGHBOUR_SELECT } } },
@@ -252,7 +262,10 @@ export async function getTaskDetail(
       where: {
         releasedAt: null,
         taskId: { not: taskId },
-        task: { feature: { projectId }, filesScope: { isEmpty: false } },
+        // `withdrawnAt: null` for the reason `board.ts` spells out: a withdrawn task
+        // keeps its open claim (restore stays free that way), so without this it goes
+        // on contesting files for work that is not happening.
+        task: { feature: { projectId }, filesScope: { isEmpty: false }, withdrawnAt: null },
       },
       orderBy: { claimedAt: 'asc' },
       select: {
@@ -275,7 +288,9 @@ export async function getTaskDetail(
   //   - **merged** — the work has landed; "someone else is in these files" is
   //     no longer anything to coordinate.
   //   - **blocked** — an unmerged dependency already stops this task, and that
-  //     is both the stronger signal and the one rendered right below. A second
+  //     is both the stronger signal and the one rendered right below.
+  //   - **withdrawn** — the work is called off (§21 t-123); nothing about file
+  //     contention is actionable for a task nobody is going to do. A second
   //     warning saying "be careful of these files" adds nothing to "you cannot
   //     start yet", and the dependency is often the very task it names.
   //
@@ -285,7 +300,13 @@ export async function getTaskDetail(
   // batch, or coordinate. This suppresses the reader's OWN warning only — a
   // blocked task still holds a claim, so it goes on warning everybody else.
   const overlaps =
-    status === 'merged' || status === 'blocked' || task.filesScope.length === 0
+    status === 'merged' ||
+    status === 'blocked' ||
+    // Withdrawn is the strongest can't-start signal of the three, so it silences the
+    // reader's own warning for the same reason `blocked` does (owner, 2026-08-20):
+    // "be careful of these files" adds nothing to "this work is not happening".
+    status === 'withdrawn' ||
+    task.filesScope.length === 0
       ? []
       : // Deduped by task, not by claim row. `startTask` releases open claims and
         // creates the new one in one transaction, but under READ COMMITTED two

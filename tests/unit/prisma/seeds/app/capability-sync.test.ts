@@ -38,6 +38,9 @@ import listProjectsUnit, {
 } from '@/prisma/seeds/app/030-list-projects';
 import getProjectUnit, { getProjectFunctionDefinition } from '@/prisma/seeds/app/031-get-project';
 import listEventsUnit, { listEventsFunctionDefinition } from '@/prisma/seeds/app/032-list-events';
+import withdrawTaskUnit, {
+  withdrawTaskFunctionDefinition,
+} from '@/prisma/seeds/app/033-withdraw-task';
 
 function runContext() {
   const upsert = vi.fn().mockResolvedValue({ id: 'cap1' });
@@ -200,5 +203,18 @@ describe('capability seeds re-sync functionDefinition on update', () => {
     expect(arg.where).toEqual({ slug: 'list_events' });
     expect(arg.update.functionDefinition).toEqual(listEventsFunctionDefinition);
     expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('featureId');
+  });
+
+  it('033-withdraw-task: the update branch carries restore, so a withdrawal stays reversible', async () => {
+    const { ctx, upsert } = runContext();
+    await withdrawTaskUnit.run(ctx);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ slug: 'withdraw_task' });
+    expect(arg.update.functionDefinition).toEqual(withdrawTaskFunctionDefinition);
+    // `restore` named explicitly: it is the half of this verb that makes withdrawal
+    // safe to use, and it is a parameter, so an environment left on a stale row
+    // strips it silently — the caller asks to restore and gets a second withdrawal
+    // reported as success (idea #13's failure mode, which cost real time on t-86).
+    expect(arg.update.functionDefinition.parameters.properties).toHaveProperty('restore');
   });
 });

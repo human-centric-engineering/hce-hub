@@ -2,6 +2,8 @@
  * Unit: Plan presentation helpers (f-plan-view t-2) — status tones, firstName,
  * prLabel edge cases.
  */
+import { readFileSync } from 'node:fs';
+
 import { describe, it, expect } from 'vitest';
 import {
   featureStatus,
@@ -11,6 +13,54 @@ import {
   prLabel,
   shortDate,
 } from '@/components/hub/projects/plan/presentation';
+import type { TaskEffectiveStatus } from '@/components/hub/projects/plan/types';
+
+/**
+ * Every effective status a server surface can return must map to a tone + label
+ * (§21 t-123). Driven off the client union rather than a hand-list, so the next
+ * status added has to come back here — the omission that made `withdrawn` render an
+ * empty pill was invisible precisely because nothing walked the set.
+ */
+/**
+ * A tone is only ever a STRING here; `StatusPill` interpolates it into
+ * `var(--signal-<tone>)`. So a tone with no matching token renders an invisible pill
+ * — no colour, no dot — and nothing type-checks the join. §20 hit exactly this and
+ * added `--signal-active` for it; §21 t-123 added `--signal-withdrawn` for the same
+ * reason, which is why this walks the map instead of trusting it.
+ */
+describe('every tone a status maps to has a CSS token, in BOTH themes', () => {
+  const css = readFileSync('app/brand-theme.css', 'utf8');
+  const ALL: TaskEffectiveStatus[] = ['claimed', 'active', 'merged', 'blocked', 'withdrawn'];
+
+  it.each(ALL)('%s resolves to a defined --signal-* pair', (status) => {
+    const { tone } = taskStatus(status);
+    // Two definitions each: the light block and the `.dark` one. One occurrence
+    // means a theme is missing it, and the pill goes invisible in that theme only —
+    // the kind of bug nobody sees until someone switches.
+    expect(css.split(`--signal-${tone}:`).length - 1).toBe(2);
+    expect(css.split(`--signal-${tone}-bg:`).length - 1).toBe(2);
+  });
+});
+
+describe('taskStatus covers the whole status union', () => {
+  const ALL: TaskEffectiveStatus[] = ['claimed', 'active', 'merged', 'blocked', 'withdrawn'];
+
+  it.each(ALL)('%s has a tone and a non-empty label', (status) => {
+    const t = taskStatus(status);
+    expect(t).toBeDefined();
+    expect(t.tone.length).toBeGreaterThan(0);
+    expect(t.label.trim().length).toBeGreaterThan(0);
+  });
+
+  it('gives withdrawn its own tone, not a borrowed one', () => {
+    // Reusing `available` or `blocked` would have said the opposite of what it
+    // means — not-happening is neither ready to pick up nor waiting on something.
+    const w = taskStatus('withdrawn');
+    expect(w).toEqual({ tone: 'withdrawn', label: 'withdrawn' });
+    expect(w.tone).not.toBe(taskStatus('blocked').tone);
+    expect(w.tone).not.toBe(taskStatus('merged').tone);
+  });
+});
 
 describe('featureStatus / taskStatus', () => {
   it('maps feature status to a signal tone + label', () => {

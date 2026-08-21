@@ -31,6 +31,7 @@ function row(over: Partial<Record<string, unknown>> = {}) {
     prUrl: null,
     assigneeUserId: 'u2',
     feature: { slug: 'f-a', title: 'Feature A' },
+    withdrawnAt: null,
     dependencies: [],
     ...over,
   };
@@ -109,5 +110,48 @@ describe('getProjectTasks', () => {
     ]);
     const { tasks } = await getProjectTasks(USER, 'p1', { status: 'blocked' });
     expect(tasks.map((t) => t.id)).toEqual(['blocked']);
+  });
+
+  /**
+   * Withdrawn work (§21 t-123). This read is the ONLY one that can still see it —
+   * the Plan, Board, feature page and `next_task` all drop it in the query — which
+   * is what keeps a withdrawal reversible: you cannot restore a task you can no
+   * longer name.
+   */
+  describe('withdrawn tasks', () => {
+    const mixed = () => [
+      row({ id: 'live', status: 'claimed' }),
+      row({ id: 'gone', status: 'claimed', withdrawnAt: new Date('2026-08-21') }),
+    ];
+
+    it('hides withdrawn work from an unfiltered read', async () => {
+      findMany.mockResolvedValue(mixed());
+      const { tasks } = await getProjectTasks(USER, 'p1');
+      expect(tasks.map((t) => t.id)).toEqual(['live']);
+    });
+
+    it('hides it from a read filtered to another status, rather than leaking it in', async () => {
+      // The subtle one: the withdrawn row's STORED status is `claimed`, so a filter
+      // keyed on the stored value would return it. The filter runs on the effective
+      // status, where it reads `withdrawn` and matches nothing.
+      findMany.mockResolvedValue(mixed());
+      const { tasks } = await getProjectTasks(USER, 'p1', { status: 'claimed' });
+      expect(tasks.map((t) => t.id)).toEqual(['live']);
+    });
+
+    it('returns ONLY withdrawn work when that is what you asked for', async () => {
+      findMany.mockResolvedValue(mixed());
+      const { tasks } = await getProjectTasks(USER, 'p1', { status: 'withdrawn' });
+      expect(tasks.map((t) => t.id)).toEqual(['gone']);
+      expect(tasks[0].status).toBe('withdrawn');
+    });
+
+    it('does not filter withdrawn work at the DB — the query must still return it', async () => {
+      // If the exclusion moved into the `where`, `status: 'withdrawn'` would return
+      // nothing and the restore path would have no way to find its subject.
+      findMany.mockResolvedValue([]);
+      await getProjectTasks(USER, 'p1', { status: 'withdrawn' });
+      expect(findMany.mock.calls[0][0].where).not.toHaveProperty('withdrawnAt');
+    });
   });
 });

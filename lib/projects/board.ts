@@ -118,7 +118,8 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
       select: { id: true, slug: true, title: true, ownerUserId: true },
     }),
     prisma.task.findMany({
-      where: { feature: { projectId } },
+      // Withdrawn work never reaches the board (§21 t-123) — it is not work.
+      where: { feature: { projectId }, withdrawnAt: null },
       orderBy: { createdAt: 'asc' },
       select: {
         id: true,
@@ -130,13 +131,20 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
         prUrl: true,
         claimedByUserId: true,
         assigneeUserId: true,
+        withdrawnAt: true, // always null here (the `where` above) — required by the shared status input
         mergedAt: true,
-        dependencies: { select: { dependsOn: { select: { status: true } } } },
+        dependencies: { select: { dependsOn: { select: { status: true, withdrawnAt: true } } } },
       },
     }),
     // Open claims (with their task's file scope) — the soft-collision source.
+    //
+    // `withdrawnAt: null` matters more than it looks (§21 t-123). Withdrawing does
+    // NOT release the claim — deliberately, because leaving the stored status and the
+    // claim alone is what makes restore free — so an ACTIVE task that gets withdrawn
+    // keeps an open claim. Without this clause that claim goes on warning everyone
+    // else off its files indefinitely, for work that is never going to happen.
     prisma.taskClaim.findMany({
-      where: { releasedAt: null, task: { feature: { projectId } } },
+      where: { releasedAt: null, task: { feature: { projectId }, withdrawnAt: null } },
       select: { userId: true, task: { select: { id: true, title: true, filesScope: true } } },
     }),
   ]);
@@ -181,6 +189,11 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
       t,
       t.dependencies.map((d) => d.dependsOn)
     );
+    // Withdrawn work has no column, so it gets no card. The query above already
+    // excluded it; this is the guard that makes that a rule rather than a habit —
+    // there is no honest `BoardColumn` for "not happening", and silently folding it
+    // into Claimed would put abandoned work back in the pull queue.
+    if (effective === 'withdrawn') continue;
     // A blocked task is a claimed task that can't start yet — it shows in the
     // Claimed column with the blocked treatment, not a column of its own.
     const column: BoardColumn = effective === 'blocked' ? 'claimed' : effective;
