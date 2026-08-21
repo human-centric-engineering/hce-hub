@@ -150,6 +150,14 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
     `STATUS_BAND` (done → in-flight → ready → blocked); a task sorts **before** a
     feature of equal rank, since a tie is exactly where the blocking reading matters.
     Stable, and features arrive in `planOrder`, so nothing already ordered moves.
+  - **Except in the DONE rank, which reads as linear history** (§33-sweep t-60). The
+    "task first" tie-break exists so a borrowed prerequisite outranks the feature it
+    blocks — and finished work blocks nothing, so applied there it merely stacked every
+    merged task above every shipped feature. The completed rows are instead ordered by
+    completion instant **oldest first**, across both types (features by
+    `Feature.shippedAt`, tasks by `Task.mergedAt`), so the run ends with whatever
+    finished most recently, immediately above the work still in flight. An unknown
+    instant sorts to the old end; two unknowns tie and fall back to `planOrder`.
   - **`BorrowedTaskRow`** — narrower and dashed, with the kind tag and an origin
     breadcrumb (`↩ f-status-model · Foundations`) linking back to the feature the
     work belongs to. It signals "from elsewhere" through _appearance_, never
