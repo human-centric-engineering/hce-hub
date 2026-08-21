@@ -580,3 +580,71 @@ describe('getFeatureDetail — phase boundaries (§33 t-100)', () => {
     }
   });
 });
+
+describe('getFeatureDetail — the borrowed-task mark (§33-sweep t-113)', () => {
+  /** One task, varying only the commitment, against a feature filed under `phase-A`. */
+  const withTask = (task: Record<string, unknown>) =>
+    featureRow({
+      phaseId: 'phase-A',
+      phase: { id: 'phase-A', name: 'Foundations' },
+      tasks: [
+        {
+          id: 't1',
+          number: 1,
+          title: 'a task',
+          status: 'claimed',
+          kind: 'feature_work',
+          createdAt: new Date('2026-08-01'),
+          doneWhen: null,
+          prUrl: null,
+          claimedByUserId: null,
+          assigneeUserId: null,
+          dependencies: [],
+          ...task,
+        },
+      ],
+    });
+
+  it('names the phase that borrowed the task', async () => {
+    featureFindFirst.mockResolvedValue(
+      withTask({ phaseId: 'phase-B', phase: { name: 'Project flow' } })
+    );
+    const detail = await getFeatureDetail(USER, 'hce-hub', 'f-mcp');
+    expect(detail.tasks[0].committedPhaseName).toBe('Project flow');
+  });
+
+  it('says nothing when the task simply inherits its feature phase', async () => {
+    // The overwhelmingly common case. Same phase id on both sides — a mark here
+    // would fire on nearly every row and mean nothing.
+    featureFindFirst.mockResolvedValue(
+      withTask({ phaseId: 'phase-A', phase: { name: 'Foundations' } })
+    );
+    const detail = await getFeatureDetail(USER, 'hce-hub', 'f-mcp');
+    expect(detail.tasks[0].committedPhaseName).toBeNull();
+  });
+
+  it('reads an ABSENT phaseId as inherit, exactly like an explicit null', async () => {
+    // The predicate is `!= null`, nullish on purpose (matching `plan.ts`): a field
+    // missing from a projection must not masquerade as a commitment. Both spellings
+    // are pinned because only one of them can be reached from a real query, and the
+    // other is what a future select change would introduce.
+    for (const shape of [{ phaseId: null, phase: null }, {}]) {
+      featureFindFirst.mockResolvedValue(withTask(shape));
+      const detail = await getFeatureDetail(USER, 'hce-hub', 'f-mcp');
+      expect(detail.tasks[0].committedPhaseName).toBeNull();
+    }
+  });
+
+  it('marks a task committed to a phase when its feature is unfiled', async () => {
+    // A real asymmetry, not an edge case for its own sake: the feature has no phase,
+    // so the task's commitment is the ONLY phase fact on the row, and suppressing it
+    // would hide the one thing worth knowing.
+    featureFindFirst.mockResolvedValue({
+      ...withTask({ phaseId: 'phase-B', phase: { name: 'Project flow' } }),
+      phaseId: null,
+      phase: null,
+    });
+    const detail = await getFeatureDetail(USER, 'hce-hub', 'f-mcp');
+    expect(detail.tasks[0].committedPhaseName).toBe('Project flow');
+  });
+});

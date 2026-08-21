@@ -63,6 +63,18 @@ export interface FeatureDetailTask {
   claimer: UserRef | null;
   /** "This is yours" — defaults to the feature owner at plan time; `null` if unassigned/erased. */
   assignee: UserRef | null;
+  /**
+   * The phase that **borrowed** this task, when it isn't its feature's own (§33-sweep
+   * t-113) — the reciprocal of the borrowed row the Plan renders in that phase's band.
+   * `null` when the task inherits its feature's phase, which is the common case.
+   *
+   * Mirrored on the client as `FeatureDetailTaskDTO.committedPhaseName`. The two are
+   * hand-kept in step and only the *client* side is reached through an unchecked
+   * `parseApiResponse` cast, so a field added here and forgotten there compiles
+   * cleanly and arrives as `undefined` at render — the §33 gap-shape this task's own
+   * description warns about. Change both together.
+   */
+  committedPhaseName: string | null;
 }
 
 /** An indicative-task sketch bullet on a not-yet-planned feature. */
@@ -215,23 +227,23 @@ async function loadFeaturePhaseMoves(projectId: string, featureId: string): Prom
  * exists for. §33's own three tasks were created within the same second, which
  * is the check that settled it.
  *
- * **The merge instant lives only on the event.** `Task` has no merged-at column
- * — `complete_task` flips `status` and the timestamp survives solely as the
- * `task_merged` event's `createdAt`. That is why this reads the journal rather
- * than the rows, and why a *merged* task with no event is read as imported
+ * **This reads the merge instant from the event, and no longer has to.**
+ * `complete_task` used to leave the timestamp solely on the `task_merged` event,
+ * which is why this queries the journal; **§33-sweep t-115 added `Task.mergedAt`**,
+ * so the column now exists and t-117 backfilled it from GitHub for the tasks §19's
+ * cutover imported. Switching this query over is **t-116's** job, not something to
+ * smuggle in here — but the old justification above it was simply false once t-115
+ * landed, and a comment explaining a query by a fact that stopped being true is
+ * worse than no comment. A *merged* task with no event is still read as imported
  * history rather than as unfinished work.
  *
- * **What this does NOT read: `Task.phaseId`.** That column is a *commitment*
- * marker — the phase that chose to do the work (§32 t-80/t-95) — and it is a
- * different axis from "where was the feature when this landed". The Plan already
- * renders a committed task as a borrowed row in its committed band, with a
- * reciprocal `→ <phase>` mark on the task's own row; the feature page has no such
- * mark (it never receives `phaseId`), so on this surface a committed task is
- * placed by merge time like any other and its commitment is simply invisible.
- * That blindness predates this task — it is a gap in t-95's reciprocal mark, not
- * something the boundary introduced — but the boundary does make it easier to
- * misread. Filed as its own work rather than widened into here, because which
- * fact should win is an owner decision, not a rendering detail.
+ * **`Task.phaseId` is read, but not by THIS function.** That column is a
+ * *commitment* marker — the phase that chose to do the work (§32 t-80/t-95) — and
+ * it is a different axis from "where was the feature when this landed". Placement
+ * here is still purely by merge time; the commitment is now surfaced alongside it
+ * as a `→ <phase>` mark on the row (§33-sweep t-113), matching the Plan's.
+ * Commitment and completion stay two separate facts, both visible, neither
+ * overriding the other — which was the owner's call when t-113 resolved idea #22.
  *
  * **The asymmetry is deliberate.** A rule with nothing *above* it is dropped (it
  * segments no work); a rule with nothing *below* it is kept, because "all of this
@@ -352,6 +364,7 @@ export async function getFeatureDetail(
         helpWanted: true,
         ownerUserId: true,
         shippedAt: true,
+        phaseId: true, // compared against each task's, to spot a borrowed row (§33-sweep t-113)
         phase: { select: { id: true, name: true } },
         dependencies: {
           // `status` feeds the readiness derivation; slug/title feed the chips.
@@ -374,6 +387,12 @@ export async function getFeatureDetail(
             prUrl: true,
             claimedByUserId: true,
             assigneeUserId: true,
+            // The COMMITMENT — the phase that chose to do this work, which may not be
+            // the feature's own (§32 t-80/t-95). Nested rather than resolved through a
+            // separate phase lookup: the name is one join away, and this query already
+            // fetches the feature's own phase exactly this way.
+            phaseId: true,
+            phase: { select: { name: true } },
             dependencies: { select: { dependsOn: { select: { status: true } } } },
           },
         },
@@ -459,6 +478,14 @@ export async function getFeatureDetail(
       prUrl: t.prUrl,
       claimer: t.claimedByUserId ? (users.get(t.claimedByUserId) ?? null) : null,
       assignee: t.assigneeUserId ? (users.get(t.assigneeUserId) ?? null) : null,
+      // Borrowed ⇔ committed to a phase that isn't its feature's (§33-sweep t-113).
+      // The predicate is the PLAN's, verbatim (`plan.ts`), rather than restated: `!=
+      // null` is nullish deliberately, so an absent `phaseId` reads as "inherit"
+      // exactly like an explicit null, and a field missing from a projection cannot
+      // masquerade as a commitment. The two surfaces have to agree about what
+      // "borrowed" means, and writing the same comparison is the cheapest guarantee.
+      committedPhaseName:
+        t.phaseId != null && t.phaseId !== feature.phaseId ? (t.phase?.name ?? null) : null,
     })),
     taskPhaseBoundaries,
     indicativeTasks: feature.indicativeTasks,

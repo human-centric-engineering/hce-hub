@@ -40,6 +40,17 @@ export interface FeatureDetailTaskDTO {
   prUrl: string | null;
   claimer: UserRef | null;
   assignee: UserRef | null;
+  /**
+   * The phase that **borrowed** this task, when it isn't its feature's own (§33-sweep
+   * t-113) — the reciprocal of the borrowed row the Plan renders in that phase's band.
+   * `null` when the task simply inherits its feature's phase, which is the common case.
+   *
+   * **Required, not optional, on purpose.** This interface is hand-written and reached
+   * through an unchecked `parseApiResponse` cast, so the compiler is the only thing
+   * that will point at a fixture or caller that forgot the field — §33 hit three
+   * separate gaps of exactly this shape, data on the wire the client type omitted.
+   */
+  committedPhaseName: string | null;
 }
 
 /**
