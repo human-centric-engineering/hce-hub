@@ -952,7 +952,14 @@ describe('withdrawTask write', () => {
       expect.objectContaining({
         where: {
           dependsOnTaskId: 't1',
-          task: { status: { not: 'merged' }, withdrawnAt: null },
+          task: {
+            status: { not: 'merged' },
+            withdrawnAt: null,
+            // Scoped to the task's own project. The advisory hands task titles back
+            // to the caller, so the boundary is stated here rather than inherited
+            // from the edge writers' validation (`/security-review`).
+            feature: { projectId: 'p1' },
+          },
         },
       })
     );

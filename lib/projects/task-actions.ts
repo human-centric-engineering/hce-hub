@@ -344,7 +344,22 @@ export async function withdrawTask(
   // advisory describe the same instant. Unmerged only: a merged dependent already
   // shipped and cannot be waiting on anything.
   const dependentRows = await prisma.taskDependency.findMany({
-    where: { dependsOnTaskId: task.id, task: { status: { not: 'merged' }, withdrawnAt: null } },
+    where: {
+      dependsOnTaskId: task.id,
+      task: {
+        status: { not: 'merged' },
+        withdrawnAt: null,
+        // Same-project, stated rather than inherited. Every writer of a task edge
+        // (`create_task`, `update_task`, `plan_feature`) already validates the target
+        // is in the same project, so this is **defence in depth on a state nothing can
+        // currently produce** — worth naming as such rather than implying it guards a
+        // live hole. It is here because the advisory names task TITLES back to the
+        // caller, and an authorisation boundary that depends on an invariant enforced
+        // three files away is one refactor from being wrong. The join is already being
+        // made; the clause is free. (Same call `/security-review` made on t-113.)
+        feature: { projectId: task.feature.projectId },
+      },
+    },
     select: { task: { select: { id: true, number: true, title: true } } },
   });
   const affectedDependents: DependentRef[] = dependentRows.map((d) => ({
