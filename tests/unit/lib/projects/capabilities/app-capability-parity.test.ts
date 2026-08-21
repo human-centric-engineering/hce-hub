@@ -62,6 +62,10 @@ const classes = registered as Pick<BaseCapability, 'slug' | 'functionDefinition'
  * narrow mock does not carry, and a permissive mock that let them run would be
  * guessing at return shapes. The filter is one string, and the count assertion below
  * is what stops it silently matching nothing.
+ *
+ * A *single* seed the filter misses is caught by a different route: its class then
+ * has no seed, and the set check fails naming that slug. So the floor guards
+ * wholesale breakage and the set check guards the individual miss.
  */
 function capabilitySeedFiles(): string[] {
   return readdirSync(SEED_DIR)
@@ -89,7 +93,13 @@ async function runSeed(file: string): Promise<SeededCapability[]> {
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
   } as unknown as SeedContext;
 
-  await unit.run(ctx);
+  try {
+    await unit.run(ctx);
+  } catch (cause) {
+    // This runs at module scope, so an unattributed throw fails the whole file with
+    // a stack that never names the seed. Say which one.
+    throw new Error(`Seed ${file} threw while being run for parity`, { cause });
+  }
 
   return upsert.mock.calls.map(([arg]) => {
     const a = arg as { where?: { slug?: string }; update?: { functionDefinition?: unknown } };
@@ -145,9 +155,13 @@ describe('class functionDefinition equals the seeded copy', () => {
     // Deep equality on purpose. Comparing parameter NAMES would have caught #545's
     // missing `multipart` but not the `body` description that had drifted with it —
     // and a description is not cosmetic, it is how the model picks a parameter.
-    expect(seededBySlug.get(slug)!.functionDefinition).toEqual(
-      classBySlug.get(slug)!.functionDefinition
-    );
+    // Guarded rather than `!`-asserted. The set check above already reports a class
+    // with no seed, but this case runs independently, and a bare
+    // `Cannot read properties of undefined` sends the reader to debug the test rather
+    // than read the finding.
+    const seed = seededBySlug.get(slug);
+    expect(seed, `no app seed upserts '${slug}' — see the set check above`).toBeDefined();
+    expect(seed!.functionDefinition).toEqual(classBySlug.get(slug)!.functionDefinition);
   });
 
   it('the seeded name matches the slug it is keyed on', () => {
