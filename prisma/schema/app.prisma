@@ -72,6 +72,7 @@ model Project {
   featureCounter  Int           @default(0) // monotonic source for project-wide Feature.number (f-status-model §20 t-37)
   ideaCounter     Int           @default(0) // monotonic source for project-wide Idea.number (f-idea-capture §22 t-63)
   createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @default(now()) @updatedAt // bumped by every write — a counted source of the project revision (f-realtime §36 t-125)
 
   members         ProjectMember[]
   features        Feature[]
@@ -100,6 +101,7 @@ model Idea {
   status          IdeaStatus   @default(open)
   createdByUserId String? // hand-FK → "user" · ON DELETE SET NULL (retain the idea as project data)
   createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @default(now()) @updatedAt // bumped by every write — a counted source of the project revision (f-realtime §36 t-125)
   // Triage outcome — set when promoted (f-idea-capture promotion task). What it became:
   promotedKind    IdeaOutcome? // feature | task | phase | bug
   promotedRefId   String? // id of the created feature / task / phase (bug = the task id)
@@ -134,6 +136,7 @@ model ProjectMember {
   userId    String // hand-FK → "user" · ON DELETE CASCADE (membership is the user's)
   role      ProjectRole @default(member)
   addedAt   DateTime    @default(now())
+  updatedAt DateTime    @default(now()) @updatedAt // bumped by every write — a counted source of the project revision (f-realtime §36 t-125)
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -159,6 +162,7 @@ model Feature {
   phaseId       String? // intra-Hub FK → app_phase · ON DELETE SET NULL (futures scaffolding, t-3)
   createdAt     DateTime             @default(now())
   shippedAt     DateTime? // sealed by ship_feature (f-work-kinds §32 t-79): completion counts only tasks created at or before it, so post-ship work can't dent the bar. NULL ⇒ count every task (unshipped features, and any the backfill couldn't resolve)
+  updatedAt     DateTime             @default(now()) @updatedAt // bumped by every write — a counted source of the project revision (f-realtime §36 t-125)
 
   project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   phase           Phase?              @relation(fields: [phaseId], references: [id], onDelete: SetNull)
@@ -177,9 +181,10 @@ model Feature {
 // A directed edge: `feature` depends on `dependsOn`. Both sides cascade so an
 // edge disappears when either endpoint feature is deleted.
 model FeatureDependency {
-  id                 String @id @default(cuid())
+  id                 String   @id @default(cuid())
   featureId          String
   dependsOnFeatureId String
+  createdAt          DateTime @default(now()) // an edge is created or deleted, never edited — so `createdAt` IS this table's mutation timestamp for the project revision (f-realtime §36 t-125)
 
   feature   Feature @relation("FeatureDependencies", fields: [featureId], references: [id], onDelete: Cascade)
   dependsOn Feature @relation("FeatureDependents", fields: [dependsOnFeatureId], references: [id], onDelete: Cascade)
@@ -196,10 +201,11 @@ model FeatureDependency {
 // is intra-Hub only: an ordinary `@relation` to Feature, ON DELETE CASCADE (the
 // sketch dies with its feature — no user data, no satellite FK).
 model IndicativeTask {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   featureId String
   order     Int // display order within the feature
-  text      String @db.Text
+  text      String   @db.Text
+  createdAt DateTime @default(now()) // the sketch is replaced wholesale at plan time, never edited — so `createdAt` IS this table's mutation timestamp for the project revision (f-realtime §36 t-125)
 
   feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
 
@@ -264,6 +270,7 @@ model Task {
   phaseId         String? // intra-Hub FK → app_phase · ON DELETE SET NULL — COMMITMENT MARKER (f-work-kinds §32 t-80): the phase that *chose* to do this work, when that differs from its feature's phase. NULL = inherit the feature's phase (today's behaviour exactly). Never propagates upward — a feature's phase is solely Feature.phaseId, so a task can't drag its feature between phases.
   prUrl           String?
   createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @default(now()) @updatedAt // bumped by every write — a counted source of the project revision (f-realtime §36 t-125)
 
   feature      Feature          @relation(fields: [featureId], references: [id], onDelete: Cascade)
   phase        Phase?           @relation(fields: [phaseId], references: [id], onDelete: SetNull)
@@ -285,9 +292,10 @@ model Task {
 // write-path concern, enforced when edges gain a writer in f-hub-capabilities
 // (plan §07), not in the schema.
 model TaskDependency {
-  id              String @id @default(cuid())
+  id              String   @id @default(cuid())
   taskId          String
   dependsOnTaskId String
+  createdAt       DateTime @default(now()) // an edge is created or deleted, never edited — so `createdAt` IS this table's mutation timestamp for the project revision (f-realtime §36 t-125)
 
   task      Task @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
   dependsOn Task @relation("TaskDependents", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
@@ -307,6 +315,7 @@ model TaskClaim {
   userId     String // hand-FK → "user" · ON DELETE CASCADE (the claim is the user's)
   claimedAt  DateTime  @default(now())
   releasedAt DateTime?
+  updatedAt  DateTime  @default(now()) @updatedAt // bumped by every write — a counted source of the project revision (f-realtime §36 t-125)
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
@@ -377,6 +386,7 @@ model FocusDirective {
   deadline         DateTime?
   reason           String? // for hold states — "until Angus gets back to us"
   status           FocusDirectiveStatus @default(active)
+  updatedAt        DateTime             @default(now()) @updatedAt // bumped by every write — a counted source of the project revision (f-realtime §36 t-125)
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sprint  Sprint? @relation(fields: [sprintId], references: [id], onDelete: SetNull)
@@ -401,6 +411,7 @@ model Phase {
   startedAt   DateTime?
   completedAt DateTime?
   createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @default(now()) @updatedAt // bumped by every write — a counted source of the project revision (f-realtime §36 t-125)
 
   project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   features Feature[] // Feature.phaseId · ON DELETE SET NULL (phase membership is optional)

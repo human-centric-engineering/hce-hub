@@ -105,3 +105,10 @@ export {
   type EventFeatureRef,
   type EventTaskRef,
 } from '@/lib/projects/journal';
+
+// Project revision — the change cursor live surfaces poll (f-realtime §36 t-125).
+export {
+  getProjectRevision,
+  PROJECT_REVISION_TABLES,
+  type ProjectRevisionDTO,
+} from '@/lib/projects/revision';

@@ -53,6 +53,7 @@
     "smoke:capability-ownership": "tsx --env-file=.env.local scripts/smoke/capability-seed-ownership.ts",
     "smoke:epub": "tsx --env-file=.env.local scripts/smoke/epub-ingestion.ts",
     "smoke:erasure": "tsx --env-file=.env.local scripts/smoke/erasure.ts",
+    "smoke:project-revision": "tsx --env-file=.env.local scripts/smoke/project-revision.ts",
     "app:smoke:erasure": "tsx --env-file=.env.local scripts/app/smoke/erasure.ts",
     "app:smoke:mcp-keys": "tsx --env-file=.env.local scripts/app/smoke/mcp-keys.ts",
     "smoke:export": "tsx --env-file=.env.local scripts/smoke/export.ts",
