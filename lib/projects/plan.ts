@@ -30,7 +30,7 @@ import {
   type WaitingOnRef,
 } from '@/lib/projects/feature-status';
 import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
-import { planOrder, byRecencyDesc } from '@/lib/projects/plan-order';
+import { planOrder, byCompletionOrder } from '@/lib/projects/plan-order';
 
 /** A depended-on feature, for the "depends on …" chips (slug, with title fallback). */
 export interface PlanDependencyRef {
@@ -517,11 +517,16 @@ const TASK_RANK: Record<EffectiveStatus, number> = {
  * every shipped feature: on the Hub's own Project flow band, eleven merged tasks sat
  * at the top of a list whose stated order is *most ready to advance first*.
  *
- * So the completed group is ordered by **completion instant, most recent first, across
- * both row types** — features by `Feature.shippedAt`, borrowed tasks by
- * `Task.mergedAt` — using the same `byRecencyDesc` the shipped band itself uses, so
- * the two orderings cannot disagree about what "most recently completed" means. Unknown
- * instants sort last and tie, leaving those rows in their incoming order.
+ * So the completed group is ordered by **completion instant, oldest first, across both
+ * row types** — features by `Feature.shippedAt`, borrowed tasks by `Task.mergedAt` —
+ * using the same `byCompletionOrder` the shipped band itself uses, so the two orderings
+ * cannot disagree about what "completion order" means. Unknown instants sort first and
+ * tie, leaving those rows in their incoming order.
+ *
+ * **Ascending, so the band reads as linear history** (owner, 2026-08-21). Completed work
+ * renders above work still moving, so ordering it newest-first would stand the oldest
+ * thing in the band next to the thing being done today. Oldest-first makes the column
+ * flow downward through time and puts what just finished directly beside what is next.
  */
 function interleaveBandRows(
   features: PlanFeatureView[],
@@ -548,7 +553,7 @@ function interleaveBandRows(
     .sort((a, b) => {
       if (a.rank !== b.rank) return a.rank - b.rank;
       // Rank 0 is the completed group — recency, across both row types.
-      if (a.rank === COMPLETED_RANK) return byRecencyDesc(a.at, b.at);
+      if (a.rank === COMPLETED_RANK) return byCompletionOrder(a.at, b.at);
       // Every other rank keeps the stable "tasks before features" order they were
       // pushed in (§32 t-95). Returning 0 is what preserves it — do not "tidy" this
       // into a single comparator.

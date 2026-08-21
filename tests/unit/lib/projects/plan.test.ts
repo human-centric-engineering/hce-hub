@@ -752,14 +752,18 @@ describe('getProjectPlan — tasks borrowed into a phase band (§32 t-95)', () =
     expect(bandRows(plan, 'now')).toHaveLength(1); // …but it still renders
   });
 
-  describe('the completed group reads by recency, across both row types (§33-sweep t-60)', () => {
+  describe('the completed group reads as linear history, across both row types (§33-sweep t-60)', () => {
     const at = (iso: string) => new Date(iso);
 
-    it('interleaves merged tasks among shipped features by date, not tasks-first', async () => {
+    it('interleaves merged tasks among shipped features by date, oldest first', async () => {
       // The bug the owner spotted: every merged borrowed task sat above every shipped
       // feature, because both rank 0 and a stable sort keeps the tasks (pushed first)
       // in front. On the Hub's own Project flow band that put eleven finished tasks at
       // the top of a list whose stated order is "most ready to advance" first.
+      //
+      // Ordered OLDEST first, so the band reads as linear history and the row that
+      // finished most recently sits at the bottom of the completed run — directly above
+      // the work still in flight.
       twoPhases();
       featureFindMany.mockResolvedValue([
         // Two borrowed tasks, straddling the feature's ship date.
@@ -795,9 +799,9 @@ describe('getProjectPlan — tasks borrowed into a phase band (§32 t-95)', () =
       ]);
       const rows = bandRows(await getProjectPlan('u1', 'p1'), 'now');
       expect(rows.map((r) => (r.kind === 'task' ? r.task.id : r.feature.id))).toEqual([
-        'newer', // 20 Aug — a task
-        'mid', //   15 Aug — a FEATURE, above an older task
         'older', // 10 Aug
+        'mid', //   15 Aug — a FEATURE, between two tasks
+        'newer', // 20 Aug — a task, LAST: what just finished, next to what is next
       ]);
     });
 
@@ -830,9 +834,10 @@ describe('getProjectPlan — tasks borrowed into a phase band (§32 t-95)', () =
       ]);
     });
 
-    it('sinks rows with no completion instant below dated ones', async () => {
-      // Null means "finished before we tracked it" — oldest, so last. Sorting an
-      // unstamped row to the TOP would claim it was the most recent thing done.
+    it('raises rows with no completion instant above dated ones', async () => {
+      // Null means "finished before we tracked it" — oldest, so first in an ascending
+      // band. Sorting an unstamped row to the BOTTOM would stand it next to the
+      // in-flight work and claim it was the most recent thing done.
       twoPhases();
       featureFindMany.mockResolvedValue([
         row({
@@ -850,8 +855,8 @@ describe('getProjectPlan — tasks borrowed into a phase band (§32 t-95)', () =
       ]);
       const rows = bandRows(await getProjectPlan('u1', 'p1'), 'now');
       expect(rows.map((r) => (r.kind === 'task' ? r.task.id : r.feature.id))).toEqual([
-        'dated',
         'undated',
+        'dated',
       ]);
     });
   });

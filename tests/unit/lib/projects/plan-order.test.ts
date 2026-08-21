@@ -97,7 +97,7 @@ describe('planOrder — robustness', () => {
   });
 });
 
-describe('planOrder — the shipped band reads in ship order (§33-sweep t-60)', () => {
+describe('planOrder — the shipped band reads as linear history (§33-sweep t-60)', () => {
   const shipped = (id: string, at: string | null, dependsOn: string[] = []): PlanOrderInput => ({
     id,
     status: 'shipped',
@@ -105,24 +105,26 @@ describe('planOrder — the shipped band reads in ship order (§33-sweep t-60)',
     shippedAt: at === null ? null : new Date(at),
   });
 
-  it('puts the most recently shipped first, regardless of dependency depth', () => {
-    // `deep` sits at depth 2 and `shallow` at 0, so DEPTH alone would order them
-    // shallow → mid → deep. Ship order reverses that, which is the whole point: a
-    // feature shipped this morning should not sit below one shipped a fortnight ago
-    // because of where it happens to sit in the graph.
+  it('reads oldest-shipped first, regardless of dependency depth', () => {
+    // The dates run OPPOSITE to the depth chain on purpose — `shallow` is depth 0 but
+    // shipped last, `deep` is depth 2 but shipped first — so depth ordering and ship
+    // ordering give different answers and this can tell them apart. (With the dates
+    // running the same way as the chain, both orderings agree and the test proves
+    // nothing.)
     const out = order([
-      shipped('shallow', '2026-08-01'),
+      shipped('shallow', '2026-08-20'),
       shipped('mid', '2026-08-10', ['shallow']),
-      shipped('deep', '2026-08-20', ['mid']),
+      shipped('deep', '2026-08-01', ['mid']),
     ]);
     expect(out).toEqual(['deep', 'mid', 'shallow']);
   });
 
-  it('sorts an unstamped feature last, not first', () => {
-    // Null means "shipped before we tracked the instant" — oldest is the truthful
-    // place for it. Sorting it to the TOP would claim it shipped most recently.
-    const out = order([shipped('unknown', null), shipped('dated', '2026-08-01')]);
-    expect(out).toEqual(['dated', 'unknown']);
+  it('sorts an unstamped feature FIRST — oldest, in a chronological list', () => {
+    // Null means "shipped before we tracked the instant", so it belongs at the old end.
+    // In an ascending band that is the top. Sorting it to the bottom would place it
+    // beside the in-flight work, claiming it was the last thing finished.
+    const out = order([shipped('dated', '2026-08-01'), shipped('unknown', null)]);
+    expect(out).toEqual(['unknown', 'dated']);
   });
 
   it('falls through to dependency depth when neither is stamped', () => {
