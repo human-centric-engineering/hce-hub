@@ -146,10 +146,16 @@ const NEIGHBOUR_SELECT = Prisma.validator<Prisma.TaskSelect>()({
   number: true,
   title: true,
   status: true,
+  // A neighbour CAN be withdrawn, unlike on every other surface — and it must show
+  // as such. A withdrawn blocker no longer blocks (see `computeEffectiveStatus`), so
+  // hiding it would leave a task reading ready with no visible reason it stopped
+  // waiting; and a withdrawn dependent is exactly what you want to see before
+  // deciding whether this task still has a purpose.
+  withdrawnAt: true,
   claimedByUserId: true,
   assigneeUserId: true,
   feature: { select: { slug: true } },
-  dependencies: { select: { dependsOn: { select: { status: true } } } },
+  dependencies: { select: { dependsOn: { select: { status: true, withdrawnAt: true } } } },
 });
 
 // Derived from the select so the two never drift (add a field to the select and
@@ -227,6 +233,10 @@ export async function getTaskDetail(
         claimedByUserId: true,
         assigneeUserId: true,
         mergedByUserId: true,
+        // NOT filtered out here, unlike the Plan / Board / feature page: the sheet and
+        // `get_task` are how you inspect a withdrawn task, and you cannot restore work
+        // you can no longer open.
+        withdrawnAt: true,
         feature: { select: { id: true, slug: true, title: true, ownerUserId: true } },
         dependencies: { select: { dependsOn: { select: NEIGHBOUR_SELECT } } },
         dependents: { select: { task: { select: NEIGHBOUR_SELECT } } },

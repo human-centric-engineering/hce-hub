@@ -269,6 +269,11 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
         select: { id: true, order: true, text: true },
       },
       tasks: {
+        // Withdrawn work is not work (§21 t-123) — dropped here rather than
+        // post-filtered so it can never reach `computeFeatureProgress`, whose
+        // `unstartedSinceShip` is derived NEGATIVELY ("whatever live/blocked don't
+        // show") and would silently count a withdrawn post-ship task as new.
+        where: { withdrawnAt: null },
         // Numerical order — tasks are built sequentially (f-status-model §20).
         // Unnumbered (null) tasks sort last, then by creation for a stable tie.
         orderBy: [{ number: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
@@ -284,7 +289,8 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
           prUrl: true,
           claimedByUserId: true,
           assigneeUserId: true,
-          dependencies: { select: { dependsOn: { select: { status: true } } } },
+          withdrawnAt: true, // always null here (the `where` above) — the shared status input requires it
+          dependencies: { select: { dependsOn: { select: { status: true, withdrawnAt: true } } } },
         },
       },
     },
@@ -495,6 +501,11 @@ const TASK_RANK: Record<EffectiveStatus, number> = {
   active: 1,
   claimed: 2,
   blocked: 3,
+  // Unreachable by construction — the Plan's task query excludes `withdrawnAt`
+  // rows, so no withdrawn task is ever ranked. Ranked WITH completed work rather
+  // than given its own band because if that filter were ever dropped, terminal is
+  // the truthful place for it: a withdrawn task is finished-with, not pending.
+  withdrawn: COMPLETED_RANK,
 };
 
 /**

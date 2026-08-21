@@ -35,6 +35,7 @@ import type {
 import { NotFoundError } from '@/lib/api/errors';
 import { resolveTaskAccess } from '@/lib/projects/access';
 import { getTaskDetail } from '@/lib/projects/task-detail';
+import type { EffectiveStatus } from '@/lib/projects/task-status';
 import { redactedString } from '@/lib/security/redact';
 
 const schema = z.object({
@@ -53,7 +54,7 @@ interface NeighbourRef {
   number: number | null;
   title: string;
   featureSlug: string | null;
-  status: 'claimed' | 'active' | 'blocked' | 'merged';
+  status: EffectiveStatus;
 }
 
 interface Data {
@@ -64,7 +65,11 @@ interface Data {
   description: string | null;
   /** The acceptance contract (markdown); `null` until authored. */
   doneWhen: string | null;
-  status: 'claimed' | 'active' | 'blocked' | 'merged';
+  // `EffectiveStatus`, for the reason the `kind` comment below already gives —
+  // which this line did not heed: the hand-written union sat here through §21 t-123
+  // adding `withdrawn` and went stale exactly as predicted, one field away from the
+  // note explaining why. Derived now, so it can't happen a third time.
+  status: EffectiveStatus;
   // `TaskKind` rather than a literal union: a hand-written copy silently goes
   // stale the next time the enum grows (it did, at §32 t-79's `enhancement`).
   kind: TaskKind;

@@ -163,6 +163,10 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
         // pullable filter already drops them) and it keeps `consideredCount`
         // meaning "candidates", not "rows that happened to match".
         status: { not: 'merged' },
+        // Withdrawn work is not pullable and never will be (§21 t-123). Excluded in
+        // the query for the same reason `merged` is: the post-compute filter would
+        // drop it anyway, but only after dragging its dependency rows back.
+        withdrawnAt: null,
         OR: [
           { feature: { ...inScope, ownerUserId: userId } }, // a feature you own
           { assigneeUserId: userId, feature: inScope }, // assigned to you anywhere
@@ -181,8 +185,9 @@ export class NextTaskCapability extends BaseCapability<Args, Data> {
         kind: true,
         claimedByUserId: true,
         assigneeUserId: true,
+        withdrawnAt: true, // always null here (the `where` above) — required by the shared status input
         feature: { select: { projectId: true, slug: true, ownerUserId: true } },
-        dependencies: { select: { dependsOn: { select: { status: true } } } },
+        dependencies: { select: { dependsOn: { select: { status: true, withdrawnAt: true } } } },
       },
       orderBy: [{ feature: { createdAt: 'asc' } }, { createdAt: 'asc' }],
     });

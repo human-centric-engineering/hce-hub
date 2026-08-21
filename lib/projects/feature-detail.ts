@@ -371,6 +371,10 @@ export async function getFeatureDetail(
           select: { dependsOn: { select: { id: true, slug: true, title: true, status: true } } },
         },
         tasks: {
+          // Withdrawn work leaves the feature page with everything else (§21 t-123),
+          // and dropping it here keeps it out of `computeFeatureProgress` — which
+          // `get_feature` computes from exactly these rows.
+          where: { withdrawnAt: null },
           // Numerical order — tasks are built sequentially (f-status-model §20).
           // Since §33 t-100 this is the order WITHIN a phase band, not necessarily
           // the order of the array returned: a feature that moved phase mid-flight
@@ -387,6 +391,7 @@ export async function getFeatureDetail(
             prUrl: true,
             claimedByUserId: true,
             assigneeUserId: true,
+            withdrawnAt: true, // always null here (the `where` above) — required by the shared status input
             // The COMMITMENT — the phase that chose to do this work, which may not be
             // the feature's own (§32 t-80/t-95). Nested rather than resolved through a
             // separate phase lookup: the name is one join away, and this query already
@@ -400,7 +405,9 @@ export async function getFeatureDetail(
             // than a second query (`/security-review`).
             phaseId: true,
             phase: { select: { name: true, projectId: true } },
-            dependencies: { select: { dependsOn: { select: { status: true } } } },
+            dependencies: {
+              select: { dependsOn: { select: { status: true, withdrawnAt: true } } },
+            },
           },
         },
         indicativeTasks: {

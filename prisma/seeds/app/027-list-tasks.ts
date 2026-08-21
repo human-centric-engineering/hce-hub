@@ -9,7 +9,7 @@ import type { SeedUnit } from '@/prisma/runner';
 export const listTasksFunctionDefinition = {
   name: 'list_tasks',
   description:
-    "Read a project's tasks — each with its t-N number, id, title, feature (id + slug), effective status (claimed | active | blocked | merged), kind (feature_work | bug | enhancement), the phase that chose it (phaseId; null = inherits its feature's phase), assignee id, and PR url. Narrow with featureId (one feature's tasks), kind (e.g. 'bug' for the open bugs, 'enhancement' for the open improvements), and/or status. Use it to see and name the same tasks/bugs the human sees on the board — e.g. before picking work up. On a large project, prefer narrowing with featureId or kind over reading every task. Membership-scoped: a project you can't see is not_found.",
+    "Read a project's tasks — each with its t-N number, id, title, feature (id + slug), effective status (claimed | active | blocked | merged), kind (feature_work | bug | enhancement), the phase that chose it (phaseId; null = inherits its feature's phase), assignee id, and PR url. Narrow with featureId (one feature's tasks), kind (e.g. 'bug' for the open bugs, 'enhancement' for the open improvements), and/or status. Withdrawn tasks — work called off via withdraw_task — are excluded from every result unless you ask for them with status: 'withdrawn'; this is the only read that shows them, so it is how you find one to restore. Use it to see and name the same tasks/bugs the human sees on the board — e.g. before picking work up. On a large project, prefer narrowing with featureId or kind over reading every task. Membership-scoped: a project you can't see is not_found.",
   parameters: {
     type: 'object',
     properties: {
@@ -20,8 +20,9 @@ export const listTasksFunctionDefinition = {
       },
       status: {
         type: 'string',
-        enum: ['claimed', 'active', 'blocked', 'merged'],
-        description: 'Optional: restrict to one effective status (blocked = deps not all merged).',
+        enum: ['claimed', 'active', 'blocked', 'merged', 'withdrawn'],
+        description:
+          'Optional: restrict to one effective status (blocked = deps not all merged; withdrawn = called off, and the only way to see it — every other read hides withdrawn work).',
       },
       kind: {
         type: 'string',
