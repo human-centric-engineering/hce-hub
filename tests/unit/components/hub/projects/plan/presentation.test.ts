@@ -11,6 +11,33 @@ import {
   prLabel,
   shortDate,
 } from '@/components/hub/projects/plan/presentation';
+import type { TaskEffectiveStatus } from '@/components/hub/projects/plan/types';
+
+/**
+ * Every effective status a server surface can return must map to a tone + label
+ * (§21 t-123). Driven off the client union rather than a hand-list, so the next
+ * status added has to come back here — the omission that made `withdrawn` render an
+ * empty pill was invisible precisely because nothing walked the set.
+ */
+describe('taskStatus covers the whole status union', () => {
+  const ALL: TaskEffectiveStatus[] = ['claimed', 'active', 'merged', 'blocked', 'withdrawn'];
+
+  it.each(ALL)('%s has a tone and a non-empty label', (status) => {
+    const t = taskStatus(status);
+    expect(t).toBeDefined();
+    expect(t.tone.length).toBeGreaterThan(0);
+    expect(t.label.trim().length).toBeGreaterThan(0);
+  });
+
+  it('gives withdrawn its own tone, not a borrowed one', () => {
+    // Reusing `available` or `blocked` would have said the opposite of what it
+    // means — not-happening is neither ready to pick up nor waiting on something.
+    const w = taskStatus('withdrawn');
+    expect(w).toEqual({ tone: 'withdrawn', label: 'withdrawn' });
+    expect(w.tone).not.toBe(taskStatus('blocked').tone);
+    expect(w.tone).not.toBe(taskStatus('merged').tone);
+  });
+});
 
 describe('featureStatus / taskStatus', () => {
   it('maps feature status to a signal tone + label', () => {

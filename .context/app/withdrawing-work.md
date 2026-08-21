@@ -35,15 +35,15 @@ journal entries and PR descriptions that name it keep pointing at something real
 
 ## Where withdrawn work goes
 
-| Surface                   | Withdrawn work                                    |
-| ------------------------- | ------------------------------------------------- |
-| Plan, Board, feature page | **gone** — excluded in the query                  |
-| `next_task`               | **never offered** — excluded in the query         |
-| `computeFeatureProgress`  | **not counted**, in any of its seven counters     |
-| active-bugs strip         | **gone** (it reads the same excluded set)         |
-| `list_tasks`              | hidden **unless** you pass `status: 'withdrawn'`  |
-| `get_task`                | **always readable**                               |
-| project journal           | **permanent** — `task_withdrawn`, with the reason |
+| Surface                   | Withdrawn work                                              |
+| ------------------------- | ----------------------------------------------------------- |
+| Plan, Board, feature page | **gone** — excluded in the query                            |
+| `next_task`               | **never offered** — excluded in the query                   |
+| `computeFeatureProgress`  | **not counted**, in any of its seven counters               |
+| active-bugs strip         | **gone** (it reads the same excluded set)                   |
+| `list_tasks`              | hidden **unless** you pass `status: 'withdrawn'`            |
+| `get_task`                | **always readable**                                         |
+| project journal           | **permanent** — `task_withdrawn` + the reason in `metadata` |
 
 The last three are what keep a withdrawal reversible: you cannot restore a task you
 can no longer name. This mirrors `IdeaStatus.dropped`, which `list_ideas` returns and
@@ -92,6 +92,12 @@ redacts the reason to a length in its provenance record.
 Both directions journal one `ProjectEventKind.task_withdrawn`, with `restored` in the
 metadata — the `task_assigned` precedent (one kind, two moves, read the metadata)
 rather than spending an enum value per direction.
+
+**Where the reason is actually readable:** `list_events` returns `metadata`, so an
+agent reading the journal sees it. The Log UI renders the verb only — "withdrew the
+task" / "restored the task" — because event metadata is not rendered for _any_
+auto-kind (`task_assigned` behaves identically). Fine while this is an MCP-first
+verb; worth revisiting if the Log ever becomes where people look for the why.
 
 Idempotent both ways: withdrawing a withdrawn task, or restoring a live one, is a
 no-op that still reports the dependents.

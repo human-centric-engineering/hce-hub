@@ -113,6 +113,13 @@
   --signal-available-bg: #ebe6d8;
   --signal-backlog: #6e6b62;
   --signal-backlog-bg: #ece8de;
+  /* Withdrawn — work called off (f-authoring-fidelity §21 t-123). Deliberately the
+     quietest signal in the set: a withdrawn task is not an alarm (brick `blocked`)
+     and not progress (sage `merged`), it is simply not happening. Its own token
+     rather than a borrowed one, per §20's `--signal-active` precedent: reusing
+     `available` would have said the opposite of what it means. */
+  --signal-withdrawn: #6e6b62;
+  --signal-withdrawn-bg: #ece8de;
 
   --radius-sm: 4px;
   --radius: 6px;
@@ -196,6 +203,8 @@
   --signal-available-bg: #25221c;
   --signal-backlog: #8a857a;
   --signal-backlog-bg: #25221c;
+  --signal-withdrawn: #8a857a;
+  --signal-withdrawn-bg: #25221c;
 
   --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.3);
   --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.3);

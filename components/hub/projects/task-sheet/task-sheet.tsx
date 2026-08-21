@@ -3,7 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { X, Link2, Play, Check, GitPullRequest, MessageSquare, Lock, Folder } from 'lucide-react';
+import {
+  X,
+  Link2,
+  Play,
+  Check,
+  GitPullRequest,
+  MessageSquare,
+  Lock,
+  Folder,
+  Ban,
+} from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
 import { Markdown } from '@/components/hub/markdown';
@@ -333,6 +343,12 @@ export function TaskSheet({
   const canStart = detail?.status === 'claimed'; // ready — deps met, not started
   const canComplete = detail?.status === 'active';
   const blocked = detail?.status === 'blocked';
+  // Called off (§21 t-123). The sheet is the ONE surface that still opens a withdrawn
+  // task — every list drops it in the query, but `getTaskDetail` does not, because a
+  // withdrawal has to stay inspectable to be reversible. Without this the action bar
+  // simply went empty (no Start, no Complete, no reason), which reads as a loading
+  // failure rather than a decision somebody made.
+  const withdrawn = detail?.status === 'withdrawn';
 
   return (
     <>
@@ -476,6 +492,11 @@ export function TaskSheet({
                 {blocked && (
                   <ActionButton icon={Lock} disabled>
                     Blocked by deps
+                  </ActionButton>
+                )}
+                {withdrawn && (
+                  <ActionButton icon={Ban} disabled>
+                    Withdrawn — restore it to work on it
                   </ActionButton>
                 )}
                 {prUrl && (
