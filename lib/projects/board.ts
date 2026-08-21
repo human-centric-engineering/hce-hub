@@ -137,8 +137,14 @@ export async function getProjectBoard(userId: string, projectId: string): Promis
       },
     }),
     // Open claims (with their task's file scope) — the soft-collision source.
+    //
+    // `withdrawnAt: null` matters more than it looks (§21 t-123). Withdrawing does
+    // NOT release the claim — deliberately, because leaving the stored status and the
+    // claim alone is what makes restore free — so an ACTIVE task that gets withdrawn
+    // keeps an open claim. Without this clause that claim goes on warning everyone
+    // else off its files indefinitely, for work that is never going to happen.
     prisma.taskClaim.findMany({
-      where: { releasedAt: null, task: { feature: { projectId } } },
+      where: { releasedAt: null, task: { feature: { projectId }, withdrawnAt: null } },
       select: { userId: true, task: { select: { id: true, title: true, filesScope: true } } },
     }),
   ]);

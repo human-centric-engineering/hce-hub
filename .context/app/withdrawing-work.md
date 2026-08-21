@@ -41,6 +41,7 @@ journal entries and PR descriptions that name it keep pointing at something real
 | `next_task`               | **never offered** — excluded in the query                   |
 | `computeFeatureProgress`  | **not counted**, in any of its seven counters               |
 | active-bugs strip         | **gone** (it reads the same excluded set)                   |
+| soft-collision warnings   | **silenced**, its own and everyone else's — see below       |
 | `list_tasks`              | hidden **unless** you pass `status: 'withdrawn'`            |
 | `get_task`                | **always readable**                                         |
 | project journal           | **permanent** — `task_withdrawn` + the reason in `metadata` |
@@ -72,6 +73,18 @@ decision with downstream reach, `withdraw_task` returns the **unmerged tasks tha
 depended on it** in `affectedDependents`. Advisory, never a refusal — the Hub does
 not block a write — but it is the one consequence you cannot see from the task in
 front of you.
+
+**Withdrawing does not release the task's `TaskClaim`.** That is deliberate — leaving
+the stored status _and_ the claim untouched is exactly what makes restore free — but
+it has a consequence worth stating: an `active` task that is withdrawn still holds an
+open claim. So the two soft-collision readers (`board.ts` and `task-detail.ts`)
+exclude withdrawn tasks from the claim query, or that claim would go on warning
+everyone else off its files indefinitely, for work nobody will ever do.
+
+The sheet also stops warning about the withdrawn task's _own_ file overlaps, joining
+`merged` and `blocked` as a third silence: "be careful of these files" adds nothing
+to "this work is not happening". Unlike those two it is the strongest can't-start
+signal of the set. See [soft collisions](./soft-collisions.md).
 
 **Owner tier**, matching `update_task`: the feature's owner or a project lead. A
 non-member is `not_found` (never `forbidden` — no enumeration); a member who isn't

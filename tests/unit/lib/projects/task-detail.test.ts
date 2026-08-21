@@ -69,6 +69,7 @@ const taskRow = (o: Record<string, unknown> = {}) => ({
   claimedByUserId: null,
   assigneeUserId: null,
   mergedByUserId: null,
+  withdrawnAt: null,
   feature: { id: 'f1', slug: 'f-mcp', title: 'Feature one', ownerUserId: null },
   dependencies: [],
   dependents: [],
@@ -353,7 +354,14 @@ describe('getTaskDetail — overlapping claims (§33-sweep t-109)', () => {
           // Scope-less claims are excluded in the QUERY: they can never overlap,
           // and `get_task` reuses this read while projecting `collisions` away
           // entirely, so fetching them would be pure cost (`/code-review`).
-          task: { feature: { projectId: 'p1' }, filesScope: { isEmpty: false } },
+          // `withdrawnAt: null` because withdrawing does NOT release the task's
+          // claim (§21 t-123) — that is what keeps restore free — so a withdrawn
+          // task would otherwise go on contesting files for work nobody will do.
+          task: {
+            feature: { projectId: 'p1' },
+            filesScope: { isEmpty: false },
+            withdrawnAt: null,
+          },
         },
       })
     );
@@ -385,6 +393,22 @@ describe('getTaskDetail — overlapping claims (§33-sweep t-109)', () => {
     expect((await getTaskDetail('u1', 'p1', 't1')).collisions).toEqual([]);
     taskFindFirst.mockResolvedValue(taskRow({ filesScope: ['web/home.tsx'] }));
     expect((await getTaskDetail('u1', 'p1', 't1')).collisions).toEqual([]);
+  });
+
+  it('stays quiet while WITHDRAWN — nothing about file contention is actionable', async () => {
+    // The third silence, alongside merged and blocked (§21 t-123). "Be careful of
+    // these files" adds nothing to "this work is not happening", and unlike the
+    // other two it is the strongest can't-start signal of the set.
+    claimFindMany.mockResolvedValue([openClaim({ id: 't9', files: ['lib/a.ts'] })]);
+    userFindMany.mockResolvedValue([userRow('u2')]);
+    taskFindFirst.mockResolvedValue(
+      taskRow({ status: 'claimed', filesScope: ['lib/a.ts'], withdrawnAt: new Date('2026-08-21') })
+    );
+
+    const d = await getTaskDetail('u1', 'p1', 't1');
+
+    expect(d.status).toBe('withdrawn');
+    expect(d.collisions).toEqual([]);
   });
 
   it('stays quiet while BLOCKED, and speaks up the moment the block clears', async () => {

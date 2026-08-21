@@ -262,7 +262,10 @@ export async function getTaskDetail(
       where: {
         releasedAt: null,
         taskId: { not: taskId },
-        task: { feature: { projectId }, filesScope: { isEmpty: false } },
+        // `withdrawnAt: null` for the reason `board.ts` spells out: a withdrawn task
+        // keeps its open claim (restore stays free that way), so without this it goes
+        // on contesting files for work that is not happening.
+        task: { feature: { projectId }, filesScope: { isEmpty: false }, withdrawnAt: null },
       },
       orderBy: { claimedAt: 'asc' },
       select: {
@@ -285,7 +288,9 @@ export async function getTaskDetail(
   //   - **merged** — the work has landed; "someone else is in these files" is
   //     no longer anything to coordinate.
   //   - **blocked** — an unmerged dependency already stops this task, and that
-  //     is both the stronger signal and the one rendered right below. A second
+  //     is both the stronger signal and the one rendered right below.
+  //   - **withdrawn** — the work is called off (§21 t-123); nothing about file
+  //     contention is actionable for a task nobody is going to do. A second
   //     warning saying "be careful of these files" adds nothing to "you cannot
   //     start yet", and the dependency is often the very task it names.
   //
@@ -295,7 +300,13 @@ export async function getTaskDetail(
   // batch, or coordinate. This suppresses the reader's OWN warning only — a
   // blocked task still holds a claim, so it goes on warning everybody else.
   const overlaps =
-    status === 'merged' || status === 'blocked' || task.filesScope.length === 0
+    status === 'merged' ||
+    status === 'blocked' ||
+    // Withdrawn is the strongest can't-start signal of the three, so it silences the
+    // reader's own warning for the same reason `blocked` does (owner, 2026-08-20):
+    // "be careful of these files" adds nothing to "this work is not happening".
+    status === 'withdrawn' ||
+    task.filesScope.length === 0
       ? []
       : // Deduped by task, not by claim row. `startTask` releases open claims and
         // creates the new one in one transaction, but under READ COMMITTED two

@@ -546,6 +546,26 @@ describe('getProjectBoard — withdrawn work (§21 t-123)', () => {
     );
   });
 
+  it(`keeps a withdrawn task's claim out of the collision source`, async () => {
+    // Withdrawing does NOT release the claim — leaving the stored status and the
+    // claim untouched is what makes restore free — so an ACTIVE task that is
+    // withdrawn keeps an open one. Without this filter it would go on warning
+    // everyone else off its files indefinitely, for work nobody will ever do.
+    memberFindMany.mockResolvedValue([member('u1')]);
+    featureFindMany.mockResolvedValue([feature('f1', 'u1')]);
+    taskFindMany.mockResolvedValue([]);
+    claimFindMany.mockResolvedValue([]);
+    userFindMany.mockResolvedValue([userRow('u1')]);
+
+    await getProjectBoard('u1', 'p1');
+
+    expect(claimFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { releasedAt: null, task: { feature: { projectId: 'p1' }, withdrawnAt: null } },
+      })
+    );
+  });
+
   it('renders no card for a withdrawn task even if the query returns one', async () => {
     memberFindMany.mockResolvedValue([member('u1')]);
     featureFindMany.mockResolvedValue([feature('f1', 'u1')]);
