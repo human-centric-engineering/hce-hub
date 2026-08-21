@@ -9,6 +9,7 @@ import {
   type LogFilter,
 } from '@/components/hub/projects/log/presentation';
 import type { ProjectEventDTO } from '@/components/hub/projects/log/types';
+import { useProjectLive } from '@/components/hub/projects/project-live';
 
 type LoadState = 'loading' | 'ready' | 'error';
 
@@ -23,6 +24,9 @@ export function LogView({ projectId, projectRef }: { projectId: string; projectR
   const [filter, setFilter] = useState<LogFilter>('all');
   const [events, setEvents] = useState<ProjectEventDTO[]>([]);
   const [state, setState] = useState<LoadState>('loading');
+  // Re-query when something changed elsewhere: `router.refresh()` re-renders the
+  // server surfaces but never re-runs this effect (f-realtime §36 t-126).
+  const live = useProjectLive();
 
   useEffect(() => {
     let active = true;
@@ -51,7 +55,7 @@ export function LogView({ projectId, projectRef }: { projectId: string; projectR
       active = false;
       controller.abort();
     };
-  }, [projectId, filter]);
+  }, [projectId, filter, live]);
 
   return (
     <div className="max-w-2xl">

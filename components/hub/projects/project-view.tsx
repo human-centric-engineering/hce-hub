@@ -12,6 +12,7 @@ import { ConnectPanel } from '@/components/hub/projects/connect/connect-panel';
 import { JotIdeaButton } from '@/components/hub/projects/ideas/jot-idea-button';
 import { ActiveBugsStrip } from '@/components/hub/projects/active-bugs-strip';
 import { TaskSheetProvider } from '@/components/hub/projects/task-sheet/task-sheet-host';
+import { ProjectLiveProvider } from '@/components/hub/projects/project-live';
 import { projectTabSpec, type ProjectTab } from '@/components/hub/projects/tabs';
 import type { ProjectViewDTO } from '@/components/hub/projects/types';
 import type { ProjectPlanDTO } from '@/components/hub/projects/plan/types';
@@ -156,12 +157,18 @@ export function ProjectView({
         </div>
       </div>
 
-      {/* The task sheet opens (deep-linked via `?task=`) over whichever tab is
+      {/* One poller for the whole page (f-realtime §36 t-126). Outside the sheet
+          provider because it is not the sheet's concern, and because everything
+          below — tabs, strip, body and sheet alike — reads the same change count.
+          Server-rendered tabs come back via `router.refresh()`; the client-fetched
+          ones (Log, sheet, activity) take `useProjectLive()` as an effect dep. */}
+      <ProjectLiveProvider projectId={project.id}>
+        {/* The task sheet opens (deep-linked via `?task=`) over whichever tab is
           active — mounted here so Plan rows and Board cards can open it. */}
-      <TaskSheetProvider projectId={project.id} projectRef={project.slug ?? project.id}>
-        <ProjectViewTabs projectRef={project.slug ?? project.id} active={activeTab} />
+        <TaskSheetProvider projectId={project.id} projectRef={project.slug ?? project.id}>
+          <ProjectViewTabs projectRef={project.slug ?? project.id} active={activeTab} />
 
-        {/* The active-bugs strip sits above the work body (Plan/Board) — a
+          {/* The active-bugs strip sits above the work body (Plan/Board) — a
             different axis (bugs from any phase), self-hiding when empty (it
             carries its own top spacing, so an empty strip leaves no gap). The list
             is defaulted defensively — a missing field should hide the strip, not
@@ -171,12 +178,13 @@ export function ProjectView({
             list here (§33-sweep t-111). The old `!== 'log' && !== 'ideas' &&
             !== 'connect'` form defaulted a tab nobody had thought about yet INTO
             the strip; now a new tab has to opt in. */}
-        {projectTabSpec(activeTab).showsBugStrip && (
-          <ActiveBugsStrip bugs={project.activeBugs ?? []} projectId={project.id} />
-        )}
+          {projectTabSpec(activeTab).showsBugStrip && (
+            <ActiveBugsStrip bugs={project.activeBugs ?? []} projectId={project.id} />
+          )}
 
-        <div className="py-8">{body}</div>
-      </TaskSheetProvider>
+          <div className="py-8">{body}</div>
+        </TaskSheetProvider>
+      </ProjectLiveProvider>
     </div>
   );
 }

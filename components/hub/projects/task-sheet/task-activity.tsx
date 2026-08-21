@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { EventRow } from '@/components/hub/projects/log/event-row';
 import type { ProjectEventDTO } from '@/components/hub/projects/log/types';
+import { useProjectLive } from '@/components/hub/projects/project-live';
 
 const sectionLabel = 'font-mono text-[10px] tracking-wider uppercase';
 
@@ -30,6 +31,10 @@ export function TaskActivity({
 }) {
   const [events, setEvents] = useState<ProjectEventDTO[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  // Two independent reasons to refetch: `refreshKey` (this user just acted) and
+  // `live` (someone else did). Kept separate rather than summed — collapsing two
+  // counters into one arithmetic value is how you get a missed refresh.
+  const live = useProjectLive();
 
   useEffect(() => {
     let active = true;
@@ -56,7 +61,7 @@ export function TaskActivity({
       active = false;
       controller.abort();
     };
-  }, [projectId, taskId, refreshKey]);
+  }, [projectId, taskId, refreshKey, live]);
 
   return (
     <section className="flex flex-col gap-1.5">

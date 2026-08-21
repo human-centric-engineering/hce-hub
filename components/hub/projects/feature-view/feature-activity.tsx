@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { EventRow } from '@/components/hub/projects/log/event-row';
 import type { ProjectEventDTO } from '@/components/hub/projects/log/types';
+import { useProjectLive } from '@/components/hub/projects/project-live';
 
 const sectionLabel = 'font-mono text-[10px] tracking-wider uppercase';
 
@@ -26,6 +27,8 @@ export function FeatureActivity({
 }) {
   const [events, setEvents] = useState<ProjectEventDTO[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  // Refetch when the project changed elsewhere (f-realtime §36 t-126).
+  const live = useProjectLive();
 
   useEffect(() => {
     let active = true;
@@ -52,7 +55,7 @@ export function FeatureActivity({
       active = false;
       controller.abort();
     };
-  }, [projectId, featureId]);
+  }, [projectId, featureId, live]);
 
   return (
     <section className="flex flex-col gap-1.5">

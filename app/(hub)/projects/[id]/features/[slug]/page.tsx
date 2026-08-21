@@ -4,6 +4,7 @@ import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';
 import { logger } from '@/lib/logging';
 import { BreadcrumbLabel } from '@/components/hub/breadcrumb-label';
 import { TaskSheetProvider } from '@/components/hub/projects/task-sheet/task-sheet-host';
+import { ProjectLiveProvider } from '@/components/hub/projects/project-live';
 import { FeatureView } from '@/components/hub/projects/feature-view/feature-view';
 import type { FeatureDetailDTO } from '@/components/hub/projects/feature-view/types';
 
@@ -59,12 +60,16 @@ export default async function FeaturePage({
       <BreadcrumbLabel segment={slug} label={feature.title} />
       {/* The task sheet opens (deep-linked via `?task=`) over the feature page —
           mounted here so the feature's task rows can open it in place. */}
-      <TaskSheetProvider
-        projectId={feature.projectId}
-        projectRef={feature.projectSlug ?? feature.projectId}
-      >
-        <FeatureView feature={feature} />
-      </TaskSheetProvider>
+      {/* One poller for this page too — the feature view, its task list and its
+          activity timeline age exactly like the Plan does (f-realtime §36 t-126). */}
+      <ProjectLiveProvider projectId={feature.projectId}>
+        <TaskSheetProvider
+          projectId={feature.projectId}
+          projectRef={feature.projectSlug ?? feature.projectId}
+        >
+          <FeatureView feature={feature} />
+        </TaskSheetProvider>
+      </ProjectLiveProvider>
     </>
   );
 }
