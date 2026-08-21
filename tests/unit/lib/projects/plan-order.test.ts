@@ -96,3 +96,61 @@ describe('planOrder — robustness', () => {
     expect(out).toEqual(['first', 'second', 'third']);
   });
 });
+
+describe('planOrder — the shipped band reads in ship order (§33-sweep t-60)', () => {
+  const shipped = (id: string, at: string | null, dependsOn: string[] = []): PlanOrderInput => ({
+    id,
+    status: 'shipped',
+    dependsOn,
+    shippedAt: at === null ? null : new Date(at),
+  });
+
+  it('puts the most recently shipped first, regardless of dependency depth', () => {
+    // `deep` sits at depth 2 and `shallow` at 0, so DEPTH alone would order them
+    // shallow → mid → deep. Ship order reverses that, which is the whole point: a
+    // feature shipped this morning should not sit below one shipped a fortnight ago
+    // because of where it happens to sit in the graph.
+    const out = order([
+      shipped('shallow', '2026-08-01'),
+      shipped('mid', '2026-08-10', ['shallow']),
+      shipped('deep', '2026-08-20', ['mid']),
+    ]);
+    expect(out).toEqual(['deep', 'mid', 'shallow']);
+  });
+
+  it('sorts an unstamped feature last, not first', () => {
+    // Null means "shipped before we tracked the instant" — oldest is the truthful
+    // place for it. Sorting it to the TOP would claim it shipped most recently.
+    const out = order([shipped('unknown', null), shipped('dated', '2026-08-01')]);
+    expect(out).toEqual(['dated', 'unknown']);
+  });
+
+  it('falls through to dependency depth when neither is stamped', () => {
+    // The degradation t-60 asked for: a set with no stamps keeps exactly the
+    // ordering it had before this change, rather than being reshuffled arbitrarily.
+    const out = order([
+      shipped('deep', null, ['mid']),
+      shipped('mid', null, ['shallow']),
+      shipped('shallow', null),
+    ]);
+    expect(out).toEqual(['shallow', 'mid', 'deep']);
+  });
+
+  it('leaves the other three bands on dependency depth', () => {
+    // A stamp on a non-shipped feature is meaningless and must not reorder anything —
+    // the depth axis is the entire value of the view for work still moving.
+    const out = order([
+      { id: 'deep', status: 'planning', dependsOn: ['shallow'], shippedAt: new Date('2026-08-20') },
+      { id: 'shallow', status: 'planning', dependsOn: [], shippedAt: new Date('2026-08-01') },
+    ]);
+    expect(out).toEqual(['shallow', 'deep']);
+  });
+
+  it('still bands shipped above everything, however old', () => {
+    const out = order([
+      { id: 'flight', status: 'in_flight', dependsOn: [] },
+      shipped('ancient', '2020-01-01'),
+    ]);
+    expect(out).toEqual(['ancient', 'flight']);
+  });
+});
