@@ -259,13 +259,19 @@ async function main(): Promise<void> {
 
     console.log('\nscoping');
 
+    // BOTH tokens are captured before the mutation. The second assertion used to
+    // compare this project's token to the OTHER project's, which passes
+    // unconditionally — two projects never share a row count, so it held even when
+    // the other project's token had not moved at all. A check that cannot fail is
+    // worse than no check, because it reads like one (`/code-review`).
     const mine = await rev();
+    const theirs = await rev(otherProjectId);
     await tick();
     await prisma.feature.create({
       data: { projectId: otherProjectId, title: 'a change somewhere else entirely' },
     });
     check(mine === (await rev()), 'another project’s change does NOT move this project’s token');
-    check(mine !== (await rev(otherProjectId)), 'and DOES move that project’s own token');
+    check(theirs !== (await rev(otherProjectId)), 'and DOES move that project’s own token');
 
     console.log('\ncoverage');
     const missed = COUNTED_REVISION_TABLES.filter((t) => !exercised.has(t));

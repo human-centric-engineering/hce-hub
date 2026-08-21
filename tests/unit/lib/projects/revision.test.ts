@@ -49,6 +49,53 @@ function mappedTables(): string[] {
   return [...matches].map((m) => m[1]).sort();
 }
 
+/**
+ * Every `app_*` table whose rows belong to a project, derived by walking the
+ * schema's foreign keys rather than by listing them.
+ *
+ * Seeded with `Project` and grown to a fixed point: a model joins the set when one
+ * of its FK-owning relations (`@relation(fields: […])`) targets a model already in
+ * it. Only the owning direction counts, which is what keeps `Sprint` out — a
+ * `FocusDirective` names a sprint, so the sprint is a parent shared across
+ * projects, not something a project owns.
+ */
+function projectOwnedTables(): Set<string> {
+  const contents = readFileSync(SCHEMA, 'utf8');
+  const tableOf = new Map<string, string>();
+  const ownedBy = new Map<string, string[]>();
+
+  for (const block of contents.split(/^model /m).slice(1)) {
+    const model = /^(\w+)/.exec(block)?.[1];
+    const table = /@@map\("(app_[a-z_]+)"\)/.exec(block)?.[1];
+    if (!model || !table) continue;
+    tableOf.set(model, table);
+    ownedBy.set(
+      model,
+      // The `"Name", ` group is not optional decoration: both edge tables carry a
+      // named relation (`@relation("FeatureDependencies", fields: […])`) because
+      // they point at the same model twice, and a pattern that demanded `fields:`
+      // immediately after the paren missed exactly those two.
+      [...block.matchAll(/^\s+\w+\s+(\w+)\??\s+@relation\((?:"[^"]*",\s*)?fields:/gm)].map(
+        (m) => m[1]
+      )
+    );
+  }
+
+  const owned = new Set<string>(['Project']);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const [model, parents] of ownedBy) {
+      if (owned.has(model)) continue;
+      if (parents.some((parent) => owned.has(parent))) {
+        owned.add(model);
+        changed = true;
+      }
+    }
+  }
+
+  return new Set([...owned].map((model) => tableOf.get(model)).filter((t): t is string => !!t));
+}
+
 /** The SQL text of the single query the module issues. */
 function issuedSql(): string {
   const [fragment] = queryRaw.mock.calls[0] as [Prisma.Sql];
@@ -78,28 +125,36 @@ describe('the revision manifest', () => {
     expect(stale, 'PROJECT_REVISION_TABLES entry for a table that no longer exists').toEqual([]);
   });
 
-  it('counts every table that carries a projectId column', () => {
-    // The rule the previous test cannot enforce: a table MAY be excluded, but not
-    // if the schema itself says it hangs off a project. Read from the schema
-    // rather than from the record, so a mislabelled table fails here rather than
-    // being taken at its word.
-    const contents = readFileSync(SCHEMA, 'utf8');
-    const wronglyExcluded: string[] = [];
+  it('counts a table iff its foreign keys lead back to a Project', () => {
+    // The rule the manifest states, enforced against the schema rather than
+    // trusted. An earlier version of this test only looked for a literal
+    // `projectId` column — which five of the twelve counted tables do not have.
+    // `app_task`, `app_task_claim` and the three edge/sketch tables reach a
+    // project only through `featureId` / `taskId`, so they were counted because
+    // someone remembered, which is the exact forgettability this module claims to
+    // have removed. A new `app_task_comment { taskId }` marked excluded would have
+    // sailed through (`/code-review`).
+    //
+    // Ownership is followed in the FK-owning direction only: a model is owned when
+    // one of its `@relation(fields: […])` targets an owned model. That direction is
+    // the whole distinction — `FocusDirective` points AT a `Sprint`, which makes
+    // the sprint a shared parent, not a child of the project.
+    const owned = projectOwnedTables();
 
-    for (const block of contents.split(/^model /m).slice(1)) {
-      const table = /@@map\("(app_[a-z_]+)"\)/.exec(block)?.[1];
-      if (!table) continue;
-
-      const hasProjectId = /^\s+projectId\s+String/m.test(block);
-      const ruling = PROJECT_REVISION_TABLES[table as keyof typeof PROJECT_REVISION_TABLES];
-
-      if (hasProjectId && ruling !== 'counted') wronglyExcluded.push(table);
-    }
+    const shouldCount = [...owned].filter(
+      (t) => PROJECT_REVISION_TABLES[t as keyof typeof PROJECT_REVISION_TABLES] !== 'counted'
+    );
+    const shouldNotCount = COUNTED_REVISION_TABLES.filter((t) => !owned.has(t));
 
     expect(
-      wronglyExcluded,
-      'table has a projectId column but is marked not-project-scoped — a change to it ' +
-        'can make that project’s surfaces stale'
+      shouldCount.sort(),
+      'table’s foreign keys lead back to a Project but it is marked not-project-scoped — ' +
+        'a change to it can make that project’s surfaces stale'
+    ).toEqual([]);
+    expect(
+      shouldNotCount.sort(),
+      'table is counted but nothing ties its rows to a project — its fragment is ' +
+        'either mis-scoped or the ruling is wrong'
     ).toEqual([]);
   });
 
