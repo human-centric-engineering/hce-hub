@@ -17,6 +17,7 @@
  * moved gets an empty boundary list and renders exactly as it did before.
  */
 import { Fragment } from 'react';
+import { ArrowRight } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { StatusPill } from '@/components/hub/projects/plan/status-pill';
 import { taskStatus, firstName } from '@/components/hub/projects/plan/presentation';
@@ -84,6 +85,23 @@ function TaskItem({ task }: { task: FeatureDetailTaskDTO }) {
         >
           <KindTag kind={task.kind} />
           <span className="truncate">{task.title}</span>
+          {/* The reciprocal of the Plan's borrowed row (§33-sweep t-113): this task was
+              committed to another phase, so it ALSO appears in that phase's band.
+              Deliberately a mark and nothing more — no band, no grouping, no reorder
+              (owner, resolving idea #22). Commitment and completion are two separate
+              facts and the row shows both; neither overrides the other. Markup copied
+              from the Plan's `task-row.tsx` verbatim, so the two surfaces read as the
+              same thing rather than as two takes on it. */}
+          {task.committedPhaseName && (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 font-mono text-[10px] whitespace-nowrap"
+              style={{ color: 'var(--ink-faint)' }}
+              title={`Committed to the ${task.committedPhaseName} phase — it also appears in that band`}
+            >
+              <ArrowRight className="h-3 w-3" aria-hidden />
+              {task.committedPhaseName}
+            </span>
+          )}
         </span>
         {task.doneWhen && (
           <span className="mt-0.5 block truncate text-xs" style={{ color: 'var(--ink-faint)' }}>

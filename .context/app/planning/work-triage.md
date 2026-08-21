@@ -145,9 +145,14 @@ dragged forward by its tasks. What changed is the mechanism ("there is no field"
 order**, distinguished by kind tag and origin breadcrumb — never as a trailing
 sub-band, because an enhancement can be a blocker for a feature new to the phase
 and `planOrder()` would sort it below the thing it blocks. The relationship
-renders at **both ends**: the phase shows the borrow, and the origin feature shows
-"N tasks committed to \<phase\>", so a feature owner is never blind to work
-happening on their feature.
+renders at **both ends**: the phase shows the borrow, and the task's own row — on the
+Plan *and*, since §33-sweep t-113, on the standalone feature page — carries a
+`→ \<phase\>` mark, so a feature owner is never blind to work happening on their
+feature. **A per-task mark, not the "N tasks committed to \<phase\>" roll-up this
+originally sketched**: the owner settled that shape when t-113 resolved idea #22 —
+copy the Plan's treatment and nothing more, no band, no grouping, no reorder.
+Commitment and completion stay two separate facts, both visible on the row, neither
+overriding the other.
 
 ## The funnel
 

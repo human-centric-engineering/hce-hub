@@ -614,6 +614,7 @@ describe('getProjectPlan — tasks borrowed into a phase band (§32 t-95)', () =
     status: 'claimed',
     kind: 'enhancement',
     createdAt: new Date('2026-08-09T00:00:00Z'),
+    mergedAt: null,
     phaseId: null,
     prUrl: null,
     claimedByUserId: null,
@@ -749,6 +750,115 @@ describe('getProjectPlan — tasks borrowed into a phase band (§32 t-95)', () =
     const plan = await getProjectPlan('u1', 'p1');
     expect(plan.phases.find((b) => b.id === 'now')!.features).toEqual([]);
     expect(bandRows(plan, 'now')).toHaveLength(1); // …but it still renders
+  });
+
+  describe('the completed group reads as linear history, across both row types (§33-sweep t-60)', () => {
+    const at = (iso: string) => new Date(iso);
+
+    it('interleaves merged tasks among shipped features by date, oldest first', async () => {
+      // The bug the owner spotted: every merged borrowed task sat above every shipped
+      // feature, because both rank 0 and a stable sort keeps the tasks (pushed first)
+      // in front. On the Hub's own Project flow band that put eleven finished tasks at
+      // the top of a list whose stated order is "most ready to advance" first.
+      //
+      // Ordered OLDEST first, so the band reads as linear history and the row that
+      // finished most recently sits at the bottom of the completed run — directly above
+      // the work still in flight.
+      twoPhases();
+      featureFindMany.mockResolvedValue([
+        // Two borrowed tasks, straddling the feature's ship date.
+        row({
+          id: 'origin',
+          status: 'shipped',
+          phaseId: 'old',
+          shippedAt: at('2026-08-01T00:00:00Z'),
+          tasks: [
+            task({
+              id: 'older',
+              number: 1,
+              status: 'merged',
+              mergedAt: at('2026-08-10T00:00:00Z'),
+              phaseId: 'now',
+            }),
+            task({
+              id: 'newer',
+              number: 2,
+              status: 'merged',
+              mergedAt: at('2026-08-20T00:00:00Z'),
+              phaseId: 'now',
+            }),
+          ],
+        }),
+        // A shipped feature living in the borrowing band, dated between the two.
+        row({
+          id: 'mid',
+          status: 'shipped',
+          phaseId: 'now',
+          shippedAt: at('2026-08-15T00:00:00Z'),
+        }),
+      ]);
+      const rows = bandRows(await getProjectPlan('u1', 'p1'), 'now');
+      expect(rows.map((r) => (r.kind === 'task' ? r.task.id : r.feature.id))).toEqual([
+        'older', // 10 Aug
+        'mid', //   15 Aug — a FEATURE, between two tasks
+        'newer', // 20 Aug — a task, LAST: what just finished, next to what is next
+      ]);
+    });
+
+    it('still puts a borrowed task ahead of a feature of equal rank when UNFINISHED', async () => {
+      // §32 t-95's rule, deliberately untouched: a borrowed task is usually the thing
+      // BLOCKING a feature new to the phase, so at a tie it leads. That reasoning holds
+      // for work still moving and is exactly what the rank-0 change must not disturb.
+      //
+      // **What this pins, precisely:** the stable "tasks pushed first" ordering, which
+      // breaks if someone reorders the `ranked` array or sorts it unstably. It does
+      // NOT detect applying recency at every rank — verified by mutation, and the
+      // reason is structural rather than a gap in the fixture: an unfinished row has
+      // no completion instant to sort by (`startTask` refuses a merged task and
+      // nothing clears `mergedAt`), so both rows compare null and tie either way.
+      // Recorded so the next reader does not mistake a passing mutation for a hole.
+      twoPhases();
+      featureFindMany.mockResolvedValue([
+        row({
+          id: 'origin',
+          status: 'shipped',
+          phaseId: 'old',
+          tasks: [task({ id: 'live', status: 'active', phaseId: 'now' })],
+        }),
+        row({ id: 'flight', status: 'in_flight', phaseId: 'now' }),
+      ]);
+      const rows = bandRows(await getProjectPlan('u1', 'p1'), 'now');
+      expect(rows.map((r) => (r.kind === 'task' ? r.task.id : r.feature.id))).toEqual([
+        'live',
+        'flight',
+      ]);
+    });
+
+    it('raises rows with no completion instant above dated ones', async () => {
+      // Null means "finished before we tracked it" — oldest, so first in an ascending
+      // band. Sorting an unstamped row to the BOTTOM would stand it next to the
+      // in-flight work and claim it was the most recent thing done.
+      twoPhases();
+      featureFindMany.mockResolvedValue([
+        row({
+          id: 'origin',
+          status: 'shipped',
+          phaseId: 'old',
+          tasks: [task({ id: 'undated', status: 'merged', mergedAt: null, phaseId: 'now' })],
+        }),
+        row({
+          id: 'dated',
+          status: 'shipped',
+          phaseId: 'now',
+          shippedAt: at('2026-08-01T00:00:00Z'),
+        }),
+      ]);
+      const rows = bandRows(await getProjectPlan('u1', 'p1'), 'now');
+      expect(rows.map((r) => (r.kind === 'task' ? r.task.id : r.feature.id))).toEqual([
+        'undated',
+        'dated',
+      ]);
+    });
   });
 
   it('rows and features cannot drift — every feature appears exactly once in rows', async () => {

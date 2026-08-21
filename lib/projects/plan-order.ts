@@ -28,6 +28,38 @@ export interface PlanOrderInput {
   status: FeatureStatus;
   /** Ids of the features this one depends on (`FeatureDependency.dependsOnFeatureId`). */
   dependsOn: string[];
+  /**
+   * When it shipped (`Feature.shippedAt`, §32 t-79) — orders the **shipped band** by
+   * recency (§33-sweep t-60). Optional so every other caller is unaffected; absent or
+   * null degrades to the depth ordering below, which is the pre-t-60 behaviour.
+   */
+  shippedAt?: Date | null;
+}
+
+/**
+ * Completion order: **oldest first**, with unknown instants at the very top.
+ *
+ * **Chronological, not most-recent-first** (owner, 2026-08-21). A band renders
+ * completed work above work still moving, so a newest-first completed group would put
+ * its *oldest* row against the in-flight work — the two ends of the timeline meeting
+ * in the middle. Ascending makes the band read as linear history flowing downward, and
+ * puts the thing that just finished directly beside the thing being done next. That
+ * adjacency is the point, and it is why this is not simply a display preference.
+ *
+ * Null means "completed before we tracked the instant", so **first** is the truthful
+ * place for it — the reading `Task.mergedAt`'s own schema comment already commits to
+ * ("NULL ⇒ merged before we tracked it (sorts oldest, which is true)"). Two nulls
+ * compare equal and fall through to whatever the caller's next tie-break is, so a set
+ * of unstamped rows keeps its incoming order rather than being shuffled.
+ *
+ * Shared with `plan.ts`'s band interleave so the two orderings cannot disagree about
+ * what "completion order" means.
+ */
+export function byCompletionOrder(a: Date | null | undefined, b: Date | null | undefined): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return -1;
+  if (b == null) return 1;
+  return a.getTime() - b.getTime();
 }
 
 /** Sort priority of each status band — lower advances first (design `STATUS_ORDER`). */
@@ -67,6 +99,26 @@ export function planOrder<T extends PlanOrderInput>(features: readonly T[]): T[]
   return [...features].sort((a, b) => {
     const band = STATUS_BAND[a.status] - STATUS_BAND[b.status];
     if (band !== 0) return band;
+    // The SHIPPED band reads in ship order, OLDEST first (§33-sweep t-60).
+    // Dependency depth answers "what is ready to advance", which is meaningless for
+    // work that is already done — it let a feature shipped this morning sit below one
+    // shipped a fortnight ago purely because of its place in the graph.
+    //
+    // Ascending, so the band reads as linear history: the most recently shipped feature
+    // sits at the BOTTOM of the shipped run, directly above the in-flight work it
+    // precedes. Newest-first would push the oldest thing you ever shipped up against
+    // the thing you are doing today.
+    //
+    // Only this band. The other three still sort by depth, which is the whole point of
+    // the view for work that is still moving.
+    //
+    // Falling THROUGH to depth on a tie is deliberate: two features with no `shippedAt`
+    // (or the same one) keep the depth ordering they had before, so an unstamped set
+    // degrades to yesterday's behaviour instead of being reshuffled arbitrarily.
+    if (a.status === 'shipped' && b.status === 'shipped') {
+      const chronological = byCompletionOrder(a.shippedAt, b.shippedAt);
+      if (chronological !== 0) return chronological;
+    }
     // Every feature id was assigned a depth by the loop above.
     return depth.get(a.id)! - depth.get(b.id)!;
   });

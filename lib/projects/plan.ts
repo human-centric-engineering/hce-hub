@@ -30,7 +30,7 @@ import {
   type WaitingOnRef,
 } from '@/lib/projects/feature-status';
 import { fetchUsers, type UserRef } from '@/lib/projects/user-refs';
-import { planOrder } from '@/lib/projects/plan-order';
+import { planOrder, byCompletionOrder } from '@/lib/projects/plan-order';
 
 /** A depended-on feature, for the "depends on …" chips (slug, with title fallback). */
 export interface PlanDependencyRef {
@@ -279,6 +279,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
           status: true,
           kind: true,
           createdAt: true, // placed against the feature's shippedAt (§32 t-79)
+          mergedAt: true, // orders completed rows in a band by recency (§33-sweep t-60)
           phaseId: true, // the phase that CHOSE this work, when it isn't the feature's (§32 t-95)
           prUrl: true,
           claimedByUserId: true,
@@ -411,6 +412,7 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
       id: f.id,
       status: f.status,
       dependsOn: f.dependencies.map((d) => d.dependsOnFeatureId),
+      shippedAt: f.shippedAt, // the shipped band reads in ship order (§33-sweep t-60)
     }))
   );
   const viewById = new Map(views.map((v) => [v.id, v]));
@@ -423,6 +425,15 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
   const phases = await phasesPromise;
   const phaseIdByFeature = new Map(features.map((f) => [f.id, f.phaseId]));
   const statusByFeature = new Map(features.map((f) => [f.id, f.status]));
+  // When each row finished — features by `shippedAt`, tasks by `mergedAt` — so the
+  // completed group of a band can be ordered by recency across both (§33-sweep t-60).
+  // One map for both id spaces: they are disjoint cuids, and the interleave should not
+  // have to know which kind of row it is looking at to ask when it was done.
+  const completedAtById = new Map<string, Date | null>();
+  for (const f of features) {
+    completedAtById.set(f.id, f.shippedAt);
+    for (const t of f.tasks) completedAtById.set(t.id, t.mergedAt);
+  }
 
   return {
     projectId,
@@ -432,7 +443,8 @@ export async function getProjectPlan(userId: string, projectId: string): Promise
       phaseIdByFeature,
       phases,
       borrowedByPhase,
-      statusByFeature
+      statusByFeature,
+      completedAtById
     ),
   };
 }
@@ -459,19 +471,27 @@ type PhaseRow = {
 };
 
 /**
+ * The rank both tables below assign to finished work — `shipped` for a feature,
+ * `merged` for a task. Named rather than written as `0` at the comparison site,
+ * because the branch there means "this row is done", not "this row happens to rank
+ * first".
+ */
+const COMPLETED_RANK = 0;
+
+/**
  * Readiness rank shared by feature rows and borrowed task rows, so the two can be
  * interleaved on one scale (§32 t-95). Mirrors `plan-order.ts`'s `STATUS_BAND`
  * — done first, then in-flight, then ready, then blocked — because that is the
  * order the band's features are already in.
  */
 const FEATURE_RANK: Record<FeatureStatus, number> = {
-  shipped: 0,
+  shipped: COMPLETED_RANK,
   in_flight: 1,
   planning: 2,
   blocked: 3,
 };
 const TASK_RANK: Record<EffectiveStatus, number> = {
-  merged: 0,
+  merged: COMPLETED_RANK,
   active: 1,
   claimed: 2,
   blocked: 3,
@@ -491,26 +511,65 @@ const TASK_RANK: Record<EffectiveStatus, number> = {
  * blocking reading matters. Within each group the incoming order is preserved (the
  * sort is stable and features arrive in `planOrder`), so this reorders nothing that
  * was already ordered.
+ *
+ * **Except at rank 0, where that rule buys nothing** (§33-sweep t-60). "Tasks first"
+ * exists so a borrowed prerequisite sorts above the feature it blocks — and completed
+ * work blocks nothing. Applied to done rows it just stacked every merged task above
+ * every shipped feature: on the Hub's own Project flow band, eleven merged tasks sat
+ * at the top of a list whose stated order is *most ready to advance first*.
+ *
+ * So the completed group is ordered by **completion instant, oldest first, across both
+ * row types** — features by `Feature.shippedAt`, borrowed tasks by `Task.mergedAt` —
+ * using the same `byCompletionOrder` the shipped band itself uses, so the two orderings
+ * cannot disagree about what "completion order" means. Unknown instants sort first and
+ * tie, leaving those rows in their incoming order.
+ *
+ * **Ascending, so the band reads as linear history** (owner, 2026-08-21). Completed work
+ * renders above work still moving, so ordering it newest-first would stand the oldest
+ * thing in the band next to the thing being done today. Oldest-first makes the column
+ * flow downward through time and puts what just finished directly beside what is next.
  */
 function interleaveBandRows(
   features: PlanFeatureView[],
   borrowed: PlanBorrowedTask[],
-  statusByFeature: Map<string, FeatureStatus>
+  statusByFeature: Map<string, FeatureStatus>,
+  completedAtById: Map<string, Date | null>
 ): PlanBandRow[] {
   if (borrowed.length === 0) return features.map((feature) => ({ kind: 'feature', feature }));
-  const ranked: { rank: number; row: PlanBandRow }[] = [
+  const ranked: { rank: number; at: Date | null; row: PlanBandRow }[] = [
     ...borrowed.map((task) => ({
       rank: TASK_RANK[task.status],
+      at: completedAtById.get(task.id) ?? null,
       row: { kind: 'task', task } as const,
     })),
     ...features.map((feature) => ({
       // A feature missing from the map cannot happen (same query), but rank it as
       // ready rather than throwing — a read degrades, it never breaks the page.
       rank: FEATURE_RANK[statusByFeature.get(feature.id) ?? 'planning'],
+      at: completedAtById.get(feature.id) ?? null,
       row: { kind: 'feature', feature } as const,
     })),
   ];
-  return ranked.sort((a, b) => a.rank - b.rank).map((r) => r.row);
+  return ranked
+    .sort((a, b) => {
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      // Rank 0 is the completed group — recency, across both row types.
+      if (a.rank === COMPLETED_RANK) return byCompletionOrder(a.at, b.at);
+      // Every other rank keeps the stable "tasks before features" order they were
+      // pushed in (§32 t-95). Returning 0 is what preserves it — do not "tidy" this
+      // into a single comparator.
+      //
+      // **The rank check is defensive, not load-bearing**, and it is worth knowing
+      // which: a row above rank 0 has no completion instant *by construction* —
+      // `completedAtById` reads `Feature.shippedAt` and `Task.mergedAt`, `startTask`
+      // refuses a merged task ("can't restart finished work"), and nothing clears
+      // either column. So dropping the check would not change a single rendered row
+      // today, and no test can tell the two apart. It stays because it states the
+      // intent — recency is a fact about *finished* work — and because it is what
+      // keeps §32 t-95's rule correct on the day someone adds a reopen path.
+      return 0;
+    })
+    .map((r) => r.row);
 }
 
 function groupIntoPhaseBands(
@@ -518,7 +577,14 @@ function groupIntoPhaseBands(
   phaseIdByFeature: Map<string, string | null>,
   phases: PhaseRow[],
   borrowedByPhase: Map<string, PlanBorrowedTask[]>,
-  statusByFeature: Map<string, FeatureStatus>
+  statusByFeature: Map<string, FeatureStatus>,
+  /**
+   * When each row finished, keyed by feature id *and* task id — the two id spaces are
+   * disjoint cuids, so one map serves both and the interleave never has to know which
+   * kind of row it is holding (§33-sweep t-60). `null` for anything unfinished or
+   * whose instant predates the columns that record it.
+   */
+  completedAtById: Map<string, Date | null>
 ): PlanPhaseBand[] {
   const known = new Set(phases.map((p) => p.id));
   const byPhase = new Map<string, PlanFeatureView[]>();
@@ -549,7 +615,12 @@ function groupIntoPhaseBands(
       startedAt: p.startedAt?.toISOString() ?? null,
       completedAt: p.completedAt?.toISOString() ?? null,
       features,
-      rows: interleaveBandRows(features, borrowedByPhase.get(p.id) ?? [], statusByFeature),
+      rows: interleaveBandRows(
+        features,
+        borrowedByPhase.get(p.id) ?? [],
+        statusByFeature,
+        completedAtById
+      ),
     };
   });
   if (residual.length > 0) {

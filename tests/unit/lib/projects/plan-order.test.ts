@@ -96,3 +96,63 @@ describe('planOrder — robustness', () => {
     expect(out).toEqual(['first', 'second', 'third']);
   });
 });
+
+describe('planOrder — the shipped band reads as linear history (§33-sweep t-60)', () => {
+  const shipped = (id: string, at: string | null, dependsOn: string[] = []): PlanOrderInput => ({
+    id,
+    status: 'shipped',
+    dependsOn,
+    shippedAt: at === null ? null : new Date(at),
+  });
+
+  it('reads oldest-shipped first, regardless of dependency depth', () => {
+    // The dates run OPPOSITE to the depth chain on purpose — `shallow` is depth 0 but
+    // shipped last, `deep` is depth 2 but shipped first — so depth ordering and ship
+    // ordering give different answers and this can tell them apart. (With the dates
+    // running the same way as the chain, both orderings agree and the test proves
+    // nothing.)
+    const out = order([
+      shipped('shallow', '2026-08-20'),
+      shipped('mid', '2026-08-10', ['shallow']),
+      shipped('deep', '2026-08-01', ['mid']),
+    ]);
+    expect(out).toEqual(['deep', 'mid', 'shallow']);
+  });
+
+  it('sorts an unstamped feature FIRST — oldest, in a chronological list', () => {
+    // Null means "shipped before we tracked the instant", so it belongs at the old end.
+    // In an ascending band that is the top. Sorting it to the bottom would place it
+    // beside the in-flight work, claiming it was the last thing finished.
+    const out = order([shipped('dated', '2026-08-01'), shipped('unknown', null)]);
+    expect(out).toEqual(['unknown', 'dated']);
+  });
+
+  it('falls through to dependency depth when neither is stamped', () => {
+    // The degradation t-60 asked for: a set with no stamps keeps exactly the
+    // ordering it had before this change, rather than being reshuffled arbitrarily.
+    const out = order([
+      shipped('deep', null, ['mid']),
+      shipped('mid', null, ['shallow']),
+      shipped('shallow', null),
+    ]);
+    expect(out).toEqual(['shallow', 'mid', 'deep']);
+  });
+
+  it('leaves the other three bands on dependency depth', () => {
+    // A stamp on a non-shipped feature is meaningless and must not reorder anything —
+    // the depth axis is the entire value of the view for work still moving.
+    const out = order([
+      { id: 'deep', status: 'planning', dependsOn: ['shallow'], shippedAt: new Date('2026-08-20') },
+      { id: 'shallow', status: 'planning', dependsOn: [], shippedAt: new Date('2026-08-01') },
+    ]);
+    expect(out).toEqual(['shallow', 'deep']);
+  });
+
+  it('still bands shipped above everything, however old', () => {
+    const out = order([
+      { id: 'flight', status: 'in_flight', dependsOn: [] },
+      shipped('ancient', '2020-01-01'),
+    ]);
+    expect(out).toEqual(['ancient', 'flight']);
+  });
+});

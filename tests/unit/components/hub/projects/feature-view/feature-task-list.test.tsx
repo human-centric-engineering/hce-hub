@@ -20,6 +20,7 @@ const task = (over: Partial<FeatureDetailTaskDTO> = {}): FeatureDetailTaskDTO =>
   kind: 'feature_work',
   doneWhen: null,
   prUrl: null,
+  committedPhaseName: null,
   claimer: null,
   assignee: null,
   ...over,
@@ -47,6 +48,38 @@ describe('FeatureTaskList — planned', () => {
     expect(screen.getByText('Ada')).toBeInTheDocument(); // assignee (no live claimer)
     fireEvent.click(screen.getByRole('button', { name: 'Open task t-3' }));
     expect(open).toHaveBeenCalledWith('t1');
+  });
+
+  it('marks a borrowed task with its committed phase, and leaves an inherited one bare (§33-sweep t-113)', () => {
+    const { rerender } = render(
+      <TaskSheetControlsProvider value={{ open: vi.fn(), close: vi.fn() }}>
+        <FeatureTaskList
+          tasks={[task({ committedPhaseName: 'Project flow' })]}
+          indicativeTasks={[]}
+          phaseBoundaries={[]}
+        />
+      </TaskSheetControlsProvider>
+    );
+    // The reciprocal of the Plan's borrowed row: this task also appears in that band.
+    expect(screen.getByText('Project flow')).toBeInTheDocument();
+    expect(
+      screen.getByTitle(/Committed to the Project flow phase — it also appears in that band/)
+    ).toBeInTheDocument();
+
+    // Asserted in BOTH directions from one fixture. The overwhelmingly common case is
+    // a task that simply inherits its feature's phase, and a mark that renders on every
+    // row is worth nothing — so "nothing here" is the half that pins the predicate.
+    rerender(
+      <TaskSheetControlsProvider value={{ open: vi.fn(), close: vi.fn() }}>
+        <FeatureTaskList
+          tasks={[task({ committedPhaseName: null })]}
+          indicativeTasks={[]}
+          phaseBoundaries={[]}
+        />
+      </TaskSheetControlsProvider>
+    );
+    expect(screen.queryByText('Project flow')).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/Committed to the/)).not.toBeInTheDocument();
   });
 
   it('tags a bug-kind task, and leaves feature-work untagged', () => {
