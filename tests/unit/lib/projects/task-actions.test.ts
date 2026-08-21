@@ -15,7 +15,11 @@ vi.mock('@/lib/projects/access', () => ({
 }));
 vi.mock('@/lib/db/utils', () => ({ executeTransaction: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
-  prisma: { taskClaim: { findMany: vi.fn() }, task: { findMany: vi.fn(), update: vi.fn() } },
+  prisma: {
+    taskClaim: { findMany: vi.fn() },
+    task: { findMany: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
+    taskDependency: { findMany: vi.fn() },
+  },
 }));
 vi.mock('@/lib/orchestration/audit/admin-audit-logger', () => ({ logAdminAction: vi.fn() }));
 vi.mock('@/lib/projects/project-event', () => ({ recordProjectEvent: vi.fn() }));
@@ -27,7 +31,8 @@ const { prisma } = await import('@/lib/db/client');
 const { logAdminAction } = await import('@/lib/orchestration/audit/admin-audit-logger');
 const { recordProjectEvent } = await import('@/lib/projects/project-event');
 const { NotFoundError, ValidationError } = await import('@/lib/api/errors');
-const { startTask, completeTask, setTaskPr, assignTask, reassignFeatureTasks } =
+const { ForbiddenError } = await import('@/lib/api/errors');
+const { startTask, completeTask, setTaskPr, assignTask, reassignFeatureTasks, withdrawTask } =
   await import('@/lib/projects/task-actions');
 
 const resolveTask = resolveTaskAccess as ReturnType<typeof vi.fn>;
@@ -37,6 +42,8 @@ const runTx = executeTransaction as ReturnType<typeof vi.fn>;
 const findClaims = prisma.taskClaim.findMany as ReturnType<typeof vi.fn>;
 const findTasks = prisma.task.findMany as ReturnType<typeof vi.fn>;
 const taskUpdate = prisma.task.update as ReturnType<typeof vi.fn>;
+const findTask = prisma.task.findUnique as ReturnType<typeof vi.fn>;
+const findDeps = prisma.taskDependency.findMany as ReturnType<typeof vi.fn>;
 const audit = logAdminAction as ReturnType<typeof vi.fn>;
 const emit = recordProjectEvent as ReturnType<typeof vi.fn>;
 
@@ -100,7 +107,28 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockTx();
   findClaims.mockResolvedValue([]);
+  findDeps.mockResolvedValue([]);
   canAccess.mockResolvedValue({ ok: true, basis: 'member' }); // assignee is a member by default
+});
+
+/**
+ * A withdrawable task, as `withdrawTask` loads it (its own `findUnique`, not the
+ * access funnel's projection — it needs `withdrawnAt`, which the funnel doesn't
+ * carry).
+ */
+const withdrawable = (
+  overrides: Partial<{
+    status: 'claimed' | 'active' | 'merged';
+    withdrawnAt: Date | null;
+    projectId: string;
+  }> = {}
+) => ({
+  id: 't1',
+  number: 42,
+  status: overrides.status ?? 'claimed',
+  withdrawnAt: overrides.withdrawnAt !== undefined ? overrides.withdrawnAt : null,
+  featureId: 'f1',
+  feature: { projectId: overrides.projectId ?? 'p1' },
 });
 
 describe('startTask funnel', () => {
@@ -780,5 +808,168 @@ describe('completeTask — mergedAt (§33-sweep t-115)', () => {
       expect.objectContaining({ data: expect.objectContaining({ mergedByUserId: 'u9' }) })
     );
     expect(taskUpdate.mock.calls[0][0].data).not.toHaveProperty('mergedAt');
+  });
+});
+
+/**
+ * `withdrawTask` (f-authoring-fidelity §21 t-123) — call work off, or bring it back.
+ *
+ * The verb §21's own rule needed: its verbs are how the record gets corrected *from
+ * the Hub, never the DB*, and without this one the only correction available was a
+ * raw `DELETE`. What matters here is that the withdrawal is **soft** (an instant, so
+ * restore has nothing to remember), **refused on merged work**, and **honest about
+ * its reach** — the dependents it frees are reported rather than left to be found.
+ */
+describe('withdrawTask funnel', () => {
+  it('throws NotFoundError for an unknown task, before any access lookup', async () => {
+    findTask.mockResolvedValue(null);
+    await expect(withdrawTask(USER, 't1')).rejects.toBeInstanceOf(NotFoundError);
+    expect(resolveFeature).not.toHaveBeenCalled();
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('maps a non-member to NotFoundError, never Forbidden (no enumeration)', async () => {
+    findTask.mockResolvedValue(withdrawable());
+    resolveFeature.mockResolvedValue({ ok: false, reason: 'not_found' });
+    await expect(withdrawTask(USER, 't1')).rejects.toBeInstanceOf(NotFoundError);
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('maps a member who is not the owner to ForbiddenError (owner tier, like update_task)', async () => {
+    // The distinction is the whole point of the funnel's two reasons: a stranger
+    // must not learn the task exists, while a colleague must be told why they
+    // cannot act rather than being sent to hunt a 404.
+    findTask.mockResolvedValue(withdrawable());
+    resolveFeature.mockResolvedValue({ ok: false, reason: 'forbidden' });
+    await expect(withdrawTask(USER, 't1')).rejects.toBeInstanceOf(ForbiddenError);
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('passes expectedProjectId through to the funnel (id-swap guard)', async () => {
+    findTask.mockResolvedValue(withdrawable());
+    resolveFeature.mockResolvedValue(grantedFeature());
+    await withdrawTask(USER, 't1', { expectedProjectId: 'p1' });
+    expect(resolveFeature).toHaveBeenCalledWith(USER, 'f1', 'owner', 'p1');
+  });
+});
+
+describe('withdrawTask write', () => {
+  beforeEach(() => {
+    resolveFeature.mockResolvedValue(grantedFeature());
+  });
+
+  it('stamps withdrawnAt and journals task_withdrawn with the reason', async () => {
+    findTask.mockResolvedValue(withdrawable({ status: 'claimed' }));
+
+    const r = await withdrawTask(USER, 't1', { reason: 'duplicate of t-88' });
+
+    expect(r).toEqual({
+      taskId: 't1',
+      number: 42,
+      withdrawn: true,
+      affectedDependents: [],
+    });
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { withdrawnAt: expect.any(Date) },
+    });
+    // The stored status is deliberately untouched — that is what makes restore free.
+    expect(txTaskUpdate.mock.calls[0][0].data).not.toHaveProperty('status');
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        kind: 'task_withdrawn',
+        taskId: 't1',
+        actorUserId: USER,
+        metadata: expect.objectContaining({ restored: false, reason: 'duplicate of t-88' }),
+      })
+    );
+  });
+
+  it('restores by NULLING the instant — one kind, `restored: true` in the metadata', async () => {
+    findTask.mockResolvedValue(withdrawable({ status: 'active', withdrawnAt: new Date() }));
+
+    const r = await withdrawTask(USER, 't1', { restore: true });
+
+    expect(r.withdrawn).toBe(false);
+    expect(txTaskUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { withdrawnAt: null },
+    });
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ metadata: expect.objectContaining({ restored: true }) })
+    );
+  });
+
+  it('refuses to withdraw a merged task — history, and it has a PR', async () => {
+    findTask.mockResolvedValue(withdrawable({ status: 'merged' }));
+    await expect(withdrawTask(USER, 't1')).rejects.toBeInstanceOf(ValidationError);
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('still RESTORES a merged task — the refusal guards the withdrawal, not the undo', async () => {
+    // A task withdrawn and then completed out-of-band would otherwise be stuck
+    // withdrawn forever, with the refusal blocking the only way back.
+    findTask.mockResolvedValue(withdrawable({ status: 'merged', withdrawnAt: new Date() }));
+    const r = await withdrawTask(USER, 't1', { restore: true });
+    expect(r.withdrawn).toBe(false);
+    expect(txTaskUpdate).toHaveBeenCalled();
+  });
+
+  it('is a no-op on a task already withdrawn — no write, no second event', async () => {
+    findTask.mockResolvedValue(withdrawable({ withdrawnAt: new Date() }));
+    const r = await withdrawTask(USER, 't1');
+    expect(r.withdrawn).toBe(true);
+    expect(runTx).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op restoring a task that was never withdrawn', async () => {
+    findTask.mockResolvedValue(withdrawable({ withdrawnAt: null }));
+    const r = await withdrawTask(USER, 't1', { restore: true });
+    expect(r.withdrawn).toBe(false);
+    expect(runTx).not.toHaveBeenCalled();
+  });
+
+  it('reports the unmerged dependents it frees, and asks the DB only for those', async () => {
+    findTask.mockResolvedValue(withdrawable());
+    findDeps.mockResolvedValue([
+      { task: { id: 't9', number: 9, title: 'Downstream' } },
+      { task: { id: 't10', number: 10, title: 'Also downstream' } },
+    ]);
+
+    const r = await withdrawTask(USER, 't1');
+
+    expect(r.affectedDependents).toEqual([
+      { taskId: 't9', number: 9, title: 'Downstream' },
+      { taskId: 't10', number: 10, title: 'Also downstream' },
+    ]);
+    // Merged and already-withdrawn dependents are excluded at the DB: neither is
+    // waiting on anything, so naming them would pad an advisory whose only job is
+    // to say what this decision actually unblocks.
+    expect(findDeps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          dependsOnTaskId: 't1',
+          task: { status: { not: 'merged' }, withdrawnAt: null },
+        },
+      })
+    );
+    // Counted, not enumerated, in the journal — the ids are already in the edges.
+    expect(emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ metadata: expect.objectContaining({ affectedDependents: 2 }) })
+    );
+  });
+
+  it('keeps the free-text reason out of the audit log', async () => {
+    // The journal is project-scoped and access-controlled; the admin audit log is
+    // neither, and a reason can name a person or a customer.
+    findTask.mockResolvedValue(withdrawable());
+    await withdrawTask(USER, 't1', { reason: 'raised by a named customer' });
+    const entry = audit.mock.calls[0][0];
+    expect(entry.action).toBe('task.withdraw');
+    expect(JSON.stringify(entry)).not.toContain('named customer');
   });
 });

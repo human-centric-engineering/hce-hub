@@ -49,6 +49,8 @@ function task(opts: {
   ownerUserId?: string | null;
   deps?: TaskStatus[];
   projectId?: string;
+  /** Withdrawn work never reaches this query — present so a test can prove it. */
+  withdrawnAt?: Date | null;
 }) {
   return {
     id: opts.id,
@@ -66,7 +68,10 @@ function task(opts: {
       slug: `f-${opts.id}`,
       ownerUserId: opts.ownerUserId === undefined ? USER : opts.ownerUserId,
     },
-    dependencies: (opts.deps ?? []).map((status) => ({ dependsOn: { status } })),
+    withdrawnAt: opts.withdrawnAt ?? null,
+    dependencies: (opts.deps ?? []).map((status) => ({
+      dependsOn: { status, withdrawnAt: null },
+    })),
   };
 }
 
@@ -95,6 +100,14 @@ const helpWantedArm = (projectId: unknown) => ({ feature: { projectId, helpWante
  * excluded them — but it keeps `consideredCount` meaning "candidates".
  */
 const NOT_MERGED = { not: 'merged' };
+/**
+ * Withdrawn work is dropped at the DB for the same reason merged work is (§21
+ * t-123): the pullable filter would drop it anyway, but only after dragging its
+ * dependency rows back — and `consideredCount` would count work nobody can do.
+ * Asserted as part of the whole `where` so removing it fails these tests rather
+ * than silently re-offering called-off work.
+ */
+const NOT_WITHDRAWN = null;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -127,6 +140,7 @@ describe('next_task project scoping (f-access funnel)', () => {
       expect.objectContaining({
         where: {
           status: NOT_MERGED,
+          withdrawnAt: NOT_WITHDRAWN,
           OR: [...ownArms({ in: ['p1', 'p2'] }), commonsArm({ in: ['p1', 'p2'] })],
         },
       })
@@ -158,7 +172,11 @@ describe('next_task project scoping (f-access funnel)', () => {
 
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { status: NOT_MERGED, OR: [...ownArms('p1'), commonsArm('p1')] },
+        where: {
+          status: NOT_MERGED,
+          withdrawnAt: NOT_WITHDRAWN,
+          OR: [...ownArms('p1'), commonsArm('p1')],
+        },
       })
     );
   });
@@ -174,6 +192,7 @@ describe('next_task project scoping (f-access funnel)', () => {
       expect.objectContaining({
         where: {
           status: NOT_MERGED,
+          withdrawnAt: NOT_WITHDRAWN,
           OR: [...ownArms(scope), commonsArm(scope), helpWantedArm(scope)],
         },
       })
