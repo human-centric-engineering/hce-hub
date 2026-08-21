@@ -17,7 +17,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { registerAppRateLimits } from '@/lib/app/rate-limit';
-import { findRateLimitRule } from '@/lib/security/rate-limit-policy';
+import { findRateLimitRule, getEffectiveRateLimitPolicy } from '@/lib/security/rate-limit-policy';
 import { resolveRateLimitTier } from '@/lib/security/rate-limit';
 
 const REVISION_PATH = '/api/v1/projects/cmjbv4i3x00003wsloputgwul/revision';
@@ -57,18 +57,43 @@ describe('Hub rate-limit registrations', () => {
     expect(resolveRateLimitTier('hub-revision')).toBeDefined();
   });
 
-  it('gives the poller enough headroom for a realistic session', () => {
-    // 240/min = 20 open project tabs at the 5s interval f-realtime polls on.
-    // Pinned because the number is derived, not chosen: if the cadence changes and
-    // this is not updated with it, the derivation has silently stopped being true.
+  it('gives the poller headroom beyond its own steady-state cadence', () => {
+    // 480/min = 20 open project tabs at the 5s interval, doubled. The doubling is
+    // the point, not padding: `useAutoRefresh` polls on mount AND on every
+    // `visibilitychange`, so tab-switching generates requests off the cadence that
+    // the steady-state arithmetic does not count. The first version of this cap was
+    // exactly 20 × 12 = 240, which left a 20-tab user with zero margin
+    // (`/code-review` round 2).
+    //
+    // Pinned because the number is derived: if the cadence changes and this does
+    // not move with it, the derivation has silently stopped being true.
     const limiter = resolveRateLimitTier('hub-revision');
     expect(limiter).toBeDefined();
 
     const key = 'session-user:test-headroom';
     let allowed = 0;
-    for (let i = 0; i < 250; i++) {
+    for (let i = 0; i < 500; i++) {
       if (limiter?.check(key).success) allowed++;
     }
-    expect(allowed).toBe(240);
+    expect(allowed).toBe(480);
+  });
+
+  it('registers one rule however many times it is called', () => {
+    // `registerRateLimitRule` dedupes by REFERENCE, so a rule built as a literal
+    // inside `registerAppRateLimits` could never be deduped — and the function runs
+    // on every HMR invalidation of the middleware, appending a copy each time.
+    // Asserting on repeat calls is what pins the hoist; asserting the shape once
+    // would pass either way (`/code-review` round 2).
+    const before = findRateLimitRule(REVISION_PATH);
+
+    registerAppRateLimits();
+    registerAppRateLimits();
+
+    const policy = getEffectiveRateLimitPolicy();
+    const revisionRules = policy.filter((rule) => rule.tier === 'hub-revision');
+
+    expect(revisionRules).toHaveLength(1);
+    // And still the same rule object the first registration installed.
+    expect(findRateLimitRule(REVISION_PATH)).toBe(before);
   });
 });

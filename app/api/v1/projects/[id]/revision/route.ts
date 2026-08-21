@@ -7,9 +7,14 @@
  * 304 while nothing has moved, or a fresh token when something has.
  *
  * Fork-owned. Routes through `getProjectRevision` → `requireProjectAccess`, so a
- * **non-member or unknown id is a 404, never a 403** (anti-enumeration). Inherits
- * the 100/min `api` section cap from `proxy.ts` — no handler-level limiter, which
- * the repo forbids and which would double-count against the same tier.
+ * **non-member or unknown id is a 404, never a 403** (anti-enumeration).
+ *
+ * Rate-limited by `proxy.ts` on its own **`hub-revision`** tier — not the shared
+ * `api` one — registered from `lib/app/rate-limit.ts`. That is the whole reason the
+ * tier exists: on `api` this route would spend the single 100/min budget every
+ * other `/api/v1` call of the same user draws on, so polling would make ordinary
+ * writes 429. Still no handler-level limiter, which the repo forbids and which
+ * would double-count against the same tier.
  *
  * **Deliberately does not log a successful read.** Every other consumer route
  * `log.info`s its fetch, and that is right for a route hit when a human opens a

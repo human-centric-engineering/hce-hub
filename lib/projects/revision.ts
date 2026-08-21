@@ -59,6 +59,20 @@
  * the count. Making this exact would need a database-side default, which
  * `@updatedAt` cannot express and a trigger would hide from the schema entirely.
  *
+ * ## The one term that grows
+ *
+ * Eleven of the twelve `COUNT(*)`s are over small, bounded sets. `app_project_event`
+ * is not: the journal only ever appends, so its count is O(events in project) on
+ * every poll — an index-only scan of the whole `[projectId, createdAt]` range, on
+ * the most frequently hit endpoint in the app. Sub-millisecond at the Hub's current
+ * size and fine for a long time yet, but it is the term to watch, and the only one
+ * that does not stay flat.
+ *
+ * It is counted rather than tracked by `MAX(createdAt)` alone because deletes have
+ * to register somewhere, and dropping the count would be the "nothing renders old
+ * events anyway" reasoning this manifest explicitly refuses. If it ever does matter,
+ * the fix is a bounded delete signal for this table — not an exception to the rule.
+ *
  * ## The forgettability property
  *
  * Prisma sets `@updatedAt` on every `update` it issues. That is the whole reason
@@ -188,9 +202,15 @@ export interface ProjectRevisionDTO {
    */
   revision: string;
   /**
-   * When the project last changed, or `null` for a project with no rows in any
-   * counted table. Not load-bearing — it is there so a `curl` of this endpoint
-   * explains itself, and so a surface can say "updated 3s ago".
+   * The **newest mutation timestamp** across the counted tables, or `null` for a
+   * project with no rows in any of them.
+   *
+   * Diagnostic only — it is here so a `curl` of this endpoint explains itself. Do
+   * **not** render it as "updated N ago": by the table above, a delete moves the
+   * count and not the max, so straight after someone deletes a task and watches the
+   * board change, this would still report minutes ago. `revision` is the field that
+   * answers "did anything change"; this one answers the narrower "when was the most
+   * recent row written or edited" (`/code-review` round 2).
    */
   changedAt: string | null;
 }
