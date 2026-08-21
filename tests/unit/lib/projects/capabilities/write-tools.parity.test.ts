@@ -7,13 +7,19 @@
  * `add_backlog` and `claim_task` retired with f-status-model §20 t-1 (you claim
  * features, not tasks — a task is born `claimed`; the pull-task flow is gone).
  *
- * **This list is hand-maintained, and nothing else covers it.** The structural
- * sibling (`capability-class-seed-parity`) reads `functionDefinition` only where it
- * is an inline object literal in the upsert, so every Hub app seed — which spreads a
- * hoisted `*_IMPL` const instead — contributes nothing to its completeness check.
- * Verified by mutating a seed description and watching that suite stay green (§21
- * t-123). Adding a write verb therefore means adding a row here, by hand, or its
- * class and its seed can drift with no test saying so.
+ * **This list is hand-maintained — but since t-124 it is no longer the only thing
+ * covering these verbs.** It used to be: the structural sibling
+ * (`capability-class-seed-parity`) reads `functionDefinition` only where it is an
+ * inline object literal in the upsert, so every Hub app seed — which spreads a
+ * hoisted `*_IMPL` const instead — contributes nothing to its completeness check
+ * (verified by mutating a seed description and watching that suite stay green, §21
+ * t-123; filed upstream as sunrise#646).
+ *
+ * `app-capability-parity.test.ts` now derives both sides — classes from the
+ * registration seam, seeds by executing each unit — so a verb added without a row
+ * here is still caught. This file is kept as the readable, per-verb statement of the
+ * same invariant; it is no longer load-bearing on its own, and a row missing from it
+ * is a documentation gap rather than a hole.
  */
 
 import { describe, it, expect } from 'vitest';
