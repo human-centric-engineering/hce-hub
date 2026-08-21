@@ -81,8 +81,18 @@ describe('rate-limit auto-wire (lib/app/rate-limit.ts → middleware realm)', ()
     expect(resolveRateLimitTier('wiretest')).toBeDefined();
   });
 
-  it('default lib/app/rate-limit is a no-op (effective policy is the base policy by identity)', async () => {
-    // Arrange — no doMock: the real (empty) registerAppRateLimits runs
+  it('the REAL lib/app/rate-limit is auto-wired at middleware load', async () => {
+    // HCE Hub (fork): upstream asserted the real seam is a no-op — "the effective
+    // policy is the base policy BY IDENTITY" — which stops being true the moment a
+    // fork fills the seam, as this one has (f-realtime §36 t-125,
+    // platform-divergences row 26).
+    //
+    // Rewritten rather than deleted, and it tests the wiring HARDER than it did:
+    // the identity check passed whether or not the middleware ever called the
+    // seam, since an unfilled seam and an uncalled one are indistinguishable. This
+    // version can only pass if the middleware really invoked it.
+    //
+    // Arrange — no doMock: the real registerAppRateLimits runs.
     vi.resetModules();
 
     // Act
@@ -90,8 +100,13 @@ describe('rate-limit auto-wire (lib/app/rate-limit.ts → middleware realm)', ()
     const { getEffectiveRateLimitPolicy, RATE_LIMIT_POLICY } =
       await import('@/lib/security/rate-limit-policy');
 
-    // Assert — no app rules registered → identity return (no allocation, no extra rule)
-    expect(getEffectiveRateLimitPolicy()).toBe(RATE_LIMIT_POLICY);
+    // Assert — the fork's rule is in the effective policy, ahead of the catch-all.
+    const effective = getEffectiveRateLimitPolicy();
+    expect(effective).not.toBe(RATE_LIMIT_POLICY);
+    expect(effective.some((rule) => rule.tier === 'hub-revision')).toBe(true);
+    expect(effective[effective.length - 1], 'catch-all stays last').toBe(
+      RATE_LIMIT_POLICY[RATE_LIMIT_POLICY.length - 1]
+    );
   });
 
   it('aborts boot when an app rule references an unregistered tier (finding #6 integrity check)', async () => {

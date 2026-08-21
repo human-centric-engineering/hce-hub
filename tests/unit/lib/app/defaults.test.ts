@@ -98,10 +98,32 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/rate-limit.ts',
     risk: 'a stray tier or rule would re-cap every install',
+    // HCE Hub (fork): FILLED, so the row is PINNED to the fork's value rather
+    // than deleted — this file's own header asks forks to do exactly that. The
+    // Hub registers one tier + one rule so the polled revision endpoint does not
+    // spend the shared 100/min `/api/v1` budget (f-realtime §36 t-125,
+    // platform-divergences row 26). Upstream's contract was "the effective policy
+    // is the base policy BY IDENTITY"; the guard it was protecting survives
+    // intact, because a SECOND rule — or one aimed anywhere but this path — still
+    // fails here.
     assert: () => {
       registerAppRateLimits();
-      // No app rules → the effective policy is the base policy BY IDENTITY.
-      expect(getEffectiveRateLimitPolicy()).toBe(RATE_LIMIT_POLICY);
+      const effective = getEffectiveRateLimitPolicy();
+      const appRules = effective.filter((rule) => !RATE_LIMIT_POLICY.includes(rule));
+
+      expect(appRules).toHaveLength(1);
+      expect(appRules[0].tier).toBe('hub-revision');
+      expect(appRules[0].key).toBe('session-user');
+      // Scoped to the one polled path, and to nothing nested under it.
+      const matches = (path: string): boolean =>
+        appRules[0].match instanceof RegExp
+          ? appRules[0].match.test(path)
+          : path.startsWith(appRules[0].match);
+      expect(matches('/api/v1/projects/abc123/revision')).toBe(true);
+      expect(matches('/api/v1/projects/abc123/plan')).toBe(false);
+      expect(matches('/api/v1/projects/abc123/revision/anything')).toBe(false);
+      // Still spliced ahead of the catch-all, or it would never fire.
+      expect(effective[effective.length - 1]).toBe(RATE_LIMIT_POLICY[RATE_LIMIT_POLICY.length - 1]);
     },
   },
   {
