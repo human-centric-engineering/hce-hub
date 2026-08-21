@@ -68,7 +68,14 @@ export function PlanSummary({ features }: { features: PlanFeature[] }) {
       </div>
       <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--ink-mute)' }}>
         <Sparkles aria-hidden className="h-3.5 w-3.5" style={{ color: 'var(--accent)' }} />
-        <span>Sorted by status, then dependency depth — top is most ready to advance.</span>
+        {/* Says what the ordering ACTUALLY does, which §33-sweep t-60 changed. The old
+            line — "Sorted by status, then dependency depth — top is most ready to advance"
+            — was wrong twice over afterwards: finished rows no longer sort by depth, and
+            the top of a band is now the OLDEST thing finished, not the most ready. "Most
+            ready first" is kept, attached to the half of the sentence it is true of. */}
+        <span>
+          Finished work in the order it landed; the rest by dependency depth, most ready first.
+        </span>
       </div>
     </div>
   );

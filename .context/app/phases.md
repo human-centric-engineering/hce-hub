@@ -180,9 +180,17 @@ Zod-validated bodies; each scoped to `:id` so no cross-project id-swap):
   otherwise ⇒ last band. (The instant is still read from the `task_merged` event
   here; `Task.mergedAt` now carries it and this read should move to the column —
   see [work kinds](./work-kinds.md#when-a-task-landed).) A rule
-  with nothing above it is dropped; one with nothing below it is kept. Does **not**
-  read `Task.phaseId` — commitment is a separate axis and this surface shows no
-  `→ <phase>` mark. A feature that never moved renders exactly as before.
+  with nothing above it is dropped; one with nothing below it is kept. A feature that
+  never moved renders exactly as before.
+
+  **Placement here is still by merge time alone** — `Task.phaseId` is a _commitment_,
+  a different axis from "where was the feature when this landed", and it does not move
+  a row between bands. But the commitment is no longer invisible on this surface:
+  since §33-sweep t-113 the row carries the Plan's `→ <phase>` mark, so a feature owner
+  isn't blind to work happening on their feature under another phase's banner.
+  Commitment and completion are two separate facts, both shown, neither overriding the
+  other.
+
 - **`ManagePhasesDialog`** ("Manage phases", top-right of the Plan) — create,
   rename, **write the one-line summary**, set status / park, and **drag-to-reorder**
   (`@dnd-kit`, keyboard-accessible: focus the grip, Space, arrows, Space). Name,

@@ -294,7 +294,7 @@ describe('PlanView rendering', () => {
     );
     const summary = screen.getByText('features').closest('div')!;
     expect(within(summary).getByText('2')).toBeInTheDocument();
-    expect(screen.getByText(/most ready to advance/i)).toBeInTheDocument();
+    expect(screen.getByText(/in the order it landed/i)).toBeInTheDocument();
   });
 });
 

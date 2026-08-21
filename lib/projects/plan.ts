@@ -471,18 +471,19 @@ type PhaseRow = {
 };
 
 /**
+ * The rank both tables below assign to finished work — `shipped` for a feature,
+ * `merged` for a task. Named rather than written as `0` at the comparison site,
+ * because the branch there means "this row is done", not "this row happens to rank
+ * first".
+ */
+const COMPLETED_RANK = 0;
+
+/**
  * Readiness rank shared by feature rows and borrowed task rows, so the two can be
  * interleaved on one scale (§32 t-95). Mirrors `plan-order.ts`'s `STATUS_BAND`
  * — done first, then in-flight, then ready, then blocked — because that is the
  * order the band's features are already in.
  */
-/**
- * The rank both tables assign to finished work — `shipped` for a feature, `merged`
- * for a task. Named rather than written as `0` at the comparison site, because the
- * branch there means "this row is done", not "this row happens to rank first".
- */
-const COMPLETED_RANK = 0;
-
 const FEATURE_RANK: Record<FeatureStatus, number> = {
   shipped: COMPLETED_RANK,
   in_flight: 1,
