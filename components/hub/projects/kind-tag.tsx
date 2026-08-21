@@ -30,7 +30,7 @@ export interface TaskKindCue {
  * of every board, so tagging it would be noise rather than information. Only work
  * that is *not* the ordinary case earns a mark.
  *
- * Both cues stay in the same quiet register — a fix, not a crisis (anti-urgency:
+ * Both cues stay in the same quiet register — work to pull, not a crisis (anti-urgency:
  * no red, no pulse, no badge count). An enhancement sits a step below a bug, on
  * `--ink-mute` rather than the bug's brick, because an improvement to shipped work
  * is a classification, not a signal.
@@ -47,7 +47,7 @@ export const TASK_KIND_CUE: Record<TaskKind, TaskKindCue | null> = {
   bug: {
     Icon: Bug,
     label: 'bug',
-    title: 'A bug — a fix on the feature it broke',
+    title: 'A bug — a defect on the feature it broke',
     color: 'var(--signal-blocked)',
   },
   enhancement: {

@@ -116,7 +116,7 @@ needed it.)
 
 ## Chosen vs. unchosen — the line that settles rendering
 
-> **The active-fixes strip is for _unchosen_ work. The phase band is for _chosen_
+> **The active-bugs strip is for _unchosen_ work. The phase band is for _chosen_
 > work.**
 
 A bug is **reactive** — it arrives and demands fixing regardless of the phase, and
@@ -130,7 +130,7 @@ inherit (today's behaviour exactly), so the field is inert at rest.
 | kind           | default        | why                                                     |
 | -------------- | -------------- | ------------------------------------------------------- |
 | `feature_work` | null           | committed via its feature; that phase is the answer      |
-| `bug`          | null           | reactive; surfaces on the active-fixes strip             |
+| `bug`          | null           | reactive; surfaces on the active-bugs strip              |
 | `enhancement`  | **set**        | setting it _is_ the act of choosing it into the phase    |
 
 It generalises: this marks chosen work regardless of kind. A bug you deliberately

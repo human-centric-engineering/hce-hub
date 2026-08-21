@@ -38,7 +38,7 @@ export function pickBiasedTask<T extends { kind: TaskKind }>(
  *
  * **The bug bias applies *within* the chosen tier, not across both.** So an
  * unclaimed bug on somebody else's feature will not interrupt your own ready work.
- * That is the deliberate trade, not an oversight: the active-fixes strip is
+ * That is the deliberate trade, not an oversight: the active-bugs strip is
  * project-scoped and already shows every open bug to everyone, so a bug sweep is a
  * thing you *choose to go and do*, not something `next_task` should push at you
  * mid-feature.

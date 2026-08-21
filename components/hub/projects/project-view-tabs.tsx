@@ -1,14 +1,6 @@
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import type { ProjectTab } from '@/components/hub/projects/types';
-
-const TABS: { key: ProjectTab; label: string }[] = [
-  { key: 'plan', label: 'Plan' },
-  { key: 'board', label: 'Board' },
-  { key: 'ideas', label: 'Ideas' },
-  { key: 'log', label: 'Log' },
-  { key: 'connect', label: 'Connect' },
-];
+import { PROJECT_TABS, type ProjectTab } from '@/components/hub/projects/tabs';
 
 /**
  * The Plan⇄Board⇄Log tab control. The active view is part of the URL (`?view=`)
@@ -26,7 +18,7 @@ export function ProjectViewTabs({
 }) {
   return (
     <div className="border-b" role="tablist" aria-label="Project view">
-      {TABS.map((t) => (
+      {PROJECT_TABS.map((t) => (
         <Link
           key={t.key}
           role="tab"

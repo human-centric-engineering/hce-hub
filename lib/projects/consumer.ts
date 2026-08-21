@@ -43,11 +43,11 @@ export interface ProjectCard {
 }
 
 /**
- * An open `bug`-kind task, surfaced in the project-scoped active-fixes strip
- * (f-bug-handling §22-02 t2). A reference to a fix + a breadcrumb to the feature
+ * An open `bug`-kind task, surfaced in the project-scoped active-bugs strip
+ * (f-bug-handling §22-02 t2). A reference to a bug + a breadcrumb to the feature
  * (and phase) it lives in — it never pulls the origin feature forward.
  */
-export interface ActiveFix {
+export interface ActiveBug {
   taskId: string;
   /** Project-wide stable ordinal, rendered `t-N`; `null` until assigned. */
   taskNumber: number | null;
@@ -74,8 +74,8 @@ export interface ProjectView {
   memberCount: number;
   featureCount: number;
   taskCount: number;
-  /** Open bug-kind tasks across the project — the active-fixes strip; `[]` when none. */
-  activeFixes: ActiveFix[];
+  /** Open bug-kind tasks across the project — the active-bugs strip; `[]` when none. */
+  activeBugs: ActiveBug[];
 }
 
 /** The projects `userId` is a member of, newest first, enriched for the card grid. */
@@ -133,9 +133,9 @@ export async function getProjectForUser(userId: string, ref: string): Promise<Pr
     prisma.projectMember.findMany({ where: { projectId }, orderBy: { addedAt: 'asc' } }),
     prisma.feature.count({ where: { projectId } }),
     prisma.task.count({ where: { feature: { projectId } } }),
-    // Open bug-kind tasks anywhere in the project — the active-fixes strip
+    // Open bug-kind tasks anywhere in the project — the active-bugs strip
     // (f-bug-handling §22-02 t2). Cross-phase by design, so scoped to the project,
-    // not a phase; ordered oldest-fix-first (stable t-N, then creation).
+    // not a phase; ordered oldest-bug-first (stable t-N, then creation).
     prisma.task.findMany({
       where: { feature: { projectId }, kind: 'bug', status: { not: 'merged' } },
       orderBy: [{ number: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
@@ -174,7 +174,7 @@ export async function getProjectForUser(userId: string, ref: string): Promise<Pr
     memberCount: members.length,
     featureCount,
     taskCount,
-    activeFixes: bugTasks.map((t) => ({
+    activeBugs: bugTasks.map((t) => ({
       taskId: t.id,
       taskNumber: t.number,
       title: t.title,

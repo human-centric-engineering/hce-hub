@@ -38,7 +38,7 @@ const userFindMany = prisma.user.findMany as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Default: no open bug tasks → an empty active-fixes strip. Tests that assert
+  // Default: no open bug tasks → an empty active-bugs strip. Tests that assert
   // the strip override this.
   taskFindMany.mockResolvedValue([]);
 });
@@ -137,10 +137,10 @@ describe('getProjectForUser', () => {
     });
     expect(view.lead?.name).toBe('Ada');
     expect(view.members.find((m) => m.userId === 'erased')?.user).toBeNull();
-    expect(view.activeFixes).toEqual([]); // default mock: no open bugs → empty strip
+    expect(view.activeBugs).toEqual([]); // default mock: no open bugs → empty strip
   });
 
-  it('maps open bug tasks into the active-fixes strip with an origin breadcrumb (§22-02 t2)', async () => {
+  it('maps open bug tasks into the active-bugs strip with an origin breadcrumb (§22-02 t2)', async () => {
     getAccessible.mockResolvedValue({
       id: 'p1',
       slug: 'hce-hub',
@@ -178,7 +178,7 @@ describe('getProjectForUser', () => {
         where: { feature: { projectId: 'p1' }, kind: 'bug', status: { not: 'merged' } },
       })
     );
-    expect(view.activeFixes).toEqual([
+    expect(view.activeBugs).toEqual([
       {
         taskId: 'bug-1',
         taskNumber: 42,

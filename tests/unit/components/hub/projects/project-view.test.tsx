@@ -39,7 +39,7 @@ const planFixture: ProjectPlanDTO = {
             total: 0,
             live: 0,
             blocked: 0,
-            openFixes: 0,
+            openBugs: 0,
             openSinceShip: 0,
             unstartedSinceShip: 0,
           },
@@ -94,7 +94,7 @@ function makeProject(overrides: Partial<ProjectViewDTO> = {}): ProjectViewDTO {
     memberCount: 2,
     featureCount: 15,
     taskCount: 12,
-    activeFixes: [],
+    activeBugs: [],
     ...overrides,
   };
 }
@@ -119,9 +119,9 @@ describe('ProjectView', () => {
     expect(screen.getByText(/Couldn.t load the plan/i)).toBeInTheDocument();
   });
 
-  it('mounts the active-fixes strip above the work body when there are open bugs (§22-02 t2)', () => {
+  it('mounts the active-bugs strip above the work body when there are open bugs (§22-02 t2)', () => {
     const project = makeProject({
-      activeFixes: [
+      activeBugs: [
         {
           taskId: 'bug-1',
           taskNumber: 7,
@@ -132,13 +132,13 @@ describe('ProjectView', () => {
       ],
     });
     render(<ProjectView project={project} activeTab="plan" plan={null} />);
-    expect(screen.getByText(/Active fixes · 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Active bugs · 1/)).toBeInTheDocument();
     expect(screen.getByText('A defect to fix')).toBeInTheDocument();
   });
 
-  it('renders no active-fixes strip when there are none (self-hiding)', () => {
-    render(<ProjectView project={makeProject({ activeFixes: [] })} activeTab="plan" plan={null} />);
-    expect(screen.queryByText(/Active fixes/)).not.toBeInTheDocument();
+  it('renders no active-bugs strip when there are none (self-hiding)', () => {
+    render(<ProjectView project={makeProject({ activeBugs: [] })} activeTab="plan" plan={null} />);
+    expect(screen.queryByText(/Active bugs/)).not.toBeInTheDocument();
   });
 
   it('mounts the Board view on the board tab when a board is supplied', () => {

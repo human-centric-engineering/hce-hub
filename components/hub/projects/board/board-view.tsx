@@ -7,7 +7,7 @@
  * share one grid template so columns line up.
  *
  * Client since §33-sweep t-107: the hide-bugs choice is per-viewer, per-project
- * UI state, persisted in `localStorage` like the active-fixes strip's collapse.
+ * UI state, persisted in `localStorage` like the active-bugs strip's collapse.
  * It is deliberately NOT a server filter — the counts must keep reporting the
  * true totals (see `BoardHeader`), and a server-side filter would have to send
  * both the filtered list and the unfiltered counts to achieve the same thing.
@@ -19,7 +19,7 @@ import { hiddenBugCount } from '@/components/hub/projects/board/presentation';
 import type { ProjectBoardDTO } from '@/components/hub/projects/board/types';
 
 export function BoardView({ board }: { board: ProjectBoardDTO }) {
-  // Project-keyed, matching the active-fixes strip: hiding bugs on one project
+  // Project-keyed, matching the active-bugs strip: hiding bugs on one project
   // says nothing about another. Default `false` — showing — so the board never
   // silently withholds work from someone who has not opted in.
   //
@@ -32,7 +32,7 @@ export function BoardView({ board }: { board: ProjectBoardDTO }) {
   // so removing the flash means either withholding the whole board until mount (a
   // blank flash instead of a content one, on the primary surface) or moving the
   // preference server-side, which is a user-preferences model and API for one
-  // boolean. The active-fixes strip already accepts the same trade; this is a
+  // boolean. The active-bugs strip already accepts the same trade; this is a
   // bigger surface, but the same reasoning and the same wrong alternatives.
   const [hideBugs, setHideBugs] = useLocalStorage(
     `hub:board-hide-assigned-bugs:${board.projectId}`,

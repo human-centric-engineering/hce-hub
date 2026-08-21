@@ -31,7 +31,7 @@ describe('KindTag', () => {
     render(<KindTag kind="bug" />);
     const tag = screen.getByText('bug');
     expect(tag).toBeInTheDocument();
-    expect(tag).toHaveAttribute('title', 'A bug — a fix on the feature it broke');
+    expect(tag).toHaveAttribute('title', 'A bug — a defect on the feature it broke');
   });
 
   /**

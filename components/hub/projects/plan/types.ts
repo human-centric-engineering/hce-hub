@@ -98,7 +98,7 @@ export interface PlanFeature {
     total: number;
     live: number;
     blocked: number;
-    openFixes: number;
+    openBugs: number;
     openSinceShip: number;
     unstartedSinceShip: number;
   };

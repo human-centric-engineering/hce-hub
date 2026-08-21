@@ -77,7 +77,7 @@ neither overwriting the other. No import, no reassignment.
 - **Board (status columns):** the bug shows in the **active** column while it's
   being worked (the board groups by status, not phase) with a small origin
   breadcrumb chip.
-- **Active-fixes strip:** a **pinned band at the top of the project view, above
+- **Active-bugs strip:** a **pinned band at the top of the project view, above
   the Plan/Board body, shown only when non-empty.** Each row references a
   cross-phase bug with a breadcrumb to its origin (`f-journal · Phase 1 ↩`) and a
   link to the fix task. It sits _above_ the phase-grouped body precisely to signal
@@ -90,7 +90,7 @@ neither overwriting the other. No import, no reassignment.
 Hub / Projects / HCE Hub
 [ Plan ]  [ Board ]  [ Log ]
 ┌──────────────────────────────────────────────────────┐
-│ ⚠ Active fixes · 2                            [ bugs ]│   ← pinned, hidden when empty
+│ ⚠ Active bugs · 2                             [ bugs ]│   ← pinned, hidden when empty
 │   • Log decisions render raw     f-journal · Phase 1 ↩ │
 │   • Logout missing in side nav   Platform             │
 └──────────────────────────────────────────────────────┘
@@ -107,7 +107,7 @@ a reference.
 
 An open `bug` task on a shipped feature must **not** flip it back to `in_flight`.
 Feature-status derivation is **kind-aware**: a shipped feature with open bug tasks
-reads **"shipped · N open fixes"**, not reopened. This is what keeps the shipped
+reads **"shipped · N open bugs"**, not reopened. This is what keeps the shipped
 Phase 1 feature as history rather than dragging it into the present.
 
 ## What's minimal vs. polish
@@ -116,7 +116,7 @@ Phase 1 feature as history rather than dragging it into the present.
   status. With just these, bugs are already tasks-on-their-feature, prioritised,
   and non-history-rewriting, and they show in the board's active column with a
   breadcrumb.
-- **Polish:** the **active-fixes strip** — the glanceable upgrade that keeps fixes
+- **Polish:** the **active-bugs strip** — the glanceable upgrade that keeps bugs
   from being buried among feature-work tasks (same instinct as not letting the
   board bury things). Layered on the board's native behaviour, not a prerequisite.
 

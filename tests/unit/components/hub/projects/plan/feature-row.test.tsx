@@ -33,7 +33,7 @@ const feature = (over: Partial<PlanFeature> = {}): PlanFeature => ({
     total: 0,
     live: 0,
     blocked: 0,
-    openFixes: 0,
+    openBugs: 0,
     openSinceShip: 0,
     unstartedSinceShip: 0,
   },
@@ -82,8 +82,8 @@ describe('FeatureRow', () => {
     expect(screen.queryByText('the long one')).not.toBeInTheDocument();
   });
 
-  describe('open-fixes label (f-bug-handling §22-02)', () => {
-    const withFixes = (openFixes: number) =>
+  describe('open-bugs label (f-bug-handling §22-02)', () => {
+    const withBugs = (openBugs: number) =>
       feature({
         status: 'shipped',
         tasks: [
@@ -103,25 +103,25 @@ describe('FeatureRow', () => {
           total: 1,
           live: 0,
           blocked: 0,
-          openFixes,
+          openBugs,
           openSinceShip: 0,
           unstartedSinceShip: 0,
         },
       });
 
-    it('surfaces multiple open bug fixes as "· N open fixes"', () => {
-      renderRow({ feature: withFixes(2) });
-      expect(screen.getByText(/open fixes/)).toBeInTheDocument();
+    it('surfaces multiple open bugs as "· N open bugs"', () => {
+      renderRow({ feature: withBugs(2) });
+      expect(screen.getByText(/open bugs/)).toBeInTheDocument();
     });
 
-    it('uses the singular "· 1 open fix" for a single fix', () => {
-      renderRow({ feature: withFixes(1) });
-      expect(screen.getByText(/open fix$/)).toBeInTheDocument();
+    it('uses the singular "· 1 open bug" for a single bug', () => {
+      renderRow({ feature: withBugs(1) });
+      expect(screen.getByText(/open bug$/)).toBeInTheDocument();
     });
 
-    it('shows no open-fixes label when there are none', () => {
-      renderRow({ feature: withFixes(0) });
-      expect(screen.queryByText(/open fix/)).not.toBeInTheDocument();
+    it('shows no open-bugs label when there are none', () => {
+      renderRow({ feature: withBugs(0) });
+      expect(screen.queryByText(/open bug/)).not.toBeInTheDocument();
     });
 
     /**
@@ -152,7 +152,7 @@ describe('FeatureRow', () => {
             total: 1,
             live: 0,
             blocked: 0,
-            openFixes: 0,
+            openBugs: 0,
             openSinceShip: 0,
             unstartedSinceShip: 0,
             ...over,
@@ -194,9 +194,9 @@ describe('FeatureRow', () => {
         expect(screen.getByText(/1 new/)).toBeInTheDocument(); // disjoint — the other one
       });
 
-      it('reads both markers when a feature carries an open fix AND unstarted post-ship work', () => {
-        renderRow({ feature: shipped({ openFixes: 2, openSinceShip: 1, unstartedSinceShip: 1 }) });
-        expect(screen.getByText(/2 open fixes/)).toBeInTheDocument();
+      it('reads both markers when a feature carries an open bug AND unstarted post-ship work', () => {
+        renderRow({ feature: shipped({ openBugs: 2, openSinceShip: 1, unstartedSinceShip: 1 }) });
+        expect(screen.getByText(/2 open bugs/)).toBeInTheDocument();
         expect(screen.getByText(/1 new/)).toBeInTheDocument();
       });
     });
@@ -272,7 +272,7 @@ describe('FeatureRow', () => {
           total: 3,
           live: 1,
           blocked: 1,
-          openFixes: 0,
+          openBugs: 0,
           openSinceShip: 0,
           unstartedSinceShip: 0,
         },
@@ -336,7 +336,7 @@ describe('FeatureRow', () => {
           total: 1,
           live: 0,
           blocked: 0,
-          openFixes: 0,
+          openBugs: 0,
           openSinceShip: 0,
           unstartedSinceShip: 0,
         },
@@ -370,7 +370,7 @@ describe('FeatureRow', () => {
           total: 1,
           live: 0,
           blocked: 0,
-          openFixes: 0,
+          openBugs: 0,
           openSinceShip: 0,
           unstartedSinceShip: 0,
         },

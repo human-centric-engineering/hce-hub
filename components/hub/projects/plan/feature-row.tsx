@@ -78,7 +78,7 @@ export function FeatureRow({
   const hasSketch = isIndicative && feature.indicativeTasks.length > 0;
   const expandable = hasTasks || hasSketch;
   const status = featureStatus(feature.status);
-  const { merged, total, live, blocked, openFixes, unstartedSinceShip } = feature.progress;
+  const { merged, total, live, blocked, openBugs, unstartedSinceShip } = feature.progress;
   const pct = total > 0 ? Math.round((merged / total) * 100) : 0;
   // The shareable feature page — human project slug + feature slug when authored.
   const featurePath = `/projects/${projectRef}/features/${feature.slug ?? feature.id}`;
@@ -199,10 +199,10 @@ export function FeatureRow({
                 {blocked > 0 && (
                   <span style={{ color: 'var(--signal-blocked)' }}> · {blocked} blocked</span>
                 )}
-                {openFixes > 0 && (
+                {openBugs > 0 && (
                   <span style={{ color: 'var(--signal-blocked)' }}>
                     {' '}
-                    · {openFixes} open {openFixes === 1 ? 'fix' : 'fixes'}
+                    · {openBugs} open {openBugs === 1 ? 'bug' : 'bugs'}
                   </span>
                 )}
                 {/* Post-ship work NO OTHER MARKER IS SHOWING (§32 t-94) — the unstarted

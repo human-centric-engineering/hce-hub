@@ -4,7 +4,7 @@
  *
  * Two load-bearing properties. A `bug` never counts toward completion, so an open
  * bug on a shipped feature can't make it read "3/4 merged" — it surfaces as
- * `openFixes` instead. And past `shippedAt`, **no** task counts toward completion
+ * `openBugs` instead. And past `shippedAt`, **no** task counts toward completion
  * whatever its kind, which is what lets an improvement be filed honestly as an
  * `enhancement` rather than disguised as a bug to protect the progress bar.
  */
@@ -31,31 +31,31 @@ describe('computeFeatureProgress', () => {
       merged: 2,
       live: 1,
       blocked: 1,
-      openFixes: 0,
+      openBugs: 0,
       openSinceShip: 0,
       unstartedSinceShip: 0,
     });
   });
 
-  it('excludes bugs from completion and tallies open bugs as openFixes', () => {
+  it('excludes bugs from completion and tallies open bugs as openBugs', () => {
     // A shipped feature: all 3 feature-work merged, one open bug + one fixed bug.
     const p = computeFeatureProgress([
       t('merged'),
       t('merged'),
       t('merged'),
-      t('active', 'bug'), // an open fix
+      t('active', 'bug'), // an open bug
       t('merged', 'bug'), // a fixed (merged) bug — not open
     ]);
     expect(p.total).toBe(3); // NOT 5 — bugs never count toward completion
     expect(p.merged).toBe(3); // reads 3/3, so the feature stays visibly shipped
     expect(p.live).toBe(0); // the worked bug is not "live" feature-work
-    expect(p.openFixes).toBe(1); // only the unmerged bug
+    expect(p.openBugs).toBe(1); // only the unmerged bug
   });
 
-  it('counts a claimed or blocked bug as an open fix', () => {
+  it('counts a claimed or blocked bug as an open bug', () => {
     const p = computeFeatureProgress([t('blocked', 'bug'), t('claimed', 'bug')]);
     expect(p.total).toBe(0);
-    expect(p.openFixes).toBe(2);
+    expect(p.openBugs).toBe(2);
   });
 
   it('is all-zero for a feature with no tasks', () => {
@@ -64,7 +64,7 @@ describe('computeFeatureProgress', () => {
       merged: 0,
       live: 0,
       blocked: 0,
-      openFixes: 0,
+      openBugs: 0,
       openSinceShip: 0,
       unstartedSinceShip: 0,
     });
@@ -86,7 +86,7 @@ describe('computeFeatureProgress', () => {
       expect(p.total).toBe(2);
       expect(p.merged).toBe(2); // still reads 2/2 — visibly complete
       expect(p.blocked).toBe(0);
-      expect(p.openFixes).toBe(0); // an enhancement is not a fix
+      expect(p.openBugs).toBe(0); // an enhancement is not a bug
     });
 
     it('excludes post-ship feature_work from COMPLETION too — the boundary is kind-blind', () => {
@@ -107,14 +107,14 @@ describe('computeFeatureProgress', () => {
         merged: 1,
         live: 1,
         blocked: 0,
-        openFixes: 0,
+        openBugs: 0,
         openSinceShip: 1,
         unstartedSinceShip: 0,
       });
     });
 
-    it('still counts a post-ship bug as an open fix', () => {
-      // openFixes deliberately spans the whole set: a defect found after ship is
+    it('still counts a post-ship bug as an open bug', () => {
+      // openBugs deliberately spans the whole set: a defect found after ship is
       // the most important kind to surface, so the boundary must not hide it.
       const p = computeFeatureProgress(
         [t('merged', 'feature_work', BEFORE), t('claimed', 'bug', AFTER)],
@@ -122,7 +122,7 @@ describe('computeFeatureProgress', () => {
       );
       expect(p.total).toBe(1);
       expect(p.merged).toBe(1);
-      expect(p.openFixes).toBe(1);
+      expect(p.openBugs).toBe(1);
     });
 
     it('counts a task created exactly at the ship instant as build-out', () => {
@@ -201,7 +201,7 @@ describe('computeFeatureProgress', () => {
       );
       expect(p.live).toBe(0);
       expect(p.blocked).toBe(0);
-      expect(p.openFixes).toBe(0);
+      expect(p.openBugs).toBe(0);
       expect(p.openSinceShip).toBe(1); // the only counter that sees it
     });
 
@@ -216,9 +216,9 @@ describe('computeFeatureProgress', () => {
       expect(p.openSinceShip).toBe(0);
     });
 
-    it('excludes post-ship bugs — those are openFixes, never both', () => {
+    it('excludes post-ship bugs — those are openBugs, never both', () => {
       const p = computeFeatureProgress([t('claimed', 'bug', AFTER)], SHIPPED);
-      expect(p.openFixes).toBe(1);
+      expect(p.openBugs).toBe(1);
       expect(p.openSinceShip).toBe(0);
     });
 
@@ -349,7 +349,7 @@ describe('computeFeatureProgress', () => {
       for (const shippedAt of [SHIPPED, null]) {
         const p = computeFeatureProgress(tasks, shippedAt);
         const unmerged = tasks.filter((x) => x.status !== 'merged').length;
-        expect(p.total - p.merged + p.openFixes + p.openSinceShip).toBe(unmerged);
+        expect(p.total - p.merged + p.openBugs + p.openSinceShip).toBe(unmerged);
       }
     });
 
@@ -364,7 +364,7 @@ describe('computeFeatureProgress', () => {
       const p = computeFeatureProgress(tasks, SHIPPED);
       expect(`${p.merged}/${p.total}`).toBe('4/4'); // the ratio stays honest…
       expect(p.openSinceShip).toBe(1); // …and no longer hides the fifth row
-      expect(p.total - p.merged + p.openFixes + p.openSinceShip).toBe(1);
+      expect(p.total - p.merged + p.openBugs + p.openSinceShip).toBe(1);
     });
   });
 });

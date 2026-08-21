@@ -270,7 +270,7 @@ describe('next_task focus policy — own work before the commons', () => {
   });
 
   it('does not let a commons bug interrupt your own ready work (bias is within a tier)', async () => {
-    // The deliberate trade: the active-fixes strip already shows every open bug to
+    // The deliberate trade: the active-bugs strip already shows every open bug to
     // everyone, so a sweep is something you go and do — not something next_task
     // pushes at you mid-feature. Contrast with the next case.
     findMany.mockResolvedValue([

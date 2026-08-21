@@ -273,15 +273,15 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
       total: 3,
       live: 1,
       blocked: 0,
-      openFixes: 0,
+      openBugs: 0,
       openSinceShip: 0,
       unstartedSinceShip: 0,
     });
   });
 
-  it('excludes a bug task from completion and reports it as an open fix (§22-02)', async () => {
+  it('excludes a bug task from completion and reports it as an open bug (§22-02)', async () => {
     // A shipped feature: its two feature-work tasks are merged (reads 2/2), plus
-    // one open bug that must NOT drag it to 2/3 — it surfaces as openFixes.
+    // one open bug that must NOT drag it to 2/3 — it surfaces as openBugs.
     featureFindMany.mockResolvedValue([
       row({
         status: 'shipped',
@@ -322,7 +322,7 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
       total: 2, // NOT 3 — the bug is off the completion axis
       live: 0, // the worked bug is not "live" feature-work
       blocked: 0,
-      openFixes: 1,
+      openBugs: 1,
       openSinceShip: 0,
       unstartedSinceShip: 0,
     });
@@ -382,7 +382,7 @@ describe('getProjectPlan — dependency chips + progress + ordering', () => {
       total: 2,
       live: 1,
       blocked: 1,
-      openFixes: 0,
+      openBugs: 0,
       openSinceShip: 0,
       unstartedSinceShip: 0,
     });

@@ -11,7 +11,7 @@
  *
  * **A borrowed row is deliberately not a feature row.** It is narrower, indented,
  * and carries an origin breadcrumb (`f-status-model · Foundations (V1) ↩`, the
- * active-fixes strip's pattern) so it reads as "work from elsewhere, being done
+ * active-bugs strip's pattern) so it reads as "work from elsewhere, being done
  * here" rather than as a feature of this phase. What it must *not* do is announce
  * that through **placement** — it sits inline, in readiness order, because a
  * borrowed task can be the thing blocking a feature new to the phase, and a
