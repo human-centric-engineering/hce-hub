@@ -136,6 +136,12 @@ const SOURCE_SQL = {
  * The counted tables, taken from the fragments rather than re-listed. Exported so
  * the guard test can *walk* the set instead of hard-coding it — a hand-written
  * copy beside a derived one is the drift this whole module exists to avoid.
+ *
+ * The cast is narrowing `Object.keys`'s unavoidable `string[]`, and it is *proven*
+ * rather than asserted: the `satisfies Record<CountedTable, …>` above accepts no
+ * key outside the union and demands every key in it, so these keys cannot be
+ * anything else. Not the "cast on external data" the repo forbids — this object is
+ * a literal three lines up.
  */
 export const COUNTED_REVISION_TABLES = Object.keys(SOURCE_SQL) as CountedTable[];
 
