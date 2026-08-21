@@ -391,8 +391,15 @@ export async function getFeatureDetail(
             // the feature's own (§32 t-80/t-95). Nested rather than resolved through a
             // separate phase lookup: the name is one join away, and this query already
             // fetches the feature's own phase exactly this way.
+            //
+            // `projectId` rides along so the mapping can check the phase belongs to THIS
+            // project. `plan.ts` gets that for free — it resolves names from a map built
+            // with `where: { projectId }`, so a foreign phase renders `null` there. This
+            // join has no such scope, and two surfaces meant to render the same thing
+            // should fail the same way. One column on a join already being made, rather
+            // than a second query (`/security-review`).
             phaseId: true,
-            phase: { select: { name: true } },
+            phase: { select: { name: true, projectId: true } },
             dependencies: { select: { dependsOn: { select: { status: true } } } },
           },
         },
@@ -484,8 +491,19 @@ export async function getFeatureDetail(
       // exactly like an explicit null, and a field missing from a projection cannot
       // masquerade as a commitment. The two surfaces have to agree about what
       // "borrowed" means, and writing the same comparison is the cheapest guarantee.
+      //
+      // The `projectId` check is **defence in depth on a state nothing can currently
+      // produce**, and is worth naming as such rather than implying it guards a live
+      // hole: both writers of `Task.phaseId` (`create-task`, `update-task`) gate on
+      // `findProjectPhase(phaseId, projectId)`, no writer moves a `Feature` between
+      // projects, and phase deletion is `SetNull` — so a cross-project commitment has no
+      // route into the database. It is here because `plan.ts` rejects one for free and
+      // this join does not, and a divergence between two surfaces that render the same
+      // thing is worth one comparison to remove.
       committedPhaseName:
-        t.phaseId != null && t.phaseId !== feature.phaseId ? (t.phase?.name ?? null) : null,
+        t.phaseId != null && t.phaseId !== feature.phaseId && t.phase?.projectId === project.id
+          ? t.phase.name
+          : null,
     })),
     taskPhaseBoundaries,
     indicativeTasks: feature.indicativeTasks,
