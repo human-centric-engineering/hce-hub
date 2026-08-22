@@ -4,6 +4,7 @@ import { serverFetch, parseApiResponse } from '@/lib/api/server-fetch';
 import { logger } from '@/lib/logging';
 import { BreadcrumbLabel } from '@/components/hub/breadcrumb-label';
 import { TaskSheetProvider } from '@/components/hub/projects/task-sheet/task-sheet-host';
+import { ProjectLiveProvider } from '@/components/hub/projects/project-live';
 import { FeatureView } from '@/components/hub/projects/feature-view/feature-view';
 import type { FeatureDetailDTO } from '@/components/hub/projects/feature-view/types';
 
@@ -23,24 +24,31 @@ export async function generateMetadata({
   return { title: feature ? feature.title : 'Feature' };
 }
 
+/**
+ * Same rule as the project page: `null` means 404 and nothing else, so a transient
+ * failure on a timer-driven refresh reaches the error boundary rather than telling
+ * the user their feature does not exist (`/code-review`).
+ */
 async function getFeature(id: string, key: string): Promise<FeatureDetailDTO | null> {
+  let res: Response;
   try {
-    const res = await serverFetch(
+    res = await serverFetch(
       `/api/v1/projects/${encodeURIComponent(id)}/features/${encodeURIComponent(key)}`
     );
-    if (!res.ok) {
-      // 404 is expected for a non-member / unknown feature (→ notFound); log the rest.
-      if (res.status !== 404) {
-        logger.error('Hub feature fetch failed', { id, key, status: res.status });
-      }
-      return null;
-    }
-    const data = await parseApiResponse<FeatureDetailDTO>(res);
-    return data.success ? data.data : null;
   } catch (error) {
     logger.error('Hub feature fetch threw', { id, key, error });
-    return null;
+    throw error;
   }
+
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    logger.error('Hub feature fetch failed', { id, key, status: res.status });
+    throw new Error(`Feature fetch failed: ${res.status}`);
+  }
+
+  const data = await parseApiResponse<FeatureDetailDTO>(res);
+  if (!data.success) throw new Error('Feature fetch returned an unsuccessful envelope');
+  return data.data;
 }
 
 export default async function FeaturePage({
@@ -59,12 +67,16 @@ export default async function FeaturePage({
       <BreadcrumbLabel segment={slug} label={feature.title} />
       {/* The task sheet opens (deep-linked via `?task=`) over the feature page —
           mounted here so the feature's task rows can open it in place. */}
-      <TaskSheetProvider
-        projectId={feature.projectId}
-        projectRef={feature.projectSlug ?? feature.projectId}
-      >
-        <FeatureView feature={feature} />
-      </TaskSheetProvider>
+      {/* One poller for this page too — the feature view, its task list and its
+          activity timeline age exactly like the Plan does (f-realtime §36 t-126). */}
+      <ProjectLiveProvider key={feature.projectId} projectId={feature.projectId}>
+        <TaskSheetProvider
+          projectId={feature.projectId}
+          projectRef={feature.projectSlug ?? feature.projectId}
+        >
+          <FeatureView feature={feature} />
+        </TaskSheetProvider>
+      </ProjectLiveProvider>
     </>
   );
 }

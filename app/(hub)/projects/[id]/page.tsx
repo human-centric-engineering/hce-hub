@@ -38,20 +38,38 @@ export async function generateMetadata({
   return { title: `${project.name} · ${label}` };
 }
 
+/**
+ * The header fetch, and the ONLY thing that may decide the page does not exist.
+ *
+ * **`null` means 404 and nothing else.** Every other outcome — a 429, a 5xx, a
+ * network error, a malformed envelope — throws, so it reaches `(hub)/error.tsx`
+ * instead of `notFound()`.
+ *
+ * That distinction became load-bearing with f-realtime §36: this now re-runs on a
+ * timer, so a single rate-limited or failing background refresh would otherwise
+ * replace the user's open project with the not-found UI — a wrong answer, and one
+ * they cannot recover from without navigating away. "Something went wrong, retry" is
+ * both true and actionable; "no such project" is neither (`/code-review`).
+ */
 async function getProject(id: string): Promise<ProjectViewDTO | null> {
+  let res: Response;
   try {
-    const res = await serverFetch(`/api/v1/projects/${id}`);
-    if (!res.ok) {
-      // 404 is expected for a non-member / unknown id (→ notFound); log the rest.
-      if (res.status !== 404) logger.error('Hub project fetch failed', { id, status: res.status });
-      return null;
-    }
-    const data = await parseApiResponse<ProjectViewDTO>(res);
-    return data.success ? data.data : null;
+    res = await serverFetch(`/api/v1/projects/${id}`);
   } catch (error) {
+    // A thrown fetch is a transport failure, never evidence the project is missing.
     logger.error('Hub project fetch threw', { id, error });
-    return null;
+    throw error;
   }
+
+  if (res.status === 404) return null; // non-member or unknown id — the one 404 case
+  if (!res.ok) {
+    logger.error('Hub project fetch failed', { id, status: res.status });
+    throw new Error(`Project fetch failed: ${res.status}`);
+  }
+
+  const data = await parseApiResponse<ProjectViewDTO>(res);
+  if (!data.success) throw new Error('Project fetch returned an unsuccessful envelope');
+  return data.data;
 }
 
 async function getPlan(id: string): Promise<ProjectPlanDTO | null> {

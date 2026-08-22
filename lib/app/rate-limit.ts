@@ -20,6 +20,7 @@
 import { createRateLimiter, registerRateLimitTier } from '@/lib/security/rate-limit';
 import { registerRateLimitRule } from '@/lib/security/rate-limit-policy';
 import { SECURITY_CONSTANTS } from '@/lib/security/constants';
+import { PROJECT_POLL_INTERVAL_SECONDS } from '@/lib/projects/live-cadence';
 
 /**
  * `/api/v1/projects/:id/revision` is **polled**, and the default `api` tier is a
@@ -48,12 +49,28 @@ import { SECURITY_CONSTANTS } from '@/lib/security/constants';
  * round 2). **t-126 should still treat a 429 as a real state** and back off rather
  * than hammering a closed door.
  */
-const REVISION_POLL_INTERVAL_SECONDS = 5;
+
 const REVISION_CONCURRENT_TABS = 20;
 /** Off-cadence polls: mount, every `visibilitychange`, and post-blip retries. */
 const REVISION_HEADROOM = 2;
-const REVISION_REQUESTS_PER_MINUTE =
-  (60 / REVISION_POLL_INTERVAL_SECONDS) * REVISION_CONCURRENT_TABS * REVISION_HEADROOM;
+/**
+ * The per-minute cap for a given poll cadence.
+ *
+ * Exported as a **function of the interval** so the rounding can actually be
+ * exercised. The `Math.ceil` matters because this seam exists to make the cadence
+ * safely turnable, and any interval that does not divide 60s (7s, say) yields a
+ * fraction — which would reach `createRateLimiter` as a non-integer cap. Rounding up
+ * keeps the headroom the derivation promises rather than shaving it.
+ *
+ * A test asserting `Number.isInteger` at the *current* cadence would pass with or
+ * without the ceil, since 5s divides 60 cleanly. That is exactly the vacuous test I
+ * first wrote (`/code-review`).
+ */
+export function revisionCapFor(intervalSeconds: number): number {
+  return Math.ceil((60 / intervalSeconds) * REVISION_CONCURRENT_TABS * REVISION_HEADROOM);
+}
+
+const REVISION_REQUESTS_PER_MINUTE = revisionCapFor(PROJECT_POLL_INTERVAL_SECONDS);
 
 const revisionLimiter = createRateLimiter({
   interval: SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_INTERVAL,

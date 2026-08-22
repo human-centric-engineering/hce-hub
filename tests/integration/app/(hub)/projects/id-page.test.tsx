@@ -228,6 +228,26 @@ describe('ProjectViewPage', () => {
     expect(navMock.notFound).toHaveBeenCalled();
   });
 
+  it.each([429, 500, 503])(
+    'does NOT call notFound on a %i — a transient failure is not a missing project',
+    async (status) => {
+      // Since f-realtime §36 this page also re-renders on a timer, so a single
+      // rate-limited or failing background refresh would otherwise replace the
+      // user's open project with the not-found UI: wrong, and unrecoverable without
+      // a manual navigation. It throws instead, which reaches `(hub)/error.tsx` —
+      // a true message with a retry (`/code-review`).
+      fetchMock.mockResolvedValue({ ok: false, status });
+
+      await expect(
+        ProjectViewPage({
+          params: Promise.resolve({ id: 'p1' }),
+          searchParams: Promise.resolve({}),
+        })
+      ).rejects.toThrow(/Project fetch failed/);
+      expect(navMock.notFound).not.toHaveBeenCalled();
+    }
+  );
+
   it('resolves a SLUG url and drives the sub-routes off the returned cuid (§19 t-35)', async () => {
     // The header fetches the slug; the plan then fetches the canonical id the
     // header returned (`view.id === 'p1'`), never `/projects/hce-hub/plan`.
@@ -246,7 +266,12 @@ describe('ProjectViewPage', () => {
     expect(screen.getByText('Fork + brand')).toBeInTheDocument();
   });
 
-  it('calls notFound when the header fetch throws (network error)', async () => {
+  // These two used to assert `notFound()` for a network error and for a 500 — they
+  // encoded the defect rather than catching it, which is why the branch shipped it.
+  // A transport failure and a 5xx are evidence that the request failed, never that
+  // the project is missing, and since f-realtime §36 this page re-renders on a timer,
+  // so the wrong answer now arrives unprompted (`/code-review`).
+  it('does not call notFound when the header fetch throws (network error)', async () => {
     fetchMock.mockRejectedValue(new Error('network down'));
 
     await expect(
@@ -254,11 +279,12 @@ describe('ProjectViewPage', () => {
         params: Promise.resolve({ id: 'p1' }),
         searchParams: Promise.resolve({}),
       })
-    ).rejects.toThrow(/NEXT_NOT_FOUND/);
-    expect(navMock.notFound).toHaveBeenCalled();
+    ).rejects.toThrow(/network down/);
+    expect(navMock.notFound).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalled();
   });
 
-  it('logs (not 404) a header fetch that fails with a 500, then notFound', async () => {
+  it('logs and rethrows a header fetch that fails with a 500 — never notFound', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 500, url: '/api/v1/projects/p1' });
 
     await expect(
@@ -266,7 +292,8 @@ describe('ProjectViewPage', () => {
         params: Promise.resolve({ id: 'p1' }),
         searchParams: Promise.resolve({}),
       })
-    ).rejects.toThrow(/NEXT_NOT_FOUND/);
+    ).rejects.toThrow(/Project fetch failed: 500/);
+    expect(navMock.notFound).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalled();
   });
 

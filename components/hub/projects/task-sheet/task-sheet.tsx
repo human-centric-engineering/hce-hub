@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/security/sanitize';
 import { Markdown } from '@/components/hub/markdown';
 import { useSidekick } from '@/components/hub/sidekick-context';
+import { useProjectLive } from '@/components/hub/projects/project-live';
 import { useTaskSheet } from '@/components/hub/projects/task-sheet/task-sheet-context';
 import { TaskActivity } from '@/components/hub/projects/task-sheet/task-activity';
 import { AssigneePicker } from '@/components/hub/projects/task-sheet/assignee-picker';
@@ -192,6 +193,10 @@ export function TaskSheet({
   const [state, setState] = useState<LoadState>('loading');
   const [entered, setEntered] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // `reloadKey` is this user's own writes; `live` is everyone else's. An open
+  // sheet is the surface most likely to be watched while someone else moves the
+  // same task (f-realtime §36 t-126).
+  const live = useProjectLive();
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState(false);
   const [warnings, setWarnings] = useState<CollisionWarning[]>([]);
@@ -251,7 +256,7 @@ export function TaskSheet({
       active = false;
       controller.abort();
     };
-  }, [path, reloadKey]);
+  }, [path, reloadKey, live]);
 
   // Esc closes the sheet.
   useEffect(() => {
