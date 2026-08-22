@@ -62,7 +62,7 @@ export default async function FeaturePage({
           mounted here so the feature's task rows can open it in place. */}
       {/* One poller for this page too — the feature view, its task list and its
           activity timeline age exactly like the Plan does (f-realtime §36 t-126). */}
-      <ProjectLiveProvider projectId={feature.projectId}>
+      <ProjectLiveProvider key={feature.projectId} projectId={feature.projectId}>
         <TaskSheetProvider
           projectId={feature.projectId}
           projectRef={feature.projectSlug ?? feature.projectId}

@@ -22,6 +22,7 @@
  *
  * @see components/hub/projects/project-live.tsx
  */
+import { StrictMode } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { createMockRouter } from '@/tests/types/mocks';
@@ -177,11 +178,19 @@ beforeEach(() => {
  * (`/code-review`).
  */
 const REAL_LOCATION = Object.getOwnPropertyDescriptor(window, 'location');
+const REAL_HIDDEN = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden');
+
+/** `document.hidden` is a getter; override it so visibility can be driven. */
+function setHidden(hidden: boolean) {
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+}
 
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   if (REAL_LOCATION) Object.defineProperty(window, 'location', REAL_LOCATION);
+  delete (document as Partial<Document>).hidden;
+  if (REAL_HIDDEN) Object.defineProperty(Document.prototype, 'hidden', REAL_HIDDEN);
 });
 
 describe('ProjectLiveProvider — the poller', () => {
@@ -529,6 +538,38 @@ describe('the poller’s lifecycle edges', () => {
     });
   });
 
+  it('does not refresh a page the user has already navigated to', async () => {
+    // The router instance is global, so a poll resolving after unmount would
+    // `router.refresh()` whatever route the user just landed on, for a change with
+    // nothing to do with it. Every other fetch in the Hub carries an abort/active
+    // guard; this one did not (`/code-review`).
+    mockEndpoints();
+    const view = await act(async () =>
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>)
+    );
+    await flush();
+
+    let release: () => void = () => {};
+    const moved = {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { revision: 'W/"landed-late"' } }),
+    } as unknown as Response;
+    vi.mocked(fetch).mockImplementationOnce(
+      () => new Promise<Response>((resolve) => (release = () => resolve(moved)))
+    );
+
+    await tick(); // the poll goes out and hangs
+    view.unmount(); // ...and the user leaves
+
+    await act(async () => {
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
   it('stops on a 404 — the door a removed member actually comes through', async () => {
     // The revision endpoint answers a non-member with 404, never 403, so losing
     // membership mid-session lands here rather than on the auth branch.
@@ -547,10 +588,23 @@ describe('the poller’s lifecycle edges', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/no longer have access/i);
   });
 
-  it('clears a stale backoff when the tab comes back', async () => {
-    // The backoff counts ticks, and a hidden tab runs none — so without this a tab
-    // that backed off and then sat in the background would still owe those skips
-    // on return, long after the failure stopped being real.
+  /** Drive the tab hidden, wait, and bring it back. */
+  async function hideFor(ms: number) {
+    setHidden(true);
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+    setHidden(false);
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  }
+
+  it('forgives a stale backoff when the tab was away longer than it owed', async () => {
+    // The backoff counts ticks and a hidden tab runs none, so the debt outlives the
+    // failure. Away long enough, the skips would have elapsed anyway — forgive them.
     const state = mockEndpoints();
     await act(async () => {
       render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
@@ -558,17 +612,36 @@ describe('the poller’s lifecycle edges', () => {
     await flush();
 
     state.status = 500;
-    await tick(3); // fail a few times → several ticks owed
+    await tick(3); // several ticks now owed
     state.status = 200;
     const owed = state.revisionCalls.length;
 
-    await act(async () => {
-      document.dispatchEvent(new Event('visibilitychange'));
-      await vi.advanceTimersByTimeAsync(0);
-    });
+    await hideFor(PROJECT_POLL_INTERVAL_MS * 60);
     await tick();
 
     expect(state.revisionCalls.length).toBeGreaterThan(owed);
+  });
+
+  it('is NOT defeated by a one-second tab flick', async () => {
+    // The other edge, and the reason the reset is time-gated rather than
+    // unconditional: alt-tabbing must not hand a 429'd client its full cadence back.
+    // That would turn the backoff into a formality — hammer the closed door, flick
+    // the tab, hammer again (`/code-review`).
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+
+    state.status = 429;
+    await tick(3);
+    const owed = state.revisionCalls.length;
+
+    await hideFor(1_000);
+
+    // Still owed: the next tick is spent on the debt, not on a request.
+    await tick();
+    expect(state.revisionCalls).toHaveLength(owed);
   });
 });
 
@@ -642,6 +715,38 @@ describe('a detected change reaches the client-fetched surfaces', () => {
         state.release();
         await vi.advanceTimersByTimeAsync(0);
       });
+    }
+  );
+
+  it.each(CLIENT_FETCHED_SURFACES.filter((surface) => surface.showsEvents))(
+    '$name reports a failed FIRST load, even under StrictMode',
+    async ({ render: renderSurface }) => {
+      // The regression `/code-review` round 3 caught in round 2's own fix. Keying
+      // "is this a background refresh?" on SUBJECT IDENTITY looked equivalent to
+      // `task-sheet.tsx`'s `!detail &&` and is not: `reactStrictMode` is on
+      // (`next.config.js`), React double-invokes effects, and the ref survives — so
+      // run 2 saw the same subject, called a genuinely failing first load
+      // "background", and left "Loading activity…" on screen forever. Before that
+      // commit it reported honestly.
+      //
+      // StrictMode here is the real trigger, not a contrivance: this is what dev
+      // does on every mount.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) =>
+          url.includes('/revision')
+            ? Promise.resolve({ ok: true, status: 200, json: async () => ({ data: {} }) })
+            : Promise.reject(new Error('boom'))
+        )
+      );
+
+      await act(async () => {
+        render(<StrictMode>{renderSurface()}</StrictMode>);
+      });
+      await flush();
+
+      expect(screen.queryByText('Loading activity…')).not.toBeInTheDocument();
+      expect(screen.getByText(/Couldn.t load/)).toBeInTheDocument();
     }
   );
 

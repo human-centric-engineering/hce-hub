@@ -162,7 +162,12 @@ export function ProjectView({
           below — tabs, strip, body and sheet alike — reads the same change count.
           Server-rendered tabs come back via `router.refresh()`; the client-fetched
           ones (Log, sheet, activity) take `useProjectLive()` as an effect dep. */}
-      <ProjectLiveProvider projectId={project.id}>
+      {/* Keyed: an unkeyed instance surviving a client-side project→project
+          navigation would carry A's revision in as B's baseline (a spurious
+          refresh on arrival) and could pin A's "no longer have access" notice
+          over B. No such link exists in the UI today — the trap is latent, and
+          one character closes it (`/code-review`). */}
+      <ProjectLiveProvider key={project.id} projectId={project.id}>
         {/* The task sheet opens (deep-linked via `?task=`) over whichever tab is
           active — mounted here so Plan rows and Board cards can open it. */}
         <TaskSheetProvider projectId={project.id} projectRef={project.slug ?? project.id}>

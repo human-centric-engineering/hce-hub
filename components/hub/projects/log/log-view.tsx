@@ -30,6 +30,19 @@ export function LogView({ projectId, projectRef }: { projectId: string; projectR
   // `task-sheet.tsx` already had the right treatment (`!detail && state ===
   // 'loading'`); this is the same rule stated as a subject comparison.
   const lastSubject = useRef<string | null>(null);
+  /**
+   * Whether a fetch has ever succeeded — i.e. whether there is anything on screen
+   * worth protecting. The ERROR state keys on this, not on subject identity.
+   *
+   * Keying the error on "was this a background refresh" was wrong twice over
+   * (`/code-review`): React StrictMode double-mounts in dev, and `lastSubject`
+   * survives it, so run 2 saw the same subject and a genuinely failing FIRST load
+   * showed a permanent skeleton instead of "couldn't load". A `live` tick landing
+   * mid-first-fetch does the same in production. `task-sheet.tsx`'s `!detail &&`
+   * is the predicate this was supposed to be copying — it asks whether there is
+   * data, which is the actual question.
+   */
+  const hasData = useRef(false);
   // Re-query when something changed elsewhere: `router.refresh()` re-renders the
   // server surfaces but never re-runs this effect (f-realtime §36 t-126).
   const live = useProjectLive();
@@ -54,17 +67,19 @@ export function LogView({ projectId, projectRef }: { projectId: string; projectR
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = (await res.json()) as { data: ProjectEventDTO[] };
         if (active) {
+          hasData.current = true;
           setEvents(json.data);
           setState('ready');
         }
       })
       .catch((err: unknown) => {
         if (active && !(err instanceof DOMException && err.name === 'AbortError')) {
-          // A failed BACKGROUND refresh leaves the last-good list on screen. One
-          // dropped poll should not replace something the user is reading with
-          // "couldn't load" — the next tick fixes it, and the poller backs off on
-          // its own. A first load still reports honestly.
-          if (!isBackgroundRefresh) setState('error');
+          // A failed refresh leaves the last-good list on screen: one dropped poll
+          // should not replace something the user is reading with "couldn't load",
+          // and the next tick fixes it. But with NOTHING on screen there is nothing
+          // to protect, and staying on the skeleton forever is the worse failure —
+          // so the guard asks whether there is data, never why we fetched.
+          if (!hasData.current) setState('error');
         }
       });
     return () => {

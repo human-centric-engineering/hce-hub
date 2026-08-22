@@ -112,6 +112,15 @@ export function ProjectLiveProvider({
    * backoff two steps for one outage (`/code-review`).
    */
   const inFlight = useRef(false);
+  /**
+   * Every other fetch in the Hub carries an `AbortController` + `active` flag; this
+   * one had neither. The router instance is global, so a poll resolving after the
+   * user navigated away would `router.refresh()` whatever route they had just
+   * landed on, for a change with nothing to do with it (`/code-review`).
+   */
+  const mounted = useRef(true);
+  /** When the tab was hidden, so a resume can forgive only the skips that really elapsed. */
+  const hiddenAt = useRef<number | null>(null);
 
   const poll = useCallback(async () => {
     if (inFlight.current) return;
@@ -188,6 +197,7 @@ export function ProjectLiveProvider({
       // 200-from-cache.
       if (previous === null || previous === next) return;
 
+      if (!mounted.current) return;
       setChanges((n) => n + 1);
       router.refresh();
     }
@@ -198,14 +208,37 @@ export function ProjectLiveProvider({
   // hour would need ~160s of visible polling to earn its way back — and the very
   // failure it is backing off from is provably ancient by then (`/code-review`).
   useEffect(() => {
-    const onVisible = () => {
-      if (typeof document !== 'undefined' && !document.hidden) {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // The backoff counts TICKS, and a hidden tab runs none — so a tab that backed off
+  // and then sat in the background would still owe those skips on return, long after
+  // the failure stopped being real.
+  //
+  // But forgiving them unconditionally let a one-second tab flick reset the backoff
+  // entirely, so a client 429'd off the tier could be driven straight back to full
+  // cadence by alt-tabbing — the closed door this exists to stop hammering
+  // (`/code-review`). So convert the owed ticks to time and forgive only what
+  // actually elapsed while hidden. A long absence clears the debt; a flick does not.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
+      if (document.hidden) {
+        hiddenAt.current = Date.now();
+        return;
+      }
+      const away = hiddenAt.current === null ? 0 : Date.now() - hiddenAt.current;
+      hiddenAt.current = null;
+      if (away >= skipTicks.current * PROJECT_POLL_INTERVAL_MS) {
         failures.current = 0;
         skipTicks.current = 0;
       }
     };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
   useAutoRefresh(poll, PROJECT_POLL_INTERVAL_MS, { enabled: stopped === null });
