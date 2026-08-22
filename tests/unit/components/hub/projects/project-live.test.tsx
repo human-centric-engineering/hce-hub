@@ -189,7 +189,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   if (REAL_LOCATION) Object.defineProperty(window, 'location', REAL_LOCATION);
-  delete (document as Partial<Document>).hidden;
+  Reflect.deleteProperty(document, 'hidden');
   if (REAL_HIDDEN) Object.defineProperty(Document.prototype, 'hidden', REAL_HIDDEN);
 });
 
