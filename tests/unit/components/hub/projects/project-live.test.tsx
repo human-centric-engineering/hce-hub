@@ -25,10 +25,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { createMockRouter } from '@/tests/types/mocks';
-import {
-  ProjectLiveProvider,
-  PROJECT_POLL_INTERVAL_MS,
-} from '@/components/hub/projects/project-live';
+import { ProjectLiveProvider } from '@/components/hub/projects/project-live';
+import { PROJECT_POLL_INTERVAL_MS } from '@/lib/projects/live-cadence';
 import { LogView } from '@/components/hub/projects/log/log-view';
 import { FeatureActivity } from '@/components/hub/projects/feature-view/feature-activity';
 import { TaskActivity } from '@/components/hub/projects/task-sheet/task-activity';
@@ -172,9 +170,18 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers();
 });
+/**
+ * `window.location` is replaced outright by the reload test. Saved here and put
+ * back after every case: `TaskSheet.copyLink` reads `window.location.href`, so an
+ * unrestored plain-object stand-in is a live cross-test leak rather than untidiness
+ * (`/code-review`).
+ */
+const REAL_LOCATION = Object.getOwnPropertyDescriptor(window, 'location');
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  if (REAL_LOCATION) Object.defineProperty(window, 'location', REAL_LOCATION);
 });
 
 describe('ProjectLiveProvider — the poller', () => {
@@ -479,6 +486,89 @@ describe('signed out — the one failure a backoff cannot fix', () => {
     await tick(3);
 
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+});
+
+describe('the poller’s lifecycle edges', () => {
+  it('never runs two polls at once', async () => {
+    // `useAutoRefresh` fires on the interval AND on every visibilitychange, so this
+    // is reachable by alt-tabbing, not just by a slow server. Out-of-order
+    // resolution rewinds the baseline and produces a cascade of spurious refreshes.
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+
+    // Hold the revision response open, then fire more ticks underneath it.
+    let release: () => void = () => {};
+    // One cast, at the boundary: `mockImplementationOnce` is typed as the real
+    // `fetch`, and a partial stand-in is the whole point of a stub.
+    const slowResponse = {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { revision: 'W/"slow"' } }),
+    } as unknown as Response;
+
+    vi.mocked(fetch).mockImplementationOnce((_url, init) => {
+      // Recorded like any other poll — otherwise the pending one is invisible to
+      // the counter and the assertion below cannot tell "blocked" from "never sent".
+      state.revisionCalls.push(init ?? {});
+      return new Promise<Response>((resolve) => {
+        release = () => resolve(slowResponse);
+      });
+    });
+
+    const before = state.revisionCalls.length;
+    await tick(3);
+    expect(state.revisionCalls.length, 'ticks fired while one was pending').toBe(before + 1);
+
+    await act(async () => {
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  });
+
+  it('stops on a 404 — the door a removed member actually comes through', async () => {
+    // The revision endpoint answers a non-member with 404, never 403, so losing
+    // membership mid-session lands here rather than on the auth branch.
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+
+    state.status = 404;
+    await tick();
+    const afterLoss = state.revisionCalls.length;
+
+    await tick(4);
+    expect(state.revisionCalls).toHaveLength(afterLoss);
+    expect(screen.getByRole('status')).toHaveTextContent(/no longer have access/i);
+  });
+
+  it('clears a stale backoff when the tab comes back', async () => {
+    // The backoff counts ticks, and a hidden tab runs none — so without this a tab
+    // that backed off and then sat in the background would still owe those skips
+    // on return, long after the failure stopped being real.
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+
+    state.status = 500;
+    await tick(3); // fail a few times → several ticks owed
+    state.status = 200;
+    const owed = state.revisionCalls.length;
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await tick();
+
+    expect(state.revisionCalls.length).toBeGreaterThan(owed);
   });
 });
 

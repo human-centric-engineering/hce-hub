@@ -20,6 +20,7 @@
 import { createRateLimiter, registerRateLimitTier } from '@/lib/security/rate-limit';
 import { registerRateLimitRule } from '@/lib/security/rate-limit-policy';
 import { SECURITY_CONSTANTS } from '@/lib/security/constants';
+import { PROJECT_POLL_INTERVAL_SECONDS } from '@/lib/projects/live-cadence';
 
 /**
  * `/api/v1/projects/:id/revision` is **polled**, and the default `api` tier is a
@@ -48,12 +49,12 @@ import { SECURITY_CONSTANTS } from '@/lib/security/constants';
  * round 2). **t-126 should still treat a 429 as a real state** and back off rather
  * than hammering a closed door.
  */
-const REVISION_POLL_INTERVAL_SECONDS = 5;
+
 const REVISION_CONCURRENT_TABS = 20;
 /** Off-cadence polls: mount, every `visibilitychange`, and post-blip retries. */
 const REVISION_HEADROOM = 2;
 const REVISION_REQUESTS_PER_MINUTE =
-  (60 / REVISION_POLL_INTERVAL_SECONDS) * REVISION_CONCURRENT_TABS * REVISION_HEADROOM;
+  (60 / PROJECT_POLL_INTERVAL_SECONDS) * REVISION_CONCURRENT_TABS * REVISION_HEADROOM;
 
 const revisionLimiter = createRateLimiter({
   interval: SECURITY_CONSTANTS.RATE_LIMIT.DEFAULT_INTERVAL,

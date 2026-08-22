@@ -1,8 +1,11 @@
 'use client';
 
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAutoRefresh } from '@/lib/hooks/use-auto-refresh';
+// Shared with `lib/app/rate-limit.ts`, which derives the tier's cap from it — the
+// two must agree, and once did not.
+import { PROJECT_POLL_INTERVAL_MS } from '@/lib/projects/live-cadence';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -64,9 +67,6 @@ import { Button } from '@/components/ui/button';
  */
 const ProjectLiveContext = createContext<number>(0);
 
-/** How often to ask, while the tab is visible. `useAutoRefresh` pauses when it isn't. */
-export const PROJECT_POLL_INTERVAL_MS = 5_000;
-
 /**
  * Consecutive-failure backoff, in ticks skipped: 1, 2, 4 … capped at 32 (≈2.7min at
  * the 5s cadence).
@@ -92,78 +92,128 @@ export function ProjectLiveProvider({
 }) {
   const router = useRouter();
   const [changes, setChanges] = useState(0);
-  const [signedOut, setSignedOut] = useState(false);
+  /**
+   * Why the poller has given up, or `null` while it is running. Both values are
+   * terminal — no amount of waiting fixes either — and both reach the user through
+   * the same stop-and-tell strip, because an invisible frozen page is the failure
+   * mode, whichever door it came through.
+   */
+  const [stopped, setStopped] = useState<'signed-out' | 'no-access' | null>(null);
   const token = useRef<string | null>(null);
   const skipTicks = useRef(0);
   const failures = useRef(0);
+  /**
+   * One poll at a time. `useAutoRefresh` fires on the interval AND immediately on
+   * every `visibilitychange`, so alt-tabbing — or any response slower than the
+   * cadence — can otherwise put two in flight at once. If those resolve out of
+   * order the baseline *rewinds*: the later one records R2 and refreshes, the
+   * earlier lands with R1 and refreshes again, and the next poll sees R1→R2 and
+   * refreshes a third time. The same race double-counted `failures`, jumping the
+   * backoff two steps for one outage (`/code-review`).
+   */
+  const inFlight = useRef(false);
 
   const poll = useCallback(async () => {
+    if (inFlight.current) return;
     if (skipTicks.current > 0) {
       skipTicks.current -= 1;
       return;
     }
-
-    let res: Response;
+    inFlight.current = true;
     try {
-      res = await fetch(`/api/v1/projects/${encodeURIComponent(projectId)}/revision`, {
-        // Our own `If-None-Match` is the conditional request; going through the
-        // browser cache as well would mean a 304 could be answered transparently
-        // as a 200-from-cache, and the status would stop meaning what it says.
-        cache: 'no-store',
-        headers: token.current ? { 'If-None-Match': token.current } : undefined,
-      });
-    } catch {
-      // Offline, or the request was cut off. Back off and try later; a dropped
-      // poll is a no-op, never an error the user should see.
-      failures.current += 1;
-      skipTicks.current = Math.min(2 ** (failures.current - 1), MAX_SKIPPED_TICKS);
-      return;
+      await runPoll();
+    } finally {
+      inFlight.current = false;
     }
 
-    if (res.status === 304) {
+    async function runPoll() {
+      let res: Response;
+      try {
+        res = await fetch(`/api/v1/projects/${encodeURIComponent(projectId)}/revision`, {
+          // Our own `If-None-Match` is the conditional request; going through the
+          // browser cache as well would mean a 304 could be answered transparently
+          // as a 200-from-cache, and the status would stop meaning what it says.
+          cache: 'no-store',
+          headers: token.current ? { 'If-None-Match': token.current } : undefined,
+        });
+      } catch {
+        // Offline, or the request was cut off. Back off and try later; a dropped
+        // poll is a no-op, never an error the user should see.
+        failures.current += 1;
+        skipTicks.current = Math.min(2 ** (failures.current - 1), MAX_SKIPPED_TICKS);
+        return;
+      }
+
+      if (res.status === 304) {
+        failures.current = 0;
+        return;
+      }
+
+      if (res.status === 401 || res.status === 403) {
+        setStopped('signed-out');
+        return;
+      }
+
+      if (res.status === 404) {
+        // Also terminal, and reached by the door the Hub actually uses: the revision
+        // endpoint answers a non-member with 404, never 403 (anti-enumeration). So a
+        // lead removing someone's membership — or the project being deleted — while
+        // their tab is open arrives here, not above. Backing off would leave every
+        // surface frozen on data they can no longer see, which is the same invisible
+        // failure the auth branch exists to prevent (`/code-review`).
+        setStopped('no-access');
+        return;
+      }
+
+      if (!res.ok) {
+        failures.current += 1;
+        skipTicks.current = Math.min(2 ** (failures.current - 1), MAX_SKIPPED_TICKS);
+        return;
+      }
+
       failures.current = 0;
-      return;
+
+      const json = (await res.json().catch(() => null)) as { data?: { revision?: unknown } } | null;
+      const next = json?.data?.revision;
+      // Validated, not cast: this is a response body, and a malformed one must leave
+      // the baseline alone rather than poison it with `undefined` — which would make
+      // the NEXT poll look like a change and refresh the page for no reason.
+      if (typeof next !== 'string') return;
+
+      const previous = token.current;
+      token.current = next;
+
+      // The first token establishes the baseline. Comparing tokens rather than
+      // trusting the status also keeps this correct if a 304 ever arrives as a
+      // 200-from-cache.
+      if (previous === null || previous === next) return;
+
+      setChanges((n) => n + 1);
+      router.refresh();
     }
-
-    if (res.status === 401 || res.status === 403) {
-      // Terminal. Stop asking and tell them — see the header.
-      setSignedOut(true);
-      return;
-    }
-
-    if (!res.ok) {
-      failures.current += 1;
-      skipTicks.current = Math.min(2 ** (failures.current - 1), MAX_SKIPPED_TICKS);
-      return;
-    }
-
-    failures.current = 0;
-
-    const json = (await res.json().catch(() => null)) as { data?: { revision?: unknown } } | null;
-    const next = json?.data?.revision;
-    // Validated, not cast: this is a response body, and a malformed one must leave
-    // the baseline alone rather than poison it with `undefined` — which would make
-    // the NEXT poll look like a change and refresh the page for no reason.
-    if (typeof next !== 'string') return;
-
-    const previous = token.current;
-    token.current = next;
-
-    // The first token establishes the baseline. Comparing tokens rather than
-    // trusting the status also keeps this correct if a 304 ever arrives as a
-    // 200-from-cache.
-    if (previous === null || previous === next) return;
-
-    setChanges((n) => n + 1);
-    router.refresh();
   }, [projectId, router]);
 
-  useAutoRefresh(poll, PROJECT_POLL_INTERVAL_MS, { enabled: !signedOut });
+  // The backoff counts TICKS, not time, and a hidden tab runs no ticks. Without
+  // this, a tab that backed off to 32 skips and then sat in the background for an
+  // hour would need ~160s of visible polling to earn its way back — and the very
+  // failure it is backing off from is provably ancient by then (`/code-review`).
+  useEffect(() => {
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        failures.current = 0;
+        skipTicks.current = 0;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
+  useAutoRefresh(poll, PROJECT_POLL_INTERVAL_MS, { enabled: stopped === null });
 
   return (
     <ProjectLiveContext.Provider value={changes}>
       {children}
-      {signedOut && <SignedOutNotice />}
+      {stopped && <StoppedNotice reason={stopped} />}
     </ProjectLiveContext.Provider>
   );
 }
@@ -180,20 +230,24 @@ export function ProjectLiveProvider({
  * visitor sees. Re-implementing that decision here would be a second answer to a
  * question the app has already answered once.
  */
-function SignedOutNotice() {
+function StoppedNotice({ reason }: { reason: 'signed-out' | 'no-access' }) {
   return (
     <div
       role="status"
-      className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-center gap-3 border-t px-4 py-3 text-sm"
+      className="fixed inset-x-0 bottom-0 z-[60] flex items-center justify-center gap-3 border-t px-4 py-3 text-sm"
       style={{
         borderColor: 'var(--line)',
         backgroundColor: 'var(--bg-elev)',
         color: 'var(--ink-soft)',
       }}
     >
-      <span>You&rsquo;ve been signed out — this page is no longer updating.</span>
+      <span>
+        {reason === 'signed-out'
+          ? 'You’ve been signed out — this page is no longer updating.'
+          : 'You no longer have access to this project — this page is no longer updating.'}
+      </span>
       <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
-        Reload to sign in
+        {reason === 'signed-out' ? 'Reload to sign in' : 'Reload'}
       </Button>
     </div>
   );

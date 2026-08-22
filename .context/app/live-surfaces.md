@@ -114,9 +114,11 @@ ticks. That matters because **a 429 here is silent**: a poller has no user-visib
 failure mode, so without a backoff a rate-limited tab would hammer a closed door for
 as long as it stayed open, with nothing on screen to say why.
 
-**Auth loss is the exception, and it is terminal.** A 401/403 means the session is
-gone and no amount of waiting brings it back, so the poller _stops_ and shows a
-"you've been signed out" strip with a Reload button. Backing off instead would leave
+**Two failures are terminal, and both stop the poller.** A 401/403 means the session
+is gone; a **404 means access is gone** — the revision endpoint answers a non-member
+with 404, never 403 (anti-enumeration), so a lead removing someone's membership
+mid-session, or the project being deleted, arrives that way. Neither self-heals, so
+both _stop_ and show a strip with a Reload button rather than backing off. Backing off instead would leave
 every surface frozen on whatever data it happened to hold, indefinitely, with nothing
 to say so — worse than the flicker, because it is invisible.
 
@@ -143,6 +145,19 @@ would be a second answer to a question the app has already answered.
 - **One growth term.** `app_project_event`'s `COUNT(*)` is O(events in project) on
   the most frequently hit endpoint in the app. Sub-millisecond today; the only term
   that does not stay flat.
+- **A detected change costs more than the poll that found it.** The poll is on its
+  own tier, but the `router.refresh()` it triggers re-runs the page's two
+  `serverFetch` self-calls — and any open client-fetched surface refetches too — all
+  on the shared 100/min `api` budget. At the 5s cadence that is up to ~24
+  requests/min per Plan tab during sustained writing, so several tabs on a project an
+  agent is actively writing to can still crowd the budget the user's own
+  claim/complete calls draw on. Coalescing refreshes is the fix; filed rather than
+  guessed at, because the trade is latency against budget.
+- **A write during page load can be missed.** The baseline is the _first poll's_
+  token, not the server render's, so anything written in the window between them is
+  absorbed into the baseline and never triggers a refresh — the surface stays stale
+  until the next change. The window is short (render → hydrate → one round trip) but
+  not zero, and on a quiet project "the next change" can be a while.
 - **Idle tabs still poll at full cadence** (t-127, not yet built). Visibility is
   handled — a hidden tab makes zero requests — but a tab that is _visible and
   unattended_, parked on a second monitor, polls all day: ~5,800 polls and ~11,600
