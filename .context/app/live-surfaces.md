@@ -76,11 +76,26 @@ directions. Mark a new model `counted` and it must have a query fragment; mark i
 ## Adding a surface
 
 - **Server-rendered?** Nothing to do. It is already live.
-- **Fetches its own data?** Call `useProjectLive()` and add it to the effect's
-  dependency array. Add a row to `CLIENT_FETCHED_SURFACES` in
-  `tests/unit/components/hub/projects/project-live.test.tsx` — the table drives both
-  the "re-reads on change" and the "does NOT re-read otherwise" assertions, so a new
-  surface is covered by adding one row rather than a fifth copy of the same test.
+- **Fetches its own data?** Two steps, and the second is the one that bites.
+
+1. Call `useProjectLive()` and add it to the effect's dependency array.
+2. **Do not show your loading state on a background refresh.** Compare the
+   _subject_ — the project/filter/feature/task this fetch is for — against the last
+   one, and enter `loading` only when it changed. A refresh of the same subject keeps
+   what is on screen until the new data lands.
+
+Step 2 is not a polish item. Step 1 alone makes the surface blank and repaint on
+**every** project change, including changes with nothing to do with it — on a
+two-person project, a flash every few seconds on screens nobody touched. It shipped
+that way briefly and was caught by watching it in a browser, not by any test. The
+same rule covers errors: a failed _background_ refresh leaves the last-good list
+alone rather than replacing something the reader is mid-sentence on.
+
+Then add a row to `CLIENT_FETCHED_SURFACES` in
+`tests/unit/components/hub/projects/project-live.test.tsx`. The table drives three
+assertions — re-reads on a change, does **not** re-read otherwise, and refreshes
+without blanking — so a new surface is covered by one row rather than a fourth copy
+of each test.
 
 ## Rate limiting
 
@@ -115,6 +130,13 @@ stayed open, with nothing on screen to say why.
 - **One growth term.** `app_project_event`'s `COUNT(*)` is O(events in project) on
   the most frequently hit endpoint in the app. Sub-millisecond today; the only term
   that does not stay flat.
+- **Idle tabs still poll at full cadence** (t-127, not yet built). Visibility is
+  handled — a hidden tab makes zero requests — but a tab that is _visible and
+  unattended_, parked on a second monitor, polls all day: ~5,800 polls and ~11,600
+  queries over eight hours, for a screen nobody looked at. Worth knowing that the
+  cost this protects against is **Neon query volume and Vercel invocation count**,
+  not connection lifetime: polling holds no invocation open, which is the whole
+  reason it beat SSE here.
 
 ## Why polling and not SSE
 
