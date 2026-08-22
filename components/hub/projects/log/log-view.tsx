@@ -61,10 +61,10 @@ export function LogView({ projectId, projectRef }: { projectId: string; projectR
       // Reset with the subject, not just once at mount. `hasData` means "there is
       // something on screen worth protecting from a failed refresh" — and the
       // moment the subject changes, whatever is on screen belongs to the OLD
-      // subject and is not worth protecting. Without this, a filter change (or a
-      // navigation to another feature) whose fetch fails hung on the skeleton
-      // forever: the error was suppressed as if data were present, and only a
-      // project-wide change would ever repaint (`/code-review`).
+      // subject and is not worth protecting. Without this, choosing a different
+      // FILTER and having that fetch fail hung on the skeleton forever: the error
+      // was suppressed as if data were present, and only a project-wide change
+      // would ever repaint (`/code-review`).
       hasData.current = false;
     }
 

@@ -69,10 +69,11 @@ export function TaskActivity({
       // Reset with the subject, not just once at mount. `hasData` means "there is
       // something on screen worth protecting from a failed refresh" — and the
       // moment the subject changes, whatever is on screen belongs to the OLD
-      // subject and is not worth protecting. Without this, a filter change (or a
-      // navigation to another feature) whose fetch fails hung on the skeleton
-      // forever: the error was suppressed as if data were present, and only a
-      // project-wide change would ever repaint (`/code-review`).
+      // subject and is not worth protecting. Without this, opening a DIFFERENT TASK
+      // and having that fetch fail hung on the skeleton forever, with the error
+      // suppressed as if data were present. Masked in the app today — the sheet
+      // unmounts this on a task change — which is exactly why it is pinned by a
+      // test rather than left to a neighbour's incidental behaviour (`/code-review`).
       hasData.current = false;
     }
     fetch(

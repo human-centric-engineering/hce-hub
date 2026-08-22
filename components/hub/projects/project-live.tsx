@@ -102,6 +102,30 @@ const MAX_BACKOFF_MULTIPLE = 32;
  */
 const POLL_TIMEOUT_MS = PROJECT_POLL_INTERVAL_MS * 2;
 
+/**
+ * How many 404s in a row before we believe access is really gone. Three at the
+ * backoff's cadence is ~35s of consistent 404 — long enough to outlast a deploy, far
+ * short of leaving someone staring at stale data.
+ */
+const CONSECUTIVE_404S_BEFORE_TERMINAL = 3;
+
+/**
+ * A timeout signal, or `undefined` where the platform has no `AbortSignal.timeout`
+ * (Safari <16, Firefox <100, some test environments).
+ *
+ * Guarded rather than called directly because an unguarded call throws *inside* the
+ * try block, which classifies every poll as a network failure — so the poller backs
+ * off to its cap and fails forever, neither terminal branch is ever reached, and
+ * nothing appears on screen. That is the invisible-frozen-page failure this design
+ * keeps trying to close, arriving through the guard added to close it
+ * (`/code-review`).
+ */
+function pollTimeoutSignal(): AbortSignal | undefined {
+  return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+    ? AbortSignal.timeout(POLL_TIMEOUT_MS)
+    : undefined;
+}
+
 /** Next time a poll may run. `0` = no backoff in force. */
 const backoffFor = (failures: number): number =>
   now() + Math.min(2 ** failures, MAX_BACKOFF_MULTIPLE) * PROJECT_POLL_INTERVAL_MS;
@@ -143,6 +167,8 @@ export function ProjectLiveProvider({
   const failures = useRef(0);
   /** Wall-clock deadline; polls before this are skipped. See {@link MAX_BACKOFF_MULTIPLE}. */
   const backoffUntil = useRef(0);
+  /** Consecutive 404s. See {@link CONSECUTIVE_404S_BEFORE_TERMINAL}. */
+  const notFounds = useRef(0);
   /**
    * One poll at a time. `useAutoRefresh` fires on the interval AND immediately on
    * every `visibilitychange`, so alt-tabbing — or any response slower than the
@@ -191,7 +217,7 @@ export function ProjectLiveProvider({
           // invisible-frozen-page failure again, through the one door that had no
           // guard on it. Browsers give up on their own only after minutes. The abort
           // throws, which routes it into the transient path below (`/code-review`).
-          signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
+          signal: pollTimeoutSignal(),
         });
       } catch {
         // Offline, or the request was cut off. Back off and try later; a dropped
@@ -213,15 +239,27 @@ export function ProjectLiveProvider({
       }
 
       if (res.status === 404) {
-        // Also terminal, and reached by the door the Hub actually uses: the revision
-        // endpoint answers a non-member with 404, never 403 (anti-enumeration). So a
-        // lead removing someone's membership — or the project being deleted — while
-        // their tab is open arrives here, not above. Backing off would leave every
-        // surface frozen on data they can no longer see, which is the same invisible
-        // failure the auth branch exists to prevent (`/code-review`).
-        setStopped('no-access');
+        // Reached by the door the Hub actually uses: the revision endpoint answers a
+        // non-member with 404, never 403 (anti-enumeration). So a lead removing
+        // someone's membership — or the project being deleted — arrives here rather
+        // than above.
+        //
+        // But a 404 is NOT proof of that on its own. Deploy skew, an edge 404, a
+        // route briefly unavailable — all look identical, and going terminal on the
+        // first one pins a false and alarming "you no longer have access" over a
+        // perfectly good page, permanently, while a mere 5xx on the line below
+        // politely recovers. So it has to repeat before we believe it; anything else
+        // backs off like any other transient failure (`/code-review`).
+        notFounds.current += 1;
+        if (notFounds.current >= CONSECUTIVE_404S_BEFORE_TERMINAL) {
+          setStopped('no-access');
+          return;
+        }
+        failures.current += 1;
+        backoffUntil.current = backoffFor(failures.current);
         return;
       }
+      notFounds.current = 0;
 
       if (!res.ok) {
         failures.current += 1;
@@ -270,6 +308,20 @@ export function ProjectLiveProvider({
       mounted.current = false;
     };
   }, []);
+
+  // Both call sites pass `key={projectId}`, so this instance should never span two
+  // projects. This makes that belt-and-braces rather than load-bearing: a third
+  // mount point that forgot the key would otherwise silently reintroduce the exact
+  // trap the key was added for — A's revision as B's baseline, and A's "no longer
+  // have access" notice pinned over B (`/code-review`).
+  useEffect(() => {
+    token.current = null;
+    failures.current = 0;
+    backoffUntil.current = 0;
+    notFounds.current = 0;
+    setStopped(null);
+    setChanges(0);
+  }, [projectId]);
 
   useAutoRefresh(poll, PROJECT_POLL_INTERVAL_MS, { enabled: stopped === null });
 

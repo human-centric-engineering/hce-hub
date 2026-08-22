@@ -592,6 +592,72 @@ describe('the poller’s lifecycle edges', () => {
     }
   });
 
+  it('resets its state when the project changes, key or no key', async () => {
+    // Both call sites pass `key={projectId}`, so this should never happen — the test
+    // exists because a third mount point that forgot the key would otherwise
+    // silently carry A's revision in as B's baseline and fire a spurious refresh on
+    // arrival, which is the trap the key was added for (`/code-review`).
+    //
+    // The mock is URL-aware rather than a single mutable token: each project has its
+    // own revision, which is the real situation and removes any dependence on when
+    // the test happens to change a shared value.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: { revision: url.includes('/p2/') ? 'W/"b-rev"' : 'W/"a-rev"' },
+          }),
+        })
+      )
+    );
+
+    const view = await act(async () =>
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>)
+    );
+    await flush();
+    expect(router.refresh, 'A established its own baseline').not.toHaveBeenCalled();
+
+    // A different project, deliberately WITHOUT remounting.
+    await act(async () => {
+      view.rerender(<ProjectLiveProvider projectId="p2">{null}</ProjectLiveProvider>);
+    });
+    await flush();
+    await tick();
+
+    // B's first token is B's baseline. Without the reset, A's revision is still held
+    // and B's very different one reads as a change the moment the page arrives.
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('still polls where AbortSignal.timeout is unavailable', async () => {
+    // Calling it unguarded throws INSIDE the try, so every poll would be classified
+    // a network failure: backed off to the cap, failing forever, neither terminal
+    // branch reached and nothing on screen (`/code-review`).
+    const real = Object.getOwnPropertyDescriptor(AbortSignal, 'timeout');
+    // `defineProperty`, not `delete` — the property may live somewhere `delete`
+    // cannot reach, and a stub that silently fails to stub makes the test pass for
+    // the wrong reason. Asserted below before the run, so it cannot.
+    Object.defineProperty(AbortSignal, 'timeout', { configurable: true, value: undefined });
+    expect(typeof AbortSignal.timeout, 'the stub did not take').not.toBe('function');
+    try {
+      const state = mockEndpoints();
+      await act(async () => {
+        render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+      });
+      await flush();
+
+      state.token = 'W/"moved"';
+      await tick();
+
+      expect(router.refresh).toHaveBeenCalledTimes(1);
+    } finally {
+      if (real) Object.defineProperty(AbortSignal, 'timeout', real);
+    }
+  });
+
   it('does not refresh a page the user has already navigated to', async () => {
     // The router instance is global, so a poll resolving after unmount would
     // `router.refresh()` whatever route the user just landed on, for a change with
@@ -624,7 +690,49 @@ describe('the poller’s lifecycle edges', () => {
     expect(router.refresh).not.toHaveBeenCalled();
   });
 
-  it('stops on a 404 — the door a removed member actually comes through', async () => {
+  it('does not believe a SINGLE 404 — deploy skew must not pin a false notice', async () => {
+    // A 404 also arrives from deploy skew, an edge 404, or a route briefly
+    // unavailable. Going terminal on the first one pins "you no longer have access"
+    // over a perfectly good page, permanently, while a mere 5xx recovers politely
+    // (`/code-review`).
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+
+    state.status = 404;
+    await tick();
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+    // ...and it recovers on its own once the 404s stop.
+    state.status = 200;
+    await tick(4);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('does not accumulate SEPARATED 404s into a false terminal state', async () => {
+    // The streak has to reset on any good response. Without that, three unrelated
+    // 404s spread over an afternoon — a deploy here, an edge blip there — add up to
+    // "you no longer have access" on a project the user is still a member of.
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+
+    for (let i = 0; i < 5; i++) {
+      state.status = 404;
+      await tick();
+      state.status = 200;
+      await tick(4); // clear of the backoff, and a good response resets the streak
+    }
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('stops once 404s persist — the door a removed member actually comes through', async () => {
     // The revision endpoint answers a non-member with 404, never 403, so losing
     // membership mid-session lands here rather than on the auth branch.
     const state = mockEndpoints();
@@ -634,12 +742,14 @@ describe('the poller’s lifecycle edges', () => {
     await flush();
 
     state.status = 404;
-    await tick();
-    const afterLoss = state.revisionCalls.length;
+    // Each 404 also backs off, so drive the clock well past the streak.
+    await tick(30);
 
-    await tick(4);
-    expect(state.revisionCalls).toHaveLength(afterLoss);
     expect(screen.getByRole('status')).toHaveTextContent(/no longer have access/i);
+
+    const afterStop = state.revisionCalls.length;
+    await tick(10);
+    expect(state.revisionCalls, 'terminal means terminal').toHaveLength(afterStop);
   });
 
   /** Drive the tab hidden, wait, and bring it back. */

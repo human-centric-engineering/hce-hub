@@ -63,10 +63,10 @@ export function FeatureActivity({
       // Reset with the subject, not just once at mount. `hasData` means "there is
       // something on screen worth protecting from a failed refresh" — and the
       // moment the subject changes, whatever is on screen belongs to the OLD
-      // subject and is not worth protecting. Without this, a filter change (or a
-      // navigation to another feature) whose fetch fails hung on the skeleton
-      // forever: the error was suppressed as if data were present, and only a
-      // project-wide change would ever repaint (`/code-review`).
+      // subject and is not worth protecting. Without this, navigating to ANOTHER
+      // FEATURE — which keeps this component alive, since the provider is keyed on
+      // the project — and having that fetch fail hung on the skeleton forever: the
+      // error was suppressed as if data were present (`/code-review`).
       hasData.current = false;
     }
     fetch(
