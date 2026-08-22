@@ -293,6 +293,33 @@ describe('ProjectLiveProvider — the poller', () => {
     expect(state.revisionCalls.length).toBeGreaterThan(afterFirstFailure);
   });
 
+  it('treats a thrown fetch (offline) as transient, not as a reason to shout', async () => {
+    // Going offline is the most ordinary failure there is. It must back off like any
+    // other transient one, and it must NOT look like auth loss — a laptop closing
+    // its lid should not tell the user they have been signed out.
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+
+    const live = vi.mocked(fetch).getMockImplementation();
+    vi.mocked(fetch).mockRejectedValue(new TypeError('Failed to fetch'));
+    await tick();
+    const afterFailure = state.revisionCalls.length;
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+    // The next tick is skipped by the backoff...
+    await tick();
+    expect(state.revisionCalls).toHaveLength(afterFailure);
+
+    // ...and it recovers on its own once the network is back.
+    if (live) vi.mocked(fetch).mockImplementation(live);
+    await tick(2);
+    expect(state.revisionCalls.length).toBeGreaterThan(afterFailure);
+  });
+
   it('resumes full cadence once a poll succeeds', async () => {
     const state = mockEndpoints();
     await act(async () => {
@@ -410,6 +437,35 @@ describe('signed out — the one failure a backoff cannot fix', () => {
     await tick();
     expect(state.revisionCalls.length).toBeGreaterThan(recovered);
     expect(router.refresh).toHaveBeenCalled();
+  });
+
+  it('reloads when the button is pressed, rather than routing to /login itself', async () => {
+    // The behaviour, not just the button's presence — `/pre-pr` coverage caught that
+    // the handler was never invoked by any test.
+    //
+    // A reload (not `router.push('/login')`) is the point: `app/(hub)/layout.tsx` is
+    // the one auth guard for the whole group, and deciding here what a signed-out
+    // visitor sees would be a second answer to a question the app already answers.
+    const reload = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload },
+    });
+
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+    state.status = 401;
+    await tick();
+
+    await act(async () => {
+      screen.getByRole('button', { name: /reload/i }).click();
+    });
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(router.push).not.toHaveBeenCalled();
   });
 
   it('shows nothing at all while the session is good', async () => {
