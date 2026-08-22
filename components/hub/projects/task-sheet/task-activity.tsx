@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EventRow } from '@/components/hub/projects/log/event-row';
 import type { ProjectEventDTO } from '@/components/hub/projects/log/types';
 import { useProjectLive } from '@/components/hub/projects/project-live';
@@ -31,6 +31,12 @@ export function TaskActivity({
 }) {
   const [events, setEvents] = useState<ProjectEventDTO[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  // The last SUBJECT this fetched for. A background refresh must not blank the
+  // list and repaint it — the browser check on t-126 caught exactly that flicker,
+  // on every project change, including ones with nothing to do with this surface.
+  // `task-sheet.tsx` already had the right treatment (`!detail && state ===
+  // 'loading'`); this is the same rule stated as a subject comparison.
+  const lastSubject = useRef<string | null>(null);
   // Two independent reasons to refetch: `refreshKey` (this user just acted) and
   // `live` (someone else did). Kept separate rather than summed — collapsing two
   // counters into one arithmetic value is how you get a missed refresh.
@@ -39,7 +45,13 @@ export function TaskActivity({
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    setState('loading');
+    // Skeleton only when the SUBJECT changed (mount, or the user picked something
+    // else). A refresh of the same subject keeps what is on screen until the new
+    // data lands.
+    const subject = `${projectId}|${taskId}`;
+    const isBackgroundRefresh = lastSubject.current === subject;
+    lastSubject.current = subject;
+    if (!isBackgroundRefresh) setState('loading');
     fetch(
       `/api/v1/projects/${encodeURIComponent(projectId)}/events?taskId=${encodeURIComponent(taskId)}`,
       { signal: controller.signal }
@@ -54,7 +66,11 @@ export function TaskActivity({
       })
       .catch((err: unknown) => {
         if (active && !(err instanceof DOMException && err.name === 'AbortError')) {
-          setState('error');
+          // A failed BACKGROUND refresh leaves the last-good list on screen. One
+          // dropped poll should not replace something the user is reading with
+          // "couldn't load" — the next tick fixes it, and the poller backs off on
+          // its own. A first load still reports honestly.
+          if (!isBackgroundRefresh) setState('error');
         }
       });
     return () => {

@@ -45,6 +45,21 @@ vi.mock('next/navigation', async () => {
 const PID = 'p1';
 const REVISION = `/api/v1/projects/${PID}/revision`;
 
+/** One event, so a refreshing surface has visible content to keep (or lose). */
+const EVENT = {
+  id: 'e1',
+  kind: 'decision',
+  actor: { id: 'u1', name: 'Simon Holmes', email: 's@x', image: null },
+  actorAgentId: null,
+  feature: null,
+  task: null,
+  phaseId: null,
+  title: 'A decision already on screen',
+  body: null,
+  metadata: null,
+  createdAt: '2026-08-21T10:00:00.000Z',
+};
+
 /** Just enough of a `TaskDetailDTO` for the sheet to render. */
 const TASK_DETAIL = {
   id: 't1',
@@ -69,7 +84,14 @@ const TASK_DETAIL = {
 
 /** Serves `/revision` from a mutable token, and every other GET as an empty list. */
 function mockEndpoints() {
-  const state = { token: 'W/"one"', status: 200, revisionCalls: [] as RequestInit[] };
+  const state = {
+    token: 'W/"one"',
+    status: 200,
+    revisionCalls: [] as RequestInit[],
+    /** Hold event responses open, so a refresh can be caught mid-flight. */
+    deferEvents: false,
+    release: () => {},
+  };
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string, init?: RequestInit) => {
@@ -96,7 +118,13 @@ function mockEndpoints() {
           json: async () => ({ data: TASK_DETAIL }),
         });
       }
-      return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: [] }) });
+      const payload = { ok: true, status: 200, json: async () => ({ data: [EVENT] }) };
+      if (state.deferEvents) {
+        return new Promise((resolve) => {
+          state.release = () => resolve(payload);
+        });
+      }
+      return Promise.resolve(payload);
     })
   );
   return state;
@@ -291,16 +319,19 @@ describe('ProjectLiveProvider — the poller', () => {
 const CLIENT_FETCHED_SURFACES = [
   {
     name: 'the Log tab',
+    showsEvents: true,
     endpoint: `/api/v1/projects/${PID}/events`,
     render: () => <LogView projectId={PID} projectRef="hce-hub" />,
   },
   {
     name: 'a feature’s activity timeline',
+    showsEvents: true,
     endpoint: 'featureId=f1',
     render: () => <FeatureActivity projectId={PID} projectRef="hce-hub" featureId="f1" />,
   },
   {
     name: 'the task sheet’s activity timeline',
+    showsEvents: true,
     endpoint: 'taskId=t1',
     render: () => <TaskActivity projectId={PID} projectRef="hce-hub" taskId="t1" refreshKey={0} />,
   },
@@ -308,6 +339,11 @@ const CLIENT_FETCHED_SURFACES = [
     // The surface most likely to be open while someone else moves the same task,
     // and the one where staleness is worst: it shows a status and an action button.
     name: 'the task sheet’s own detail',
+    // Renders a detail object, not the event list — and already guarded its
+    // skeleton with `!detail`, which is where the fix for the other three came
+    // from. Excluded from the no-flicker case because it has nothing to assert
+    // the same way, not because it is exempt from the rule.
+    showsEvents: false,
     endpoint: `/api/v1/projects/${PID}/tasks/t1`,
     render: () => (
       <SidekickProvider value={{ open: false, setOpen: () => {} }}>
@@ -355,6 +391,40 @@ describe('a detected change reaches the client-fetched surfaces', () => {
       await flush();
 
       expect(callsMatching(endpoint)).toBe(initial);
+    }
+  );
+
+  it.each(CLIENT_FETCHED_SURFACES.filter((surface) => surface.showsEvents))(
+    '$name refreshes WITHOUT blanking what is on screen',
+    async ({ render: renderSurface }) => {
+      // The defect the browser check caught, and no earlier test could: every
+      // surface re-read correctly and then flickered, because the effect called
+      // `setState('loading')` unconditionally. On a project with two people that
+      // is a blank-and-repaint every few seconds, on surfaces the change had
+      // nothing to do with.
+      //
+      // Caught by holding the response open: with the bug the skeleton is on
+      // screen the instant the refetch starts, so the assertion is made while the
+      // request is still in flight rather than after it settles.
+      const state = mockEndpoints();
+      await act(async () => {
+        render(<ProjectLiveProvider projectId={PID}>{renderSurface()}</ProjectLiveProvider>);
+      });
+      await flush();
+      expect(screen.getByText('A decision already on screen')).toBeInTheDocument();
+
+      state.deferEvents = true;
+      state.token = 'W/"moved"';
+      await tick();
+      await flush();
+
+      expect(screen.queryByText('Loading activity…')).not.toBeInTheDocument();
+      expect(screen.getByText('A decision already on screen')).toBeInTheDocument();
+
+      await act(async () => {
+        state.release();
+        await vi.advanceTimersByTimeAsync(0);
+      });
     }
   );
 
