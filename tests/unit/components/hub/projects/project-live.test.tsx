@@ -268,6 +268,38 @@ describe('ProjectLiveProvider — the poller', () => {
     expect(router.refresh).not.toHaveBeenCalled();
   });
 
+  it('backs off on a malformed body, rather than polling forever against it', async () => {
+    // A 200 carrying a body we cannot read is a proxy, an edge error page, or a bad
+    // deploy. Shrugging at it meant full-cadence polling forever while every surface
+    // froze silently — the invisible-frozen-page failure the terminal branches exist
+    // to prevent, reached through a door nobody was watching (`/code-review`).
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+
+    const garbage = {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { revision: 42 } }),
+    } as unknown as Response;
+    // Records like any other poll. A stub that does not push here makes the counter
+    // blind, and the assertion passes whether the backoff exists or not — which is
+    // exactly how this test first shipped useless.
+    vi.mocked(fetch).mockImplementation((_url, init) => {
+      state.revisionCalls.push(init ?? {});
+      return Promise.resolve(garbage);
+    });
+
+    await tick();
+    const afterGarbage = state.revisionCalls.length;
+
+    // Inside the backoff window: nothing goes out.
+    await tick();
+    expect(state.revisionCalls).toHaveLength(afterGarbage);
+  });
+
   it('leaves the baseline alone when the body is malformed', async () => {
     const state = mockEndpoints();
     await act(async () => {
@@ -300,11 +332,12 @@ describe('ProjectLiveProvider — the poller', () => {
     await tick();
     const afterFirstFailure = state.revisionCalls.length;
 
-    // The next tick is skipped, not sent.
+    // The wait is a deadline, so it is stated in time: two cadences after a first
+    // failure. The tick inside that window sends nothing.
     await tick();
     expect(state.revisionCalls).toHaveLength(afterFirstFailure);
 
-    // ...and the one after it goes out again.
+    // ...and the one past the deadline goes out again.
     await tick();
     expect(state.revisionCalls.length).toBeGreaterThan(afterFirstFailure);
   });
@@ -602,31 +635,13 @@ describe('the poller’s lifecycle edges', () => {
     });
   }
 
-  it('forgives a stale backoff when the tab was away longer than it owed', async () => {
-    // The backoff counts ticks and a hidden tab runs none, so the debt outlives the
-    // failure. Away long enough, the skips would have elapsed anyway — forgive them.
-    const state = mockEndpoints();
-    await act(async () => {
-      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
-    });
-    await flush();
-
-    state.status = 500;
-    await tick(3); // several ticks now owed
-    state.status = 200;
-    const owed = state.revisionCalls.length;
-
-    await hideFor(PROJECT_POLL_INTERVAL_MS * 60);
-    await tick();
-
-    expect(state.revisionCalls.length).toBeGreaterThan(owed);
-  });
-
-  it('is NOT defeated by a one-second tab flick', async () => {
-    // The other edge, and the reason the reset is time-gated rather than
-    // unconditional: alt-tabbing must not hand a 429'd client its full cadence back.
-    // That would turn the backoff into a formality — hammer the closed door, flick
-    // the tab, hammer again (`/code-review`).
+  it('is NOT defeated by REPEATED tab flicks', async () => {
+    // The edge that broke both earlier attempts. Counting skipped ticks let each
+    // return-to-visible burn one off, so N flicks paid N ticks of debt for free; the
+    // fix for that then let any flick clear the failure count once the debt hit zero
+    // (`/code-review` rounds 3 and 4). A wall-clock deadline is immune to both —
+    // time is time whether the tab is watched or not — which is why the fix was to
+    // change the mechanism rather than add a third guard to it.
     const state = mockEndpoints();
     await act(async () => {
       render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
@@ -634,14 +649,35 @@ describe('the poller’s lifecycle edges', () => {
     await flush();
 
     state.status = 429;
-    await tick(3);
+    await tick();
     const owed = state.revisionCalls.length;
 
-    await hideFor(1_000);
+    // Flick repeatedly, well inside the backoff window.
+    for (let i = 0; i < 5; i++) await hideFor(50);
 
-    // Still owed: the next tick is spent on the debt, not on a request.
-    await tick();
     expect(state.revisionCalls).toHaveLength(owed);
+  });
+
+  it('serves its wait while hidden, with no forgiveness logic', async () => {
+    // The property that made the deadline worth switching to: a hidden tab runs no
+    // ticks but time still passes, so the wait is served exactly as a visible tab's
+    // would be. The tick-counting version needed a separate mechanism to approximate
+    // this, and that mechanism was the hole.
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+
+    state.status = 500;
+    await tick();
+    const owed = state.revisionCalls.length;
+    state.status = 200;
+
+    await hideFor(PROJECT_POLL_INTERVAL_MS * 10);
+    await tick();
+
+    expect(state.revisionCalls.length).toBeGreaterThan(owed);
   });
 });
 
@@ -749,6 +785,104 @@ describe('a detected change reaches the client-fetched surfaces', () => {
       expect(screen.getByText(/Couldn.t load/)).toBeInTheDocument();
     }
   );
+
+  it('the Log reports a failed load after a FILTER change', async () => {
+    // Round 3 keyed the error on subject identity; round 4's fix keyed it on
+    // `hasData` — and forgot to reset that when the subject changes. So a successful
+    // load followed by a failing filter change suppressed the error as though data
+    // were present, and hung on the skeleton forever with no retry path. Two
+    // consecutive fixes for one bug, each introducing the next (`/code-review`).
+    let failNext = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/revision')) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: {} }) });
+        }
+        return failNext
+          ? Promise.reject(new Error('boom'))
+          : Promise.resolve({ ok: true, status: 200, json: async () => ({ data: [EVENT] }) });
+      })
+    );
+
+    await act(async () => {
+      render(<LogView projectId={PID} projectRef="hce-hub" />);
+    });
+    await flush();
+    expect(screen.getByText('A decision already on screen')).toBeInTheDocument();
+
+    failNext = true;
+    await act(async () => {
+      screen.getByRole('tab', { name: 'Decisions' }).click();
+    });
+    await flush();
+
+    expect(screen.queryByText('Loading activity…')).not.toBeInTheDocument();
+    expect(screen.getByText(/Couldn.t load/)).toBeInTheDocument();
+  });
+
+  it('an activity timeline reports a failed load after the SUBJECT changes', async () => {
+    // The same defect reached by navigation rather than a click: the provider is
+    // keyed on the project, so moving between two features of one project keeps the
+    // component — and its refs — alive.
+    let failNext = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        failNext
+          ? Promise.reject(new Error('boom'))
+          : Promise.resolve({ ok: true, status: 200, json: async () => ({ data: [EVENT] }) })
+      )
+    );
+
+    const view = await act(async () =>
+      render(<FeatureActivity projectId={PID} projectRef="hce-hub" featureId="f1" />)
+    );
+    await flush();
+    expect(screen.getByText('A decision already on screen')).toBeInTheDocument();
+
+    failNext = true;
+    await act(async () => {
+      view.rerender(<FeatureActivity projectId={PID} projectRef="hce-hub" featureId="f2" />);
+    });
+    await flush();
+
+    expect(screen.queryByText('Loading activity…')).not.toBeInTheDocument();
+    expect(screen.getByText(/Couldn.t load/)).toBeInTheDocument();
+  });
+
+  it('the task timeline reports a failed load after the TASK changes', async () => {
+    // Masked in the app today — `task-sheet.tsx` nulls `detail` on a task change and
+    // unmounts this — but the defect is in the component, so it is pinned here. A
+    // bug that survives only because of a neighbour's incidental behaviour is one
+    // refactor away from being real.
+    let failNext = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        failNext
+          ? Promise.reject(new Error('boom'))
+          : Promise.resolve({ ok: true, status: 200, json: async () => ({ data: [EVENT] }) })
+      )
+    );
+
+    const view = await act(async () =>
+      render(<TaskActivity projectId={PID} projectRef="hce-hub" taskId="t1" refreshKey={0} />)
+    );
+    await flush();
+    expect(screen.getByText('A decision already on screen')).toBeInTheDocument();
+
+    failNext = true;
+    await act(async () => {
+      view.rerender(
+        <TaskActivity projectId={PID} projectRef="hce-hub" taskId="t2" refreshKey={0} />
+      );
+    });
+    await flush();
+
+    expect(screen.queryByText('Loading activity…')).not.toBeInTheDocument();
+    expect(screen.getByText(/Couldn.t load/)).toBeInTheDocument();
+  });
 
   it('renders outside a provider without crashing', async () => {
     // The context default is 0, so a surface mounted on some other page (or in an

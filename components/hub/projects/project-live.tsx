@@ -68,15 +68,37 @@ import { Button } from '@/components/ui/button';
 const ProjectLiveContext = createContext<number>(0);
 
 /**
- * Consecutive-failure backoff, in ticks skipped: 1, 2, 4 … capped at 32 (≈2.7min at
- * the 5s cadence).
+ * Consecutive-failure backoff: wait 2, 4, 8 … cadences before the next attempt,
+ * capped at 32 (≈2.7min at the 5s cadence).
+ *
+ * Starts at two rather than one so "backing off" always means waiting longer than
+ * the normal cadence — a one-cadence wait lands exactly on the next tick and skips
+ * nothing, which is a backoff in name only.
  *
  * A 429 is the case that matters, and it is **silent** — a poller has no
  * user-visible failure mode, so without this a rate-limited client would hammer a
  * closed door for as long as the tab stayed open, and the only symptom anywhere
  * would be surfaces that quietly stopped updating.
+ *
+ * **A deadline, not a count of skipped ticks.** Counting ticks made the backoff
+ * defeatable by tab-switching, twice over: `useAutoRefresh` polls on every return
+ * to visible, and each of those polls burned a skip, so N flicks paid off N ticks
+ * of debt for free. Patching that needed a second mechanism — forgive the debt a
+ * hidden tab could not have paid — which introduced its own hole, because once the
+ * debt drained to zero `away >= 0` was trivially true and any flick then cleared
+ * the failure count as well (`/code-review` rounds 3 and 4).
+ *
+ * A wall-clock deadline has none of that. Time passes whether the tab is visible,
+ * hidden, or being flicked between — so a hidden tab serves its wait exactly like a
+ * visible one, no forgiveness logic is needed, and there is nothing for a
+ * visibilitychange to game. The two-mechanism version was a fix that needed a fix;
+ * this is the shape that removes the question.
  */
-const MAX_SKIPPED_TICKS = 32;
+const MAX_BACKOFF_MULTIPLE = 32;
+
+/** Next time a poll may run. `0` = no backoff in force. */
+const backoffFor = (failures: number): number =>
+  Date.now() + Math.min(2 ** failures, MAX_BACKOFF_MULTIPLE) * PROJECT_POLL_INTERVAL_MS;
 
 /** Increments once per detected change; `0` until the first one. */
 export function useProjectLive(): number {
@@ -100,8 +122,9 @@ export function ProjectLiveProvider({
    */
   const [stopped, setStopped] = useState<'signed-out' | 'no-access' | null>(null);
   const token = useRef<string | null>(null);
-  const skipTicks = useRef(0);
   const failures = useRef(0);
+  /** Wall-clock deadline; polls before this are skipped. See {@link MAX_BACKOFF_MULTIPLE}. */
+  const backoffUntil = useRef(0);
   /**
    * One poll at a time. `useAutoRefresh` fires on the interval AND immediately on
    * every `visibilitychange`, so alt-tabbing — or any response slower than the
@@ -113,21 +136,20 @@ export function ProjectLiveProvider({
    */
   const inFlight = useRef(false);
   /**
-   * Every other fetch in the Hub carries an `AbortController` + `active` flag; this
-   * one had neither. The router instance is global, so a poll resolving after the
-   * user navigated away would `router.refresh()` whatever route they had just
-   * landed on, for a change with nothing to do with it (`/code-review`).
+   * The router instance is global, so a poll resolving after the user navigated away
+   * would `router.refresh()` whatever route they had just landed on, for a change
+   * with nothing to do with it (`/code-review`).
+   *
+   * A flag rather than an `AbortController` — unlike the surfaces, this request has
+   * no render to race, so all that matters is not acting on a stale result. An
+   * earlier version of this comment claimed parity with "every other fetch in the
+   * Hub", which was simply untrue of the code beneath it.
    */
   const mounted = useRef(true);
-  /** When the tab was hidden, so a resume can forgive only the skips that really elapsed. */
-  const hiddenAt = useRef<number | null>(null);
 
   const poll = useCallback(async () => {
     if (inFlight.current) return;
-    if (skipTicks.current > 0) {
-      skipTicks.current -= 1;
-      return;
-    }
+    if (Date.now() < backoffUntil.current) return;
     inFlight.current = true;
     try {
       await runPoll();
@@ -149,12 +171,13 @@ export function ProjectLiveProvider({
         // Offline, or the request was cut off. Back off and try later; a dropped
         // poll is a no-op, never an error the user should see.
         failures.current += 1;
-        skipTicks.current = Math.min(2 ** (failures.current - 1), MAX_SKIPPED_TICKS);
+        backoffUntil.current = backoffFor(failures.current);
         return;
       }
 
       if (res.status === 304) {
         failures.current = 0;
+        backoffUntil.current = 0;
         return;
       }
 
@@ -176,18 +199,30 @@ export function ProjectLiveProvider({
 
       if (!res.ok) {
         failures.current += 1;
-        skipTicks.current = Math.min(2 ** (failures.current - 1), MAX_SKIPPED_TICKS);
+        backoffUntil.current = backoffFor(failures.current);
         return;
       }
-
-      failures.current = 0;
 
       const json = (await res.json().catch(() => null)) as { data?: { revision?: unknown } } | null;
       const next = json?.data?.revision;
       // Validated, not cast: this is a response body, and a malformed one must leave
       // the baseline alone rather than poison it with `undefined` — which would make
       // the NEXT poll look like a change and refresh the page for no reason.
-      if (typeof next !== 'string') return;
+      //
+      // It also counts as a FAILURE. A 200 carrying a body we cannot read is a proxy,
+      // an edge error page, or a bad deploy — and treating it as a shrug meant polling
+      // at full cadence forever while every surface froze silently, which is the
+      // invisible-frozen-page failure the terminal branches exist to prevent, reached
+      // through a door nobody was watching (`/code-review`).
+      if (typeof next !== 'string') {
+        failures.current += 1;
+        backoffUntil.current = backoffFor(failures.current);
+        return;
+      }
+
+      // Only a well-formed response clears the backoff.
+      failures.current = 0;
+      backoffUntil.current = 0;
 
       const previous = token.current;
       token.current = next;
@@ -203,42 +238,11 @@ export function ProjectLiveProvider({
     }
   }, [projectId, router]);
 
-  // The backoff counts TICKS, not time, and a hidden tab runs no ticks. Without
-  // this, a tab that backed off to 32 skips and then sat in the background for an
-  // hour would need ~160s of visible polling to earn its way back — and the very
-  // failure it is backing off from is provably ancient by then (`/code-review`).
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
-  }, []);
-
-  // The backoff counts TICKS, and a hidden tab runs none — so a tab that backed off
-  // and then sat in the background would still owe those skips on return, long after
-  // the failure stopped being real.
-  //
-  // But forgiving them unconditionally let a one-second tab flick reset the backoff
-  // entirely, so a client 429'd off the tier could be driven straight back to full
-  // cadence by alt-tabbing — the closed door this exists to stop hammering
-  // (`/code-review`). So convert the owed ticks to time and forgive only what
-  // actually elapsed while hidden. A long absence clears the debt; a flick does not.
-  useEffect(() => {
-    const onVisibilityChange = () => {
-      if (typeof document === 'undefined') return;
-      if (document.hidden) {
-        hiddenAt.current = Date.now();
-        return;
-      }
-      const away = hiddenAt.current === null ? 0 : Date.now() - hiddenAt.current;
-      hiddenAt.current = null;
-      if (away >= skipTicks.current * PROJECT_POLL_INTERVAL_MS) {
-        failures.current = 0;
-        skipTicks.current = 0;
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
   useAutoRefresh(poll, PROJECT_POLL_INTERVAL_MS, { enabled: stopped === null });

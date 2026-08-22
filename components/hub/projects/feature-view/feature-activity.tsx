@@ -58,7 +58,17 @@ export function FeatureActivity({
     const subject = `${projectId}|${featureId}`;
     const isBackgroundRefresh = lastSubject.current === subject;
     lastSubject.current = subject;
-    if (!isBackgroundRefresh) setState('loading');
+    if (!isBackgroundRefresh) {
+      setState('loading');
+      // Reset with the subject, not just once at mount. `hasData` means "there is
+      // something on screen worth protecting from a failed refresh" — and the
+      // moment the subject changes, whatever is on screen belongs to the OLD
+      // subject and is not worth protecting. Without this, a filter change (or a
+      // navigation to another feature) whose fetch fails hung on the skeleton
+      // forever: the error was suppressed as if data were present, and only a
+      // project-wide change would ever repaint (`/code-review`).
+      hasData.current = false;
+    }
     fetch(
       `/api/v1/projects/${encodeURIComponent(projectId)}/events?featureId=${encodeURIComponent(featureId)}`,
       { signal: controller.signal }

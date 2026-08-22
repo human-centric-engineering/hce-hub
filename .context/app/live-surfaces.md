@@ -109,8 +109,13 @@ The cap is derived, not picked: 20 tabs × the 5s cadence × 2 for off-cadence p
 (`useAutoRefresh` fires on mount and on every `visibilitychange`). **Change the
 cadence and this number moves with it** — a test pins the derivation.
 
-The client backs off exponentially on a **transient** failure, capped at 32 skipped
-ticks. That matters because **a 429 here is silent**: a poller has no user-visible
+The client backs off exponentially on a **transient** failure — a wall-clock
+deadline of 2, 4, 8 … cadences, capped at 32 (≈2.7 min). A deadline rather than a
+count of skipped ticks, because time passes whether the tab is visible, hidden or
+being flicked between: a hidden tab serves its wait exactly like a visible one, and
+there is nothing for a `visibilitychange` to game. A malformed body counts as a
+failure too — a 200 nobody can parse is a proxy or a bad deploy, and polling full
+tilt against it forever would freeze every surface in silence. That matters because **a 429 here is silent**: a poller has no user-visible
 failure mode, so without a backoff a rate-limited tab would hammer a closed door for
 as long as it stayed open, with nothing on screen to say why.
 
