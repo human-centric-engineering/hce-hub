@@ -355,6 +355,77 @@ const CLIENT_FETCHED_SURFACES = [
   },
 ];
 
+describe('signed out — the one failure a backoff cannot fix', () => {
+  it.each([401, 403])('stops polling on a %i', async (status) => {
+    // A backoff assumes the failure is transient. An expired session is not: the
+    // poller would slow to a crawl and go on failing forever while every surface
+    // showed whatever data it happened to have, with nothing on screen to say it
+    // was frozen. Worse than the flicker, because it is invisible.
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+
+    state.status = status;
+    await tick();
+    const afterAuthFailure = state.revisionCalls.length;
+
+    await tick(4);
+    expect(state.revisionCalls).toHaveLength(afterAuthFailure);
+  });
+
+  it('tells the user, rather than going quiet', async () => {
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+
+    state.status = 401;
+    await tick();
+
+    expect(screen.getByRole('status')).toHaveTextContent(/signed out/i);
+    expect(screen.getByRole('button', { name: /reload/i })).toBeInTheDocument();
+  });
+
+  it('keeps backing off and recovering on a 500 — only auth loss is terminal', async () => {
+    // The other direction, and the reason the two are distinguished rather than
+    // lumped together as "not ok": a server blip must not permanently freeze a page.
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+
+    state.status = 500;
+    await tick();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+    state.status = 200;
+    await tick(2); // one skipped by the backoff, then a live one
+    const recovered = state.revisionCalls.length;
+
+    state.token = 'W/"moved"';
+    await tick();
+    expect(state.revisionCalls.length).toBeGreaterThan(recovered);
+    expect(router.refresh).toHaveBeenCalled();
+  });
+
+  it('shows nothing at all while the session is good', async () => {
+    // Guards against the notice being rendered unconditionally, which would pass
+    // the "tells the user" test above for entirely the wrong reason.
+    mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+    await tick(3);
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+});
+
 describe('a detected change reaches the client-fetched surfaces', () => {
   it.each(CLIENT_FETCHED_SURFACES)(
     '$name re-reads',

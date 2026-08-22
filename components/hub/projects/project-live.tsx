@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAutoRefresh } from '@/lib/hooks/use-auto-refresh';
+import { Button } from '@/components/ui/button';
 
 /**
  * Live project surfaces — one poller per page (f-realtime §36 t-126).
@@ -34,6 +35,25 @@ import { useAutoRefresh } from '@/lib/hooks/use-auto-refresh';
  * first token is a *baseline*, so the count stays at 0 until something genuinely
  * moves. It also drops straight into the `refreshKey`-shaped props these components
  * already had.
+ *
+ * ## Auth loss is terminal; everything else recovers
+ *
+ * A 401/403 is the one failure a backoff cannot fix — the session is gone and no
+ * amount of waiting brings it back. Left on the normal path the poller would slow
+ * to a crawl and go on failing forever while every surface showed the last data it
+ * happened to have, with nothing on screen to say it was frozen. That is worse than
+ * the flicker this feature already fixed, because it is invisible.
+ *
+ * So auth loss **stops the poller and says so**. Deliberately not a redirect: this
+ * fires from a timer, at a moment the user did not choose, and the task sheet's
+ * set-PR form and the jot-idea popover both hold unsaved text a surprise navigation
+ * would discard. `app/(hub)/layout.tsx` is the one auth guard for the whole group
+ * and already bounces a signed-out visitor to `/login`, so a reload does exactly the
+ * right thing — the user only needs telling to take it.
+ *
+ * Every other failure (500, offline, a dropped connection) keeps backing off and
+ * recovers on its own, which is why the two are distinguished rather than lumped
+ * together as "not ok".
  *
  * ## One poller, not one per surface
  *
@@ -72,6 +92,7 @@ export function ProjectLiveProvider({
 }) {
   const router = useRouter();
   const [changes, setChanges] = useState(0);
+  const [signedOut, setSignedOut] = useState(false);
   const token = useRef<string | null>(null);
   const skipTicks = useRef(0);
   const failures = useRef(0);
@@ -104,6 +125,12 @@ export function ProjectLiveProvider({
       return;
     }
 
+    if (res.status === 401 || res.status === 403) {
+      // Terminal. Stop asking and tell them — see the header.
+      setSignedOut(true);
+      return;
+    }
+
     if (!res.ok) {
       failures.current += 1;
       skipTicks.current = Math.min(2 ** (failures.current - 1), MAX_SKIPPED_TICKS);
@@ -131,7 +158,43 @@ export function ProjectLiveProvider({
     router.refresh();
   }, [projectId, router]);
 
-  useAutoRefresh(poll, PROJECT_POLL_INTERVAL_MS);
+  useAutoRefresh(poll, PROJECT_POLL_INTERVAL_MS, { enabled: !signedOut });
 
-  return <ProjectLiveContext.Provider value={changes}>{children}</ProjectLiveContext.Provider>;
+  return (
+    <ProjectLiveContext.Provider value={changes}>
+      {children}
+      {signedOut && <SignedOutNotice />}
+    </ProjectLiveContext.Provider>
+  );
+}
+
+/**
+ * Shown when the poller has stopped because the session is gone.
+ *
+ * Bottom-anchored so it cannot collide with the sticky topbar, and `role="status"`
+ * rather than `alert` — this is worth announcing, but it is not an emergency and
+ * should not interrupt whatever a screen reader is mid-way through.
+ *
+ * The button reloads rather than routing to `/login` itself: the reload hits the
+ * `(hub)` layout's guard, which is the single place that decides what a signed-out
+ * visitor sees. Re-implementing that decision here would be a second answer to a
+ * question the app has already answered once.
+ */
+function SignedOutNotice() {
+  return (
+    <div
+      role="status"
+      className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-center gap-3 border-t px-4 py-3 text-sm"
+      style={{
+        borderColor: 'var(--line)',
+        backgroundColor: 'var(--bg-elev)',
+        color: 'var(--ink-soft)',
+      }}
+    >
+      <span>You&rsquo;ve been signed out — this page is no longer updating.</span>
+      <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+        Reload to sign in
+      </Button>
+    </div>
+  );
 }

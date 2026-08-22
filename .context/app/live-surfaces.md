@@ -109,10 +109,23 @@ The cap is derived, not picked: 20 tabs × the 5s cadence × 2 for off-cadence p
 (`useAutoRefresh` fires on mount and on every `visibilitychange`). **Change the
 cadence and this number moves with it** — a test pins the derivation.
 
-The client backs off exponentially on any failure, capped at 32 skipped ticks. That
-matters because **a 429 here is silent**: a poller has no user-visible failure mode,
-so without a backoff a rate-limited tab would hammer a closed door for as long as it
-stayed open, with nothing on screen to say why.
+The client backs off exponentially on a **transient** failure, capped at 32 skipped
+ticks. That matters because **a 429 here is silent**: a poller has no user-visible
+failure mode, so without a backoff a rate-limited tab would hammer a closed door for
+as long as it stayed open, with nothing on screen to say why.
+
+**Auth loss is the exception, and it is terminal.** A 401/403 means the session is
+gone and no amount of waiting brings it back, so the poller _stops_ and shows a
+"you've been signed out" strip with a Reload button. Backing off instead would leave
+every surface frozen on whatever data it happened to hold, indefinitely, with nothing
+to say so — worse than the flicker, because it is invisible.
+
+Deliberately **not** a redirect: this fires from a timer at a moment the user did not
+choose, and the task sheet's set-PR form and the jot-idea popover both hold unsaved
+text a surprise navigation would discard. `app/(hub)/layout.tsx` is the one auth guard
+for the whole group and already bounces a signed-out visitor to `/login`, so a reload
+does the right thing — the user only needs telling to take it. Re-deciding that here
+would be a second answer to a question the app has already answered.
 
 ## Deliberate limits
 
