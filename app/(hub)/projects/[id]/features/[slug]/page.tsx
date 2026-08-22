@@ -24,24 +24,31 @@ export async function generateMetadata({
   return { title: feature ? feature.title : 'Feature' };
 }
 
+/**
+ * Same rule as the project page: `null` means 404 and nothing else, so a transient
+ * failure on a timer-driven refresh reaches the error boundary rather than telling
+ * the user their feature does not exist (`/code-review`).
+ */
 async function getFeature(id: string, key: string): Promise<FeatureDetailDTO | null> {
+  let res: Response;
   try {
-    const res = await serverFetch(
+    res = await serverFetch(
       `/api/v1/projects/${encodeURIComponent(id)}/features/${encodeURIComponent(key)}`
     );
-    if (!res.ok) {
-      // 404 is expected for a non-member / unknown feature (→ notFound); log the rest.
-      if (res.status !== 404) {
-        logger.error('Hub feature fetch failed', { id, key, status: res.status });
-      }
-      return null;
-    }
-    const data = await parseApiResponse<FeatureDetailDTO>(res);
-    return data.success ? data.data : null;
   } catch (error) {
     logger.error('Hub feature fetch threw', { id, key, error });
-    return null;
+    throw error;
   }
+
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    logger.error('Hub feature fetch failed', { id, key, status: res.status });
+    throw new Error(`Feature fetch failed: ${res.status}`);
+  }
+
+  const data = await parseApiResponse<FeatureDetailDTO>(res);
+  if (!data.success) throw new Error('Feature fetch returned an unsuccessful envelope');
+  return data.data;
 }
 
 export default async function FeaturePage({

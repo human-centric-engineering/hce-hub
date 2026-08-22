@@ -18,7 +18,7 @@ import {
   PROJECT_POLL_INTERVAL_MS,
   PROJECT_POLL_INTERVAL_SECONDS,
 } from '@/lib/projects/live-cadence';
-import { registerAppRateLimits } from '@/lib/app/rate-limit';
+import { registerAppRateLimits, revisionCapFor } from '@/lib/app/rate-limit';
 import { resolveRateLimitTier } from '@/lib/security/rate-limit';
 
 beforeAll(() => registerAppRateLimits());
@@ -26,6 +26,14 @@ beforeAll(() => registerAppRateLimits());
 describe('the shared poll cadence', () => {
   it('states the same interval in both units', () => {
     expect(PROJECT_POLL_INTERVAL_SECONDS).toBe(PROJECT_POLL_INTERVAL_MS / 1000);
+  });
+
+  it.each([5, 7, 11, 13])('yields a whole-number request cap at a %is cadence', (seconds) => {
+    // Exercised at cadences that do NOT divide 60, because 5s does — so asserting
+    // this at the shipped interval alone would pass with or without the rounding.
+    const cap = revisionCapFor(seconds);
+    expect(Number.isInteger(cap), `cap for ${seconds}s was ${cap}`).toBe(true);
+    expect(cap).toBeGreaterThan(0);
   });
 
   it('leaves the rate-limit cap enough room for 20 tabs at this cadence, doubled', () => {

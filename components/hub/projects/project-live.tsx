@@ -96,9 +96,27 @@ const ProjectLiveContext = createContext<number>(0);
  */
 const MAX_BACKOFF_MULTIPLE = 32;
 
+/**
+ * Give up on a request that outlives two cadences. Long enough that a merely slow
+ * response is not cut off, short enough that a hung one cannot outlast the tab.
+ */
+const POLL_TIMEOUT_MS = PROJECT_POLL_INTERVAL_MS * 2;
+
 /** Next time a poll may run. `0` = no backoff in force. */
 const backoffFor = (failures: number): number =>
-  Date.now() + Math.min(2 ** failures, MAX_BACKOFF_MULTIPLE) * PROJECT_POLL_INTERVAL_MS;
+  now() + Math.min(2 ** failures, MAX_BACKOFF_MULTIPLE) * PROJECT_POLL_INTERVAL_MS;
+
+/**
+ * Monotonic, not wall-clock. `Date.now()` can step backwards — an NTP correction, a
+ * VM resume, someone changing the system clock — which would leave `backoffUntil`
+ * in the future by that whole offset and strand the poller far past the 32-cadence
+ * cap, with no recovery and nothing on screen. `performance.now()` gives the same
+ * immunity to tab-flicking that the deadline was chosen for, and immunity to the
+ * clock as well (`/code-review`).
+ */
+function now(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
 
 /** Increments once per detected change; `0` until the first one. */
 export function useProjectLive(): number {
@@ -149,7 +167,7 @@ export function ProjectLiveProvider({
 
   const poll = useCallback(async () => {
     if (inFlight.current) return;
-    if (Date.now() < backoffUntil.current) return;
+    if (now() < backoffUntil.current) return;
     inFlight.current = true;
     try {
       await runPoll();
@@ -166,6 +184,14 @@ export function ProjectLiveProvider({
           // as a 200-from-cache, and the status would stop meaning what it says.
           cache: 'no-store',
           headers: token.current ? { 'If-None-Match': token.current } : undefined,
+          // Without this a request that never settles — a captive portal, a proxy
+          // holding the socket — leaves `inFlight` latched true forever. Every later
+          // tick returns at the guard, so neither the backoff nor the stop-and-tell
+          // strip can ever fire, and every surface freezes in silence: the
+          // invisible-frozen-page failure again, through the one door that had no
+          // guard on it. Browsers give up on their own only after minutes. The abort
+          // throws, which routes it into the transient path below (`/code-review`).
+          signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
         });
       } catch {
         // Offline, or the request was cut off. Back off and try later; a dropped

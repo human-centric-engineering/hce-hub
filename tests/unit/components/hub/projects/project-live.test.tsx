@@ -571,6 +571,27 @@ describe('the poller’s lifecycle edges', () => {
     });
   });
 
+  it('gives every poll an abort signal, so a hung request cannot latch it shut', async () => {
+    // `inFlight` makes a never-settling request permanently fatal: every later tick
+    // returns at the guard, so neither the backoff nor the stop-and-tell strip can
+    // fire and every surface freezes in silence. The signal routes it into the
+    // transient path instead (`/code-review`).
+    //
+    // Honest limit: this pins the WIRING, not the duration — `AbortSignal.timeout`
+    // runs on a timer the test harness does not drive.
+    const state = mockEndpoints();
+    await act(async () => {
+      render(<ProjectLiveProvider projectId={PID}>{null}</ProjectLiveProvider>);
+    });
+    await flush();
+    await tick();
+
+    expect(state.revisionCalls.length).toBeGreaterThan(0);
+    for (const init of state.revisionCalls) {
+      expect(init.signal, 'a poll went out with no abort signal').toBeInstanceOf(AbortSignal);
+    }
+  });
+
   it('does not refresh a page the user has already navigated to', async () => {
     // The router instance is global, so a poll resolving after unmount would
     // `router.refresh()` whatever route the user just landed on, for a change with
